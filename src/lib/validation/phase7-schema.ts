@@ -76,6 +76,7 @@ export const boqItemFromSourceSchema = z
   .object({
     sourceType: z.enum(["MANUAL", "MASTER_ITEM", "COMPANY_LIBRARY", "RATE_CATALOGUE", "PREVIOUS_BOQ", "IMPORT"]),
     sourceId: optionalUuid,
+    sectionId: optionalUuid,
     itemNumber: z.coerce.number().int().min(1),
     quantity: z.string().trim().min(1, "Quantity is required."),
     sortOrder: z.coerce.number().int().optional(),

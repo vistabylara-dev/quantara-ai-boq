@@ -34,6 +34,7 @@ const EMPTY_DEFAULTS: ResolvedDefaults = {
 export type AddBoqItemFromSourceInput = {
   sourceType: BoqItemSourceType;
   sourceId?: string;
+  sectionId?: string;
   itemNumber: number;
   quantity: string;
   sortOrder?: number;
@@ -118,7 +119,7 @@ async function resolvePreviousBoqItemDefaults(companyId: string, boqItemId: stri
 export async function addBoqItemFromSource(actor: CurrentActor, boqId: string, input: AddBoqItemFromSourceInput) {
   requireCapability(actor, "boq:edit");
   const boq = await getBOQ(actor.companyId, boqId);
-  const section = boq.sections[0];
+  const section = (input.sectionId ? boq.sections.find((s) => s.id === input.sectionId) : undefined) ?? boq.sections[0];
   if (!section) throw new AppError("NO_SECTIONS", "This BOQ has no sections to add an item to.", 409);
 
   let defaults: ResolvedDefaults = EMPTY_DEFAULTS;

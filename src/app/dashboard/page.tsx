@@ -5,6 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 import type { Project } from "@/types/project";
 import { formatDate } from "@/lib/formatting/dates";
 import { apiClient, getApiErrorMessage } from "@/lib/api/client";
+import TrialBanner from "@/components/dashboard/trial-banner";
 
 type IndustrySummary = {
   id?: string;
@@ -93,6 +94,7 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-8">
+      <TrialBanner />
       <div className="rounded-[32px] border border-slate-800 bg-slate-950 p-8">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div>

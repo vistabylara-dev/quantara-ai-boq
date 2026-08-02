@@ -8,6 +8,7 @@ import { formatCurrency } from "@/lib/formatting/currency";
 import { formatDate } from "@/lib/formatting/dates";
 import { withCalculatedBOQTotals } from "@/lib/calculations/boq-totals";
 import BoqEditor from "@/components/boq/boq-editor";
+import AddItemFromSourceModal from "@/components/boq/add-item-from-source-modal";
 
 type PageProps = {
   params: {
@@ -37,6 +38,7 @@ export default function ProjectBOQPage({ params }: PageProps) {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [pendingAction, setPendingAction] = useState<PendingAction>(null);
+  const [showAddItem, setShowAddItem] = useState(false);
 
   const loadWorkspace = useCallback(async (signal?: AbortSignal) => {
     setIsLoading(true);
@@ -207,6 +209,14 @@ export default function ProjectBOQPage({ params }: PageProps) {
           <div className="flex flex-wrap gap-3">
             <button
               type="button"
+              onClick={() => setShowAddItem(true)}
+              disabled={!activeRevision || isReadOnly || actionInProgress}
+              className="rounded-2xl border border-slate-700 bg-slate-900 px-4 py-2 text-sm font-semibold text-slate-200 hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Add item
+            </button>
+            <button
+              type="button"
               onClick={() => void (
                 activeRevision ? createRevision(activeRevision) : createInitialBOQ()
               )}
@@ -318,6 +328,19 @@ export default function ProjectBOQPage({ params }: PageProps) {
           </section>
         </aside>
       </div>
+
+      {showAddItem && activeRevision && (
+        <AddItemFromSourceModal
+          boqId={activeRevision.id}
+          sections={activeRevision.sections.map((section) => ({ id: section.id, title: section.title }))}
+          nextItemNumber={activeRevision.sections.reduce((max, section) => Math.max(max, ...section.items.map((item) => item.itemNumber), 0), 0) + 1}
+          onClose={() => setShowAddItem(false)}
+          onAdded={() => {
+            setShowAddItem(false);
+            void loadWorkspace();
+          }}
+        />
+      )}
     </div>
   );
 }

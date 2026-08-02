@@ -12,8 +12,24 @@ type PageProps = {
   };
 };
 
+type ProposalSummary = { id: string; status: string; recipientName: string; expiresAt: string };
+
+const PROPOSAL_STATUS_COLORS: Record<string, string> = {
+  DRAFT: "text-slate-400",
+  READY: "text-blue-300",
+  SENT: "text-sky-300",
+  OPENED: "text-amber-300",
+  COMMENTED: "text-amber-300",
+  REVISION_REQUESTED: "text-orange-300",
+  APPROVED: "text-emerald-300",
+  REJECTED: "text-rose-300",
+  REVOKED: "text-slate-500",
+  EXPIRED: "text-slate-500",
+};
+
 export default function ProjectOverviewPage({ params }: PageProps) {
   const [project, setProject] = useState<Project | null>(null);
+  const [latestProposal, setLatestProposal] = useState<ProposalSummary | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [notFound, setNotFound] = useState(false);
@@ -23,11 +39,12 @@ export default function ProjectOverviewPage({ params }: PageProps) {
     setError(null);
     setNotFound(false);
     try {
-      const data = await apiClient.get<Project>(
-        `/api/projects/${encodeURIComponent(params.projectId)}`,
-        signal
-      );
+      const [data, proposals] = await Promise.all([
+        apiClient.get<Project>(`/api/projects/${encodeURIComponent(params.projectId)}`, signal),
+        apiClient.get<ProposalSummary[]>(`/api/projects/${encodeURIComponent(params.projectId)}/proposals`, signal).catch(() => []),
+      ]);
       setProject(data);
+      setLatestProposal(proposals[0] ?? null);
     } catch (loadError) {
       if (loadError instanceof DOMException && loadError.name === "AbortError") return;
       if (loadError instanceof ApiClientError && loadError.status === 404) {
@@ -124,6 +141,28 @@ export default function ProjectOverviewPage({ params }: PageProps) {
             <p className="text-sm uppercase tracking-[0.28em] text-slate-500">Revision</p>
             <p className="mt-3 text-lg font-semibold text-white">{project.currentRevision}</p>
           </div>
+        </div>
+      </div>
+
+      <div className="rounded-[32px] border border-slate-800 bg-slate-950 p-8">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h3 className="text-xl font-semibold text-white">Latest proposal</h3>
+            {latestProposal ? (
+              <p className="mt-1 text-sm text-slate-400">
+                To {latestProposal.recipientName} · expires {formatDate(latestProposal.expiresAt)} ·{" "}
+                <span className={`font-semibold ${PROPOSAL_STATUS_COLORS[latestProposal.status] ?? "text-slate-300"}`}>{latestProposal.status}</span>
+              </p>
+            ) : (
+              <p className="mt-1 text-sm text-slate-400">No proposals have been created for this project yet.</p>
+            )}
+          </div>
+          <Link
+            href={`/projects/${project.id}/proposals`}
+            className="inline-flex rounded-2xl border border-slate-700 bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-500"
+          >
+            {latestProposal ? "Manage proposals" : "Create a proposal"}
+          </Link>
         </div>
       </div>
     </div>

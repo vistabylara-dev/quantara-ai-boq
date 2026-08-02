@@ -11,5 +11,9 @@ export default defineConfig({
   test: {
     environment: "node",
     include: ["tests/**/*.test.ts"],
+    // These are integration tests sharing one local Postgres instance;
+    // running test files in parallel causes intermittent transaction
+    // serialization/deadlock errors unrelated to actual test correctness.
+    fileParallelism: false,
   },
 });

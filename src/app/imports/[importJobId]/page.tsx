@@ -170,6 +170,11 @@ export default function ImportJobPage({ params }: PageProps) {
             </label>
           ))}
         </div>
+        {job.headers.filter((h) => !Object.values(mapping).includes(h)).length > 0 && (
+          <p className="mt-3 text-xs text-amber-300">
+            Unmapped column(s), will be ignored: {job.headers.filter((h) => !Object.values(mapping).includes(h)).join(", ")}
+          </p>
+        )}
         <div className="mt-4 flex gap-3">
           <button type="button" onClick={() => void saveMapping()} disabled={busy === "mapping"} className="rounded-2xl border border-slate-700 bg-slate-900 px-4 py-2 text-sm font-semibold text-slate-200 hover:bg-slate-800 disabled:opacity-50">
             {busy === "mapping" ? "Saving…" : "Save mapping"}

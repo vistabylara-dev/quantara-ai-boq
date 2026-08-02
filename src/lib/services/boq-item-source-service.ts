@@ -3,7 +3,7 @@ import { prisma } from "@/lib/db/prisma";
 import { requireCapability } from "@/lib/auth/rbac";
 import type { CurrentActor } from "@/lib/auth/current-actor";
 import { AppError, NotFoundError } from "@/lib/errors/app-error";
-import { createBOQItem, getBOQ } from "@/lib/repositories/boq-repository";
+import { createBOQItem, getBOQ, getBOQRecord } from "@/lib/repositories/boq-repository";
 import { getMasterItemRecord } from "@/lib/repositories/master-item-repository";
 import { getLibraryItemRecord, recordItemUsage } from "@/lib/repositories/company-library-repository";
 import { assertMasterItemAccess, companyHasPackageAccessForItem } from "@/lib/entitlements/package-entitlement-service";
@@ -118,6 +118,7 @@ async function resolvePreviousBoqItemDefaults(companyId: string, boqItemId: stri
  */
 export async function addBoqItemFromSource(actor: CurrentActor, boqId: string, input: AddBoqItemFromSourceInput) {
   requireCapability(actor, "boq:edit");
+  const boqRecord = await getBOQRecord(actor.companyId, boqId);
   const boq = await getBOQ(actor.companyId, boqId);
   const section = (input.sectionId ? boq.sections.find((s) => s.id === input.sectionId) : undefined) ?? boq.sections[0];
   if (!section) throw new AppError("NO_SECTIONS", "This BOQ has no sections to add an item to.", 409);
@@ -179,7 +180,7 @@ export async function addBoqItemFromSource(actor: CurrentActor, boqId: string, i
 
   if (input.sourceType === BoqItemSourceType.COMPANY_LIBRARY && input.sourceId) {
     await recordItemUsage(actor.companyId, input.sourceId, {
-      projectId: boq.projectId,
+      projectId: boqRecord.projectId,
       boqId,
       boqItemId: updated.id,
       usedByUserId: actor.userId,

@@ -1,0 +1,79 @@
+export type BOQStatus = "draft" | "locked" | "approved";
+
+export type BOQMarginMode = "markup" | "gross_margin" | "MARKUP" | "GROSS_MARGIN";
+
+export type BOQItemOption = {
+  id: string;
+  label: string;
+  description: string;
+  rate: number;
+  selected: boolean;
+  specification: string;
+};
+
+export type BOQItem = {
+  id: string;
+  itemNumber: number;
+  itemCode: string;
+  category: string;
+  description: string;
+  specification: string;
+  quantity: number;
+  unit: string;
+  unitCost: number;
+  freightCost?: number;
+  installationCost?: number;
+  additionalCost?: number;
+  landedCost: number;
+  marginMode?: BOQMarginMode;
+  marginPercentage: number;
+  sellingRate: number;
+  totalAmount: number;
+  wastagePercentage: number;
+  taxApplicable: boolean;
+  sourceReference: string;
+  roomOrZone: string;
+  drawingReference: string;
+  confidenceScore: number;
+  status: string;
+  notes: string;
+  options: BOQItemOption[];
+};
+
+export type BOQSection = {
+  id: string;
+  code: string;
+  title: string;
+  description: string;
+  order: number;
+  items: BOQItem[];
+  collapsed?: boolean;
+};
+
+export type BOQTotals = {
+  directCost: number;
+  landedCost: number;
+  grossProfit: number;
+  grossMarginPercentage: number;
+  subtotal: number;
+  discountPercentage: number;
+  discountAmount: number;
+  taxableAmount: number;
+  taxAmount: number;
+  grandTotal: number;
+};
+
+export type BOQ = {
+  id: string;
+  projectId: string;
+  title: string;
+  revision: string;
+  status: BOQStatus;
+  sections: BOQSection[];
+  totals: BOQTotals;
+  taxRate?: number;
+  isLocked?: boolean;
+  createdAt: string;
+  lockedAt?: string;
+  approvedBy?: string;
+};

@@ -1,0 +1,41 @@
+import { apiSuccess, handleApiError, parseJsonBody } from "@/lib/http/api-response";
+import { getCurrentActor } from "@/lib/auth/current-actor";
+import { requireCapability } from "@/lib/auth/rbac";
+import {
+  createProjectBOQ,
+  listProjectBOQs,
+} from "@/lib/repositories/boq-repository";
+import {
+  projectBOQCreateSchema,
+  projectIdParamsSchema,
+} from "@/lib/validation/boq-route-schemas";
+
+export const dynamic = "force-dynamic";
+
+type RouteContext = { params: { projectId: string } };
+
+export async function GET(_request: Request, context: RouteContext) {
+  try {
+    const actor = await getCurrentActor();
+    const { projectId } = projectIdParamsSchema.parse(context.params);
+    const data = await listProjectBOQs(actor.companyId, projectId);
+    return apiSuccess(data);
+  } catch (error) {
+    return handleApiError(error);
+  }
+}
+
+export async function POST(request: Request, context: RouteContext) {
+  try {
+    const actor = await getCurrentActor();
+    requireCapability(actor, "boq:edit");
+    const { projectId } = projectIdParamsSchema.parse(context.params);
+    const input = request.body === null
+      ? undefined
+      : await parseJsonBody(request, projectBOQCreateSchema);
+    const data = await createProjectBOQ(actor.companyId, projectId, input);
+    return apiSuccess(data, 201);
+  } catch (error) {
+    return handleApiError(error);
+  }
+}

@@ -1,0 +1,433 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum ProjectStatus {
+  DRAFT
+  ACTIVE
+  NEEDS_REVIEW
+  INTERNALLY_APPROVED
+  SENT
+  CLIENT_APPROVED
+  REVISION_REQUESTED
+  REJECTED
+  ARCHIVED
+}
+
+enum BOQStatus {
+  DRAFT
+  CALCULATED
+  NEEDS_VERIFICATION
+  LOCKED
+  ISSUED
+  APPROVED
+}
+
+enum BOQItemStatus {
+  DRAFT
+  EXTRACTED
+  NEEDS_REVIEW
+  CONFIRMED
+  CORRECTED
+  REJECTED
+  LOCKED
+}
+
+enum MarginMode {
+  MARKUP
+  GROSS_MARGIN
+}
+
+enum VerificationSeverity {
+  INFO
+  WARNING
+  CRITICAL
+}
+
+enum RateStatus {
+  ACTIVE
+  EXPIRED
+  INACTIVE
+}
+
+enum UserRole {
+  COMPANY_OWNER
+  ADMINISTRATOR
+  QUANTITY_SURVEYOR
+  ESTIMATOR
+  DESIGNER
+  SALES_USER
+  REVIEWER
+}
+
+model Company {
+  id                     String                  @id @default(uuid()) @db.Uuid
+  legalName              String
+  tradeName              String
+  email                  String
+  phone                  String?
+  website                String?
+  address                String?
+  taxRegistrationNumber  String?
+  defaultCurrency        String                  @default("AED")
+  vatRate                Decimal                 @default(5) @db.Decimal(7, 4)
+  defaultLanguage        String                  @default("English")
+  createdAt              DateTime                @default(now())
+  updatedAt              DateTime                @updatedAt
+  industryEngines        CompanyIndustryEngine[]
+  clients                Client[]
+  projects               Project[]
+  boqs                   BOQ[]
+  boqSections            BOQSection[]
+  boqItems               BOQItem[]
+  boqItemOptions         BOQItemOption[]
+  verificationExceptions VerificationException[]
+  revisionSnapshots      BOQRevisionSnapshot[]
+  rateCatalogueItems     RateCatalogueItem[]
+  auditLogs              AuditLog[]
+  users                  User[]
+}
+
+model User {
+  id              String    @id @default(uuid()) @db.Uuid
+  companyId       String    @db.Uuid
+  email           String    @unique
+  passwordHash    String
+  fullName        String
+  role            UserRole  @default(ESTIMATOR)
+  emailVerifiedAt DateTime?
+  isActive        Boolean   @default(true)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  company         Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  sessions        Session[]
+  emailVerificationTokens EmailVerificationToken[]
+  passwordResetTokens     PasswordResetToken[]
+  auditLogs       AuditLog[]
+
+  @@index([companyId])
+  @@index([role])
+}
+
+model Session {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @db.Uuid
+  tokenHash String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+model EmailVerificationToken {
+  id        String    @id @default(uuid()) @db.Uuid
+  userId    String    @db.Uuid
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model PasswordResetToken {
+  id        String    @id @default(uuid()) @db.Uuid
+  userId    String    @db.Uuid
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model IndustryEngine {
+  id                 String                  @id @default(uuid()) @db.Uuid
+  key                String                  @unique
+  name               String
+  description        String
+  isActive           Boolean                 @default(true)
+  configJson         Json
+  createdAt          DateTime                @default(now())
+  updatedAt          DateTime                @updatedAt
+  companyIndustries  CompanyIndustryEngine[]
+  projects           Project[]
+  rateCatalogueItems RateCatalogueItem[]
+}
+
+model CompanyIndustryEngine {
+  id               String         @id @default(uuid()) @db.Uuid
+  companyId        String         @db.Uuid
+  industryEngineId String         @db.Uuid
+  enabled          Boolean        @default(true)
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+  company          Company        @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  industryEngine   IndustryEngine @relation(fields: [industryEngineId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, industryEngineId])
+  @@index([companyId])
+  @@index([industryEngineId])
+  @@index([enabled])
+}
+
+model Client {
+  id          String    @id @default(uuid()) @db.Uuid
+  companyId   String    @db.Uuid
+  name        String
+  companyName String?
+  email       String?
+  phone       String?
+  address     String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  company     Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  projects    Project[]
+
+  @@index([companyId])
+  @@index([email])
+}
+
+model Project {
+  id                    String                @id @default(uuid()) @db.Uuid
+  companyId             String                @db.Uuid
+  clientId              String                @db.Uuid
+  industryEngineId      String                @db.Uuid
+  slug                  String
+  reference             String
+  name                  String
+  description           String?
+  location              String?
+  currency              String                @default("AED")
+  taxRate               Decimal               @default(5) @db.Decimal(7, 4)
+  language              String                @default("English")
+  status                ProjectStatus         @default(DRAFT)
+  currentRevisionNumber Int                   @default(1)
+  createdAt             DateTime              @default(now())
+  updatedAt             DateTime              @updatedAt
+  company               Company               @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  client                Client                @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  industryEngine        IndustryEngine        @relation(fields: [industryEngineId], references: [id], onDelete: Restrict)
+  boqs                  BOQ[]
+  revisionSnapshots     BOQRevisionSnapshot[]
+
+  @@unique([companyId, reference])
+  @@unique([companyId, slug])
+  @@index([companyId])
+  @@index([clientId])
+  @@index([industryEngineId])
+  @@index([status])
+}
+
+model BOQ {
+  id                     String                  @id @default(uuid()) @db.Uuid
+  companyId              String                  @db.Uuid
+  projectId              String                  @db.Uuid
+  title                  String
+  revisionNumber         Int                     @default(1)
+  status                 BOQStatus               @default(DRAFT)
+  isLocked               Boolean                 @default(false)
+  lockedAt               DateTime?
+  approvedByName         String?
+  discountPercentage     Decimal                 @default(0) @db.Decimal(7, 4)
+  taxRate                Decimal                 @default(5) @db.Decimal(7, 4)
+  version                Int                     @default(1)
+  verifiedVersion        Int?
+  verifiedAt             DateTime?
+  createdAt              DateTime                @default(now())
+  updatedAt              DateTime                @updatedAt
+  company                Company                 @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  project                Project                 @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  sections               BOQSection[]
+  verificationExceptions VerificationException[]
+  revisionSnapshots      BOQRevisionSnapshot[]
+
+  @@unique([projectId, revisionNumber])
+  @@index([companyId])
+  @@index([projectId])
+  @@index([status])
+}
+
+model BOQSection {
+  id          String    @id @default(uuid()) @db.Uuid
+  companyId   String    @db.Uuid
+  boqId       String    @db.Uuid
+  code        String
+  title       String
+  description String    @default("")
+  sortOrder   Int
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  company     Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  boq         BOQ       @relation(fields: [boqId], references: [id], onDelete: Cascade)
+  items       BOQItem[]
+
+  @@unique([boqId, code])
+  @@index([companyId])
+  @@index([boqId])
+  @@index([sortOrder])
+}
+
+model BOQItem {
+  id                     String                  @id @default(uuid()) @db.Uuid
+  companyId              String                  @db.Uuid
+  sectionId              String                  @db.Uuid
+  itemNumber             Int
+  itemCode               String
+  category               String
+  description            String
+  specification          String                  @default("")
+  quantity               Decimal                 @db.Decimal(18, 4)
+  unit                   String
+  unitCost               Decimal                 @default(0) @db.Decimal(18, 4)
+  freightCost            Decimal                 @default(0) @db.Decimal(18, 4)
+  installationCost       Decimal                 @default(0) @db.Decimal(18, 4)
+  additionalCost         Decimal                 @default(0) @db.Decimal(18, 4)
+  landedCost             Decimal                 @default(0) @db.Decimal(18, 4)
+  marginMode             MarginMode              @default(MARKUP)
+  marginPercentage       Decimal                 @default(0) @db.Decimal(7, 4)
+  sellingRate            Decimal                 @default(0) @db.Decimal(18, 4)
+  totalAmount            Decimal                 @default(0) @db.Decimal(20, 4)
+  wastagePercentage      Decimal                 @default(0) @db.Decimal(7, 4)
+  taxApplicable          Boolean                 @default(true)
+  sourceReference        String                  @default("")
+  roomOrZone             String                  @default("")
+  drawingReference       String                  @default("")
+  confidenceScore        Decimal                 @default(100) @db.Decimal(7, 4)
+  status                 BOQItemStatus           @default(DRAFT)
+  notes                  String                  @default("")
+  sortOrder              Int
+  createdAt              DateTime                @default(now())
+  updatedAt              DateTime                @updatedAt
+  company                Company                 @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  section                BOQSection              @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  options                BOQItemOption[]
+  verificationExceptions VerificationException[]
+
+  @@index([companyId])
+  @@index([sectionId])
+  @@index([itemCode])
+  @@index([status])
+  @@index([sortOrder])
+}
+
+model BOQItemOption {
+  id            String   @id @default(uuid()) @db.Uuid
+  companyId     String   @db.Uuid
+  boqItemId     String   @db.Uuid
+  label         String
+  description   String   @default("")
+  specification String   @default("")
+  rate          Decimal  @default(0) @db.Decimal(18, 4)
+  isSelected    Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  company       Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  boqItem       BOQItem  @relation(fields: [boqItemId], references: [id], onDelete: Cascade)
+
+  @@unique([boqItemId, label])
+  @@index([companyId])
+  @@index([boqItemId])
+}
+
+model VerificationException {
+  id             String               @id @default(uuid()) @db.Uuid
+  companyId      String               @db.Uuid
+  boqId          String               @db.Uuid
+  boqItemId      String?              @db.Uuid
+  type           String
+  severity       VerificationSeverity
+  message        String
+  currentValue   String?
+  suggestedValue String?
+  resolutionNote String?
+  resolved       Boolean              @default(false)
+  resolvedAt     DateTime?
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
+  company        Company              @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  boq            BOQ                  @relation(fields: [boqId], references: [id], onDelete: Cascade)
+  boqItem        BOQItem?             @relation(fields: [boqItemId], references: [id], onDelete: Cascade)
+
+  @@index([companyId])
+  @@index([boqId])
+  @@index([boqItemId])
+  @@index([severity])
+  @@index([resolved])
+}
+
+model BOQRevisionSnapshot {
+  id             String   @id @default(uuid()) @db.Uuid
+  companyId      String   @db.Uuid
+  projectId      String   @db.Uuid
+  boqId          String   @db.Uuid
+  revisionNumber Int
+  snapshotJson   Json
+  createdByName  String
+  createdAt      DateTime @default(now())
+  company        Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  project        Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  boq            BOQ      @relation(fields: [boqId], references: [id], onDelete: Cascade)
+
+  @@unique([boqId, revisionNumber])
+  @@index([companyId])
+  @@index([projectId])
+  @@index([boqId])
+}
+
+model RateCatalogueItem {
+  id               String         @id @default(uuid()) @db.Uuid
+  companyId        String         @db.Uuid
+  industryEngineId String         @db.Uuid
+  itemCode         String
+  category         String
+  description      String
+  unit             String
+  supplier         String
+  cost             Decimal        @db.Decimal(18, 4)
+  defaultMargin    Decimal        @default(0) @db.Decimal(7, 4)
+  sellingRate      Decimal        @db.Decimal(18, 4)
+  currency         String         @default("AED")
+  effectiveDate    DateTime
+  expiryDate       DateTime?
+  status           RateStatus     @default(ACTIVE)
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+  company          Company        @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  industryEngine   IndustryEngine @relation(fields: [industryEngineId], references: [id], onDelete: Restrict)
+
+  @@unique([companyId, industryEngineId, itemCode, effectiveDate])
+  @@index([companyId])
+  @@index([industryEngineId])
+  @@index([itemCode])
+  @@index([status])
+}
+
+model AuditLog {
+  id          String   @id @default(uuid()) @db.Uuid
+  companyId   String   @db.Uuid
+  userId      String?  @db.Uuid
+  entityType  String
+  entityId    String   @db.Uuid
+  action      String
+  payloadJson Json
+  actorName   String
+  createdAt   DateTime @default(now())
+  company     Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  user        User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([companyId])
+  @@index([entityType, entityId])
+  @@index([action])
+  @@index([userId])
+}

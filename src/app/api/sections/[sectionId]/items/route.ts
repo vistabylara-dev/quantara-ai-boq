@@ -1,0 +1,26 @@
+import { apiSuccess, handleApiError, parseJsonBody } from "@/lib/http/api-response";
+import { getCurrentActor } from "@/lib/auth/current-actor";
+import { requireCapability } from "@/lib/auth/rbac";
+import {
+  createBOQItem,
+  type BOQItemWriteInput,
+} from "@/lib/repositories/boq-repository";
+import {
+  itemCreateRouteSchema,
+  sectionIdParamsSchema,
+} from "@/lib/validation/boq-route-schemas";
+
+export const dynamic = "force-dynamic";
+
+export async function POST(request: Request, context: { params: { sectionId: string } }) {
+  try {
+    const actor = await getCurrentActor();
+    requireCapability(actor, "boq:edit");
+    const { sectionId } = sectionIdParamsSchema.parse(context.params);
+    const input = await parseJsonBody(request, itemCreateRouteSchema) as BOQItemWriteInput;
+    const data = await createBOQItem(actor.companyId, sectionId, input);
+    return apiSuccess(data, 201);
+  } catch (error) {
+    return handleApiError(error);
+  }
+}

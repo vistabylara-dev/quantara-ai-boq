@@ -26,7 +26,11 @@ export type Capability =
   | "templates:manage"
   | "proposals:manage"
   | "files:manage"
-  | "review:comment";
+  | "review:comment"
+  | "documents:generate"
+  | "documents:generate:internal"
+  | "documents:download"
+  | "documents:delete";
 
 const ALL_CAPABILITIES: Capability[] = [
   "company:manage",
@@ -45,6 +49,10 @@ const ALL_CAPABILITIES: Capability[] = [
   "proposals:manage",
   "files:manage",
   "review:comment",
+  "documents:generate",
+  "documents:generate:internal",
+  "documents:download",
+  "documents:delete",
 ];
 
 const ROLE_CAPABILITIES: Record<UserRole, Capability[]> = {
@@ -63,12 +71,40 @@ const ROLE_CAPABILITIES: Record<UserRole, Capability[]> = {
     "suppliers:deactivate",
     "clients:manage",
     "templates:manage",
+    "documents:generate",
+    "documents:generate:internal",
+    "documents:download",
+    "documents:delete",
   ],
-  QUANTITY_SURVEYOR: ["projects:create", "projects:update", "boq:edit", "boq:lock", "verification:manage"],
-  ESTIMATOR: ["projects:create", "projects:update", "boq:edit", "catalogue:manage", "suppliers:manage"],
+  // "generate and download" (section 21): full generate access, no delete, no template management.
+  QUANTITY_SURVEYOR: [
+    "projects:create",
+    "projects:update",
+    "boq:edit",
+    "boq:lock",
+    "verification:manage",
+    "documents:generate",
+    "documents:generate:internal",
+    "documents:download",
+  ],
+  // "generate internal and approved client outputs where allowed" (section 21): same generate
+  // capability as QUANTITY_SURVEYOR — the "where allowed" nuance is the lock-required rule
+  // enforced by document-generation-service, not a distinct RBAC capability.
+  ESTIMATOR: [
+    "projects:create",
+    "projects:update",
+    "boq:edit",
+    "catalogue:manage",
+    "suppliers:manage",
+    "documents:generate",
+    "documents:generate:internal",
+    "documents:download",
+  ],
   DESIGNER: ["files:manage", "review:comment"],
-  SALES_USER: ["projects:create", "clients:manage", "proposals:manage"],
-  REVIEWER: ["review:comment", "verification:manage"],
+  // "download and generate client-facing outputs from approved revisions" (section 21): generate
+  // access without the internal-audience capability, so INTERNAL-audience generation is blocked.
+  SALES_USER: ["projects:create", "clients:manage", "proposals:manage", "documents:generate", "documents:download"],
+  REVIEWER: ["review:comment", "verification:manage", "documents:download"],
 };
 
 export function hasCapability(role: UserRole, capability: Capability): boolean {

@@ -19,3 +19,6 @@ yarn-error.log*
 *.tsbuildinfo
 coverage
 .vercel
+
+# Locally generated document files (never committed, never public)
+.storage/

@@ -17,7 +17,8 @@
       "Glob",
       "Grep",
       "WebSearch",
-      "WebFetch"
+      "WebFetch",
+      "Bash(docker exec *)"
     ],
     "deny": [
       "Bash(rm -rf /*)",

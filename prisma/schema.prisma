@@ -66,6 +66,34 @@ enum UserRole {
   REVIEWER
 }
 
+enum DocumentTemplateType {
+  CORPORATE_TECHNICAL
+  EXECUTIVE_PREMIUM
+  FURNITURE_CATALOGUE
+  MEP_TENDER
+  ARABIC_FORMAL
+}
+
+enum GeneratedDocumentType {
+  CSV
+  XLSX
+  PDF
+  DOCX
+  HTML
+}
+
+enum GeneratedDocumentStatus {
+  QUEUED
+  GENERATING
+  COMPLETED
+  FAILED
+}
+
+enum DocumentAudience {
+  INTERNAL
+  CLIENT
+}
+
 model Company {
   id                          String                      @id @default(uuid()) @db.Uuid
   legalName                   String
@@ -94,6 +122,8 @@ model Company {
   suppliers                   Supplier[]
   auditLogs                   AuditLog[]
   users                       User[]
+  documentTemplates           DocumentTemplate[]
+  generatedDocuments          GeneratedDocument[]
 }
 
 model User {
@@ -113,6 +143,7 @@ model User {
   passwordResetTokens         PasswordResetToken[]
   auditLogs                   AuditLog[]
   rateCataloguePriceHistories RateCataloguePriceHistory[]
+  generatedDocuments          GeneratedDocument[]
 
   @@index([companyId])
   @@index([role])
@@ -167,6 +198,7 @@ model IndustryEngine {
   companyIndustries  CompanyIndustryEngine[]
   projects           Project[]
   rateCatalogueItems RateCatalogueItem[]
+  documentTemplates  DocumentTemplate[]
 }
 
 model CompanyIndustryEngine {
@@ -229,6 +261,7 @@ model Project {
   industryEngine        IndustryEngine        @relation(fields: [industryEngineId], references: [id], onDelete: Restrict)
   boqs                  BOQ[]
   revisionSnapshots     BOQRevisionSnapshot[]
+  generatedDocuments    GeneratedDocument[]
 
   @@unique([companyId, reference])
   @@unique([companyId, slug])
@@ -260,6 +293,7 @@ model BOQ {
   sections               BOQSection[]
   verificationExceptions VerificationException[]
   revisionSnapshots      BOQRevisionSnapshot[]
+  generatedDocuments     GeneratedDocument[]
 
   @@unique([projectId, revisionNumber])
   @@index([companyId])
@@ -519,4 +553,67 @@ model AuditLog {
   @@index([entityType, entityId])
   @@index([action])
   @@index([userId])
+}
+
+model DocumentTemplate {
+  id                 String               @id @default(uuid()) @db.Uuid
+  companyId          String               @db.Uuid
+  industryEngineId   String?              @db.Uuid
+  name               String
+  code               String
+  type               DocumentTemplateType
+  description        String               @default("")
+  styleConfigJson    Json
+  contentConfigJson  Json
+  isDefault          Boolean              @default(false)
+  isActive           Boolean              @default(true)
+  createdAt          DateTime             @default(now())
+  updatedAt          DateTime             @updatedAt
+  company            Company              @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  industryEngine     IndustryEngine?      @relation(fields: [industryEngineId], references: [id], onDelete: SetNull)
+  generatedDocuments GeneratedDocument[]
+
+  @@unique([companyId, code])
+  @@index([companyId])
+  @@index([industryEngineId])
+  @@index([type])
+  @@index([isActive])
+}
+
+model GeneratedDocument {
+  id                     String                  @id @default(uuid()) @db.Uuid
+  companyId              String                  @db.Uuid
+  projectId              String                  @db.Uuid
+  boqId                  String                  @db.Uuid
+  templateId             String                  @db.Uuid
+  revisionNumber         Int
+  type                   GeneratedDocumentType
+  audience               DocumentAudience
+  status                 GeneratedDocumentStatus @default(QUEUED)
+  isDraft                Boolean                 @default(false)
+  storageKey             String?
+  fileName               String?
+  mimeType               String?
+  fileSize               Int?
+  checksum               String?
+  generatedByUserId      String?                 @db.Uuid
+  generatedByName        String
+  generationMetadataJson Json?
+  errorMessage           String?
+  createdAt              DateTime                @default(now())
+  completedAt            DateTime?
+  failedAt               DateTime?
+  company                Company                 @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  project                Project                 @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  boq                    BOQ                     @relation(fields: [boqId], references: [id], onDelete: Cascade)
+  template               DocumentTemplate        @relation(fields: [templateId], references: [id], onDelete: Restrict)
+  generatedByUser        User?                   @relation(fields: [generatedByUserId], references: [id], onDelete: SetNull)
+
+  @@index([companyId])
+  @@index([projectId])
+  @@index([boqId])
+  @@index([templateId])
+  @@index([type])
+  @@index([status])
+  @@index([createdAt])
 }

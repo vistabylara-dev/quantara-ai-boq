@@ -1,6 +1,7 @@
 import {
   BOQItemStatus,
   BOQStatus,
+  DocumentTemplateType,
   MarginMode,
   Prisma,
   PrismaClient,
@@ -13,6 +14,12 @@ import { demoIndustries } from "../src/config/industries/index";
 import { getDevelopmentCompanyId } from "../src/lib/tenancy/development-company";
 import { hashPassword } from "../src/lib/auth/password";
 import { calculateLandedCost, calculateSellingRate } from "../src/lib/calculations/boq-calculator";
+import {
+  DEFAULT_CONTENT_CONFIG,
+  DEFAULT_STYLE_CONFIG,
+  type DocumentTemplateContentConfig,
+  type DocumentTemplateStyleConfig,
+} from "../src/lib/documents/template-config";
 
 const prisma = new PrismaClient();
 
@@ -514,16 +521,21 @@ async function seedCompany(): Promise<string> {
   const companyId = getDevelopmentCompanyId();
   await prisma.company.upsert({
     where: { id: companyId },
-    update: {},
+    update: {
+      // Backfilled on every reseed (not just at creation) so an existing dev
+      // database picks up a complete profile without a manual reset —
+      // document generation for CLIENT audiences requires this field.
+      taxRegistrationNumber: "100123456700003",
+    },
     create: {
       id: companyId,
       legalName: "Quantara AI Development Workspace",
       tradeName: "Quantara AI",
       email: "development@quantara.local",
-      phone: null,
-      website: null,
+      phone: "+971-4-555-0100",
+      website: "quantara.ai",
       address: "Dubai, United Arab Emirates",
-      taxRegistrationNumber: null,
+      taxRegistrationNumber: "100123456700003",
       defaultCurrency: "AED",
       vatRate: decimal(5),
       defaultLanguage: "English",
@@ -938,6 +950,96 @@ async function seedOwnerUser(companyId: string): Promise<void> {
   });
 }
 
+type TemplateSeed = {
+  key: string;
+  industryKey: string | null;
+  name: string;
+  code: string;
+  type: DocumentTemplateType;
+  description: string;
+  style: Partial<DocumentTemplateStyleConfig>;
+  content: Partial<DocumentTemplateContentConfig>;
+};
+
+const templateSeeds: TemplateSeed[] = [
+  {
+    key: "corporate-technical",
+    industryKey: null,
+    name: "Corporate Technical",
+    code: "corporate-technical",
+    type: DocumentTemplateType.CORPORATE_TECHNICAL,
+    description: "Clean, formal BOQ document for construction, consultancy, and general technical submissions.",
+    style: { direction: "ltr", coverStyle: "light", primaryColor: "#0B1D3A", accentColor: "#2563EB", fontFamily: "sans" },
+    content: {},
+  },
+  {
+    key: "executive-premium",
+    industryKey: null,
+    name: "Executive Premium",
+    code: "executive-premium",
+    type: DocumentTemplateType.EXECUTIVE_PREMIUM,
+    description: "Premium proposal layout for luxury fit-out and executive client submissions.",
+    style: { direction: "ltr", coverStyle: "dark", primaryColor: "#111827", accentColor: "#D4AF37", fontFamily: "sans" },
+    content: { showExclusionsSection: false, columns: { ...DEFAULT_CONTENT_CONFIG.columns, notes: false } },
+  },
+  {
+    key: "furniture-catalogue",
+    industryKey: "furniture",
+    name: "Furniture Catalogue",
+    code: "furniture-catalogue",
+    type: DocumentTemplateType.FURNITURE_CATALOGUE,
+    description: "Catalogue-style layout for furniture packages: item, specification, quantity, and rate per piece.",
+    style: { direction: "ltr", coverStyle: "light", primaryColor: "#1F2937", accentColor: "#B45309", fontFamily: "sans" },
+    content: { columns: { ...DEFAULT_CONTENT_CONFIG.columns, brandModel: true } },
+  },
+  {
+    key: "mep-tender",
+    industryKey: "mep",
+    name: "MEP Tender",
+    code: "mep-tender",
+    type: DocumentTemplateType.MEP_TENDER,
+    description: "Dense technical tender format for MEP submissions, grouped by discipline and system.",
+    style: { direction: "ltr", coverStyle: "light", primaryColor: "#0F172A", accentColor: "#0EA5E9", fontFamily: "sans" },
+    content: { denseTechnicalTable: true },
+  },
+  {
+    key: "arabic-formal",
+    industryKey: null,
+    name: "Arabic Formal",
+    code: "arabic-formal",
+    type: DocumentTemplateType.ARABIC_FORMAL,
+    description: "Right-to-left Arabic BOQ document with mirrored layout and Arabic-capable typography.",
+    style: { direction: "rtl", coverStyle: "dark", primaryColor: "#0B1D3A", accentColor: "#2563EB", fontFamily: "arabic-naskh" },
+    content: {},
+  },
+];
+
+async function seedDocumentTemplates(companyId: string, industryIds: Map<string, string>): Promise<void> {
+  for (const [index, seed] of templateSeeds.entries()) {
+    const industryEngineId = seed.industryKey ? requiredId(industryIds, seed.industryKey, "IndustryEngine") : null;
+    const id = seedUuid("d0000000", index + 1);
+    await prisma.documentTemplate.upsert({
+      where: { id },
+      update: {},
+      create: {
+        id,
+        companyId,
+        industryEngineId,
+        name: seed.name,
+        code: seed.code,
+        type: seed.type,
+        description: seed.description,
+        styleConfigJson: json({ ...DEFAULT_STYLE_CONFIG, ...seed.style }),
+        contentConfigJson: json({ ...DEFAULT_CONTENT_CONFIG, ...seed.content }),
+        isDefault: true,
+        isActive: true,
+        createdAt: CREATED_AT,
+        updatedAt: UPDATED_AT,
+      },
+    });
+  }
+}
+
 async function seedAuditLogs(
   companyId: string,
   boqIds: Map<string, string>,
@@ -969,12 +1071,13 @@ async function main(): Promise<void> {
   const { boqIds, itemIds } = await seedBOQs(companyId, projectIds);
   const supplierIds = await seedSuppliers(companyId);
   await seedCatalogue(companyId, industryIds, supplierIds);
+  await seedDocumentTemplates(companyId, industryIds);
   await seedVerificationExamples(companyId, boqIds, itemIds);
   await seedAuditLogs(companyId, boqIds);
   await seedOwnerUser(companyId);
 
   console.log(
-    `Seeded Quantara development tenant with ${INDUSTRY_KEYS.length} industries, ${projectSeeds.length} projects, ${supplierSeeds.length} suppliers, and ${catalogueSeeds.length} catalogue rates.`,
+    `Seeded Quantara development tenant with ${INDUSTRY_KEYS.length} industries, ${projectSeeds.length} projects, ${supplierSeeds.length} suppliers, ${catalogueSeeds.length} catalogue rates, and ${templateSeeds.length} document templates.`,
   );
 }
 

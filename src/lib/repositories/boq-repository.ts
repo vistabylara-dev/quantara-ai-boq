@@ -11,7 +11,7 @@ import { assertBOQCanBeLocked, assertBOQEditable } from "@/lib/domain/boq-guards
 import { calculateBOQItem, calculateBOQTotals } from "@/lib/calculations/boq-calculator";
 import { createAuditLog } from "@/lib/repositories/audit-repository";
 import { getProjectRecord } from "@/lib/repositories/project-repository";
-import type { BOQ, BOQItem, BOQSection } from "@/types/boq";
+import type { BOQ, BOQItem, BOQItemPricingMetadata, BOQSection } from "@/types/boq";
 
 const boqInclude = {
   project: {
@@ -96,6 +96,7 @@ export function toBOQDTO(boq: BOQRecord): BOQ & { databaseId: string; taxRate: n
         confidenceScore: item.confidenceScore.toNumber(),
         status: item.status.toLowerCase(),
         notes: item.notes,
+        pricingMetadata: (item.pricingMetadataJson as BOQItemPricingMetadata | null) ?? null,
         options: item.options.map((option) => ({
           id: option.id,
           label: option.label,
@@ -747,6 +748,7 @@ export type BOQItemWriteInput = {
   notes?: string;
   sortOrder?: number;
   options?: BOQItemOptionWriteInput[];
+  pricingMetadataJson?: Prisma.InputJsonValue | null;
 };
 
 async function getItemRecord(companyId: string, itemId: string) {
@@ -852,6 +854,29 @@ export async function updateBOQItem(
     marginMode,
     marginPercentage,
   });
+
+  // If this item was previously priced from the catalogue and a normal edit
+  // (not an explicit pricingMetadataJson write from the apply-rate service)
+  // changes a commercial field, record it as a manual override instead of
+  // silently losing the fact that it once tracked the catalogue.
+  let pricingMetadataUpdate: Prisma.InputJsonValue | typeof Prisma.JsonNull | undefined;
+  if (input.pricingMetadataJson === undefined) {
+    const existingMeta = current.pricingMetadataJson as unknown as BOQItemPricingMetadata | null;
+    if (existingMeta?.commercialSource === "catalogue") {
+      const changedFields: string[] = [];
+      if (input.unitCost !== undefined && !new Prisma.Decimal(input.unitCost).equals(current.unitCost)) changedFields.push("unitCost");
+      if (input.freightCost !== undefined && !new Prisma.Decimal(input.freightCost).equals(current.freightCost)) changedFields.push("freightCost");
+      if (input.installationCost !== undefined && !new Prisma.Decimal(input.installationCost).equals(current.installationCost)) changedFields.push("installationCost");
+      if (input.additionalCost !== undefined && !new Prisma.Decimal(input.additionalCost).equals(current.additionalCost)) changedFields.push("additionalCost");
+      if (input.marginPercentage !== undefined && !new Prisma.Decimal(input.marginPercentage).equals(current.marginPercentage)) changedFields.push("marginPercentage");
+      if (input.marginMode !== undefined && input.marginMode !== current.marginMode) changedFields.push("marginMode");
+      if (changedFields.length > 0) {
+        const merged = Array.from(new Set([...(existingMeta.manuallyOverriddenFields ?? []), ...changedFields]));
+        pricingMetadataUpdate = { ...existingMeta, manuallyOverriddenFields: merged } as unknown as Prisma.InputJsonValue;
+      }
+    }
+  }
+
   await prisma.$transaction(async (tx) => {
     await claimEditableBOQ(tx, companyId, current.section.boqId, current.section.boq.version);
     await tx.bOQItem.update({
@@ -880,6 +905,11 @@ export async function updateBOQItem(
         ...(input.status !== undefined ? { status: input.status } : {}),
         ...(input.notes !== undefined ? { notes: input.notes } : {}),
         ...(input.sortOrder !== undefined ? { sortOrder: input.sortOrder } : {}),
+        ...(pricingMetadataUpdate !== undefined
+          ? { pricingMetadataJson: pricingMetadataUpdate }
+          : input.pricingMetadataJson !== undefined
+            ? { pricingMetadataJson: input.pricingMetadataJson ?? Prisma.JsonNull }
+            : {}),
         ...(input.options !== undefined
           ? {
               options: {
@@ -903,6 +933,18 @@ export async function updateBOQItem(
       action: "ITEM_CHANGED",
       payload: { boqId: current.section.boqId, sectionId: current.sectionId, itemCode: input.itemCode ?? current.itemCode },
     }, tx);
+    if (pricingMetadataUpdate && pricingMetadataUpdate !== Prisma.JsonNull) {
+      await createAuditLog(companyId, {
+        entityType: "BOQItem",
+        entityId: current.id,
+        action: "MANUAL_COMMERCIAL_OVERRIDE",
+        payload: {
+          boqId: current.section.boqId,
+          itemCode: input.itemCode ?? current.itemCode,
+          overriddenFields: (pricingMetadataUpdate as unknown as BOQItemPricingMetadata).manuallyOverriddenFields,
+        },
+      }, tx);
+    }
   });
   return getBOQ(companyId, current.section.boqId);
 }

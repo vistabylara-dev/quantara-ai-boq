@@ -156,6 +156,17 @@ export default function ProjectBOQPage({ params }: PageProps) {
 
   const activeRevision = useMemo(() => activeBoq ?? revisions[0] ?? null, [activeBoq, revisions]);
 
+  const applyCatalogueRate = useCallback(async (itemId: string, catalogueItemId: string, confirmReplaceOverrides = false) => {
+    if (!activeRevision || isReadOnlyBOQ(activeRevision)) return;
+    await persistDraft(activeRevision);
+    const boq = await apiClient.post<BOQ>(`/api/catalogue/${encodeURIComponent(catalogueItemId)}/apply-to-boq`, {
+      boqItemId: itemId,
+      applyMode: "REPLACE_COMMERCIAL_FIELDS",
+      confirmReplaceOverrides,
+    });
+    replaceRevision(boq);
+  }, [activeRevision, persistDraft, replaceRevision]);
+
   if (isLoading) {
     return (
       <div className="rounded-[32px] border border-slate-800 bg-slate-950 p-8 text-slate-300">
@@ -248,11 +259,13 @@ export default function ProjectBOQPage({ params }: PageProps) {
               boq={activeRevision}
               currency={project.currency}
               taxRate={project.taxRate}
+              industryId={project.industryId}
               actionPending={actionInProgress}
               onChange={setActiveBoq}
               onSave={saveBoq}
               onCreateRevision={createRevision}
               onLock={lockRevision}
+              onApplyCatalogueRate={applyCatalogueRate}
             />
           ) : (
             <div className="rounded-[32px] border border-slate-800 bg-slate-950 p-8 text-slate-300">

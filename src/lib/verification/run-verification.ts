@@ -18,7 +18,10 @@ export type VerificationRuleType =
   | "MISSING_SPECIFICATION"
   | "DUPLICATE_ITEM_CODE"
   | "UNUSUALLY_HIGH_QUANTITY"
-  | "LOCKED_REVISION_CONFLICT";
+  | "LOCKED_REVISION_CONFLICT"
+  | "SELLING_RATE_BELOW_MINIMUM"
+  | "SELLING_RATE_BELOW_LANDED_COST"
+  | "MANUAL_COMMERCIAL_OVERRIDE";
 
 export type VerificationItemInput = {
   id: string;
@@ -37,6 +40,8 @@ export type VerificationItemInput = {
   confidenceScore?: DecimalInput | null;
   drawingReference?: string | null;
   supplierRateExpiryDate?: Date | string | null;
+  minimumSellingRate?: DecimalInput | null;
+  manualOverrideFields?: string[] | null;
   status?: string | null;
 };
 
@@ -201,6 +206,50 @@ export function runVerification(input: VerificationRunInput): VerificationExcept
     if (sellingRate === null || sellingRate.isZero()) {
       results.push(
         exception(input, item, "ZERO_SELLING_RATE", "CRITICAL", "Item selling rate is zero or missing.", currentDecimal(sellingRate), "Recalculate or enter a selling rate greater than zero."),
+      );
+    }
+
+    const landedCostForComparison = optionalDecimal(item.landedCost);
+    if (sellingRate !== null && landedCostForComparison !== null && sellingRate.lessThan(landedCostForComparison)) {
+      results.push(
+        exception(
+          input,
+          item,
+          "SELLING_RATE_BELOW_LANDED_COST",
+          "CRITICAL",
+          "Item selling rate is below its landed cost.",
+          `sellingRate=${sellingRate.toString()} landedCost=${landedCostForComparison.toString()}`,
+          "Increase the selling rate or margin so it covers the landed cost.",
+        ),
+      );
+    }
+
+    const minimumSellingRate = optionalDecimal(item.minimumSellingRate);
+    if (sellingRate !== null && minimumSellingRate !== null && sellingRate.lessThan(minimumSellingRate)) {
+      results.push(
+        exception(
+          input,
+          item,
+          "SELLING_RATE_BELOW_MINIMUM",
+          "WARNING",
+          "Item selling rate is below the catalogue's configured minimum selling rate.",
+          sellingRate.toString(),
+          minimumSellingRate.toString(),
+        ),
+      );
+    }
+
+    if (item.manualOverrideFields && item.manualOverrideFields.length > 0) {
+      results.push(
+        exception(
+          input,
+          item,
+          "MANUAL_COMMERCIAL_OVERRIDE",
+          "WARNING",
+          `Item was manually edited after a catalogue rate was applied (${item.manualOverrideFields.join(", ")}).`,
+          item.manualOverrideFields.join(", "),
+          "Confirm the manual values or reapply the catalogue rate.",
+        ),
       );
     }
 

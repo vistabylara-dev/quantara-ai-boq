@@ -1,4 +1,11 @@
+import { Prisma } from "@prisma/client";
 import { z } from "zod";
+
+const metadataJsonSchema = z
+  .record(z.unknown())
+  .nullable()
+  .optional()
+  .transform((value) => value as Prisma.InputJsonValue | null | undefined);
 
 const requiredText = (label: string, maximum = 255) =>
   z.string({ required_error: `${label} is required.` }).trim().min(1, `${label} is required.`).max(maximum);
@@ -23,10 +30,10 @@ const dateInputSchema = z
   .refine((value) => !Number.isNaN(value.getTime()), "A valid date is required.");
 const uuidOrKeySchema = z.string().trim().min(1, "Industry engine is required.").max(120);
 
-function normalizeOptionalText<T extends Record<string, unknown>>(value: T, keys: string[]) {
-  const result: Record<string, unknown> = { ...value };
+function normalizeOptionalText<T extends Record<string, unknown>>(value: T, keys: string[]): T {
+  const result = { ...value };
   for (const key of keys) {
-    if (key in result && result[key] === "") result[key] = null;
+    if (key in result && result[key] === "") (result as Record<string, unknown>)[key] = null;
   }
   return result;
 }
@@ -68,7 +75,7 @@ export const catalogueItemCreateSchema = z
     expiryDate: dateInputSchema.nullable().optional(),
     sourceReference: optionalText(500),
     supplierQuotationReference: optionalText(255),
-    metadataJson: z.record(z.unknown()).nullable().optional(),
+    metadataJson: metadataJsonSchema,
     changeReason: optionalText(500),
   })
   .strict()
@@ -109,7 +116,7 @@ export const catalogueItemUpdateSchema = z
     expiryDate: dateInputSchema.nullable().optional(),
     sourceReference: optionalText(500),
     supplierQuotationReference: optionalText(255),
-    metadataJson: z.record(z.unknown()).nullable().optional(),
+    metadataJson: metadataJsonSchema,
     changeReason: optionalText(500),
   })
   .strict()
@@ -148,7 +155,10 @@ export const applyCatalogueRateSchema = z
   })
   .strict();
 
+export const applyCatalogueRateBodySchema = applyCatalogueRateSchema.omit({ catalogueItemId: true });
+
 export type CatalogueItemCreateInput = z.output<typeof catalogueItemCreateSchema>;
 export type CatalogueItemUpdateInput = z.output<typeof catalogueItemUpdateSchema>;
 export type CatalogueListQuery = z.output<typeof catalogueListQuerySchema>;
 export type ApplyCatalogueRateInput = z.output<typeof applyCatalogueRateSchema>;
+export type ApplyCatalogueRateBodyInput = z.output<typeof applyCatalogueRateBodySchema>;

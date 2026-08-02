@@ -1,6 +1,6 @@
 import { Prisma } from "@prisma/client";
 import { NextResponse } from "next/server";
-import { ZodError, type ZodSchema } from "zod";
+import { ZodError, type ZodType, type ZodTypeDef } from "zod";
 import { AppError } from "@/lib/errors/app-error";
 
 export type ApiErrorBody = {
@@ -45,7 +45,10 @@ function zodFieldErrors(error: ZodError): Record<string, string[]> {
   );
 }
 
-export async function parseJsonBody<T>(request: Request, schema: ZodSchema<T>): Promise<T> {
+export async function parseJsonBody<Output, Input = Output>(
+  request: Request,
+  schema: ZodType<Output, ZodTypeDef, Input>,
+): Promise<Output> {
   let body: unknown;
   try {
     body = await request.json();

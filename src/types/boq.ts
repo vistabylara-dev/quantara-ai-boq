@@ -11,6 +11,19 @@ export type BOQItemOption = {
   specification: string;
 };
 
+export type BOQItemPricingMetadata = {
+  catalogueItemId: string;
+  catalogueItemCode: string;
+  commercialSource: "catalogue";
+  rateAppliedAt: string;
+  rateAppliedByUserId: string;
+  rateAppliedByName: string;
+  supplierNameSnapshot: string | null;
+  supplierQuotationReference: string | null;
+  sourceExpiryDate: string | null;
+  manuallyOverriddenFields: string[];
+};
+
 export type BOQItem = {
   id: string;
   itemNumber: number;
@@ -38,6 +51,7 @@ export type BOQItem = {
   status: string;
   notes: string;
   options: BOQItemOption[];
+  pricingMetadata?: BOQItemPricingMetadata | null;
 };
 
 export type BOQSection = {

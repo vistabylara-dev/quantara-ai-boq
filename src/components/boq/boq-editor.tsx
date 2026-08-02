@@ -10,17 +10,26 @@ import {
   withCalculatedBOQTotals,
 } from "@/lib/calculations/boq-totals";
 import { formatCurrency } from "@/lib/formatting/currency";
+import { formatDate } from "@/lib/formatting/dates";
+import CatalogueRateDrawer from "@/components/boq/catalogue-rate-drawer";
+import type { CatalogueItem } from "@/types/catalogue";
 
 type BoqEditorProps = {
   boq: BOQ;
   currency: string;
   taxRate: number;
+  industryId?: string;
   actionPending?: boolean;
   onChange: (boq: BOQ) => void;
   onSave: (boq: BOQ) => Promise<void> | void;
   onCreateRevision: (boq: BOQ) => Promise<void> | void;
   onLock: (boq: BOQ) => Promise<void> | void;
+  onApplyCatalogueRate?: (itemId: string, catalogueItemId: string, confirmReplaceOverrides?: boolean) => Promise<void>;
 };
+
+function isPersistedItemId(itemId: string): boolean {
+  return !itemId.includes("-item-");
+}
 
 const emptyItem = (section: BOQSection, nextNumber: number): BOQItem => ({
   id: `${section.id}-item-${Date.now()}`,
@@ -55,13 +64,18 @@ export default function BoqEditor({
   boq,
   currency,
   taxRate,
+  industryId,
   actionPending = false,
   onChange,
   onSave,
   onCreateRevision,
   onLock,
+  onApplyCatalogueRate,
 }: BoqEditorProps) {
   const [isSaving, setIsSaving] = useState(false);
+  const [rateDrawerItemId, setRateDrawerItemId] = useState<string | null>(null);
+  const [isApplyingRate, setIsApplyingRate] = useState(false);
+  const [rateError, setRateError] = useState<string | null>(null);
   const activeBoq = boq;
   const effectiveTaxRate = activeBoq.taxRate ?? taxRate;
 
@@ -162,6 +176,32 @@ export default function BoqEditor({
       await onSave(currentPayload());
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const applyCatalogueRate = async (catalogueItem: CatalogueItem) => {
+    if (!rateDrawerItemId || !onApplyCatalogueRate) return;
+    setIsApplyingRate(true);
+    setRateError(null);
+    try {
+      await onApplyCatalogueRate(rateDrawerItemId, catalogueItem.id);
+      setRateDrawerItemId(null);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Could not apply this rate.";
+      if (message.includes("manually overridden")) {
+        if (window.confirm(`${message}\n\nReplace the manual overrides with this catalogue rate?`)) {
+          try {
+            await onApplyCatalogueRate(rateDrawerItemId, catalogueItem.id, true);
+            setRateDrawerItemId(null);
+          } catch (retryError) {
+            setRateError(retryError instanceof Error ? retryError.message : "Could not apply this rate.");
+          }
+        }
+      } else {
+        setRateError(message);
+      }
+    } finally {
+      setIsApplyingRate(false);
     }
   };
 
@@ -273,6 +313,20 @@ export default function BoqEditor({
                           disabled={isReadOnly || actionPending}
                           className="w-full rounded-2xl border border-slate-800 bg-slate-900 px-2 py-2 text-slate-100 outline-none focus:border-blue-500 disabled:cursor-not-allowed disabled:opacity-60"
                         />
+                        {item.pricingMetadata && (
+                          <p
+                            className={`mt-1 text-[10px] uppercase tracking-wide ${
+                              item.pricingMetadata.manuallyOverriddenFields.length > 0 ? "text-amber-400" : "text-sky-400"
+                            }`}
+                            title={`Applied ${formatDate(item.pricingMetadata.rateAppliedAt)} by ${item.pricingMetadata.rateAppliedByName}${
+                              item.pricingMetadata.supplierNameSnapshot ? ` · ${item.pricingMetadata.supplierNameSnapshot}` : ""
+                            }`}
+                          >
+                            {item.pricingMetadata.manuallyOverriddenFields.length > 0
+                              ? "Catalogue (overridden)"
+                              : `Catalogue · ${item.pricingMetadata.catalogueItemCode}`}
+                          </p>
+                        )}
                       </td>
                       <td className="px-4 py-3 w-24">
                         <input
@@ -327,14 +381,26 @@ export default function BoqEditor({
                       <td className="px-4 py-3 w-28 text-slate-200">{formatCurrency(item.sellingRate, currency)}</td>
                       <td className="px-4 py-3 w-28 text-slate-200">{formatCurrency(item.totalAmount, currency)}</td>
                       <td className="px-4 py-3 w-24">
-                        <button
-                          type="button"
-                          onClick={() => deleteItem(section.id, item.id)}
-                          disabled={isReadOnly || actionPending}
-                          className="rounded-2xl border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-200 hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
-                        >
-                          Delete
-                        </button>
+                        <div className="flex flex-col gap-2">
+                          {onApplyCatalogueRate && industryId && isPersistedItemId(item.id) && (
+                            <button
+                              type="button"
+                              onClick={() => setRateDrawerItemId(item.id)}
+                              disabled={isReadOnly || actionPending || isApplyingRate}
+                              className="rounded-2xl border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-200 hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+                            >
+                              Apply rate
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => deleteItem(section.id, item.id)}
+                            disabled={isReadOnly || actionPending}
+                            className="rounded-2xl border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-200 hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+                          >
+                            Delete
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -374,6 +440,25 @@ export default function BoqEditor({
           </div>
         </div>
       </section>
+
+      {rateError && (
+        <div className="rounded-[28px] border border-rose-900 bg-rose-950/40 p-5 text-sm text-rose-200" role="alert">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <p>{rateError}</p>
+            <button type="button" onClick={() => setRateError(null)} className="rounded-2xl border border-rose-800 px-3 py-2 font-semibold hover:bg-rose-900/40">
+              Dismiss
+            </button>
+          </div>
+        </div>
+      )}
+
+      {rateDrawerItemId && industryId && (
+        <CatalogueRateDrawer
+          industryId={industryId}
+          onSelect={(item) => void applyCatalogueRate(item)}
+          onClose={() => setRateDrawerItemId(null)}
+        />
+      )}
     </div>
   );
 }

@@ -12,9 +12,18 @@ type IndustrySummary = {
   name: string;
 };
 
+type CommercialSummary = {
+  activeCatalogueItems: number;
+  expiredRates: number;
+  totalSuppliers: number;
+  expiringWithin30Days: number;
+  itemsBelowMinimum: number;
+};
+
 export default function DashboardPage() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [industryCount, setIndustryCount] = useState(0);
+  const [commercial, setCommercial] = useState<CommercialSummary | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -22,12 +31,14 @@ export default function DashboardPage() {
     setIsLoading(true);
     setError(null);
     try {
-      const [projectData, industries] = await Promise.all([
+      const [projectData, industries, commercialData] = await Promise.all([
         apiClient.get<Project[]>("/api/projects", signal),
         apiClient.get<IndustrySummary[]>("/api/industries", signal),
+        apiClient.get<CommercialSummary>("/api/dashboard/commercial-summary", signal),
       ]);
       setProjects(projectData);
       setIndustryCount(industries.length);
+      setCommercial(commercialData);
     } catch (loadError) {
       if (loadError instanceof DOMException && loadError.name === "AbortError") return;
       setError(getApiErrorMessage(loadError));
@@ -101,6 +112,43 @@ export default function DashboardPage() {
           </div>
         </div>
       </div>
+
+      <section className="rounded-[32px] border border-slate-800 bg-slate-950 p-8">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h2 className="text-xl font-semibold text-white">Commercial catalogue</h2>
+            <p className="mt-1 text-sm text-slate-400">Supplier rate coverage and pricing risk.</p>
+          </div>
+          <Link
+            href="/catalogue"
+            className="rounded-2xl border border-slate-700 bg-slate-900 px-4 py-2 text-sm font-semibold text-slate-200 hover:bg-slate-800"
+          >
+            Open catalogue
+          </Link>
+        </div>
+        <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+          <div className="rounded-3xl border border-slate-800 bg-slate-900 p-5">
+            <p className="text-xs uppercase tracking-[0.24em] text-slate-500">Active rates</p>
+            <p className="mt-2 text-3xl font-semibold text-white">{commercial?.activeCatalogueItems ?? 0}</p>
+          </div>
+          <div className="rounded-3xl border border-slate-800 bg-slate-900 p-5">
+            <p className="text-xs uppercase tracking-[0.24em] text-slate-500">Expired rates</p>
+            <p className="mt-2 text-3xl font-semibold text-white">{commercial?.expiredRates ?? 0}</p>
+          </div>
+          <div className="rounded-3xl border border-slate-800 bg-slate-900 p-5">
+            <p className="text-xs uppercase tracking-[0.24em] text-slate-500">Suppliers</p>
+            <p className="mt-2 text-3xl font-semibold text-white">{commercial?.totalSuppliers ?? 0}</p>
+          </div>
+          <div className="rounded-3xl border border-slate-800 bg-slate-900 p-5">
+            <p className="text-xs uppercase tracking-[0.24em] text-slate-500">Expiring in 30 days</p>
+            <p className="mt-2 text-3xl font-semibold text-white">{commercial?.expiringWithin30Days ?? 0}</p>
+          </div>
+          <div className="rounded-3xl border border-slate-800 bg-slate-900 p-5">
+            <p className="text-xs uppercase tracking-[0.24em] text-slate-500">Below minimum rate</p>
+            <p className="mt-2 text-3xl font-semibold text-white">{commercial?.itemsBelowMinimum ?? 0}</p>
+          </div>
+        </div>
+      </section>
 
       <section className="rounded-[32px] border border-slate-800 bg-slate-950 p-8">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">

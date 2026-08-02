@@ -12,12 +12,12 @@ import {
 import { demoIndustries } from "../src/config/industries/index";
 import { getDevelopmentCompanyId } from "../src/lib/tenancy/development-company";
 import { hashPassword } from "../src/lib/auth/password";
+import { calculateLandedCost, calculateSellingRate } from "../src/lib/calculations/boq-calculator";
 
 const prisma = new PrismaClient();
 
 const CREATED_AT = new Date("2026-01-01T08:00:00.000Z");
 const UPDATED_AT = new Date("2026-01-15T12:00:00.000Z");
-const EFFECTIVE_AT = new Date("2026-01-01T00:00:00.000Z");
 
 const INDUSTRY_KEYS = [
   "construction",
@@ -424,18 +424,91 @@ const boqSeeds = [
   },
 ] as const;
 
-const catalogueSeeds = [
-  ["construction", "C-001", "Concrete", "25 MPa ready-mix concrete", "m3", "Dubai Concrete", "520", "12", "582.4"],
-  ["mep", "M-301", "Cabling", "4C x 16 mm2 power cable", "m", "PowerLine Supplies", "33", "10", "36.3"],
-  ["interior-fitout", "I-101", "Flooring", "Commercial carpet tile supply and installation", "m2", "FloorTech UAE", "95", "12", "106.4"],
-  ["furniture", "F-201", "Seating", "Ergonomic executive chair", "pcs", "OfficeComfort", "1450", "15", "1667.5"],
-  ["electrical", "E-101", "Lighting", "600x600 mm LED panel light, 36 W", "nos", "Gulf Electrical Supplies", "165", "12", "184.8"],
-  ["hvac", "H-101", "Diffusers", "Linear slot diffuser supply and installation", "lm", "Climate Systems UAE", "280", "12", "313.6"],
-  ["plumbing", "P-101", "Water Supply", "25 mm PPR water supply pipe", "m", "AquaFlow Supplies", "18", "12", "20.16"],
-  ["firefighting", "FF-101", "Sprinklers", "Quick-response sprinkler head", "nos", "FireSafe Equipment", "38", "12", "42.56"],
-  ["joinery", "J-401", "Joinery", "Reception desk with oak veneer finish", "LS", "WoodCraft UAE", "28500", "15", "32775"],
-  ["landscaping", "L-501", "Hardscape", "600x600 permeable concrete paving slabs", "m2", "GreenScape Materials", "210", "12", "235.2"],
-] as const;
+type SupplierSeed = {
+  key: string;
+  name: string;
+  contactPerson: string;
+  email: string;
+  phone: string;
+  defaultCurrency: string;
+  paymentTerms: string;
+  leadTimeDays: number;
+};
+
+const supplierSeeds: SupplierSeed[] = [
+  { key: "dubai-concrete-steel", name: "Dubai Concrete & Steel Co", contactPerson: "Ahmed Al Marzooqi", email: "sales@dubaiconcretesteel.ae", phone: "+971-4-555-0101", defaultCurrency: "AED", paymentTerms: "Net 30", leadTimeDays: 7 },
+  { key: "gulf-waterproofing-formwork", name: "Gulf Waterproofing & Formwork", contactPerson: "Sara Haddad", email: "quotes@gulfwaterproofing.ae", phone: "+971-4-555-0102", defaultCurrency: "AED", paymentTerms: "Net 30", leadTimeDays: 10 },
+  { key: "emirates-interior-materials", name: "Emirates Interior Materials", contactPerson: "Rania Youssef", email: "info@emiratesinteriors.ae", phone: "+971-4-555-0103", defaultCurrency: "AED", paymentTerms: "Net 45", leadTimeDays: 14 },
+  { key: "officecomfort-furniture", name: "OfficeComfort Furniture", contactPerson: "David Lopes", email: "orders@officecomfort.ae", phone: "+971-4-555-0104", defaultCurrency: "AED", paymentTerms: "Net 30", leadTimeDays: 21 },
+  { key: "climate-systems-uae", name: "Climate Systems UAE", contactPerson: "Faisal Rahman", email: "sales@climatesystems.ae", phone: "+971-4-555-0105", defaultCurrency: "AED", paymentTerms: "Net 30", leadTimeDays: 28 },
+  { key: "powerline-supplies", name: "PowerLine Supplies", contactPerson: "Michael Tan", email: "sales@powerlinesupplies.ae", phone: "+971-4-555-0106", defaultCurrency: "AED", paymentTerms: "Net 30", leadTimeDays: 10 },
+  { key: "aquaflow-supplies", name: "AquaFlow Supplies", contactPerson: "Hassan Ali", email: "info@aquaflowsupplies.ae", phone: "+971-4-555-0107", defaultCurrency: "AED", paymentTerms: "Net 15", leadTimeDays: 7 },
+  { key: "woodcraft-uae", name: "WoodCraft UAE", contactPerson: "Layla Nasser", email: "sales@woodcraft.ae", phone: "+971-4-555-0108", defaultCurrency: "AED", paymentTerms: "Net 30", leadTimeDays: 18 },
+  { key: "greenscape-materials", name: "GreenScape Materials", contactPerson: "Omar Suleiman", email: "sales@greenscape.ae", phone: "+971-4-555-0109", defaultCurrency: "AED", paymentTerms: "Net 30", leadTimeDays: 14 },
+  { key: "irritech-systems", name: "IrriTech Systems", contactPerson: "Noura Khalid", email: "info@irritech.ae", phone: "+971-4-555-0110", defaultCurrency: "AED", paymentTerms: "Net 30", leadTimeDays: 10 },
+  { key: "lumascape-lighting", name: "LumaScape Lighting", contactPerson: "Karim Fathy", email: "sales@lumascape.ae", phone: "+971-4-555-0111", defaultCurrency: "AED", paymentTerms: "Net 30", leadTimeDays: 21 },
+];
+
+type CatalogueStatusKind = "ACTIVE" | "EXPIRED" | "PENDING";
+
+type CatalogueSeed = {
+  industryKey: string;
+  itemCode: string;
+  category: string;
+  description: string;
+  unit: string;
+  supplierKey: string;
+  baseCost: string;
+  freightCost: string;
+  installationCost: string;
+  defaultMargin: string;
+  statusKind: CatalogueStatusKind;
+  minimumSellingRate?: string;
+};
+
+const catalogueSeeds: CatalogueSeed[] = [
+  // Construction
+  { industryKey: "construction", itemCode: "CON-CONC-25", category: "Concrete", description: "25 MPa ready-mix concrete", unit: "m3", supplierKey: "dubai-concrete-steel", baseCost: "480", freightCost: "20", installationCost: "0", defaultMargin: "12", statusKind: "ACTIVE" },
+  { industryKey: "construction", itemCode: "CON-REBAR-12", category: "Reinforcement", description: "High-yield reinforcement steel 12 mm", unit: "tonne", supplierKey: "dubai-concrete-steel", baseCost: "2380", freightCost: "90", installationCost: "0", defaultMargin: "18", statusKind: "ACTIVE" },
+  { industryKey: "construction", itemCode: "CON-BLOCK-200", category: "Blockwork", description: "200 mm concrete block wall", unit: "m2", supplierKey: "dubai-concrete-steel", baseCost: "65", freightCost: "5", installationCost: "15", defaultMargin: "15", statusKind: "ACTIVE" },
+  { industryKey: "construction", itemCode: "CON-WP-TORCH", category: "Waterproofing", description: "Torch-applied bituminous waterproof membrane", unit: "m2", supplierKey: "gulf-waterproofing-formwork", baseCost: "45", freightCost: "3", installationCost: "12", defaultMargin: "18", statusKind: "EXPIRED" },
+  { industryKey: "construction", itemCode: "CON-FORM-PLY", category: "Formwork", description: "Plywood formwork system", unit: "m2", supplierKey: "gulf-waterproofing-formwork", baseCost: "35", freightCost: "2", installationCost: "8", defaultMargin: "15", statusKind: "PENDING" },
+
+  // Interior fit-out
+  { industryKey: "interior-fitout", itemCode: "INT-GYP-125", category: "Gypsum Board", description: "12.5 mm gypsum wallboard", unit: "m2", supplierKey: "emirates-interior-materials", baseCost: "28", freightCost: "2", installationCost: "10", defaultMargin: "15", statusKind: "ACTIVE" },
+  { industryKey: "interior-fitout", itemCode: "INT-CARPET-600", category: "Flooring", description: "Carpet tile 600x600 mm", unit: "m2", supplierKey: "emirates-interior-materials", baseCost: "85", freightCost: "5", installationCost: "15", defaultMargin: "12", statusKind: "ACTIVE" },
+  { industryKey: "interior-fitout", itemCode: "INT-GLASS-PART", category: "Glass Partition", description: "10 mm tempered glass partition", unit: "m2", supplierKey: "emirates-interior-materials", baseCost: "320", freightCost: "15", installationCost: "45", defaultMargin: "18", statusKind: "ACTIVE" },
+  { industryKey: "interior-fitout", itemCode: "INT-PAINT-EMUL", category: "Painting", description: "Emulsion paint, three coats", unit: "m2", supplierKey: "emirates-interior-materials", baseCost: "12", freightCost: "1", installationCost: "6", defaultMargin: "20", statusKind: "EXPIRED" },
+  { industryKey: "interior-fitout", itemCode: "INT-CEIL-GRID", category: "Ceiling System", description: "Suspended ceiling grid with tiles", unit: "m2", supplierKey: "emirates-interior-materials", baseCost: "55", freightCost: "3", installationCost: "18", defaultMargin: "15", statusKind: "PENDING" },
+
+  // Furniture
+  { industryKey: "furniture", itemCode: "FUR-DESK-EXEC", category: "Executive Furniture", description: "Executive desk 1800x900 mm", unit: "pcs", supplierKey: "officecomfort-furniture", baseCost: "1850", freightCost: "80", installationCost: "50", defaultMargin: "18", statusKind: "ACTIVE" },
+  { industryKey: "furniture", itemCode: "FUR-CHAIR-TASK", category: "Seating", description: "Ergonomic task chair", unit: "pcs", supplierKey: "officecomfort-furniture", baseCost: "620", freightCost: "30", installationCost: "0", defaultMargin: "20", statusKind: "ACTIVE", minimumSellingRate: "820" },
+  { industryKey: "furniture", itemCode: "FUR-WS-1200", category: "Workstations", description: "1200 mm workstation with screen", unit: "pcs", supplierKey: "officecomfort-furniture", baseCost: "1450", freightCost: "60", installationCost: "40", defaultMargin: "15", statusKind: "ACTIVE" },
+  { industryKey: "furniture", itemCode: "FUR-TABLE-MEET", category: "Meeting Rooms", description: "Meeting table, seats eight", unit: "pcs", supplierKey: "officecomfort-furniture", baseCost: "3200", freightCost: "150", installationCost: "100", defaultMargin: "16", statusKind: "EXPIRED" },
+  { industryKey: "furniture", itemCode: "FUR-CAB-FILE", category: "Storage", description: "4-drawer filing cabinet", unit: "pcs", supplierKey: "officecomfort-furniture", baseCost: "780", freightCost: "40", installationCost: "0", defaultMargin: "18", statusKind: "PENDING" },
+
+  // MEP
+  { industryKey: "mep", itemCode: "MEP-FCU-2T", category: "Mechanical", description: "Fan coil unit, 2 ton", unit: "nos", supplierKey: "climate-systems-uae", baseCost: "2100", freightCost: "120", installationCost: "250", defaultMargin: "15", statusKind: "ACTIVE" },
+  { industryKey: "mep", itemCode: "MEP-AHU-5000", category: "Mechanical", description: "Air handling unit, 5000 CFM", unit: "nos", supplierKey: "climate-systems-uae", baseCost: "18500", freightCost: "800", installationCost: "1200", defaultMargin: "12", statusKind: "ACTIVE" },
+  { industryKey: "mep", itemCode: "MEP-CABLE-4C25", category: "Electrical", description: "4C x 25 mm2 XLPE power cable", unit: "m", supplierKey: "powerline-supplies", baseCost: "42", freightCost: "2", installationCost: "8", defaultMargin: "10", statusKind: "ACTIVE" },
+  { industryKey: "mep", itemCode: "MEP-PIPE-PPR32", category: "Plumbing", description: "32 mm PPR pipe", unit: "m", supplierKey: "aquaflow-supplies", baseCost: "22", freightCost: "1", installationCost: "6", defaultMargin: "12", statusKind: "EXPIRED" },
+  { industryKey: "mep", itemCode: "MEP-DIFF-600", category: "HVAC", description: "600x600 linear diffuser", unit: "nos", supplierKey: "climate-systems-uae", baseCost: "165", freightCost: "10", installationCost: "25", defaultMargin: "15", statusKind: "PENDING" },
+
+  // Joinery
+  { industryKey: "joinery", itemCode: "JNY-MDF-18", category: "MDF Board", description: "18 mm MDF board", unit: "m2", supplierKey: "woodcraft-uae", baseCost: "48", freightCost: "3", installationCost: "0", defaultMargin: "15", statusKind: "ACTIVE" },
+  { industryKey: "joinery", itemCode: "JNY-VENEER-OAK", category: "Veneer", description: "Natural oak veneer", unit: "m2", supplierKey: "woodcraft-uae", baseCost: "95", freightCost: "5", installationCost: "20", defaultMargin: "18", statusKind: "ACTIVE" },
+  { industryKey: "joinery", itemCode: "JNY-LAM-HPL", category: "Laminate", description: "High-pressure laminate finish", unit: "m2", supplierKey: "woodcraft-uae", baseCost: "65", freightCost: "4", installationCost: "15", defaultMargin: "16", statusKind: "ACTIVE" },
+  { industryKey: "joinery", itemCode: "JNY-HW-HINGE", category: "Hardware", description: "Soft-close cabinet hinge set", unit: "set", supplierKey: "woodcraft-uae", baseCost: "35", freightCost: "2", installationCost: "0", defaultMargin: "25", statusKind: "EXPIRED" },
+  { industryKey: "joinery", itemCode: "JNY-INSTALL-LS", category: "Installation", description: "Joinery installation labor", unit: "LS", supplierKey: "woodcraft-uae", baseCost: "5000", freightCost: "0", installationCost: "0", defaultMargin: "20", statusKind: "PENDING" },
+
+  // Landscaping
+  { industryKey: "landscaping", itemCode: "LND-TREE-PALM", category: "Trees", description: "Mature date palm tree", unit: "nos", supplierKey: "greenscape-materials", baseCost: "850", freightCost: "100", installationCost: "150", defaultMargin: "15", statusKind: "ACTIVE" },
+  { industryKey: "landscaping", itemCode: "LND-TURF-NAT", category: "Turf", description: "Natural grass turf", unit: "m2", supplierKey: "greenscape-materials", baseCost: "18", freightCost: "2", installationCost: "5", defaultMargin: "12", statusKind: "ACTIVE" },
+  { industryKey: "landscaping", itemCode: "LND-IRR-PIPE20", category: "Irrigation", description: "20 mm irrigation drip pipe", unit: "m", supplierKey: "irritech-systems", baseCost: "8", freightCost: "1", installationCost: "3", defaultMargin: "15", statusKind: "ACTIVE" },
+  { industryKey: "landscaping", itemCode: "LND-PAVE-600", category: "Hardscape", description: "600x600 concrete paving slab", unit: "m2", supplierKey: "greenscape-materials", baseCost: "195", freightCost: "12", installationCost: "40", defaultMargin: "12", statusKind: "EXPIRED" },
+  { industryKey: "landscaping", itemCode: "LND-LIGHT-LED", category: "Landscape Lighting", description: "LED bollard light", unit: "nos", supplierKey: "lumascape-lighting", baseCost: "320", freightCost: "20", installationCost: "60", defaultMargin: "18", statusKind: "PENDING" },
+];
 
 async function seedCompany(): Promise<string> {
   const companyId = getDevelopmentCompanyId();
@@ -679,39 +752,87 @@ async function seedBOQs(
   return { boqIds, itemIds };
 }
 
+async function seedSuppliers(companyId: string): Promise<Map<string, string>> {
+  const ids = new Map<string, string>();
+  for (const [index, seed] of supplierSeeds.entries()) {
+    const supplier = await prisma.supplier.upsert({
+      where: { id: seedUuid("b1000000", index + 1) },
+      update: {},
+      create: {
+        id: seedUuid("b1000000", index + 1),
+        companyId,
+        name: seed.name,
+        contactPerson: seed.contactPerson,
+        email: seed.email,
+        phone: seed.phone,
+        defaultCurrency: seed.defaultCurrency,
+        paymentTerms: seed.paymentTerms,
+        leadTimeDays: seed.leadTimeDays,
+        isActive: true,
+        createdAt: CREATED_AT,
+        updatedAt: UPDATED_AT,
+      },
+    });
+    ids.set(seed.key, supplier.id);
+  }
+  return ids;
+}
+
+function statusDateRange(kind: CatalogueStatusKind): { effectiveDate: Date; expiryDate: Date | null } {
+  const now = Date.now();
+  const day = 24 * 60 * 60 * 1000;
+  switch (kind) {
+    case "ACTIVE":
+      return { effectiveDate: new Date(now - 30 * day), expiryDate: new Date(now + 90 * day) };
+    case "EXPIRED":
+      return { effectiveDate: new Date(now - 120 * day), expiryDate: new Date(now - 10 * day) };
+    case "PENDING":
+      return { effectiveDate: new Date(now + 14 * day), expiryDate: null };
+  }
+}
+
 async function seedCatalogue(
   companyId: string,
   industryIds: Map<string, string>,
+  supplierIds: Map<string, string>,
 ): Promise<void> {
   for (const [index, seed] of catalogueSeeds.entries()) {
-    const [industryKey, itemCode, category, description, unit, supplier, cost, margin, sellingRate] = seed;
-    const industryEngineId = requiredId(industryIds, industryKey, "industry");
+    const industryEngineId = requiredId(industryIds, seed.industryKey, "industry");
+    const supplierId = requiredId(supplierIds, seed.supplierKey, "supplier");
+    const { effectiveDate, expiryDate } = statusDateRange(seed.statusKind);
+
+    const landedCost = calculateLandedCost({
+      unitCost: seed.baseCost,
+      freightCost: seed.freightCost,
+      installationCost: seed.installationCost,
+    });
+    const sellingRate = calculateSellingRate(landedCost, MarginMode.MARKUP, seed.defaultMargin);
+
     const data = {
       companyId,
       industryEngineId,
-      itemCode,
-      category,
-      description,
-      unit,
-      supplier,
-      cost: decimal(cost),
-      defaultMargin: decimal(margin),
-      sellingRate: decimal(sellingRate),
+      supplierId,
+      itemCode: seed.itemCode,
+      category: seed.category,
+      description: seed.description,
+      unit: seed.unit,
+      baseCost: decimal(seed.baseCost),
+      freightCost: decimal(seed.freightCost),
+      installationCost: decimal(seed.installationCost),
+      additionalCost: decimal(0),
+      landedCost,
+      marginMode: MarginMode.MARKUP,
+      defaultMargin: decimal(seed.defaultMargin),
+      sellingRate,
+      minimumSellingRate: seed.minimumSellingRate ? decimal(seed.minimumSellingRate) : null,
       currency: "AED",
-      effectiveDate: EFFECTIVE_AT,
-      expiryDate: null,
-      status: RateStatus.ACTIVE,
+      effectiveDate,
+      expiryDate,
+      status: seed.statusKind as RateStatus,
       updatedAt: UPDATED_AT,
     };
     await prisma.rateCatalogueItem.upsert({
-      where: {
-        companyId_industryEngineId_itemCode_effectiveDate: {
-          companyId,
-          industryEngineId,
-          itemCode,
-          effectiveDate: EFFECTIVE_AT,
-        },
-      },
+      where: { companyId_itemCode: { companyId, itemCode: seed.itemCode } },
       update: {},
       create: {
         id: seedUuid("90000000", index + 1),
@@ -846,13 +967,14 @@ async function main(): Promise<void> {
   await seedClients(companyId);
   const projectIds = await seedProjects(companyId, industryIds);
   const { boqIds, itemIds } = await seedBOQs(companyId, projectIds);
-  await seedCatalogue(companyId, industryIds);
+  const supplierIds = await seedSuppliers(companyId);
+  await seedCatalogue(companyId, industryIds, supplierIds);
   await seedVerificationExamples(companyId, boqIds, itemIds);
   await seedAuditLogs(companyId, boqIds);
   await seedOwnerUser(companyId);
 
   console.log(
-    `Seeded Quantara development tenant with ${INDUSTRY_KEYS.length} industries and ${projectSeeds.length} projects.`,
+    `Seeded Quantara development tenant with ${INDUSTRY_KEYS.length} industries, ${projectSeeds.length} projects, ${supplierSeeds.length} suppliers, and ${catalogueSeeds.length} catalogue rates.`,
   );
 }
 

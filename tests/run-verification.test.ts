@@ -62,6 +62,8 @@ describe("deterministic verification", () => {
         { ...validItem, id: "item-zero", itemCode: "DUP-001", quantity: 0 },
         { ...validItem, id: "item-negative", itemCode: "NEG-001", quantity: -1 },
         { ...validItem, id: "item-high", itemCode: "HIGH-001", quantity: 10_001 },
+        { ...validItem, id: "item-below-minimum", itemCode: "MIN-001", minimumSellingRate: 150 },
+        { ...validItem, id: "item-overridden", itemCode: "OVR-001", manualOverrideFields: ["unitCost"] },
       ],
     });
     const types = new Set(exceptions.map((entry) => entry.type));
@@ -83,6 +85,9 @@ describe("deterministic verification", () => {
         "DUPLICATE_ITEM_CODE",
         "UNUSUALLY_HIGH_QUANTITY",
         "LOCKED_REVISION_CONFLICT",
+        "SELLING_RATE_BELOW_LANDED_COST",
+        "SELLING_RATE_BELOW_MINIMUM",
+        "MANUAL_COMMERCIAL_OVERRIDE",
       ]),
     );
     expect(hasBlockingCriticalExceptions(exceptions)).toBe(true);

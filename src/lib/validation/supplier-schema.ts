@@ -18,13 +18,7 @@ const currencySchema = z
   .regex(/^[A-Za-z]{3}$/, "Currency must be a three-letter ISO code.")
   .transform((value) => value.toUpperCase());
 
-function normalize<T extends { [key: string]: unknown }>(value: T) {
-  const result: Record<string, unknown> = { ...value };
-  for (const key of ["legalName", "email", "phone", "website", "address", "contactPerson", "taxRegistrationNumber", "paymentTerms", "notes"]) {
-    if (key in result && result[key] === "") result[key] = null;
-  }
-  return result;
-}
+const blankToNull = (value: string | null | undefined) => (value ? value : null);
 
 export const supplierCreateSchema = z
   .object({
@@ -42,7 +36,20 @@ export const supplierCreateSchema = z
     notes: optionalText(5_000),
   })
   .strict()
-  .transform(normalize);
+  .transform((value) => ({
+    name: value.name,
+    legalName: blankToNull(value.legalName),
+    email: blankToNull(value.email),
+    phone: blankToNull(value.phone),
+    website: blankToNull(value.website),
+    address: blankToNull(value.address),
+    contactPerson: blankToNull(value.contactPerson),
+    taxRegistrationNumber: blankToNull(value.taxRegistrationNumber),
+    defaultCurrency: value.defaultCurrency,
+    paymentTerms: blankToNull(value.paymentTerms),
+    leadTimeDays: value.leadTimeDays ?? null,
+    notes: blankToNull(value.notes),
+  }));
 
 export const supplierUpdateSchema = z
   .object({
@@ -60,7 +67,22 @@ export const supplierUpdateSchema = z
     notes: optionalText(5_000),
   })
   .strict()
-  .transform(normalize);
+  .transform((value) => {
+    const result: Record<string, unknown> = {};
+    if (value.name !== undefined) result.name = value.name;
+    if (value.legalName !== undefined) result.legalName = blankToNull(value.legalName);
+    if (value.email !== undefined) result.email = blankToNull(value.email);
+    if (value.phone !== undefined) result.phone = blankToNull(value.phone);
+    if (value.website !== undefined) result.website = blankToNull(value.website);
+    if (value.address !== undefined) result.address = blankToNull(value.address);
+    if (value.contactPerson !== undefined) result.contactPerson = blankToNull(value.contactPerson);
+    if (value.taxRegistrationNumber !== undefined) result.taxRegistrationNumber = blankToNull(value.taxRegistrationNumber);
+    if (value.defaultCurrency !== undefined) result.defaultCurrency = value.defaultCurrency;
+    if (value.paymentTerms !== undefined) result.paymentTerms = blankToNull(value.paymentTerms);
+    if (value.leadTimeDays !== undefined) result.leadTimeDays = value.leadTimeDays;
+    if (value.notes !== undefined) result.notes = blankToNull(value.notes);
+    return result;
+  });
 
 export const supplierListQuerySchema = z
   .object({

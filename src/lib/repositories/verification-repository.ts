@@ -148,6 +148,10 @@ export async function runBOQVerification(companyId: string, boqId: string, asOf 
         drawingReference: item.drawingReference,
         supplierRateExpiryDate:
           rate?.status === RateStatus.EXPIRED ? new Date(0) : rate?.expiryDate,
+        minimumSellingRate: rate?.minimumSellingRate ?? undefined,
+        manualOverrideFields:
+          (item.pricingMetadataJson as { manuallyOverriddenFields?: string[] } | null)?.manuallyOverriddenFields ??
+          undefined,
         status: item.status,
       };
     }),

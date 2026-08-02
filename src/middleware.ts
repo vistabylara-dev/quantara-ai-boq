@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { SESSION_COOKIE_NAME } from "@/lib/auth/session";
+import { SESSION_COOKIE_NAME } from "@/lib/auth/session-cookie-name";
 
 const PUBLIC_PAGE_PREFIXES = [
   "/",

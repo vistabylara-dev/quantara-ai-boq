@@ -1,8 +1,9 @@
 import { cookies } from "next/headers";
 import { prisma } from "@/lib/db/prisma";
 import { generateRawToken, hashToken } from "./tokens";
+import { SESSION_COOKIE_NAME } from "./session-cookie-name";
 
-export const SESSION_COOKIE_NAME = "quantara_session";
+export { SESSION_COOKIE_NAME };
 export const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 
 function cookieOptions(expiresAt: Date) {

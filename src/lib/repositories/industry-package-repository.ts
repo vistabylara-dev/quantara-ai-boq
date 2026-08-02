@@ -2,6 +2,10 @@ import type { IndustryDataPackage } from "@prisma/client";
 import { prisma } from "@/lib/db/prisma";
 import { NotFoundError } from "@/lib/errors/app-error";
 
+function isUuid(value: string) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+}
+
 function toPackageDTO(row: IndustryDataPackage) {
   return {
     id: row.id,
@@ -29,7 +33,9 @@ export async function listPackages(includeInactive = false) {
 }
 
 export async function getPackage(packageIdOrKey: string) {
-  const row = await prisma.industryDataPackage.findFirst({ where: { OR: [{ id: packageIdOrKey }, { key: packageIdOrKey }] } });
+  const row = await prisma.industryDataPackage.findFirst({
+    where: isUuid(packageIdOrKey) ? { OR: [{ id: packageIdOrKey }, { key: packageIdOrKey }] } : { key: packageIdOrKey },
+  });
   if (!row) throw new NotFoundError("Package not found.");
   return toPackageDTO(row);
 }

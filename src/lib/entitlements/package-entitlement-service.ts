@@ -12,8 +12,13 @@ import type { CurrentActor } from "@/lib/auth/current-actor";
  * companyHasPackageAccessForItem, which entitlement-service imports.
  */
 
+function isUuid(value: string) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+}
+
+/** A raw {id: nonUuidString} equality filter throws at the Prisma layer for a @db.Uuid column, so the id branch is only ever included when the input actually looks like a UUID. */
 async function resolvePackage(packageKeyOrId: string) {
-  return prisma.industryDataPackage.findFirst({ where: { OR: [{ id: packageKeyOrId }, { key: packageKeyOrId }] } });
+  return prisma.industryDataPackage.findFirst({ where: isUuid(packageKeyOrId) ? { OR: [{ id: packageKeyOrId }, { key: packageKeyOrId }] } : { key: packageKeyOrId } });
 }
 
 /** Expires any package subscription whose expiresAt has passed. Existing copied items remain visible; only new copying is blocked (enforced by the callers of assertMasterItemAccess). */

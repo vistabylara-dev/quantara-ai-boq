@@ -251,6 +251,15 @@ describe("Phase 7: commercial entitlements + industry data platform (integration
       await expect(assertMasterItemAccess(companyId, itemId)).rejects.toThrow(AppError);
     });
 
+    it("resolves a package by its string key as well as its UUID (not just the UUID)", async () => {
+      const { companyId } = await seedCompanyWithUser("package-by-key");
+      cleanupCompanyIds.push(companyId);
+
+      await activateDevelopmentPackage(actor(companyId), "mechanical-hvac-professional");
+      expect(await companyHasPackageAccess(companyId, "mechanical-hvac-professional")).toBe(true);
+      expect(await companyHasPackageAccess(companyId, mechanicalPackageId)).toBe(true);
+    });
+
     it("does not cross company boundaries for package subscriptions", async () => {
       const { companyId: companyAId } = await seedCompanyWithUser("pkg-isolation-a");
       const { companyId: companyBId } = await seedCompanyWithUser("pkg-isolation-b");

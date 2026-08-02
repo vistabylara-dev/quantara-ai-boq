@@ -20,6 +20,8 @@ export type Capability =
   | "boq:lock"
   | "verification:manage"
   | "catalogue:manage"
+  | "suppliers:manage"
+  | "suppliers:deactivate"
   | "clients:manage"
   | "templates:manage"
   | "proposals:manage"
@@ -36,6 +38,8 @@ const ALL_CAPABILITIES: Capability[] = [
   "boq:lock",
   "verification:manage",
   "catalogue:manage",
+  "suppliers:manage",
+  "suppliers:deactivate",
   "clients:manage",
   "templates:manage",
   "proposals:manage",
@@ -55,11 +59,13 @@ const ROLE_CAPABILITIES: Record<UserRole, Capability[]> = {
     "boq:lock",
     "verification:manage",
     "catalogue:manage",
+    "suppliers:manage",
+    "suppliers:deactivate",
     "clients:manage",
     "templates:manage",
   ],
   QUANTITY_SURVEYOR: ["projects:create", "projects:update", "boq:edit", "boq:lock", "verification:manage"],
-  ESTIMATOR: ["projects:create", "projects:update", "boq:edit", "catalogue:manage"],
+  ESTIMATOR: ["projects:create", "projects:update", "boq:edit", "catalogue:manage", "suppliers:manage"],
   DESIGNER: ["files:manage", "review:comment"],
   SALES_USER: ["projects:create", "clients:manage", "proposals:manage"],
   REVIEWER: ["review:comment", "verification:manage"],

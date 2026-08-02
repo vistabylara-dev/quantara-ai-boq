@@ -36,6 +36,6 @@ export async function updateSupplierForCompany(
 }
 
 export async function deactivateSupplierForCompany(actor: CurrentActor, supplierId: string) {
-  requireCapability(actor, "suppliers:manage");
+  requireCapability(actor, "suppliers:deactivate");
   return deactivateSupplierRecord(actor.companyId, supplierId);
 }

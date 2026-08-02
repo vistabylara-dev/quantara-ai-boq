@@ -31,7 +31,10 @@ export type Capability =
   | "documents:generate:internal"
   | "documents:download"
   | "documents:delete"
-  | "email-templates:manage";
+  | "email-templates:manage"
+  | "library:manage"
+  | "imports:manage"
+  | "entitlements:manage";
 
 const ALL_CAPABILITIES: Capability[] = [
   "company:manage",
@@ -55,6 +58,9 @@ const ALL_CAPABILITIES: Capability[] = [
   "documents:download",
   "documents:delete",
   "email-templates:manage",
+  "library:manage",
+  "imports:manage",
+  "entitlements:manage",
 ];
 
 const ROLE_CAPABILITIES: Record<UserRole, Capability[]> = {
@@ -79,8 +85,12 @@ const ROLE_CAPABILITIES: Record<UserRole, Capability[]> = {
     "documents:delete",
     "proposals:manage",
     "email-templates:manage",
+    "library:manage",
+    "imports:manage",
+    "entitlements:manage",
   ],
   // "generate and download" (section 21): full generate access, no delete, no template management.
+  // Phase 7 section 31: "search, add to BOQ, create and edit company items, import BOQ items".
   QUANTITY_SURVEYOR: [
     "projects:create",
     "projects:update",
@@ -90,10 +100,13 @@ const ROLE_CAPABILITIES: Record<UserRole, Capability[]> = {
     "documents:generate",
     "documents:generate:internal",
     "documents:download",
+    "library:manage",
+    "imports:manage",
   ],
   // "generate internal and approved client outputs where allowed" (section 21): same generate
   // capability as QUANTITY_SURVEYOR — the "where allowed" nuance is the lock-required rule
   // enforced by document-generation-service, not a distinct RBAC capability.
+  // Phase 7 section 31: "search, add to BOQ, edit commercial defaults, import rates".
   ESTIMATOR: [
     "projects:create",
     "projects:update",
@@ -103,10 +116,14 @@ const ROLE_CAPABILITIES: Record<UserRole, Capability[]> = {
     "documents:generate",
     "documents:generate:internal",
     "documents:download",
+    "library:manage",
+    "imports:manage",
   ],
-  DESIGNER: ["files:manage", "review:comment"],
+  // Phase 7 section 31: "search, create technical items, edit technical specifications" — no import access.
+  DESIGNER: ["files:manage", "review:comment", "library:manage"],
   // "download and generate client-facing outputs from approved revisions" (section 21): generate
   // access without the internal-audience capability, so INTERNAL-audience generation is blocked.
+  // Phase 7 section 31: "read company library, use approved items where permitted" — no library:manage.
   SALES_USER: ["projects:create", "clients:manage", "proposals:manage", "documents:generate", "documents:download"],
   REVIEWER: ["review:comment", "verification:manage", "documents:download"],
 };

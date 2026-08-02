@@ -25,6 +25,9 @@ import { generatePdf } from "@/lib/documents/generators/pdf-generator";
 import { generateDocx } from "@/lib/documents/generators/docx-generator";
 import { generateHtml } from "@/lib/documents/generators/html-generator";
 import { calculateBOQTotals } from "@/lib/calculations/boq-calculator";
+import { canGenerateDocument, getCompanyEntitlements, recordDocumentGenerated } from "@/lib/entitlements/entitlement-service";
+
+export const TRIAL_WATERMARK_TEXT = "Generated with Quantara AI — Trial Version";
 
 const FINAL_ONLY_TYPES: GeneratedDocumentType[] = [
   GeneratedDocumentType.PDF,
@@ -148,6 +151,11 @@ export async function generateDocument(actor: CurrentActor, projectIdentifier: s
   const isLocked = boqRecord.isLocked;
   const isDraft = !isLocked;
 
+  const documentCheck = await canGenerateDocument(actor.companyId, isDraft);
+  if (!documentCheck.allowed) {
+    throw new AppError("TRIAL_EXPORT_LIMIT_REACHED", documentCheck.reason ?? "Document generation limit reached.", 403);
+  }
+
   if (FINAL_ONLY_TYPES.includes(input.documentType) && isDraft) {
     throw new AppError(
       "LOCKED_REVISION_REQUIRED",
@@ -194,6 +202,8 @@ export async function generateDocument(actor: CurrentActor, projectIdentifier: s
   }
 
   const company = await prisma.company.findUniqueOrThrow({ where: { id: actor.companyId } });
+  const entitlements = await getCompanyEntitlements(actor.companyId);
+  const applyTrialWatermark = entitlements.isTrial && !isDraft;
 
   const documentData = buildDocumentData({
     company: {
@@ -231,6 +241,7 @@ export async function generateDocument(actor: CurrentActor, projectIdentifier: s
     generatedByName: actor.fullName,
     isDraft,
     showInternalCostFieldsToClient: template.contentConfig.showInternalCostFieldsToClient,
+    watermarkText: applyTrialWatermark ? TRIAL_WATERMARK_TEXT : null,
   });
 
   const queued = await createQueuedDocument(actor.companyId, {
@@ -279,7 +290,7 @@ export async function generateDocument(actor: CurrentActor, projectIdentifier: s
       contentType: MIME_TYPES[input.documentType],
     });
 
-    return await markDocumentCompleted(actor.companyId, queued.id, {
+    const completed = await markDocumentCompleted(actor.companyId, queued.id, {
       storageKey,
       fileName,
       mimeType: MIME_TYPES[input.documentType],
@@ -291,8 +302,11 @@ export async function generateDocument(actor: CurrentActor, projectIdentifier: s
         audience: input.audience,
         isDraft,
         acknowledgedWarnings: Boolean(input.acknowledgedWarnings),
+        trialWatermarked: applyTrialWatermark,
       },
     });
+    await recordDocumentGenerated(actor.companyId, isDraft);
+    return completed;
   } catch (error) {
     const message = error instanceof Error ? error.message : "Document generation failed.";
     await markDocumentFailed(actor.companyId, queued.id, message.slice(0, 500));

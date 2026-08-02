@@ -21,6 +21,7 @@ import {
 import { localDocumentStorageAdapter } from "../src/lib/storage/local-document-storage-adapter";
 import { NotFoundError, PermissionDeniedError } from "../src/lib/errors/app-error";
 import type { CurrentActor } from "../src/lib/auth/current-actor";
+import { grantUnlimitedPlanForTests } from "./helpers/grant-unlimited-plan";
 
 const RUN_ID = Date.now();
 const userIdByCompany = new Map<string, string>();
@@ -104,7 +105,9 @@ describe("document generation service (integration, real local Postgres)", () =>
       data: { legalName: `Phase5 Test Co B ${RUN_ID}`, tradeName: "Phase5 Co B", email: `phase5-b-${RUN_ID}@example.com` },
     });
     companyAId = companyA.id;
+    await grantUnlimitedPlanForTests(companyAId);
     companyBId = companyB.id;
+    await grantUnlimitedPlanForTests(companyBId);
 
     const construction = await prisma.industryEngine.findUniqueOrThrow({ where: { key: "construction" } });
     await prisma.companyIndustryEngine.create({ data: { companyId: companyAId, industryEngineId: construction.id, enabled: true } });

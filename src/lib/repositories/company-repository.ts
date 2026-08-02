@@ -11,10 +11,19 @@ export type CompanyUpdateData = {
   phone?: string | null;
   website?: string | null;
   address?: string | null;
+  country?: string | null;
   taxRegistrationNumber?: string | null;
   defaultCurrency?: string;
   vatRate?: string | number | import("@prisma/client").Prisma.Decimal;
   defaultLanguage?: string;
+  logoUrl?: string | null;
+  authorizedSignatoryName?: string | null;
+  authorizedSignatoryTitle?: string | null;
+  stampUrl?: string | null;
+  signatureUrl?: string | null;
+  defaultTerms?: string | null;
+  defaultExclusions?: string | null;
+  defaultValidityDays?: number;
 };
 
 export type CreateCompanyInput = {

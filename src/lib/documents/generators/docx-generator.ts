@@ -167,6 +167,15 @@ export async function generateDocx(input: GenerateDocxInput): Promise<Buffer> {
       }),
     );
   }
+  if (data.meta.watermarkText) {
+    children.push(
+      new Paragraph({
+        alignment: AlignmentType.CENTER,
+        spacing: { after: 200 },
+        children: [new TextRun({ text: data.meta.watermarkText, bold: true, color: "1D4ED8", size: 20 })],
+      }),
+    );
+  }
 
   children.push(paragraph(data.boq.title, rtl, { heading: HeadingLevel.TITLE, spacingAfter: 80 }));
   children.push(
@@ -246,6 +255,14 @@ export async function generateDocx(input: GenerateDocxInput): Promise<Buffer> {
         footers: {
           default: new Footer({
             children: [
+              ...(data.meta.watermarkText
+                ? [
+                    new Paragraph({
+                      alignment: AlignmentType.CENTER,
+                      children: [new TextRun({ text: data.meta.watermarkText, size: 14, color: "1D4ED8" })],
+                    }),
+                  ]
+                : []),
               new Paragraph({
                 alignment: AlignmentType.CENTER,
                 children: [

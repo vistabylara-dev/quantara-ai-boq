@@ -36,3 +36,27 @@ export const proposalTokenDocumentParamsSchema = z.object({
   token: z.string().trim().min(20, "A valid proposal token is required.").max(200),
   documentId: z.string().uuid("A valid document ID is required."),
 }).strict();
+
+export const categoryIdParamsSchema = z.object({
+  categoryId: z.string().uuid("A valid category ID is required."),
+}).strict();
+
+export const masterItemIdParamsSchema = z.object({
+  itemId: z.string().uuid("A valid master item ID is required."),
+}).strict();
+
+export const packageIdParamsSchema = z.object({
+  packageId: z.string().min(1, "A valid package ID is required.").max(200),
+}).strict();
+
+export const libraryItemIdParamsSchema = z.object({
+  itemId: z.string().uuid("A valid company library item ID is required."),
+}).strict();
+
+export const boqIdParamsSchema = z.object({
+  boqId: z.string().uuid("A valid BOQ ID is required."),
+}).strict();
+
+export const importJobIdParamsSchema = z.object({
+  importJobId: z.string().uuid("A valid import job ID is required."),
+}).strict();

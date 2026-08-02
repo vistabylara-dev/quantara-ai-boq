@@ -40,6 +40,9 @@ export function generateCsv(data: CanonicalDocumentData): Buffer {
   ];
 
   let output = UTF8_BOM;
+  if (data.meta.watermarkText) {
+    output += row([data.meta.watermarkText]);
+  }
   output += row(headers);
 
   for (const section of data.boq.sections) {
@@ -72,6 +75,10 @@ export function generateCsv(data: CanonicalDocumentData): Buffer {
   }
 
   output += row([]);
+  if (data.meta.watermarkText) {
+    output += row([data.meta.watermarkText]);
+    output += row([]);
+  }
   output += row(["", "", "", "", "", "", "", ...(showInternal ? ["", "", "", "", "", ""] : []), "Subtotal", data.boq.totals.subtotal, "", "", ""]);
   output += row(["", "", "", "", "", "", "", ...(showInternal ? ["", "", "", "", "", ""] : []), "Discount", data.boq.totals.discountAmount, "", "", ""]);
   output += row(["", "", "", "", "", "", "", ...(showInternal ? ["", "", "", "", "", ""] : []), "VAT", data.boq.totals.taxAmount, "", "", ""]);

@@ -144,20 +144,601 @@ enum EmailDispatchStatus {
   CANCELLED
 }
 
+// ---------- Phase 7: commercial access, entitlements, master data platform ----------
+
+enum PlanType {
+  FREE
+  TRIAL
+  PRO
+  BUSINESS
+  ENTERPRISE
+}
+
+/**
+ * Shared by both CompanySoftwareSubscription and CompanyPackageSubscription — identical lifecycle.
+ */
+enum SubscriptionStatus {
+  TRIAL
+  ACTIVE
+  PAST_DUE
+  CANCELLED
+  EXPIRED
+  SUSPENDED
+}
+
+enum TechnicalFieldType {
+  TEXT
+  NUMBER
+  DECIMAL
+  BOOLEAN
+  SELECT
+  MULTI_SELECT
+  DATE
+  DIMENSION
+  RANGE
+  JSON
+}
+
+enum MasterItemStatus {
+  DRAFT
+  ACTIVE
+  DEPRECATED
+  ARCHIVED
+}
+
+enum IndustryPackageType {
+  CORE
+  PROFESSIONAL
+  SPECIALIST
+  ENTERPRISE
+  REGIONAL
+}
+
+enum IndustryPackageStatus {
+  DRAFT
+  ACTIVE
+  INACTIVE
+}
+
+enum CompanyLibrarySourceType {
+  MASTER_PACKAGE
+  MANUAL
+  IMPORTED
+  PREVIOUS_PROJECT
+  SUPPLIER_CATALOGUE
+}
+
+enum BoqItemSourceType {
+  MANUAL
+  MASTER_ITEM
+  COMPANY_LIBRARY
+  RATE_CATALOGUE
+  PREVIOUS_BOQ
+  IMPORT
+}
+
+enum ImportSourceType {
+  CSV
+  XLSX
+}
+
+enum ImportDestinationType {
+  COMPANY_LIBRARY
+  RATE_CATALOGUE
+  DRAFT_BOQ
+  STAGING_REVIEW
+}
+
+enum ImportJobStatus {
+  PENDING
+  VALIDATING
+  VALIDATED
+  IMPORTING
+  COMPLETED
+  FAILED
+}
+
+enum ImportRowStatus {
+  PENDING
+  VALID
+  WARNING
+  ERROR
+  APPROVED
+  IMPORTED
+  REJECTED
+}
+
+model SoftwarePlan {
+  id                   String                        @id @default(uuid()) @db.Uuid
+  key                  String                        @unique
+  name                 String
+  description          String                        @default("")
+  planType             PlanType
+  monthlyPrice         Decimal                       @default(0) @db.Decimal(12, 2)
+  annualPrice          Decimal                       @default(0) @db.Decimal(12, 2)
+  currency             String                        @default("USD")
+  maxUsers             Int?
+  maxProjects          Int?
+  maxActiveBoqs        Int?
+  maxDocumentsPerMonth Int?
+  maxStorageBytes      BigInt?
+  featuresJson         Json?
+  isActive             Boolean                       @default(true)
+  createdAt            DateTime                      @default(now())
+  updatedAt            DateTime                      @updatedAt
+  subscriptions        CompanySoftwareSubscription[]
+
+  @@index([planType])
+  @@index([isActive])
+}
+
+model CompanySoftwareSubscription {
+  id                     String                   @id @default(uuid()) @db.Uuid
+  companyId              String                   @db.Uuid
+  softwarePlanId         String                   @db.Uuid
+  status                 SubscriptionStatus
+  trialStartedAt         DateTime?
+  trialExpiresAt         DateTime?
+  startsAt               DateTime?
+  expiresAt              DateTime?
+  cancelledAt            DateTime?
+  externalSubscriptionId String?
+  source                 String                   @default("development")
+  createdAt              DateTime                 @default(now())
+  updatedAt              DateTime                 @updatedAt
+  company                Company                  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  softwarePlan           SoftwarePlan             @relation(fields: [softwarePlanId], references: [id], onDelete: Restrict)
+  trialUsage             CompanyTrialUsage[]
+  trialPremiumUnlocks    TrialPremiumItemUnlock[]
+
+  @@index([companyId])
+  @@index([softwarePlanId])
+  @@index([status])
+}
+
+model CompanyTrialUsage {
+  id                         String                      @id @default(uuid()) @db.Uuid
+  companyId                  String                      @db.Uuid
+  subscriptionId             String                      @db.Uuid
+  projectsCreated            Int                         @default(0)
+  boqsCompleted              Int                         @default(0)
+  documentsGenerated         Int                         @default(0)
+  proposalsCreated           Int                         @default(0)
+  uniquePremiumItemsUnlocked Int                         @default(0)
+  firstUsedAt                DateTime?
+  lastUsedAt                 DateTime?
+  createdAt                  DateTime                    @default(now())
+  updatedAt                  DateTime                    @updatedAt
+  company                    Company                     @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  subscription               CompanySoftwareSubscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, subscriptionId])
+  @@index([companyId])
+  @@index([subscriptionId])
+}
+
+model TrialPremiumItemUnlock {
+  id              String                      @id @default(uuid()) @db.Uuid
+  companyId       String                      @db.Uuid
+  subscriptionId  String                      @db.Uuid
+  masterItemId    String                      @db.Uuid
+  firstUnlockedAt DateTime                    @default(now())
+  lastUsedAt      DateTime                    @default(now())
+  usageCount      Int                         @default(1)
+  createdAt       DateTime                    @default(now())
+  updatedAt       DateTime                    @updatedAt
+  company         Company                     @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  subscription    CompanySoftwareSubscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  masterItem      MasterItem                  @relation(fields: [masterItemId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, subscriptionId, masterItemId])
+  @@index([companyId])
+  @@index([subscriptionId])
+  @@index([masterItemId])
+}
+
+model CompanyBranding {
+  id                  String            @id @default(uuid()) @db.Uuid
+  companyId           String            @unique @db.Uuid
+  primaryColor        String            @default("#0F172A")
+  secondaryColor      String            @default("#1E293B")
+  accentColor         String            @default("#2563EB")
+  documentHeaderColor String            @default("#0F172A")
+  tableHeaderColor    String            @default("#1E293B")
+  coverStyle          String            @default("light")
+  logoPosition        String            @default("top-left")
+  preferredTemplateId String?           @db.Uuid
+  emailSignatureHtml  String            @default("")
+  footerText          String            @default("")
+  createdAt           DateTime          @default(now())
+  updatedAt           DateTime          @updatedAt
+  company             Company           @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  preferredTemplate   DocumentTemplate? @relation(fields: [preferredTemplateId], references: [id], onDelete: SetNull)
+
+  @@index([preferredTemplateId])
+}
+
+model MasterDiscipline {
+  id               String                     @id @default(uuid()) @db.Uuid
+  key              String                     @unique
+  name             String
+  description      String                     @default("")
+  icon             String?
+  sortOrder        Int                        @default(0)
+  isActive         Boolean                    @default(true)
+  createdAt        DateTime                   @default(now())
+  updatedAt        DateTime                   @updatedAt
+  categories       MasterCategory[]
+  items            MasterItem[]
+  fieldDefinitions TechnicalFieldDefinition[]
+  packages         IndustryDataPackage[]
+  libraryItems     CompanyLibraryItem[]
+
+  @@index([isActive])
+}
+
+model MasterCategory {
+  id               String                     @id @default(uuid()) @db.Uuid
+  disciplineId     String                     @db.Uuid
+  parentCategoryId String?                    @db.Uuid
+  key              String
+  name             String
+  description      String                     @default("")
+  path             String
+  depth            Int                        @default(0)
+  sortOrder        Int                        @default(0)
+  isActive         Boolean                    @default(true)
+  createdAt        DateTime                   @default(now())
+  updatedAt        DateTime                   @updatedAt
+  discipline       MasterDiscipline           @relation(fields: [disciplineId], references: [id], onDelete: Cascade)
+  parentCategory   MasterCategory?            @relation("CategoryParent", fields: [parentCategoryId], references: [id], onDelete: Restrict)
+  childCategories  MasterCategory[]           @relation("CategoryParent")
+  items            MasterItem[]
+  fieldDefinitions TechnicalFieldDefinition[]
+  libraryItems     CompanyLibraryItem[]
+
+  @@index([disciplineId])
+  @@index([parentCategoryId])
+  @@index([path])
+}
+
+model MasterItem {
+  id                         String                    @id @default(uuid()) @db.Uuid
+  disciplineId               String                    @db.Uuid
+  categoryId                 String                    @db.Uuid
+  itemCode                   String
+  name                       String
+  shortDescription           String                    @default("")
+  fullDescription            String                    @default("")
+  defaultUnit                String
+  defaultSpecificationJson   Json?
+  technicalFieldsJson        Json?
+  defaultTagsJson            Json?
+  searchKeywordsJson         Json?
+  synonymsJson               Json?
+  defaultManufacturerType    String?
+  defaultInstallationMethod  String?
+  defaultTestingRequirement  String?
+  defaultWarrantyRequirement String?
+  defaultDocumentLabelsJson  Json?
+  version                    Int                       @default(1)
+  status                     MasterItemStatus          @default(ACTIVE)
+  isPremium                  Boolean                   @default(true)
+  createdAt                  DateTime                  @default(now())
+  updatedAt                  DateTime                  @updatedAt
+  discipline                 MasterDiscipline          @relation(fields: [disciplineId], references: [id], onDelete: Cascade)
+  category                   MasterCategory            @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  packageItems               IndustryDataPackageItem[]
+  trialUnlocks               TrialPremiumItemUnlock[]
+  libraryItems               CompanyLibraryItem[]
+  boqItems                   BOQItem[]
+
+  @@unique([disciplineId, itemCode])
+  @@index([disciplineId])
+  @@index([categoryId])
+  @@index([status])
+  @@index([isPremium])
+  @@index([name])
+}
+
+model TechnicalFieldDefinition {
+  id             String             @id @default(uuid()) @db.Uuid
+  disciplineId   String             @db.Uuid
+  categoryId     String?            @db.Uuid
+  key            String
+  label          String
+  description    String             @default("")
+  fieldType      TechnicalFieldType
+  unit           String?
+  optionsJson    Json?
+  validationJson Json?
+  isRequired     Boolean            @default(false)
+  isSearchable   Boolean            @default(false)
+  isFilterable   Boolean            @default(false)
+  sortOrder      Int                @default(0)
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+  discipline     MasterDiscipline   @relation(fields: [disciplineId], references: [id], onDelete: Cascade)
+  category       MasterCategory?    @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@index([disciplineId])
+  @@index([categoryId])
+}
+
+model IndustryDataPackage {
+  id            String                       @id @default(uuid()) @db.Uuid
+  key           String                       @unique
+  name          String
+  description   String                       @default("")
+  disciplineId  String                       @db.Uuid
+  packageType   IndustryPackageType
+  version       Int                          @default(1)
+  itemCount     Int                          @default(0)
+  monthlyPrice  Decimal                      @default(0) @db.Decimal(12, 2)
+  annualPrice   Decimal                      @default(0) @db.Decimal(12, 2)
+  currency      String                       @default("USD")
+  status        IndustryPackageStatus        @default(ACTIVE)
+  isFeatured    Boolean                      @default(false)
+  metadataJson  Json?
+  createdAt     DateTime                     @default(now())
+  updatedAt     DateTime                     @updatedAt
+  discipline    MasterDiscipline             @relation(fields: [disciplineId], references: [id], onDelete: Restrict)
+  items         IndustryDataPackageItem[]
+  subscriptions CompanyPackageSubscription[]
+  libraryItems  CompanyLibraryItem[]
+
+  @@index([disciplineId])
+  @@index([packageType])
+  @@index([status])
+}
+
+model IndustryDataPackageItem {
+  id           String              @id @default(uuid()) @db.Uuid
+  packageId    String              @db.Uuid
+  masterItemId String              @db.Uuid
+  sortOrder    Int                 @default(0)
+  createdAt    DateTime            @default(now())
+  package      IndustryDataPackage @relation(fields: [packageId], references: [id], onDelete: Cascade)
+  masterItem   MasterItem          @relation(fields: [masterItemId], references: [id], onDelete: Cascade)
+
+  @@unique([packageId, masterItemId])
+  @@index([packageId])
+  @@index([masterItemId])
+}
+
+model CompanyPackageSubscription {
+  id                     String              @id @default(uuid()) @db.Uuid
+  companyId              String              @db.Uuid
+  packageId              String              @db.Uuid
+  status                 SubscriptionStatus
+  startsAt               DateTime?
+  expiresAt              DateTime?
+  cancelledAt            DateTime?
+  source                 String              @default("development")
+  externalSubscriptionId String?
+  createdAt              DateTime            @default(now())
+  updatedAt              DateTime            @updatedAt
+  company                Company             @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  package                IndustryDataPackage @relation(fields: [packageId], references: [id], onDelete: Restrict)
+
+  @@index([companyId])
+  @@index([packageId])
+  @@index([status])
+}
+
+model CompanyLibraryItem {
+  id                         String                      @id @default(uuid()) @db.Uuid
+  companyId                  String                      @db.Uuid
+  sourceMasterItemId         String?                     @db.Uuid
+  sourcePackageId            String?                     @db.Uuid
+  disciplineId               String?                     @db.Uuid
+  categoryId                 String?                     @db.Uuid
+  companyItemCode            String
+  name                       String
+  description                String                      @default("")
+  specificationJson          Json?
+  technicalDataJson          Json?
+  unit                       String
+  defaultSupplierId          String?                     @db.Uuid
+  defaultRateCatalogueItemId String?                     @db.Uuid
+  defaultCost                Decimal                     @default(0) @db.Decimal(18, 4)
+  defaultMarginMode          MarginMode                  @default(MARKUP)
+  defaultMargin              Decimal                     @default(0) @db.Decimal(7, 4)
+  defaultSellingRate         Decimal                     @default(0) @db.Decimal(18, 4)
+  tagsJson                   Json?
+  searchKeywordsJson         Json?
+  sourceType                 CompanyLibrarySourceType    @default(MANUAL)
+  usageCount                 Int                         @default(0)
+  lastUsedAt                 DateTime?
+  isFavorite                 Boolean                     @default(false)
+  isActive                   Boolean                     @default(true)
+  createdByUserId            String?                     @db.Uuid
+  createdAt                  DateTime                    @default(now())
+  updatedAt                  DateTime                    @updatedAt
+  company                    Company                     @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  sourceMasterItem           MasterItem?                 @relation(fields: [sourceMasterItemId], references: [id], onDelete: SetNull)
+  sourcePackage              IndustryDataPackage?        @relation(fields: [sourcePackageId], references: [id], onDelete: SetNull)
+  discipline                 MasterDiscipline?           @relation(fields: [disciplineId], references: [id], onDelete: SetNull)
+  category                   MasterCategory?             @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  defaultSupplier            Supplier?                   @relation(fields: [defaultSupplierId], references: [id], onDelete: SetNull)
+  defaultRateCatalogueItem   RateCatalogueItem?          @relation(fields: [defaultRateCatalogueItemId], references: [id], onDelete: SetNull)
+  createdByUser              User?                       @relation(fields: [createdByUserId], references: [id], onDelete: SetNull)
+  versions                   CompanyLibraryItemVersion[]
+  variants                   CompanyLibraryItemVariant[]
+  usages                     CompanyItemUsage[]
+  boqItems                   BOQItem[]
+
+  @@unique([companyId, companyItemCode])
+  @@index([companyId])
+  @@index([disciplineId])
+  @@index([categoryId])
+  @@index([sourceMasterItemId])
+  @@index([isFavorite])
+  @@index([isActive])
+  @@index([name])
+  @@index([lastUsedAt])
+}
+
+model CompanyLibraryItemVersion {
+  id                   String             @id @default(uuid()) @db.Uuid
+  companyId            String             @db.Uuid
+  companyLibraryItemId String             @db.Uuid
+  version              Int
+  snapshotJson         Json
+  changeReason         String             @default("")
+  createdByUserId      String?            @db.Uuid
+  createdAt            DateTime           @default(now())
+  company              Company            @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  companyLibraryItem   CompanyLibraryItem @relation(fields: [companyLibraryItemId], references: [id], onDelete: Cascade)
+  createdByUser        User?              @relation(fields: [createdByUserId], references: [id], onDelete: SetNull)
+
+  @@unique([companyLibraryItemId, version])
+  @@index([companyId])
+  @@index([companyLibraryItemId])
+}
+
+model CompanyLibraryItemVariant {
+  id                         String             @id @default(uuid()) @db.Uuid
+  companyId                  String             @db.Uuid
+  companyLibraryItemId       String             @db.Uuid
+  name                       String
+  variantCode                String
+  specificationOverridesJson Json?
+  technicalOverridesJson     Json?
+  unit                       String?
+  defaultSupplierId          String?            @db.Uuid
+  defaultCost                Decimal            @default(0) @db.Decimal(18, 4)
+  defaultSellingRate         Decimal            @default(0) @db.Decimal(18, 4)
+  isActive                   Boolean            @default(true)
+  createdAt                  DateTime           @default(now())
+  updatedAt                  DateTime           @updatedAt
+  company                    Company            @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  companyLibraryItem         CompanyLibraryItem @relation(fields: [companyLibraryItemId], references: [id], onDelete: Cascade)
+  defaultSupplier            Supplier?          @relation(fields: [defaultSupplierId], references: [id], onDelete: SetNull)
+
+  @@unique([companyLibraryItemId, variantCode])
+  @@index([companyId])
+  @@index([companyLibraryItemId])
+}
+
+model CompanyItemUsage {
+  id                   String             @id @default(uuid()) @db.Uuid
+  companyId            String             @db.Uuid
+  companyLibraryItemId String             @db.Uuid
+  projectId            String?            @db.Uuid
+  boqId                String?            @db.Uuid
+  boqItemId            String?            @db.Uuid
+  usedByUserId         String?            @db.Uuid
+  usedAt               DateTime           @default(now())
+  company              Company            @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  companyLibraryItem   CompanyLibraryItem @relation(fields: [companyLibraryItemId], references: [id], onDelete: Cascade)
+  project              Project?           @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  boq                  BOQ?               @relation(fields: [boqId], references: [id], onDelete: SetNull)
+  boqItem              BOQItem?           @relation(fields: [boqItemId], references: [id], onDelete: SetNull)
+  usedByUser           User?              @relation(fields: [usedByUserId], references: [id], onDelete: SetNull)
+
+  @@index([companyId])
+  @@index([companyLibraryItemId])
+  @@index([projectId])
+  @@index([usedAt])
+}
+
+model ImportMappingTemplate {
+  id              String                @id @default(uuid()) @db.Uuid
+  companyId       String                @db.Uuid
+  name            String
+  sourceType      ImportSourceType
+  destinationType ImportDestinationType
+  mappingJson     Json
+  createdByUserId String?               @db.Uuid
+  createdAt       DateTime              @default(now())
+  updatedAt       DateTime              @updatedAt
+  company         Company               @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  createdByUser   User?                 @relation(fields: [createdByUserId], references: [id], onDelete: SetNull)
+  importJobs      ImportJob[]
+
+  @@unique([companyId, name])
+  @@index([companyId])
+}
+
+model ImportJob {
+  id                String                 @id @default(uuid()) @db.Uuid
+  companyId         String                 @db.Uuid
+  projectId         String?                @db.Uuid
+  uploadedFileName  String
+  storageKey        String?
+  headersJson       Json?
+  mappingTemplateId String?                @db.Uuid
+  sourceType        ImportSourceType
+  destinationType   ImportDestinationType
+  status            ImportJobStatus        @default(PENDING)
+  totalRows         Int                    @default(0)
+  validRows         Int                    @default(0)
+  warningRows       Int                    @default(0)
+  errorRows         Int                    @default(0)
+  importedRows      Int                    @default(0)
+  createdByUserId   String?                @db.Uuid
+  createdAt         DateTime               @default(now())
+  completedAt       DateTime?
+  failedAt          DateTime?
+  errorMessage      String?
+  company           Company                @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  project           Project?               @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  mappingTemplate   ImportMappingTemplate? @relation(fields: [mappingTemplateId], references: [id], onDelete: SetNull)
+  createdByUser     User?                  @relation(fields: [createdByUserId], references: [id], onDelete: SetNull)
+  rows              ImportRow[]
+
+  @@index([companyId])
+  @@index([projectId])
+  @@index([status])
+}
+
+model ImportRow {
+  id                     String          @id @default(uuid()) @db.Uuid
+  companyId              String          @db.Uuid
+  importJobId            String          @db.Uuid
+  rowNumber              Int
+  rawDataJson            Json
+  normalizedDataJson     Json?
+  validationErrorsJson   Json?
+  validationWarningsJson Json?
+  status                 ImportRowStatus @default(PENDING)
+  destinationEntityId    String?         @db.Uuid
+  createdAt              DateTime        @default(now())
+  updatedAt              DateTime        @updatedAt
+  company                Company         @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  importJob              ImportJob       @relation(fields: [importJobId], references: [id], onDelete: Cascade)
+
+  @@unique([importJobId, rowNumber])
+  @@index([companyId])
+  @@index([importJobId])
+  @@index([status])
+}
+
 model Company {
-  id                          String                      @id @default(uuid()) @db.Uuid
+  id                          String                        @id @default(uuid()) @db.Uuid
   legalName                   String
   tradeName                   String
   email                       String
   phone                       String?
   website                     String?
   address                     String?
+  country                     String?
   taxRegistrationNumber       String?
-  defaultCurrency             String                      @default("AED")
-  vatRate                     Decimal                     @default(5) @db.Decimal(7, 4)
-  defaultLanguage             String                      @default("English")
-  createdAt                   DateTime                    @default(now())
-  updatedAt                   DateTime                    @updatedAt
+  defaultCurrency             String                        @default("AED")
+  vatRate                     Decimal                       @default(5) @db.Decimal(7, 4)
+  defaultLanguage             String                        @default("English")
+  logoUrl                     String?
+  authorizedSignatoryName     String?
+  authorizedSignatoryTitle    String?
+  stampUrl                    String?
+  signatureUrl                String?
+  defaultTerms                String?
+  defaultExclusions           String?
+  defaultValidityDays         Int                           @default(30)
+  trialTermsAcceptedAt        DateTime?
+  createdAt                   DateTime                      @default(now())
+  updatedAt                   DateTime                      @updatedAt
   industryEngines             CompanyIndustryEngine[]
   clients                     Client[]
   projects                    Project[]
@@ -179,6 +760,18 @@ model Company {
   clientProposalDocuments     ClientProposalDocument[]
   clientProposalEvents        ClientProposalEvent[]
   emailDispatches             EmailDispatch[]
+  softwareSubscriptions       CompanySoftwareSubscription[]
+  trialUsageRecords           CompanyTrialUsage[]
+  trialPremiumItemUnlocks     TrialPremiumItemUnlock[]
+  branding                    CompanyBranding?
+  packageSubscriptions        CompanyPackageSubscription[]
+  libraryItems                CompanyLibraryItem[]
+  libraryItemVersions         CompanyLibraryItemVersion[]
+  libraryItemVariants         CompanyLibraryItemVariant[]
+  itemUsages                  CompanyItemUsage[]
+  importMappingTemplates      ImportMappingTemplate[]
+  importJobs                  ImportJob[]
+  importRows                  ImportRow[]
 }
 
 model User {
@@ -202,6 +795,12 @@ model User {
   clientProposals             ClientProposal[]
   clientProposalEvents        ClientProposalEvent[]
   emailDispatches             EmailDispatch[]
+  companyLibraryItems         CompanyLibraryItem[]
+  companyLibraryItemVersions  CompanyLibraryItemVersion[]
+  companyItemUsages           CompanyItemUsage[]
+  importMappingTemplates      ImportMappingTemplate[]
+  importJobs                  ImportJob[]
+  copiedBoqItems              BOQItem[]                   @relation("BoqItemCopiedByUser")
 
   @@index([companyId])
   @@index([role])
@@ -323,6 +922,8 @@ model Project {
   generatedDocuments    GeneratedDocument[]
   clientProposals       ClientProposal[]
   emailDispatches       EmailDispatch[]
+  itemUsages            CompanyItemUsage[]
+  importJobs            ImportJob[]
 
   @@unique([companyId, reference])
   @@unique([companyId, slug])
@@ -357,6 +958,7 @@ model BOQ {
   generatedDocuments     GeneratedDocument[]
   clientProposals        ClientProposal[]
   emailDispatches        EmailDispatch[]
+  itemUsages             CompanyItemUsage[]
 
   @@unique([projectId, revisionNumber])
   @@index([companyId])
@@ -385,47 +987,63 @@ model BOQSection {
 }
 
 model BOQItem {
-  id                     String                  @id @default(uuid()) @db.Uuid
-  companyId              String                  @db.Uuid
-  sectionId              String                  @db.Uuid
-  itemNumber             Int
-  itemCode               String
-  category               String
-  description            String
-  specification          String                  @default("")
-  quantity               Decimal                 @db.Decimal(18, 4)
-  unit                   String
-  unitCost               Decimal                 @default(0) @db.Decimal(18, 4)
-  freightCost            Decimal                 @default(0) @db.Decimal(18, 4)
-  installationCost       Decimal                 @default(0) @db.Decimal(18, 4)
-  additionalCost         Decimal                 @default(0) @db.Decimal(18, 4)
-  landedCost             Decimal                 @default(0) @db.Decimal(18, 4)
-  marginMode             MarginMode              @default(MARKUP)
-  marginPercentage       Decimal                 @default(0) @db.Decimal(7, 4)
-  sellingRate            Decimal                 @default(0) @db.Decimal(18, 4)
-  totalAmount            Decimal                 @default(0) @db.Decimal(20, 4)
-  wastagePercentage      Decimal                 @default(0) @db.Decimal(7, 4)
-  taxApplicable          Boolean                 @default(true)
-  sourceReference        String                  @default("")
-  roomOrZone             String                  @default("")
-  drawingReference       String                  @default("")
-  confidenceScore        Decimal                 @default(100) @db.Decimal(7, 4)
-  status                 BOQItemStatus           @default(DRAFT)
-  notes                  String                  @default("")
-  pricingMetadataJson    Json?
-  sortOrder              Int
-  createdAt              DateTime                @default(now())
-  updatedAt              DateTime                @updatedAt
-  company                Company                 @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  section                BOQSection              @relation(fields: [sectionId], references: [id], onDelete: Cascade)
-  options                BOQItemOption[]
-  verificationExceptions VerificationException[]
+  id                         String                  @id @default(uuid()) @db.Uuid
+  companyId                  String                  @db.Uuid
+  sectionId                  String                  @db.Uuid
+  itemNumber                 Int
+  itemCode                   String
+  category                   String
+  description                String
+  specification              String                  @default("")
+  quantity                   Decimal                 @db.Decimal(18, 4)
+  unit                       String
+  unitCost                   Decimal                 @default(0) @db.Decimal(18, 4)
+  freightCost                Decimal                 @default(0) @db.Decimal(18, 4)
+  installationCost           Decimal                 @default(0) @db.Decimal(18, 4)
+  additionalCost             Decimal                 @default(0) @db.Decimal(18, 4)
+  landedCost                 Decimal                 @default(0) @db.Decimal(18, 4)
+  marginMode                 MarginMode              @default(MARKUP)
+  marginPercentage           Decimal                 @default(0) @db.Decimal(7, 4)
+  sellingRate                Decimal                 @default(0) @db.Decimal(18, 4)
+  totalAmount                Decimal                 @default(0) @db.Decimal(20, 4)
+  wastagePercentage          Decimal                 @default(0) @db.Decimal(7, 4)
+  taxApplicable              Boolean                 @default(true)
+  sourceReference            String                  @default("")
+  roomOrZone                 String                  @default("")
+  drawingReference           String                  @default("")
+  confidenceScore            Decimal                 @default(100) @db.Decimal(7, 4)
+  status                     BOQItemStatus           @default(DRAFT)
+  notes                      String                  @default("")
+  pricingMetadataJson        Json?
+  sortOrder                  Int
+  sourceType                 BoqItemSourceType       @default(MANUAL)
+  sourceMasterItemId         String?                 @db.Uuid
+  sourceCompanyLibraryItemId String?                 @db.Uuid
+  sourceCatalogueItemId      String?                 @db.Uuid
+  sourcePreviousBoqItemId    String?                 @db.Uuid
+  copiedAt                   DateTime?
+  copiedByUserId             String?                 @db.Uuid
+  createdAt                  DateTime                @default(now())
+  updatedAt                  DateTime                @updatedAt
+  company                    Company                 @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  section                    BOQSection              @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  options                    BOQItemOption[]
+  verificationExceptions     VerificationException[]
+  sourceMasterItem           MasterItem?             @relation(fields: [sourceMasterItemId], references: [id], onDelete: SetNull)
+  sourceCompanyLibraryItem   CompanyLibraryItem?     @relation(fields: [sourceCompanyLibraryItemId], references: [id], onDelete: SetNull)
+  sourceCatalogueItem        RateCatalogueItem?      @relation(fields: [sourceCatalogueItemId], references: [id], onDelete: SetNull)
+  sourcePreviousBoqItem      BOQItem?                @relation("BoqItemSourceChain", fields: [sourcePreviousBoqItemId], references: [id], onDelete: SetNull)
+  copiedIntoItems            BOQItem[]               @relation("BoqItemSourceChain")
+  copiedByUser               User?                   @relation("BoqItemCopiedByUser", fields: [copiedByUserId], references: [id], onDelete: SetNull)
+  itemUsages                 CompanyItemUsage[]
 
   @@index([companyId])
   @@index([sectionId])
   @@index([itemCode])
   @@index([status])
   @@index([sortOrder])
+  @@index([sourceMasterItemId])
+  @@index([sourceCompanyLibraryItemId])
 }
 
 model BOQItemOption {
@@ -493,25 +1111,27 @@ model BOQRevisionSnapshot {
 }
 
 model Supplier {
-  id                    String              @id @default(uuid()) @db.Uuid
-  companyId             String              @db.Uuid
-  name                  String
-  legalName             String?
-  email                 String?
-  phone                 String?
-  website               String?
-  address               String?
-  contactPerson         String?
-  taxRegistrationNumber String?
-  defaultCurrency       String              @default("AED")
-  paymentTerms          String?
-  leadTimeDays          Int?
-  notes                 String?
-  isActive              Boolean             @default(true)
-  createdAt             DateTime            @default(now())
-  updatedAt             DateTime            @updatedAt
-  company               Company             @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  catalogueItems        RateCatalogueItem[]
+  id                         String                      @id @default(uuid()) @db.Uuid
+  companyId                  String                      @db.Uuid
+  name                       String
+  legalName                  String?
+  email                      String?
+  phone                      String?
+  website                    String?
+  address                    String?
+  contactPerson              String?
+  taxRegistrationNumber      String?
+  defaultCurrency            String                      @default("AED")
+  paymentTerms               String?
+  leadTimeDays               Int?
+  notes                      String?
+  isActive                   Boolean                     @default(true)
+  createdAt                  DateTime                    @default(now())
+  updatedAt                  DateTime                    @updatedAt
+  company                    Company                     @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  catalogueItems             RateCatalogueItem[]
+  companyLibraryItems        CompanyLibraryItem[]
+  companyLibraryItemVariants CompanyLibraryItemVariant[]
 
   @@index([companyId])
   @@index([name])
@@ -556,6 +1176,8 @@ model RateCatalogueItem {
   industryEngine             IndustryEngine              @relation(fields: [industryEngineId], references: [id], onDelete: Restrict)
   supplier                   Supplier?                   @relation(fields: [supplierId], references: [id], onDelete: SetNull)
   priceHistory               RateCataloguePriceHistory[]
+  companyLibraryItems        CompanyLibraryItem[]
+  boqitems                   BOQItem[]
 
   @@unique([companyId, itemCode])
   @@index([companyId])
@@ -635,6 +1257,7 @@ model DocumentTemplate {
   company            Company              @relation(fields: [companyId], references: [id], onDelete: Cascade)
   industryEngine     IndustryEngine?      @relation(fields: [industryEngineId], references: [id], onDelete: SetNull)
   generatedDocuments GeneratedDocument[]
+  companyBrandings   CompanyBranding[]
 
   @@unique([companyId, code])
   @@index([companyId])

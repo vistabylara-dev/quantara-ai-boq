@@ -29,6 +29,7 @@ import { createProposal, markProposalSent } from "../src/lib/repositories/client
 import { NotFoundError, PermissionDeniedError } from "../src/lib/errors/app-error";
 import { localDocumentStorageAdapter } from "../src/lib/storage/local-document-storage-adapter";
 import type { CurrentActor } from "../src/lib/auth/current-actor";
+import { grantUnlimitedPlanForTests } from "./helpers/grant-unlimited-plan";
 
 const RUN_ID = Date.now();
 const userIdByCompany = new Map<string, string>();
@@ -126,7 +127,9 @@ describe("client proposal + email delivery (integration, real local Postgres)", 
       data: { legalName: `Phase6 Test Co B ${RUN_ID}`, tradeName: "Phase6 Co B", email: `phase6-b-${RUN_ID}@example.com` },
     });
     companyAId = companyA.id;
+    await grantUnlimitedPlanForTests(companyAId);
     companyBId = companyB.id;
+    await grantUnlimitedPlanForTests(companyBId);
 
     const construction = await prisma.industryEngine.findUniqueOrThrow({ where: { key: "construction" } });
     await prisma.companyIndustryEngine.create({ data: { companyId: companyAId, industryEngineId: construction.id, enabled: true } });

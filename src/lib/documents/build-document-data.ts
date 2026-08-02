@@ -83,6 +83,8 @@ export type DocumentMeta = {
   documentType: string;
   audience: DocumentAudienceValue;
   isDraft: boolean;
+  /** Set only for documents generated under a trial subscription — never removable via template settings (spec Phase 7 section 13). */
+  watermarkText: string | null;
 };
 
 export type CanonicalDocumentData = {
@@ -145,6 +147,7 @@ export type BuildDocumentDataInput = {
   validityDays?: number;
   notes?: string;
   generatedAt?: Date;
+  watermarkText?: string | null;
 };
 
 function toItemData(item: BOQItem, showInternalFields: boolean): DocumentBOQItemData {
@@ -243,6 +246,7 @@ export function buildDocumentData(input: BuildDocumentDataInput): CanonicalDocum
       documentType: input.documentType,
       audience: input.audience,
       isDraft: input.isDraft,
+      watermarkText: input.watermarkText ?? null,
     },
   };
 }

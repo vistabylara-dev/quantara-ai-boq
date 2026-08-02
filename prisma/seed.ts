@@ -11,6 +11,8 @@ import {
   VerificationSeverity,
 } from "@prisma/client";
 import { demoIndustries } from "../src/config/industries/index";
+import { seedMechanicalDiscipline, seedTaxonomyFoundations } from "./seed-data/master-data";
+import { seedMechanicalPackage, seedSoftwarePlans } from "./seed-data/commercial";
 import { getDevelopmentCompanyId } from "../src/lib/tenancy/development-company";
 import { hashPassword } from "../src/lib/auth/password";
 import { calculateLandedCost, calculateSellingRate } from "../src/lib/calculations/boq-calculator";
@@ -1213,8 +1215,13 @@ async function main(): Promise<void> {
   await seedAuditLogs(companyId, boqIds);
   await seedOwnerUser(companyId);
 
+  const mechanical = await seedMechanicalDiscipline(prisma);
+  await seedTaxonomyFoundations(prisma);
+  await seedSoftwarePlans(prisma);
+  await seedMechanicalPackage(prisma, mechanical.disciplineId, mechanical.itemIds);
+
   console.log(
-    `Seeded Quantara development tenant with ${INDUSTRY_KEYS.length} industries, ${projectSeeds.length} projects, ${supplierSeeds.length} suppliers, ${catalogueSeeds.length} catalogue rates, ${templateSeeds.length} document templates, and 2 email templates.`,
+    `Seeded Quantara development tenant with ${INDUSTRY_KEYS.length} industries, ${projectSeeds.length} projects, ${supplierSeeds.length} suppliers, ${catalogueSeeds.length} catalogue rates, ${templateSeeds.length} document templates, 2 email templates, 9 master-data disciplines, ${mechanical.itemIds.length} Mechanical master items, and 5 software plans.`,
   );
 }
 

@@ -5,6 +5,7 @@ import { AppError, ConflictError } from "@/lib/errors/app-error";
 import { createProjectBOQ } from "@/lib/repositories/boq-repository";
 import { getClient } from "@/lib/repositories/client-repository";
 import { getEnabledIndustry } from "@/lib/repositories/industry-repository";
+import { canCreateProject, recordProjectCreated } from "@/lib/entitlements/entitlement-service";
 import {
   createProject,
   projectReferenceExists,
@@ -36,10 +37,16 @@ export async function createProjectWithDefaultBoq(actor: CurrentActor, input: Cr
   if (await projectReferenceExists(actor.companyId, input.reference)) {
     throw new ConflictError("PROJECT_REFERENCE_EXISTS", "A project with this reference already exists.");
   }
+  const projectCheck = await canCreateProject(actor.companyId);
+  if (!projectCheck.allowed) {
+    throw new AppError("PROJECT_LIMIT_REACHED", projectCheck.reason ?? "Project limit reached.", 403);
+  }
 
-  return prisma.$transaction(async (tx) => {
+  const result = await prisma.$transaction(async (tx) => {
     const project = await createProject(actor.companyId, input, tx);
     const boq = await createProjectBOQ(actor.companyId, project.databaseId, undefined, tx);
     return { project, boq };
   });
+  await recordProjectCreated(actor.companyId);
+  return result;
 }

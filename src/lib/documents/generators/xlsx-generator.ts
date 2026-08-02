@@ -76,7 +76,16 @@ export async function generateXlsx(data: CanonicalDocumentData): Promise<Buffer>
   sheet.mergeCells(4, 1, 4, columns.length);
   sheet.getCell(4, 1).font = { italic: true, size: 10, color: { argb: "FF64748B" } };
 
-  const headerRowNumber = 6;
+  let watermarkRowOffset = 0;
+  if (data.meta.watermarkText) {
+    sheet.spliceRows(5, 0, [data.meta.watermarkText]);
+    sheet.mergeCells(5, 1, 5, columns.length);
+    sheet.getCell(5, 1).font = { bold: true, size: 11, color: { argb: "FF1D4ED8" } };
+    sheet.getCell(5, 1).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFEFF6FF" } };
+    watermarkRowOffset = 1;
+  }
+
+  const headerRowNumber = 6 + watermarkRowOffset;
   const headerRow = sheet.getRow(headerRowNumber);
   headerRow.values = columns.map((col) => col.header as string);
   headerRow.eachCell((cell) => {

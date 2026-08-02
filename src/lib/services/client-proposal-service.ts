@@ -9,6 +9,7 @@ import { appBaseUrl } from "@/lib/auth/dev-mailer";
 import { hashPassword } from "@/lib/auth/password";
 import { DEFAULT_VALIDITY_DAYS } from "@/lib/documents/build-document-data";
 import type { ClientProposalSettings } from "@/lib/proposals/proposal-settings";
+import { canCreateProposal, recordProposalCreated } from "@/lib/entitlements/entitlement-service";
 
 /**
  * The API accepts a plaintext `accessPasscode` (never `accessPasscodeHash`
@@ -97,6 +98,11 @@ export async function createProposalForProject(actor: CurrentActor, projectIdent
     }
   }
 
+  const proposalCheck = await canCreateProposal(actor.companyId);
+  if (!proposalCheck.allowed) {
+    throw new AppError("TRIAL_PROPOSAL_LIMIT_REACHED", proposalCheck.reason ?? "Proposal limit reached.", 403);
+  }
+
   const expiresAt = new Date(Date.now() + (input.expiresInDays ?? DEFAULT_VALIDITY_DAYS) * 24 * 60 * 60 * 1000);
   const { proposal, rawToken } = await createProposal(actor.companyId, {
     projectId: project.id,
@@ -111,6 +117,7 @@ export async function createProposalForProject(actor: CurrentActor, projectIdent
     createdByUserId: actor.userId,
     createdByName: actor.fullName,
   });
+  await recordProposalCreated(actor.companyId);
   return { proposal, rawToken, secureUrl: buildProposalSecureUrl(rawToken), isExisting: false };
 }
 

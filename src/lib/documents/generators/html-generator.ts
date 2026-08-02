@@ -96,6 +96,7 @@ export function generateHtml(input: GenerateHtmlInput): string {
   .signatures { display: flex; justify-content: space-between; margin-top: 40px; }
   .signatures div { width: 40%; border-top: 1px solid #94a3b8; padding-top: 4px; font-size: 10px; color: #64748b; }
   .draft-badge { display: inline-block; background: #fee2e2; color: #b91c1c; font-weight: 700; font-size: 11px; padding: 4px 10px; border-radius: 999px; margin-bottom: 12px; }
+  .trial-watermark-banner { background: #eff6ff; color: #1d4ed8; font-weight: 700; font-size: 11px; padding: 6px 12px; border-radius: 8px; margin-bottom: 12px; border: 1px solid #bfdbfe; }
   @media print {
     body { padding: 0; }
     .no-print { display: none; }
@@ -104,6 +105,7 @@ export function generateHtml(input: GenerateHtmlInput): string {
 </head>
 <body>
   ${data.meta.isDraft ? `<div class="draft-badge">${escapeHtml(style.watermarkDraftText)}</div>` : ""}
+  ${data.meta.watermarkText ? `<div class="trial-watermark-banner">${escapeHtml(data.meta.watermarkText)}</div>` : ""}
   <h1>${escapeHtml(data.boq.title)}</h1>
   <div class="muted">${escapeHtml(data.project.reference)} · Revision ${escapeHtml(data.boq.revision)} · ${data.boq.status.toUpperCase()}</div>
   <div class="muted">Generated ${new Date(data.meta.generatedAt).toLocaleString()} by ${escapeHtml(data.meta.generatedByName)} · ${escapeHtml(data.meta.templateName)}</div>

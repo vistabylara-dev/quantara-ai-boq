@@ -17,6 +17,7 @@ import { runBOQVerification } from "../src/lib/repositories/verification-reposit
 import { runVerification } from "../src/lib/verification/run-verification";
 import { ConflictError, NotFoundError, PermissionDeniedError, AppError } from "../src/lib/errors/app-error";
 import type { CurrentActor } from "../src/lib/auth/current-actor";
+import { grantUnlimitedPlanForTests } from "./helpers/grant-unlimited-plan";
 
 const RUN_ID = Date.now();
 
@@ -37,7 +38,9 @@ describe("supplier and catalogue services (integration, real local Postgres)", (
       data: { legalName: `Phase4 Test Co B ${RUN_ID}`, tradeName: "Phase4 Co B", email: `phase4-b-${RUN_ID}@example.com` },
     });
     companyAId = companyA.id;
+    await grantUnlimitedPlanForTests(companyAId);
     companyBId = companyB.id;
+    await grantUnlimitedPlanForTests(companyBId);
 
     const construction = await prisma.industryEngine.findUniqueOrThrow({ where: { key: "construction" } });
     await prisma.companyIndustryEngine.create({ data: { companyId: companyAId, industryEngineId: construction.id, enabled: true } });

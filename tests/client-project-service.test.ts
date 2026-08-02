@@ -10,6 +10,7 @@ import { createProjectWithDefaultBoq } from "../src/lib/services/project-service
 import { createClientForCompany } from "../src/lib/services/client-service";
 import { ConflictError, PermissionDeniedError } from "../src/lib/errors/app-error";
 import type { CurrentActor } from "../src/lib/auth/current-actor";
+import { grantUnlimitedPlanForTests } from "./helpers/grant-unlimited-plan";
 
 const RUN_ID = Date.now();
 
@@ -30,7 +31,9 @@ describe("client and project services (integration, real local Postgres)", () =>
       data: { legalName: `Phase3 Test Co B ${RUN_ID}`, tradeName: `Phase3 Co B`, email: `phase3-b-${RUN_ID}@example.com` },
     });
     companyAId = companyA.id;
+    await grantUnlimitedPlanForTests(companyAId);
     companyBId = companyB.id;
+    await grantUnlimitedPlanForTests(companyBId);
 
     const construction = await prisma.industryEngine.findUniqueOrThrow({ where: { key: "construction" } });
     constructionIndustryId = construction.id;

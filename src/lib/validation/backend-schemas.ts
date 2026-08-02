@@ -115,10 +115,19 @@ export const companySchema = z.object({
   phone: nullableText(50),
   website: z.string().trim().url("A valid website URL is required.").max(2_048).nullable().optional(),
   address: nullableText(1_000),
+  country: nullableText(100),
   taxRegistrationNumber: nullableText(100),
   defaultCurrency: currencySchema.default("AED"),
   vatRate: percentage("VAT rate", 100).default("5"),
   defaultLanguage: requiredText("Default language", 50).default("English"),
+  logoUrl: nullableText(2_048),
+  authorizedSignatoryName: nullableText(255),
+  authorizedSignatoryTitle: nullableText(255),
+  stampUrl: nullableText(2_048),
+  signatureUrl: nullableText(2_048),
+  defaultTerms: nullableText(4_000),
+  defaultExclusions: nullableText(4_000),
+  defaultValidityDays: z.coerce.number().int().min(1).max(365).default(30),
 }).strict();
 
 export const companyUpdateSchema = companySchema.partial();

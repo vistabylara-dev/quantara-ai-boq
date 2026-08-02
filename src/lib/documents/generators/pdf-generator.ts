@@ -426,6 +426,14 @@ export async function generatePdf(input: GeneratePdfInput): Promise<Buffer> {
         doc.opacity(1);
         doc.restore();
       }
+      if (data.meta.watermarkText) {
+        doc.save();
+        doc.rotate(-40, { origin: [doc.page.width / 2, doc.page.height / 2] });
+        doc.fontSize(34).fillColor("#2563EB").opacity(0.22);
+        doc.text(data.meta.watermarkText, 0, doc.page.height / 2 + 40, { width: doc.page.width, align: "center" });
+        doc.opacity(1);
+        doc.restore();
+      }
     }
 
     doc.end();

@@ -558,6 +558,12 @@ export async function lockBOQ(companyId: string, boqId: string, actorName = "Dev
   const existing = await getBOQRecord(companyId, boqId);
   if (existing.isLocked) return toBOQDTO(existing);
 
+  const { canCreateBoq, recordBoqCompleted } = await import("@/lib/entitlements/entitlement-service");
+  const boqCheck = await canCreateBoq(companyId);
+  if (!boqCheck.allowed) {
+    throw new ConflictError("TRIAL_BOQ_LIMIT_REACHED", boqCheck.reason ?? "BOQ completion limit reached.");
+  }
+
   const lockedId = await prisma.$transaction(async (tx) => {
     const current = await tx.bOQ.findFirst({
       where: { id: boqId, companyId },
@@ -615,6 +621,7 @@ export async function lockBOQ(companyId: string, boqId: string, actorName = "Dev
     }, tx);
     return current.id;
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+  await recordBoqCompleted(companyId);
   return getBOQ(companyId, lockedId);
 }
 

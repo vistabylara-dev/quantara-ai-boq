@@ -52,6 +52,7 @@ export function toProjectFileDTO(row: ProjectFileRecord) {
     measurementUnit: row.measurementUnit,
     processingErrorCode: row.processingErrorCode,
     processingErrorMessage: row.processingErrorMessage,
+    metadata: row.metadataJson,
     uploadedBy: { id: row.uploadedByUser.id, fullName: row.uploadedByUser.fullName, email: row.uploadedByUser.email },
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
@@ -107,4 +108,75 @@ export async function findDuplicateByChecksum(companyId: string, projectId: stri
 export async function deleteProjectFileRow(companyId: string, fileId: string, db: DbClient = prisma): Promise<void> {
   const result = await db.projectFile.deleteMany({ where: { id: fileId, companyId } });
   if (result.count === 0) throw new NotFoundError("File not found.");
+}
+
+export async function updateProjectFileStatus(companyId: string, fileId: string, status: ProjectFileStatus, db: DbClient = prisma): Promise<void> {
+  const result = await db.projectFile.updateMany({ where: { id: fileId, companyId }, data: { status } });
+  if (result.count === 0) throw new NotFoundError("File not found.");
+}
+
+/**
+ * Applies an automatic classification suggestion. Never overwrites a
+ * human-confirmed classification (spec section 9: "classification must not
+ * delete or mutate extracted data silently") — if the file already has a
+ * confirmed classification, only the metadataJson suggestion snapshot is
+ * refreshed, the confirmed classification/confidence/status are left alone.
+ */
+export async function applyAutoClassification(
+  companyId: string,
+  fileId: string,
+  suggestion: { classification: ProjectFileClassification; confidence: number; matchedSignals: string[]; method: string },
+  db: DbClient = prisma,
+): Promise<void> {
+  const file = await db.projectFile.findFirst({ where: { id: fileId, companyId } });
+  if (!file) throw new NotFoundError("File not found.");
+
+  const existingMeta = (file.metadataJson as Record<string, unknown> | null) ?? {};
+  const metadataJson = {
+    ...existingMeta,
+    autoClassification: { ...suggestion, ranAt: new Date().toISOString() },
+  };
+
+  if (file.classificationConfirmedAt) {
+    await db.projectFile.update({ where: { id: fileId }, data: { metadataJson } });
+    return;
+  }
+
+  await db.projectFile.update({
+    where: { id: fileId },
+    data: {
+      classification: suggestion.classification,
+      classificationConfidence: suggestion.confidence,
+      status: ProjectFileStatus.CLASSIFIED,
+      metadataJson,
+    },
+  });
+}
+
+export type ConfirmOrReclassifyResult = { updated: ProjectFileRecord; previousClassification: ProjectFileClassification; isReclassification: boolean };
+
+/** Human confirm-or-change action. Confirming as-is only stamps who/when; changing the type also sets confidence to 100 (human-certain, no longer probabilistic) and always requires an explicit audit log entry (written by the caller). */
+export async function confirmOrReclassifyProjectFile(
+  companyId: string,
+  fileId: string,
+  userId: string,
+  newClassification: ProjectFileClassification | undefined,
+  db: DbClient = prisma,
+): Promise<ConfirmOrReclassifyResult> {
+  const file = await db.projectFile.findFirst({ where: { id: fileId, companyId } });
+  if (!file) throw new NotFoundError("File not found.");
+
+  const isReclassification = newClassification !== undefined && newClassification !== file.classification;
+  const updated = await db.projectFile.update({
+    where: { id: fileId },
+    data: {
+      classification: newClassification ?? file.classification,
+      classificationConfidence: isReclassification ? 100 : file.classificationConfidence,
+      classificationConfirmedByUserId: userId,
+      classificationConfirmedAt: new Date(),
+    },
+    include: projectFileInclude,
+  });
+
+  return { updated, previousClassification: file.classification, isReclassification };
 }

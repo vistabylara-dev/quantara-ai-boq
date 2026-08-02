@@ -1,17 +1,23 @@
+import { ExtractionEngineType, ProjectFileStatus, type ProjectFileClassification } from "@prisma/client";
 import type { CurrentActor } from "@/lib/auth/current-actor";
 import { requireCapability } from "@/lib/auth/rbac";
 import { getProjectRecord } from "@/lib/repositories/project-repository";
 import {
+  confirmOrReclassifyProjectFile,
   createProjectFile,
   deleteProjectFileRow,
   findDuplicateByChecksum,
   getProjectFileRecord,
   listProjectFiles,
   toProjectFileDTO,
+  updateProjectFileStatus,
 } from "@/lib/repositories/project-file-repository";
+import { toExtractionJobDTO } from "@/lib/repositories/extraction-job-repository";
 import { buildStorageKey, computeChecksum, validateUpload } from "@/lib/files/file-security";
 import { localProjectFileStorageAdapter } from "@/lib/storage/local-project-file-storage-adapter";
 import { createAuditLog } from "@/lib/repositories/audit-repository";
+import "@/lib/jobs/register-handlers";
+import { extractionJobQueue } from "@/lib/jobs/extraction-worker";
 
 export type UploadProjectFileInput = {
   originalName: string;
@@ -97,4 +103,47 @@ export async function deleteProjectFile(actor: CurrentActor, fileId: string) {
     action: "FILE_DELETED",
     payload: { projectId: row.projectId, originalName: row.originalName },
   });
+}
+
+/** Enqueues the automatic classification engine. Idempotent — re-triggering while a job is already in flight returns that same job rather than starting a duplicate. */
+export async function triggerFileClassification(actor: CurrentActor, fileId: string) {
+  requireCapability(actor, "files:manage");
+  const file = await getProjectFileRecord(actor.companyId, fileId);
+  await updateProjectFileStatus(actor.companyId, fileId, ProjectFileStatus.CLASSIFYING);
+
+  const job = await extractionJobQueue.enqueue({
+    companyId: actor.companyId,
+    projectId: file.projectId,
+    projectFileId: file.id,
+    engineType: ExtractionEngineType.DOCUMENT_CLASSIFICATION,
+    createdByUserId: actor.userId,
+  });
+
+  await createAuditLog(actor.companyId, {
+    entityType: "ProjectFile",
+    entityId: fileId,
+    action: "FILE_CLASSIFICATION_TRIGGERED",
+    payload: { jobId: job.id },
+  });
+
+  return toExtractionJobDTO(job);
+}
+
+/**
+ * Human confirm-or-change action (spec section 9). Omitting `classification`
+ * confirms the current (auto-suggested) value as-is; providing one
+ * reclassifies. Always audit-logged, always distinguishes the two actions.
+ */
+export async function updateFileClassification(actor: CurrentActor, fileId: string, classification: ProjectFileClassification | undefined) {
+  requireCapability(actor, "files:manage");
+  const { updated, previousClassification, isReclassification } = await confirmOrReclassifyProjectFile(actor.companyId, fileId, actor.userId, classification);
+
+  await createAuditLog(actor.companyId, {
+    entityType: "ProjectFile",
+    entityId: fileId,
+    action: isReclassification ? "FILE_RECLASSIFIED" : "FILE_CLASSIFICATION_CONFIRMED",
+    payload: { previousClassification, newClassification: updated.classification },
+  });
+
+  return toProjectFileDTO(updated);
 }

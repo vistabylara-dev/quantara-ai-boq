@@ -1,4 +1,4 @@
-import { ExtractionJobStatus, type ExtractionEngineType, type ExtractionJob } from "@prisma/client";
+import { ExtractionJobStatus, type ExtractionEngineType, type ExtractionJob, type Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db/prisma";
 import { AppError, NotFoundError } from "@/lib/errors/app-error";
 import { createAuditLog } from "@/lib/repositories/audit-repository";
@@ -43,7 +43,7 @@ export class LocalJobQueue implements JobQueue {
         projectFileId: input.projectFileId,
         engineType: input.engineType,
         createdByUserId: input.createdByUserId,
-        configurationJson: input.configuration ?? undefined,
+        configurationJson: (input.configuration as Prisma.InputJsonValue | undefined) ?? undefined,
         maximumAttempts: input.maximumAttempts ?? 3,
         status: ExtractionJobStatus.QUEUED,
       },
@@ -132,8 +132,8 @@ export class LocalJobQueue implements JobQueue {
           status: result.status ?? ExtractionJobStatus.COMPLETED,
           completedAt: new Date(),
           progressPercentage: 100,
-          resultSummaryJson: result.resultSummary ?? undefined,
-          usageMetadataJson: result.usageMetadata ?? undefined,
+          resultSummaryJson: (result.resultSummary as Prisma.InputJsonValue | undefined) ?? undefined,
+          usageMetadataJson: (result.usageMetadata as Prisma.InputJsonValue | undefined) ?? undefined,
         },
       });
     } catch (error) {

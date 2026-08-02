@@ -51,6 +51,7 @@ enum VerificationSeverity {
 
 enum RateStatus {
   ACTIVE
+  PENDING
   EXPIRED
   INACTIVE
 }
@@ -66,49 +67,52 @@ enum UserRole {
 }
 
 model Company {
-  id                     String                  @id @default(uuid()) @db.Uuid
-  legalName              String
-  tradeName              String
-  email                  String
-  phone                  String?
-  website                String?
-  address                String?
-  taxRegistrationNumber  String?
-  defaultCurrency        String                  @default("AED")
-  vatRate                Decimal                 @default(5) @db.Decimal(7, 4)
-  defaultLanguage        String                  @default("English")
-  createdAt              DateTime                @default(now())
-  updatedAt              DateTime                @updatedAt
-  industryEngines        CompanyIndustryEngine[]
-  clients                Client[]
-  projects               Project[]
-  boqs                   BOQ[]
-  boqSections            BOQSection[]
-  boqItems               BOQItem[]
-  boqItemOptions         BOQItemOption[]
-  verificationExceptions VerificationException[]
-  revisionSnapshots      BOQRevisionSnapshot[]
-  rateCatalogueItems     RateCatalogueItem[]
-  auditLogs              AuditLog[]
-  users                  User[]
+  id                          String                      @id @default(uuid()) @db.Uuid
+  legalName                   String
+  tradeName                   String
+  email                       String
+  phone                       String?
+  website                     String?
+  address                     String?
+  taxRegistrationNumber       String?
+  defaultCurrency             String                      @default("AED")
+  vatRate                     Decimal                     @default(5) @db.Decimal(7, 4)
+  defaultLanguage             String                      @default("English")
+  createdAt                   DateTime                    @default(now())
+  updatedAt                   DateTime                    @updatedAt
+  industryEngines             CompanyIndustryEngine[]
+  clients                     Client[]
+  projects                    Project[]
+  boqs                        BOQ[]
+  boqSections                 BOQSection[]
+  boqItems                    BOQItem[]
+  boqItemOptions              BOQItemOption[]
+  verificationExceptions      VerificationException[]
+  revisionSnapshots           BOQRevisionSnapshot[]
+  rateCatalogueItems          RateCatalogueItem[]
+  rateCataloguePriceHistories RateCataloguePriceHistory[]
+  suppliers                   Supplier[]
+  auditLogs                   AuditLog[]
+  users                       User[]
 }
 
 model User {
-  id              String    @id @default(uuid()) @db.Uuid
-  companyId       String    @db.Uuid
-  email           String    @unique
-  passwordHash    String
-  fullName        String
-  role            UserRole  @default(ESTIMATOR)
-  emailVerifiedAt DateTime?
-  isActive        Boolean   @default(true)
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
-  company         Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  sessions        Session[]
-  emailVerificationTokens EmailVerificationToken[]
-  passwordResetTokens     PasswordResetToken[]
-  auditLogs       AuditLog[]
+  id                          String                      @id @default(uuid()) @db.Uuid
+  companyId                   String                      @db.Uuid
+  email                       String                      @unique
+  passwordHash                String
+  fullName                    String
+  role                        UserRole                    @default(ESTIMATOR)
+  emailVerifiedAt             DateTime?
+  isActive                    Boolean                     @default(true)
+  createdAt                   DateTime                    @default(now())
+  updatedAt                   DateTime                    @updatedAt
+  company                     Company                     @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  sessions                    Session[]
+  emailVerificationTokens     EmailVerificationToken[]
+  passwordResetTokens         PasswordResetToken[]
+  auditLogs                   AuditLog[]
+  rateCataloguePriceHistories RateCataloguePriceHistory[]
 
   @@index([companyId])
   @@index([role])
@@ -311,6 +315,7 @@ model BOQItem {
   confidenceScore        Decimal                 @default(100) @db.Decimal(7, 4)
   status                 BOQItemStatus           @default(DRAFT)
   notes                  String                  @default("")
+  pricingMetadataJson    Json?
   sortOrder              Int
   createdAt              DateTime                @default(now())
   updatedAt              DateTime                @updatedAt
@@ -390,32 +395,111 @@ model BOQRevisionSnapshot {
   @@index([boqId])
 }
 
-model RateCatalogueItem {
-  id               String         @id @default(uuid()) @db.Uuid
-  companyId        String         @db.Uuid
-  industryEngineId String         @db.Uuid
-  itemCode         String
-  category         String
-  description      String
-  unit             String
-  supplier         String
-  cost             Decimal        @db.Decimal(18, 4)
-  defaultMargin    Decimal        @default(0) @db.Decimal(7, 4)
-  sellingRate      Decimal        @db.Decimal(18, 4)
-  currency         String         @default("AED")
-  effectiveDate    DateTime
-  expiryDate       DateTime?
-  status           RateStatus     @default(ACTIVE)
-  createdAt        DateTime       @default(now())
-  updatedAt        DateTime       @updatedAt
-  company          Company        @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  industryEngine   IndustryEngine @relation(fields: [industryEngineId], references: [id], onDelete: Restrict)
+model Supplier {
+  id                    String              @id @default(uuid()) @db.Uuid
+  companyId             String              @db.Uuid
+  name                  String
+  legalName             String?
+  email                 String?
+  phone                 String?
+  website               String?
+  address               String?
+  contactPerson         String?
+  taxRegistrationNumber String?
+  defaultCurrency       String              @default("AED")
+  paymentTerms          String?
+  leadTimeDays          Int?
+  notes                 String?
+  isActive              Boolean             @default(true)
+  createdAt             DateTime            @default(now())
+  updatedAt             DateTime            @updatedAt
+  company               Company             @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  catalogueItems        RateCatalogueItem[]
 
-  @@unique([companyId, industryEngineId, itemCode, effectiveDate])
+  @@index([companyId])
+  @@index([name])
+  @@index([email])
+  @@index([isActive])
+}
+
+model RateCatalogueItem {
+  id                         String                      @id @default(uuid()) @db.Uuid
+  companyId                  String                      @db.Uuid
+  industryEngineId           String                      @db.Uuid
+  supplierId                 String?                     @db.Uuid
+  itemCode                   String
+  category                   String
+  subcategory                String?
+  description                String
+  specification              String?
+  unit                       String
+  manufacturer               String?
+  brand                      String?
+  model                      String?
+  countryOfOrigin            String?
+  baseCost                   Decimal                     @db.Decimal(18, 4)
+  freightCost                Decimal                     @default(0) @db.Decimal(18, 4)
+  installationCost           Decimal                     @default(0) @db.Decimal(18, 4)
+  additionalCost             Decimal                     @default(0) @db.Decimal(18, 4)
+  landedCost                 Decimal                     @default(0) @db.Decimal(18, 4)
+  marginMode                 MarginMode                  @default(MARKUP)
+  defaultMargin              Decimal                     @default(0) @db.Decimal(7, 4)
+  sellingRate                Decimal                     @default(0) @db.Decimal(18, 4)
+  minimumSellingRate         Decimal?                    @db.Decimal(18, 4)
+  currency                   String                      @default("AED")
+  effectiveDate              DateTime
+  expiryDate                 DateTime?
+  status                     RateStatus                  @default(ACTIVE)
+  sourceReference            String?
+  supplierQuotationReference String?
+  metadataJson               Json?
+  createdAt                  DateTime                    @default(now())
+  updatedAt                  DateTime                    @updatedAt
+  company                    Company                     @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  industryEngine             IndustryEngine              @relation(fields: [industryEngineId], references: [id], onDelete: Restrict)
+  supplier                   Supplier?                   @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  priceHistory               RateCataloguePriceHistory[]
+
+  @@unique([companyId, itemCode])
   @@index([companyId])
   @@index([industryEngineId])
+  @@index([supplierId])
   @@index([itemCode])
+  @@index([category])
   @@index([status])
+  @@index([expiryDate])
+}
+
+model RateCataloguePriceHistory {
+  id                       String            @id @default(uuid()) @db.Uuid
+  companyId                String            @db.Uuid
+  rateCatalogueItemId      String            @db.Uuid
+  previousBaseCost         Decimal           @db.Decimal(18, 4)
+  newBaseCost              Decimal           @db.Decimal(18, 4)
+  previousFreightCost      Decimal           @db.Decimal(18, 4)
+  newFreightCost           Decimal           @db.Decimal(18, 4)
+  previousInstallationCost Decimal           @db.Decimal(18, 4)
+  newInstallationCost      Decimal           @db.Decimal(18, 4)
+  previousAdditionalCost   Decimal           @db.Decimal(18, 4)
+  newAdditionalCost        Decimal           @db.Decimal(18, 4)
+  previousLandedCost       Decimal           @db.Decimal(18, 4)
+  newLandedCost            Decimal           @db.Decimal(18, 4)
+  previousMargin           Decimal           @db.Decimal(7, 4)
+  newMargin                Decimal           @db.Decimal(7, 4)
+  previousSellingRate      Decimal           @db.Decimal(18, 4)
+  newSellingRate           Decimal           @db.Decimal(18, 4)
+  currency                 String
+  effectiveDate            DateTime
+  expiryDate               DateTime?
+  changedByUserId          String?           @db.Uuid
+  changeReason             String?
+  createdAt                DateTime          @default(now())
+  company                  Company           @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  rateCatalogueItem        RateCatalogueItem @relation(fields: [rateCatalogueItemId], references: [id], onDelete: Cascade)
+  changedByUser            User?             @relation(fields: [changedByUserId], references: [id], onDelete: SetNull)
+
+  @@index([companyId])
+  @@index([rateCatalogueItemId])
 }
 
 model AuditLog {

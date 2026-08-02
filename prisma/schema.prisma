@@ -773,6 +773,7 @@ model Company {
   importJobs                  ImportJob[]
   importRows                  ImportRow[]
   projectFiles                ProjectFile[]
+  extractionJobs               ExtractionJob[]
 }
 
 model User {
@@ -804,6 +805,7 @@ model User {
   copiedBoqItems              BOQItem[]                   @relation("BoqItemCopiedByUser")
   uploadedProjectFiles        ProjectFile[]               @relation("ProjectFileUploadedByUser")
   classificationConfirmedFiles ProjectFile[]              @relation("ProjectFileClassificationConfirmedByUser")
+  createdExtractionJobs        ExtractionJob[]
 
   @@index([companyId])
   @@index([role])
@@ -928,6 +930,7 @@ model Project {
   itemUsages            CompanyItemUsage[]
   importJobs            ImportJob[]
   files                 ProjectFile[]
+  extractionJobs        ExtractionJob[]
 
   @@unique([companyId, reference])
   @@unique([companyId, slug])
@@ -1495,6 +1498,7 @@ model ProjectFile {
   project                       Project                    @relation(fields: [projectId], references: [id], onDelete: Cascade)
   uploadedByUser                User                       @relation("ProjectFileUploadedByUser", fields: [uploadedByUserId], references: [id], onDelete: Restrict)
   classificationConfirmedByUser User?                      @relation("ProjectFileClassificationConfirmedByUser", fields: [classificationConfirmedByUserId], references: [id], onDelete: SetNull)
+  extractionJobs                 ExtractionJob[]
 
   @@index([companyId])
   @@index([projectId])
@@ -1551,4 +1555,77 @@ enum ProjectFileStatus {
   FAILED
   CANCELLED
   ARCHIVED
+}
+
+/**
+ * Phase 8 — a single unit of background processing work against a
+ * ProjectFile (classification, extraction, detection, etc.). Always
+ * created before any large/slow processing starts; API route handlers only
+ * ever enqueue a job and return, never run the work inline (spec section 1
+ * anti-drift rule against synchronous large-file processing in request
+ * handlers). Processed by the queue in src/lib/jobs/*.
+ */
+model ExtractionJob {
+  id                  String                @id @default(uuid()) @db.Uuid
+  companyId           String                @db.Uuid
+  projectId           String                @db.Uuid
+  projectFileId       String                @db.Uuid
+  engineType          ExtractionEngineType
+  provider            String                @default("local")
+  status              ExtractionJobStatus   @default(QUEUED)
+  progressPercentage  Int                   @default(0)
+  currentStep         String?
+  startedAt           DateTime?
+  completedAt         DateTime?
+  failedAt            DateTime?
+  attempts            Int                   @default(0)
+  maximumAttempts     Int                   @default(3)
+  configurationJson   Json?
+  resultSummaryJson   Json?
+  usageMetadataJson   Json?
+  errorCode           String?
+  errorMessage        String?
+  createdByUserId     String                @db.Uuid
+  createdAt           DateTime              @default(now())
+  updatedAt           DateTime              @updatedAt
+  company             Company               @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  project             Project               @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  projectFile         ProjectFile           @relation(fields: [projectFileId], references: [id], onDelete: Cascade)
+  createdByUser       User                  @relation(fields: [createdByUserId], references: [id], onDelete: Restrict)
+
+  @@index([companyId])
+  @@index([projectId])
+  @@index([projectFileId])
+  @@index([status])
+  @@index([engineType])
+}
+
+enum ExtractionEngineType {
+  DOCUMENT_CLASSIFICATION
+  FILE_PREPROCESSING
+  PDF_TEXT_EXTRACTION
+  OCR_TEXT_EXTRACTION
+  TABLE_EXTRACTION
+  TITLE_BLOCK_EXTRACTION
+  SCALE_DETECTION
+  VECTOR_EXTRACTION
+  ROOM_BOUNDARY_DETECTION
+  OBJECT_DETECTION
+  SYMBOL_DETECTION
+  QUANTITY_CALCULATION
+  PRODUCT_MATCHING
+  PHOTO_ANALYSIS
+  FINDINGS_DRAFTING
+  REPORT_DRAFTING
+  VERIFICATION_GENERATION
+}
+
+enum ExtractionJobStatus {
+  QUEUED
+  RUNNING
+  NEEDS_INPUT
+  NEEDS_REVIEW
+  COMPLETED
+  FAILED
+  CANCELLED
 }

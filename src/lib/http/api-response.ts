@@ -111,9 +111,18 @@ export function handleApiError(error: unknown) {
   }
 
   if (error && typeof error === "object" && "code" in error) {
-    const domainError = error as { code?: unknown; message?: unknown; statusCode?: unknown; field?: unknown };
+    const domainError = error as { code?: unknown; message?: unknown; status?: unknown; statusCode?: unknown; field?: unknown };
     if (typeof domainError.code === "string" && typeof domainError.message === "string") {
-      const status = typeof domainError.statusCode === "number" ? domainError.statusCode : 400;
+      // Covers two shapes: AppError-family errors (a `status` field — reached here only if an
+      // `instanceof AppError` check upstream somehow missed, e.g. a cross-module-instance error),
+      // and standalone domain errors like LockedBOQError/TenantAccessError that carry `statusCode`
+      // instead. Prefer whichever is actually present; 400 is the last-resort default.
+      const status =
+        typeof domainError.status === "number"
+          ? domainError.status
+          : typeof domainError.statusCode === "number"
+            ? domainError.statusCode
+            : 400;
       const fieldErrors = typeof domainError.field === "string"
         ? { [domainError.field]: [domainError.message] }
         : undefined;

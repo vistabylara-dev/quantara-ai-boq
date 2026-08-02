@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
-import AppShell from "@/components/layout/app-shell";
+import ConditionalAppShell from "@/components/layout/conditional-app-shell";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -12,7 +12,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en">
       <body className="bg-[#07111F] text-white">
-        <AppShell>{children}</AppShell>
+        <ConditionalAppShell>{children}</ConditionalAppShell>
       </body>
     </html>
   );

@@ -94,6 +94,56 @@ enum DocumentAudience {
   CLIENT
 }
 
+enum ClientProposalStatus {
+  DRAFT
+  READY
+  SENT
+  OPENED
+  COMMENTED
+  REVISION_REQUESTED
+  APPROVED
+  REJECTED
+  REVOKED
+  EXPIRED
+}
+
+enum ClientProposalEventType {
+  CREATED
+  READY
+  EMAIL_PREVIEWED
+  EMAIL_QUEUED
+  EMAIL_SENT
+  EMAIL_FAILED
+  LINK_OPENED
+  DOCUMENT_VIEWED
+  DOCUMENT_DOWNLOADED
+  OPTION_SELECTED
+  COMMENT_ADDED
+  REVISION_REQUESTED
+  APPROVED
+  REJECTED
+  REVOKED
+  EXPIRED
+  LINK_REGENERATED
+}
+
+enum ProposalActorType {
+  INTERNAL
+  CLIENT
+  SYSTEM
+}
+
+enum EmailDispatchStatus {
+  DRAFT
+  PREVIEWED
+  QUEUED
+  SENDING
+  SENT
+  DELIVERED
+  FAILED
+  CANCELLED
+}
+
 model Company {
   id                          String                      @id @default(uuid()) @db.Uuid
   legalName                   String
@@ -124,6 +174,11 @@ model Company {
   users                       User[]
   documentTemplates           DocumentTemplate[]
   generatedDocuments          GeneratedDocument[]
+  emailTemplates              EmailTemplate[]
+  clientProposals             ClientProposal[]
+  clientProposalDocuments     ClientProposalDocument[]
+  clientProposalEvents        ClientProposalEvent[]
+  emailDispatches             EmailDispatch[]
 }
 
 model User {
@@ -144,6 +199,9 @@ model User {
   auditLogs                   AuditLog[]
   rateCataloguePriceHistories RateCataloguePriceHistory[]
   generatedDocuments          GeneratedDocument[]
+  clientProposals             ClientProposal[]
+  clientProposalEvents        ClientProposalEvent[]
+  emailDispatches             EmailDispatch[]
 
   @@index([companyId])
   @@index([role])
@@ -218,8 +276,8 @@ model CompanyIndustryEngine {
 }
 
 model Client {
-  id                    String    @id @default(uuid()) @db.Uuid
-  companyId             String    @db.Uuid
+  id                    String           @id @default(uuid()) @db.Uuid
+  companyId             String           @db.Uuid
   name                  String
   companyName           String?
   email                 String?
@@ -227,12 +285,13 @@ model Client {
   address               String?
   taxRegistrationNumber String?
   notes                 String?
-  isArchived            Boolean   @default(false)
+  isArchived            Boolean          @default(false)
   archivedAt            DateTime?
-  createdAt             DateTime  @default(now())
-  updatedAt             DateTime  @updatedAt
-  company               Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  createdAt             DateTime         @default(now())
+  updatedAt             DateTime         @updatedAt
+  company               Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
   projects              Project[]
+  clientProposals       ClientProposal[]
 
   @@index([companyId])
   @@index([email])
@@ -262,6 +321,8 @@ model Project {
   boqs                  BOQ[]
   revisionSnapshots     BOQRevisionSnapshot[]
   generatedDocuments    GeneratedDocument[]
+  clientProposals       ClientProposal[]
+  emailDispatches       EmailDispatch[]
 
   @@unique([companyId, reference])
   @@unique([companyId, slug])
@@ -294,6 +355,8 @@ model BOQ {
   verificationExceptions VerificationException[]
   revisionSnapshots      BOQRevisionSnapshot[]
   generatedDocuments     GeneratedDocument[]
+  clientProposals        ClientProposal[]
+  emailDispatches        EmailDispatch[]
 
   @@unique([projectId, revisionNumber])
   @@index([companyId])
@@ -581,33 +644,34 @@ model DocumentTemplate {
 }
 
 model GeneratedDocument {
-  id                     String                  @id @default(uuid()) @db.Uuid
-  companyId              String                  @db.Uuid
-  projectId              String                  @db.Uuid
-  boqId                  String                  @db.Uuid
-  templateId             String                  @db.Uuid
+  id                     String                   @id @default(uuid()) @db.Uuid
+  companyId              String                   @db.Uuid
+  projectId              String                   @db.Uuid
+  boqId                  String                   @db.Uuid
+  templateId             String                   @db.Uuid
   revisionNumber         Int
   type                   GeneratedDocumentType
   audience               DocumentAudience
-  status                 GeneratedDocumentStatus @default(QUEUED)
-  isDraft                Boolean                 @default(false)
+  status                 GeneratedDocumentStatus  @default(QUEUED)
+  isDraft                Boolean                  @default(false)
   storageKey             String?
   fileName               String?
   mimeType               String?
   fileSize               Int?
   checksum               String?
-  generatedByUserId      String?                 @db.Uuid
+  generatedByUserId      String?                  @db.Uuid
   generatedByName        String
   generationMetadataJson Json?
   errorMessage           String?
-  createdAt              DateTime                @default(now())
+  createdAt              DateTime                 @default(now())
   completedAt            DateTime?
   failedAt               DateTime?
-  company                Company                 @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  project                Project                 @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  boq                    BOQ                     @relation(fields: [boqId], references: [id], onDelete: Cascade)
-  template               DocumentTemplate        @relation(fields: [templateId], references: [id], onDelete: Restrict)
-  generatedByUser        User?                   @relation(fields: [generatedByUserId], references: [id], onDelete: SetNull)
+  company                Company                  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  project                Project                  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  boq                    BOQ                      @relation(fields: [boqId], references: [id], onDelete: Cascade)
+  template               DocumentTemplate         @relation(fields: [templateId], references: [id], onDelete: Restrict)
+  generatedByUser        User?                    @relation(fields: [generatedByUserId], references: [id], onDelete: SetNull)
+  proposalDocuments      ClientProposalDocument[]
 
   @@index([companyId])
   @@index([projectId])
@@ -616,4 +680,147 @@ model GeneratedDocument {
   @@index([type])
   @@index([status])
   @@index([createdAt])
+}
+
+model EmailTemplate {
+  id              String          @id @default(uuid()) @db.Uuid
+  companyId       String          @db.Uuid
+  name            String
+  code            String
+  subject         String
+  bodyHtml        String
+  bodyText        String
+  language        String          @default("English")
+  isDefault       Boolean         @default(false)
+  isActive        Boolean         @default(true)
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+  company         Company         @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  emailDispatches EmailDispatch[]
+
+  @@unique([companyId, code])
+  @@index([companyId])
+  @@index([isActive])
+}
+
+model ClientProposal {
+  id                  String                   @id @default(uuid()) @db.Uuid
+  companyId           String                   @db.Uuid
+  projectId           String                   @db.Uuid
+  boqId               String                   @db.Uuid
+  revisionNumber      Int
+  clientId            String                   @db.Uuid
+  createdByUserId     String?                  @db.Uuid
+  createdByName       String
+  recipientEmail      String
+  recipientName       String
+  tokenHash           String                   @unique
+  status              ClientProposalStatus     @default(DRAFT)
+  expiresAt           DateTime
+  revokedAt           DateTime?
+  firstOpenedAt       DateTime?
+  lastOpenedAt        DateTime?
+  approvedAt          DateTime?
+  rejectedAt          DateTime?
+  revisionRequestedAt DateTime?
+  clientComment       String?
+  approvalName        String?
+  approvalEmail       String?
+  rejectionReason     String?
+  selectedOptionsJson Json?
+  settingsJson        Json
+  createdAt           DateTime                 @default(now())
+  updatedAt           DateTime                 @updatedAt
+  company             Company                  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  project             Project                  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  boq                 BOQ                      @relation(fields: [boqId], references: [id], onDelete: Cascade)
+  client              Client                   @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  createdByUser       User?                    @relation(fields: [createdByUserId], references: [id], onDelete: SetNull)
+  documents           ClientProposalDocument[]
+  events              ClientProposalEvent[]
+  emailDispatches     EmailDispatch[]
+
+  @@index([companyId])
+  @@index([projectId])
+  @@index([boqId])
+  @@index([tokenHash])
+  @@index([status])
+  @@index([expiresAt])
+}
+
+model ClientProposalDocument {
+  id                  String            @id @default(uuid()) @db.Uuid
+  companyId           String            @db.Uuid
+  clientProposalId    String            @db.Uuid
+  generatedDocumentId String            @db.Uuid
+  createdAt           DateTime          @default(now())
+  company             Company           @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  clientProposal      ClientProposal    @relation(fields: [clientProposalId], references: [id], onDelete: Cascade)
+  generatedDocument   GeneratedDocument @relation(fields: [generatedDocumentId], references: [id], onDelete: Cascade)
+
+  @@unique([clientProposalId, generatedDocumentId])
+  @@index([companyId])
+  @@index([clientProposalId])
+}
+
+model ClientProposalEvent {
+  id               String                  @id @default(uuid()) @db.Uuid
+  companyId        String                  @db.Uuid
+  clientProposalId String                  @db.Uuid
+  eventType        ClientProposalEventType
+  actorType        ProposalActorType
+  actorUserId      String?                 @db.Uuid
+  actorName        String?
+  actorEmail       String?
+  ipHash           String?
+  userAgentSummary String?
+  metadataJson     Json?
+  createdAt        DateTime                @default(now())
+  company          Company                 @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  clientProposal   ClientProposal          @relation(fields: [clientProposalId], references: [id], onDelete: Cascade)
+  actorUser        User?                   @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@index([companyId])
+  @@index([clientProposalId])
+  @@index([eventType])
+}
+
+model EmailDispatch {
+  id                String              @id @default(uuid()) @db.Uuid
+  companyId         String              @db.Uuid
+  projectId         String              @db.Uuid
+  boqId             String?             @db.Uuid
+  clientProposalId  String?             @db.Uuid
+  emailTemplateId   String?             @db.Uuid
+  createdByUserId   String?             @db.Uuid
+  createdByName     String
+  recipient         String
+  ccJson            Json?
+  bccJson           Json?
+  replyTo           String?
+  subject           String
+  bodyHtml          String
+  bodyText          String
+  provider          String
+  providerMessageId String?
+  status            EmailDispatchStatus @default(DRAFT)
+  attempts          Int                 @default(0)
+  sentAt            DateTime?
+  deliveredAt       DateTime?
+  failedAt          DateTime?
+  errorCode         String?
+  errorMessage      String?
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+  company           Company             @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  project           Project             @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  boq               BOQ?                @relation(fields: [boqId], references: [id], onDelete: SetNull)
+  clientProposal    ClientProposal?     @relation(fields: [clientProposalId], references: [id], onDelete: SetNull)
+  emailTemplate     EmailTemplate?      @relation(fields: [emailTemplateId], references: [id], onDelete: SetNull)
+  createdByUser     User?               @relation(fields: [createdByUserId], references: [id], onDelete: SetNull)
+
+  @@index([companyId])
+  @@index([projectId])
+  @@index([clientProposalId])
+  @@index([status])
 }

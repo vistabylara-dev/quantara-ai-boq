@@ -30,7 +30,8 @@ export type Capability =
   | "documents:generate"
   | "documents:generate:internal"
   | "documents:download"
-  | "documents:delete";
+  | "documents:delete"
+  | "email-templates:manage";
 
 const ALL_CAPABILITIES: Capability[] = [
   "company:manage",
@@ -53,6 +54,7 @@ const ALL_CAPABILITIES: Capability[] = [
   "documents:generate:internal",
   "documents:download",
   "documents:delete",
+  "email-templates:manage",
 ];
 
 const ROLE_CAPABILITIES: Record<UserRole, Capability[]> = {
@@ -75,6 +77,8 @@ const ROLE_CAPABILITIES: Record<UserRole, Capability[]> = {
     "documents:generate:internal",
     "documents:download",
     "documents:delete",
+    "proposals:manage",
+    "email-templates:manage",
   ],
   // "generate and download" (section 21): full generate access, no delete, no template management.
   QUANTITY_SURVEYOR: [

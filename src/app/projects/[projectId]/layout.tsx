@@ -57,6 +57,12 @@ export default function ProjectLayout({ children, params }: ProjectLayoutProps) 
             >
               Client Preview
             </Link>
+            <Link
+              href={`${basePath}/proposals`}
+              className="rounded-full border border-slate-800 bg-slate-900 px-4 py-2 text-sm text-slate-200 transition hover:bg-slate-800"
+            >
+              Proposals
+            </Link>
           </div>
         </div>
       </div>

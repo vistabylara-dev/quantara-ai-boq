@@ -1040,6 +1040,142 @@ async function seedDocumentTemplates(companyId: string, industryIds: Map<string,
   }
 }
 
+const DEFAULT_ENGLISH_SUBJECT = "BOQ Submission – {{projectName}} – {{boqReference}}";
+
+const DEFAULT_ENGLISH_BODY_TEXT = `Dear {{clientName}},
+
+Thank you for the opportunity to submit our proposal for {{projectName}}.
+
+Please review the Bill of Quantities using the secure link below:
+
+{{secureReviewUrl}}
+
+Through the proposal portal, you may:
+
+- Review the proposed scope and commercial value
+- Select available product or material options
+- Add comments or clarification requests
+- Approve the proposal or request a revision
+- Download authorized proposal documents
+
+Proposal reference:
+{{boqReference}}
+
+Revision:
+{{revision}}
+
+Validity date:
+{{proposalValidityDate}}
+
+Grand total:
+{{currency}} {{grandTotal}}
+
+Please note that quantities and pricing remain subject to the stated terms, exclusions, approved drawings, selected materials, and confirmed project conditions.
+
+Kind regards,
+
+{{senderName}}
+{{companyName}}
+{{senderEmail}}`;
+
+const DEFAULT_ENGLISH_BODY_HTML = `<div style="font-family: 'Segoe UI', Helvetica, Arial, sans-serif; color: #0f172a; line-height: 1.6;">
+<p>Dear {{clientName}},</p>
+<p>Thank you for the opportunity to submit our proposal for {{projectName}}.</p>
+<p>Please review the Bill of Quantities using the secure link below:</p>
+<p><a href="{{secureReviewUrl}}">{{secureReviewUrl}}</a></p>
+<p>Through the proposal portal, you may:</p>
+<ul>
+<li>Review the proposed scope and commercial value</li>
+<li>Select available product or material options</li>
+<li>Add comments or clarification requests</li>
+<li>Approve the proposal or request a revision</li>
+<li>Download authorized proposal documents</li>
+</ul>
+<p>Proposal reference: <strong>{{boqReference}}</strong><br />
+Revision: <strong>{{revision}}</strong><br />
+Validity date: <strong>{{proposalValidityDate}}</strong><br />
+Grand total: <strong>{{currency}} {{grandTotal}}</strong></p>
+<p style="color:#64748b;font-size:12px;">Please note that quantities and pricing remain subject to the stated terms, exclusions, approved drawings, selected materials, and confirmed project conditions.</p>
+<p>Kind regards,<br />
+{{senderName}}<br />
+{{companyName}}<br />
+{{senderEmail}}</p>
+</div>`;
+
+const DEFAULT_ARABIC_SUBJECT = "عرض الأسعار – {{projectName}} – {{boqReference}}";
+
+const DEFAULT_ARABIC_BODY_TEXT = `عزيزي {{clientName}}،
+
+شكراً لإتاحة الفرصة لتقديم عرضنا لمشروع {{projectName}}.
+
+يرجى مراجعة كشف الكميات عبر الرابط الآمن أدناه:
+
+{{secureReviewUrl}}
+
+مرجع العرض: {{boqReference}}
+المراجعة: {{revision}}
+تاريخ الصلاحية: {{proposalValidityDate}}
+الإجمالي الكلي: {{currency}} {{grandTotal}}
+
+مع خالص التقدير،
+{{senderName}}
+{{companyName}}
+{{senderEmail}}`;
+
+const DEFAULT_ARABIC_BODY_HTML = `<div dir="rtl" style="font-family: 'Segoe UI', Tahoma, sans-serif; color: #0f172a; line-height: 1.8; text-align: right;">
+<p>عزيزي {{clientName}}،</p>
+<p>شكراً لإتاحة الفرصة لتقديم عرضنا لمشروع {{projectName}}.</p>
+<p>يرجى مراجعة كشف الكميات عبر الرابط الآمن أدناه:</p>
+<p><a href="{{secureReviewUrl}}">{{secureReviewUrl}}</a></p>
+<p>مرجع العرض: <strong>{{boqReference}}</strong><br />
+المراجعة: <strong>{{revision}}</strong><br />
+تاريخ الصلاحية: <strong>{{proposalValidityDate}}</strong><br />
+الإجمالي الكلي: <strong>{{currency}} {{grandTotal}}</strong></p>
+<p>مع خالص التقدير،<br />
+{{senderName}}<br />
+{{companyName}}<br />
+{{senderEmail}}</p>
+</div>`;
+
+async function seedEmailTemplates(companyId: string): Promise<void> {
+  await prisma.emailTemplate.upsert({
+    where: { id: seedUuid("e0000000", 1) },
+    update: {},
+    create: {
+      id: seedUuid("e0000000", 1),
+      companyId,
+      name: "Default Proposal Email",
+      code: "default-proposal-english",
+      subject: DEFAULT_ENGLISH_SUBJECT,
+      bodyHtml: DEFAULT_ENGLISH_BODY_HTML,
+      bodyText: DEFAULT_ENGLISH_BODY_TEXT,
+      language: "English",
+      isDefault: true,
+      isActive: true,
+      createdAt: CREATED_AT,
+      updatedAt: UPDATED_AT,
+    },
+  });
+  await prisma.emailTemplate.upsert({
+    where: { id: seedUuid("e0000000", 2) },
+    update: {},
+    create: {
+      id: seedUuid("e0000000", 2),
+      companyId,
+      name: "Default Proposal Email (Arabic)",
+      code: "default-proposal-arabic",
+      subject: DEFAULT_ARABIC_SUBJECT,
+      bodyHtml: DEFAULT_ARABIC_BODY_HTML,
+      bodyText: DEFAULT_ARABIC_BODY_TEXT,
+      language: "Arabic",
+      isDefault: false,
+      isActive: true,
+      createdAt: CREATED_AT,
+      updatedAt: UPDATED_AT,
+    },
+  });
+}
+
 async function seedAuditLogs(
   companyId: string,
   boqIds: Map<string, string>,
@@ -1072,12 +1208,13 @@ async function main(): Promise<void> {
   const supplierIds = await seedSuppliers(companyId);
   await seedCatalogue(companyId, industryIds, supplierIds);
   await seedDocumentTemplates(companyId, industryIds);
+  await seedEmailTemplates(companyId);
   await seedVerificationExamples(companyId, boqIds, itemIds);
   await seedAuditLogs(companyId, boqIds);
   await seedOwnerUser(companyId);
 
   console.log(
-    `Seeded Quantara development tenant with ${INDUSTRY_KEYS.length} industries, ${projectSeeds.length} projects, ${supplierSeeds.length} suppliers, ${catalogueSeeds.length} catalogue rates, and ${templateSeeds.length} document templates.`,
+    `Seeded Quantara development tenant with ${INDUSTRY_KEYS.length} industries, ${projectSeeds.length} projects, ${supplierSeeds.length} suppliers, ${catalogueSeeds.length} catalogue rates, ${templateSeeds.length} document templates, and 2 email templates.`,
   );
 }
 

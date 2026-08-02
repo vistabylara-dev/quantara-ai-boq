@@ -23,3 +23,16 @@ export const documentIdParamsSchema = z.object({
 export const templateIdParamsSchema = z.object({
   templateId: z.string().uuid("A valid template ID is required."),
 }).strict();
+
+export const proposalIdParamsSchema = z.object({
+  proposalId: z.string().uuid("A valid proposal ID is required."),
+}).strict();
+
+export const proposalTokenParamsSchema = z.object({
+  token: z.string().trim().min(20, "A valid proposal token is required.").max(200),
+}).strict();
+
+export const proposalTokenDocumentParamsSchema = z.object({
+  token: z.string().trim().min(20, "A valid proposal token is required.").max(200),
+  documentId: z.string().uuid("A valid document ID is required."),
+}).strict();

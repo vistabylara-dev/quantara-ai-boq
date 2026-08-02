@@ -3,6 +3,9 @@ import { Prisma, ProjectStatus } from "@prisma/client";
 import { prisma } from "@/lib/db/prisma";
 import { NotFoundError } from "@/lib/errors/app-error";
 import { getEnabledIndustry } from "@/lib/repositories/industry-repository";
+import { createAuditLog } from "@/lib/repositories/audit-repository";
+
+type DbClient = typeof prisma | Prisma.TransactionClient;
 
 const projectInclude = {
   client: true,
@@ -68,6 +71,7 @@ export function toProjectDTO(project: ProjectRecord) {
   return {
     id: project.slug,
     databaseId: project.id,
+    clientId: project.clientId,
     reference: project.reference,
     name: project.name,
     clientName: project.client.companyName ?? project.client.name,
@@ -135,8 +139,8 @@ export async function listProjects(companyId: string) {
   return projects.map(toProjectDTO);
 }
 
-export async function getProjectRecord(companyId: string, identifier: string) {
-  const project = await prisma.project.findFirst({
+export async function getProjectRecord(companyId: string, identifier: string, db: DbClient = prisma) {
+  const project = await db.project.findFirst({
     where: isUuid(identifier) ? { companyId, id: identifier } : { companyId, slug: identifier },
     include: projectInclude,
   });
@@ -148,12 +152,33 @@ export async function getProject(companyId: string, identifier: string) {
   return toProjectDTO(await getProjectRecord(companyId, identifier));
 }
 
-export async function createProject(companyId: string, input: ProjectWriteInput) {
+export async function projectReferenceExists(companyId: string, reference: string): Promise<boolean> {
+  const existing = await prisma.project.findFirst({ where: { companyId, reference }, select: { id: true } });
+  return Boolean(existing);
+}
+
+export async function projectSlugExists(companyId: string, slug: string): Promise<boolean> {
+  const existing = await prisma.project.findFirst({ where: { companyId, slug }, select: { id: true } });
+  return Boolean(existing);
+}
+
+/**
+ * Accepts an optional externally-managed transaction so callers (the
+ * project-creation service) can create the project and its default R01 BOQ
+ * atomically. Without one, this opens and commits its own transaction,
+ * preserving standalone behavior for existing callers.
+ */
+export async function createProject(
+  companyId: string,
+  input: ProjectWriteInput,
+  externalTx?: Prisma.TransactionClient,
+) {
   const industry = await getEnabledIndustry(companyId, input.industryEngineId);
   const slug = await uniqueSlug(companyId, input.slug ?? `project-${slugify(input.reference)}`);
-  const project = await prisma.$transaction(async (tx) => {
+
+  const run = async (tx: Prisma.TransactionClient) => {
     const client = await resolveClient(tx, companyId, input);
-    return tx.project.create({
+    const created = await tx.project.create({
       data: {
         companyId,
         clientId: client.id,
@@ -171,6 +196,31 @@ export async function createProject(companyId: string, input: ProjectWriteInput)
       },
       include: projectInclude,
     });
+    await createAuditLog(companyId, {
+      entityType: "Project",
+      entityId: created.id,
+      action: "PROJECT_CREATED",
+      payload: { reference: created.reference, slug: created.slug, clientId: client.id },
+    }, tx);
+    return created;
+  };
+
+  const project = externalTx ? await run(externalTx) : await prisma.$transaction(run);
+  return toProjectDTO(project);
+}
+
+export async function archiveProject(companyId: string, identifier: string) {
+  const current = await getProjectRecord(companyId, identifier);
+  const project = await prisma.project.update({
+    where: { id: current.id, companyId },
+    data: { status: ProjectStatus.ARCHIVED },
+    include: projectInclude,
+  });
+  await createAuditLog(companyId, {
+    entityType: "Project",
+    entityId: project.id,
+    action: "PROJECT_ARCHIVED",
+    payload: { reference: project.reference },
   });
   return toProjectDTO(project);
 }

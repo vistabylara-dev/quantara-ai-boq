@@ -3,7 +3,6 @@ import { prisma } from "@/lib/db/prisma";
 import { UnauthorizedError } from "@/lib/errors/app-error";
 import { readSessionTokenFromCookies } from "./session";
 import { hashToken } from "./tokens";
-import { setActorContext } from "./request-context";
 
 export type CurrentActor = {
   userId: string;
@@ -50,20 +49,26 @@ async function resolveActorFromCookie(): Promise<CurrentActor | null> {
  * Resolves the authenticated actor for the current request. Throws
  * UnauthorizedError (401) when there is no valid session, so route handlers
  * can call this once and let handleApiError translate the failure.
+ *
+ * IMPORTANT: this does NOT set the audit request-context itself. Node's
+ * AsyncLocalStorage.enterWith(), called from inside an awaited function,
+ * does not propagate back out through the caller's own await boundary (the
+ * caller's continuation is already linked to the pre-call context by the
+ * time this function's internals run). Route handlers that need audit
+ * attribution must call `setActorContext(actor)` themselves, directly in
+ * their own function body, immediately after awaiting this:
+ *
+ *   const actor = await getCurrentActor();
+ *   setActorContext(actor);
  */
 export async function getCurrentActor(): Promise<CurrentActor> {
   const actor = await resolveActorFromCookie();
   if (!actor) {
     throw new UnauthorizedError();
   }
-  setActorContext(actor);
   return actor;
 }
 
 export async function getCurrentActorOrNull(): Promise<CurrentActor | null> {
-  const actor = await resolveActorFromCookie();
-  if (actor) {
-    setActorContext(actor);
-  }
-  return actor;
+  return resolveActorFromCookie();
 }

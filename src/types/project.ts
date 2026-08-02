@@ -2,6 +2,7 @@ export type ProjectStatus = "draft" | "active" | "review" | "approved" | "comple
 
 export type Project = {
   id: string;
+  clientId?: string;
   reference: string;
   name: string;
   clientName: string;

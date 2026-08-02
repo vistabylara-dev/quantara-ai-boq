@@ -98,6 +98,9 @@ export const apiClient = {
       signal,
     });
   },
+  delete<T>(path: string, signal?: AbortSignal) {
+    return request<T>(path, { method: "DELETE", signal });
+  },
 };
 
 export function getApiErrorMessage(error: unknown): string {

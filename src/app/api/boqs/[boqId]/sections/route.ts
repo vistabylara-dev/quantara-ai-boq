@@ -1,5 +1,6 @@
 import { apiSuccess, handleApiError, parseJsonBody } from "@/lib/http/api-response";
 import { getCurrentActor } from "@/lib/auth/current-actor";
+import { setActorContext } from "@/lib/auth/request-context";
 import { requireCapability } from "@/lib/auth/rbac";
 import { createBOQSection } from "@/lib/repositories/boq-repository";
 import {
@@ -12,6 +13,7 @@ export const dynamic = "force-dynamic";
 export async function POST(request: Request, context: { params: { boqId: string } }) {
   try {
     const actor = await getCurrentActor();
+    setActorContext(actor);
     requireCapability(actor, "boq:edit");
     const { boqId } = boqIdParamsSchema.parse(context.params);
     const input = await parseJsonBody(request, sectionWriteRouteSchema);

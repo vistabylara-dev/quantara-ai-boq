@@ -1,5 +1,6 @@
 import { apiSuccess, handleApiError, parseJsonBody } from "@/lib/http/api-response";
 import { getCurrentActor } from "@/lib/auth/current-actor";
+import { setActorContext } from "@/lib/auth/request-context";
 import { requireCapability } from "@/lib/auth/rbac";
 import { getBOQ, updateBOQ } from "@/lib/repositories/boq-repository";
 import {
@@ -14,6 +15,7 @@ type RouteContext = { params: { boqId: string } };
 export async function GET(_request: Request, context: RouteContext) {
   try {
     const actor = await getCurrentActor();
+    setActorContext(actor);
     const { boqId } = boqIdParamsSchema.parse(context.params);
     const data = await getBOQ(actor.companyId, boqId);
     return apiSuccess(data);
@@ -25,6 +27,7 @@ export async function GET(_request: Request, context: RouteContext) {
 export async function PUT(request: Request, context: RouteContext) {
   try {
     const actor = await getCurrentActor();
+    setActorContext(actor);
     requireCapability(actor, "boq:edit");
     const { boqId } = boqIdParamsSchema.parse(context.params);
     const input = await parseJsonBody(request, frontendBOQUpdateSchema);

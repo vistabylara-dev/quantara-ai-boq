@@ -13,7 +13,9 @@ import type { CurrentActor } from "./current-actor";
 export type Capability =
   | "company:manage"
   | "users:manage"
-  | "projects:manage"
+  | "projects:create"
+  | "projects:update"
+  | "projects:archive"
   | "boq:edit"
   | "boq:lock"
   | "verification:manage"
@@ -27,7 +29,9 @@ export type Capability =
 const ALL_CAPABILITIES: Capability[] = [
   "company:manage",
   "users:manage",
-  "projects:manage",
+  "projects:create",
+  "projects:update",
+  "projects:archive",
   "boq:edit",
   "boq:lock",
   "verification:manage",
@@ -44,7 +48,9 @@ const ROLE_CAPABILITIES: Record<UserRole, Capability[]> = {
   ADMINISTRATOR: [
     "company:manage",
     "users:manage",
-    "projects:manage",
+    "projects:create",
+    "projects:update",
+    "projects:archive",
     "boq:edit",
     "boq:lock",
     "verification:manage",
@@ -52,10 +58,10 @@ const ROLE_CAPABILITIES: Record<UserRole, Capability[]> = {
     "clients:manage",
     "templates:manage",
   ],
-  QUANTITY_SURVEYOR: ["projects:manage", "boq:edit", "boq:lock", "verification:manage"],
-  ESTIMATOR: ["boq:edit", "catalogue:manage"],
+  QUANTITY_SURVEYOR: ["projects:create", "projects:update", "boq:edit", "boq:lock", "verification:manage"],
+  ESTIMATOR: ["projects:create", "projects:update", "boq:edit", "catalogue:manage"],
   DESIGNER: ["files:manage", "review:comment"],
-  SALES_USER: ["clients:manage", "proposals:manage"],
+  SALES_USER: ["projects:create", "clients:manage", "proposals:manage"],
   REVIEWER: ["review:comment", "verification:manage"],
 };
 

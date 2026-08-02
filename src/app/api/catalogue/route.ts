@@ -2,6 +2,7 @@ import { RateStatus } from "@prisma/client";
 import { z } from "zod";
 import { apiSuccess, handleApiError, parseJsonBody } from "@/lib/http/api-response";
 import { getCurrentActor } from "@/lib/auth/current-actor";
+import { setActorContext } from "@/lib/auth/request-context";
 import { requireCapability } from "@/lib/auth/rbac";
 import {
   createRateCatalogueItem,
@@ -22,6 +23,7 @@ type CatalogueCreateRequest = z.output<typeof rateCatalogueItemSchema>;
 export async function GET(request: Request) {
   try {
     const actor = await getCurrentActor();
+    setActorContext(actor);
     const url = new URL(request.url);
     const filters = catalogueQuerySchema.parse({
       industryId: url.searchParams.get("industryId") ?? undefined,
@@ -40,6 +42,7 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const actor = await getCurrentActor();
+    setActorContext(actor);
     requireCapability(actor, "catalogue:manage");
     const input = await parseJsonBody<CatalogueCreateRequest>(
       request,

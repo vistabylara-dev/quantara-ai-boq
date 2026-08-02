@@ -1,0 +1,23 @@
+"use client";
+
+import { useRouter } from "next/navigation";
+import ClientForm from "@/components/clients/client-form";
+import type { Client } from "@/types/client";
+
+export default function NewClientPage() {
+  const router = useRouter();
+
+  return (
+    <div className="min-h-screen bg-[#07111F] text-white">
+      <div className="mx-auto max-w-4xl px-4 py-8 sm:px-6 lg:px-8">
+        <div className="mb-6">
+          <p className="text-sm uppercase tracking-[0.3em] text-slate-500">Create client</p>
+          <h1 className="mt-2 text-3xl font-semibold text-white">New client</h1>
+          <p className="mt-2 text-slate-400">Add a client contact for this company workspace.</p>
+        </div>
+
+        <ClientForm onCreated={(client: Client) => router.push(`/clients/${client.id}`)} />
+      </div>
+    </div>
+  );
+}

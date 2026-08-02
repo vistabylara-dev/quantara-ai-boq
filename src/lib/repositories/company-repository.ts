@@ -1,5 +1,8 @@
+import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db/prisma";
 import { NotFoundError } from "@/lib/errors/app-error";
+
+type DbClient = typeof prisma | Prisma.TransactionClient;
 
 export type CompanyUpdateData = {
   legalName?: string;
@@ -20,8 +23,8 @@ export type CreateCompanyInput = {
   email: string;
 };
 
-export function createCompany(data: CreateCompanyInput) {
-  return prisma.company.create({
+export function createCompany(data: CreateCompanyInput, db: DbClient = prisma) {
+  return db.company.create({
     data: {
       legalName: data.legalName,
       tradeName: data.tradeName,

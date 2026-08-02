@@ -6,6 +6,7 @@ import MobileNavigation from "./mobile-navigation";
 const navigation = [
   { label: "Dashboard", href: "/dashboard" },
   { label: "Projects", href: "/projects" },
+  { label: "Clients", href: "/clients" },
   { label: "Industries", href: "/industries" },
   { label: "Catalogue", href: "/catalogue" },
   { label: "Templates", href: "/templates" },

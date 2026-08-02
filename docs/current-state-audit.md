@@ -7,7 +7,9 @@ Scope: full repository inspection performed before any new implementation work, 
 
 The build brief that triggered this audit assumed the app was still LocalStorage-only with no backend. That is not the actual state of this repository. A prior, uncommitted session ("Backend Foundation Phase 1", see `README.md`) already connected five pages to a real PostgreSQL database via Prisma. **Nothing in this repo is committed to git yet** — `git log` shows zero commits; everything is untracked. Treat this audit as the true baseline, not the brief's assumption.
 
-**Update:** the Authentication phase (real email/password auth, hashed DB-backed sessions, RBAC) described as missing below has since been implemented in the same session that wrote this audit. See [authentication.md](authentication.md) and [multi-tenancy.md](multi-tenancy.md) for what's actually built. The "Missing entirely" and "Migration order" sections below are left as originally written (a point-in-time snapshot) except where struck through — do not treat them as current status for auth.
+**Update (Phase 2):** the Authentication phase (real email/password auth, hashed DB-backed sessions, RBAC) described as missing below has since been implemented. See [authentication.md](authentication.md) and [multi-tenancy.md](multi-tenancy.md) for what's actually built.
+
+**Update (Phase 3):** client management (`/clients`, real CRUD + archive) and real project creation (`/projects/new`, atomic project + default R01 BOQ + industry sections) are also now implemented — previously the single biggest functional gap. See the README's "Backend-connected pages" section. The "Missing entirely" and "Migration order" sections below are left as originally written (a point-in-time snapshot) except where noted — do not treat them as current status.
 
 ## Working functions (verified this session)
 

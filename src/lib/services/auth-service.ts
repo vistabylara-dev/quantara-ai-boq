@@ -27,11 +27,14 @@ export async function registerCompanyOwner(input: RegisterInput) {
   const passwordHash = await hashPassword(input.password);
 
   const { user } = await prisma.$transaction(async (tx) => {
-    const company = await createCompany({
-      legalName: input.companyName,
-      tradeName: input.companyName,
-      email: input.email.toLowerCase(),
-    });
+    const company = await createCompany(
+      {
+        legalName: input.companyName,
+        tradeName: input.companyName,
+        email: input.email.toLowerCase(),
+      },
+      tx,
+    );
     const createdUser = await tx.user.create({
       data: {
         companyId: company.id,
@@ -41,6 +44,21 @@ export async function registerCompanyOwner(input: RegisterInput) {
         role: UserRole.COMPANY_OWNER,
       },
     });
+
+    // Give a newly registered company immediate access to every industry
+    // engine so it can create projects right away; they can disable ones
+    // they don't need from the industries settings page.
+    const industries = await tx.industryEngine.findMany({ select: { id: true } });
+    if (industries.length > 0) {
+      await tx.companyIndustryEngine.createMany({
+        data: industries.map((industry) => ({
+          companyId: company.id,
+          industryEngineId: industry.id,
+          enabled: true,
+        })),
+      });
+    }
+
     return { company, user: createdUser };
   });
 

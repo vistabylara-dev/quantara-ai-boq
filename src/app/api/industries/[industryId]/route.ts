@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { apiSuccess, handleApiError, parseJsonBody } from "@/lib/http/api-response";
 import { getCurrentActor } from "@/lib/auth/current-actor";
+import { setActorContext } from "@/lib/auth/request-context";
 import { requireCapability } from "@/lib/auth/rbac";
 import { setIndustryEnabled } from "@/lib/repositories/industry-repository";
 
@@ -13,6 +14,7 @@ type RouteContext = {
 export async function PATCH(request: Request, { params }: RouteContext) {
   try {
     const actor = await getCurrentActor();
+    setActorContext(actor);
     requireCapability(actor, "company:manage");
     const input = await parseJsonBody(request, industryUpdateSchema);
     const link = await setIndustryEnabled(

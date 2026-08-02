@@ -1,8 +1,12 @@
 import { apiSuccess, handleApiError, parseJsonBody } from "@/lib/http/api-response";
 import { getCurrentActor } from "@/lib/auth/current-actor";
-import { requireCapability } from "@/lib/auth/rbac";
-import { getClient, updateClient } from "@/lib/repositories/client-repository";
-import { clientUpdateSchema } from "@/lib/validation/backend-schemas";
+import { setActorContext } from "@/lib/auth/request-context";
+import {
+  archiveClientForCompany,
+  getClientForCompany,
+  updateClientForCompany,
+} from "@/lib/services/client-service";
+import { clientUpdateSchema } from "@/lib/validation/client-schema";
 import { clientIdParamsSchema } from "@/lib/validation/route-params";
 
 type RouteContext = {
@@ -12,8 +16,9 @@ type RouteContext = {
 export async function GET(_request: Request, { params }: RouteContext) {
   try {
     const actor = await getCurrentActor();
+    setActorContext(actor);
     const { clientId } = clientIdParamsSchema.parse(params);
-    return apiSuccess(await getClient(actor.companyId, clientId));
+    return apiSuccess(await getClientForCompany(actor, clientId));
   } catch (error) {
     return handleApiError(error);
   }
@@ -22,10 +27,22 @@ export async function GET(_request: Request, { params }: RouteContext) {
 export async function PUT(request: Request, { params }: RouteContext) {
   try {
     const actor = await getCurrentActor();
-    requireCapability(actor, "clients:manage");
+    setActorContext(actor);
     const { clientId } = clientIdParamsSchema.parse(params);
     const input = await parseJsonBody(request, clientUpdateSchema);
-    const client = await updateClient(actor.companyId, clientId, input);
+    const client = await updateClientForCompany(actor, clientId, input);
+    return apiSuccess(client);
+  } catch (error) {
+    return handleApiError(error);
+  }
+}
+
+export async function DELETE(_request: Request, { params }: RouteContext) {
+  try {
+    const actor = await getCurrentActor();
+    setActorContext(actor);
+    const { clientId } = clientIdParamsSchema.parse(params);
+    const client = await archiveClientForCompany(actor, clientId);
     return apiSuccess(client);
   } catch (error) {
     return handleApiError(error);

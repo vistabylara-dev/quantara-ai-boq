@@ -1,13 +1,22 @@
 import { apiSuccess, handleApiError, parseJsonBody } from "@/lib/http/api-response";
 import { getCurrentActor } from "@/lib/auth/current-actor";
-import { requireCapability } from "@/lib/auth/rbac";
-import { createClient, listClients } from "@/lib/repositories/client-repository";
-import { clientSchema } from "@/lib/validation/backend-schemas";
+import { setActorContext } from "@/lib/auth/request-context";
+import { createClientForCompany, listClientsForCompany } from "@/lib/services/client-service";
+import { clientCreateSchema, clientListQuerySchema } from "@/lib/validation/client-schema";
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
     const actor = await getCurrentActor();
-    return apiSuccess(await listClients(actor.companyId));
+    setActorContext(actor);
+    const url = new URL(request.url);
+    const query = clientListQuerySchema.parse({
+      search: url.searchParams.get("search") ?? undefined,
+      page: url.searchParams.get("page") ?? undefined,
+      pageSize: url.searchParams.get("pageSize") ?? undefined,
+      includeArchived: url.searchParams.get("includeArchived") ?? undefined,
+    });
+    const result = await listClientsForCompany(actor, query);
+    return apiSuccess(result);
   } catch (error) {
     return handleApiError(error);
   }
@@ -16,9 +25,9 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const actor = await getCurrentActor();
-    requireCapability(actor, "clients:manage");
-    const input = await parseJsonBody(request, clientSchema);
-    const client = await createClient(actor.companyId, input);
+    setActorContext(actor);
+    const input = await parseJsonBody(request, clientCreateSchema);
+    const client = await createClientForCompany(actor, input);
     return apiSuccess(client, 201);
   } catch (error) {
     return handleApiError(error);

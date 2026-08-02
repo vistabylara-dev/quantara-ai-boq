@@ -102,19 +102,25 @@ All tenant-owned records carry `companyId`. Project references and slugs are uni
 ## Backend-connected pages
 
 - `/dashboard`
-- `/projects`
-- `/projects/[projectId]`
+- `/projects`, `/projects/new`, `/projects/[projectId]`
 - `/projects/[projectId]/boq`
 - `/projects/[projectId]/verification`
+- `/clients`, `/clients/new`, `/clients/[clientId]`
 - `/login`, `/register`, `/verify-email`, `/forgot-password`, `/reset-password`
 
 These pages use the real API and include loading, error, and empty states. The seeded end-to-end route is `/projects/project-construction-001`.
 
+Creating a project (`/projects/new` or `POST /api/projects`) requires a real client — select an
+existing one or create one inline without leaving the form — and an enabled industry engine. It
+atomically creates the project, its default R01 BOQ, and the industry's default sections in one
+database transaction (`src/lib/services/project-service.ts`): if section creation fails, the
+project and BOQ roll back too, so there is never an orphan project without a BOQ. New companies
+get every industry engine enabled at registration so this works immediately after sign-up.
+
 ## Pages and modules still local
 
-The following are intentionally outside the first frontend migration and retain their existing demo/static behavior:
+The following are intentionally outside the frontend migration so far and retain their existing demo/static behavior:
 
-- `/projects/new`
 - `/catalogue`
 - `/industries` and `/industries/[industryId]`
 - `/settings`
@@ -122,7 +128,7 @@ The following are intentionally outside the first frontend migration and retain 
 - project document and client-preview modules
 - the marketing/home demo content
 
-Their LocalStorage adapters and Zustand stores remain in place. Do not remove them until each exact module has a tested database-backed replacement. In particular, `/projects/new` is still a local demo workflow and does not create a project in the Phase 1 database.
+Their LocalStorage adapters and Zustand stores remain in place. Do not remove them until each exact module has a tested database-backed replacement.
 
 ## Validation
 
@@ -134,8 +140,9 @@ npm run build
 npm test
 ```
 
-`npm test` includes an integration suite (`tests/auth-service.test.ts`) that talks to the real
-local Postgres database — Docker must be running for the full suite to pass.
+`npm test` includes integration suites (`tests/auth-service.test.ts`,
+`tests/client-project-service.test.ts`) that talk to the real local Postgres database — Docker
+must be running for the full suite to pass.
 
 The API surface includes auth, health, company, industries, clients, projects, BOQs, sections, items, verification, revision/lock, and rate catalogue routes under `/api`.
 
@@ -144,11 +151,15 @@ The API surface includes auth, health, company, industries, clients, projects, B
 - User management UI (invite, list, change role, deactivate) is not built — the data model and RBAC support it, but there is no `/settings/users` page or `/api/users` route yet.
 - Rate limiting on `/api/auth/*` is not implemented.
 - CSRF protection relies on `SameSite=Lax` cookies and same-origin fetches only; no dedicated CSRF token exists yet.
-- The initial project-creation UI remains local pending its database migration.
-- Catalogue, industry administration, settings, documents, and client preview are not yet migrated.
+- Client duplicate-email detection is an application-level check, not a database constraint — a genuine race between two concurrent requests could still create two clients with the same email. Low risk at current scale; noted rather than fixed with a partial unique index.
+- Catalogue, industry administration, settings, documents, and client preview are not yet migrated. A brand-new company gets every industry engine enabled at registration specifically so this gap doesn't block project creation, but engines can only be *disabled* once the industries admin page is migrated.
 - Verification is deterministic and rule-based; no OCR or AI extraction is present.
 - No SMTP integration yet — verification and password-reset links are logged to the server console in development mode only.
 
 ## Next backend phase
 
-The next phase should migrate `/projects/new`, `/catalogue`, `/settings`, and `/industries` admin to the database, add a user-management UI on top of the existing `User`/RBAC model, and then move on to file upload, structured extraction, document generation, email delivery, and the client proposal portal. OCR, drawing intelligence, payments, and legally qualified e-signatures remain explicitly out of scope for now.
+Phase 4 connects the rate catalogue and supplier pricing to BOQ items before document generation.
+After that: `/catalogue`, `/settings`, and `/industries` admin migration to the database, a
+user-management UI on top of the existing `User`/RBAC model, then file upload, structured
+extraction, document generation, email delivery, and the client proposal portal. OCR, drawing
+intelligence, payments, and legally qualified e-signatures remain explicitly out of scope for now.

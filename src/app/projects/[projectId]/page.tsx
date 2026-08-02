@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import type { Project } from "@/types/project";
 import { ApiClientError, apiClient, getApiErrorMessage } from "@/lib/api/client";
@@ -91,7 +92,9 @@ export default function ProjectOverviewPage({ params }: PageProps) {
           </div>
           <div className="space-y-3 rounded-3xl border border-slate-800 bg-slate-900 p-5">
             <p className="text-sm uppercase tracking-[0.28em] text-slate-500">Client</p>
-            <p className="text-base font-semibold text-white">{project.clientName}</p>
+            <Link href={`/clients/${project.clientId}`} className="block text-base font-semibold text-white hover:text-blue-400">
+              {project.clientName}
+            </Link>
             <p className="text-sm text-slate-400">{project.clientEmail}</p>
           </div>
           <div className="space-y-3 rounded-3xl border border-slate-800 bg-slate-900 p-5">

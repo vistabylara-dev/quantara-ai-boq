@@ -60,29 +60,44 @@ visitor), not security.
 
 ## Role-based access control
 
-`src/lib/auth/rbac.ts` defines a small capability set (`company:manage`, `projects:manage`,
-`boq:edit`, `boq:lock`, `verification:manage`, `catalogue:manage`, `clients:manage`,
-`templates:manage`, `proposals:manage`, `files:manage`, `review:comment`) and maps each of the
-seven roles from the build plan onto it. **Read access within a company is not capability-gated
-— any authenticated member of a company can view its projects, BOQs, catalogue, etc.** Only
-mutating routes call `requireCapability(actor, "...")`, throwing `PermissionDeniedError` (403).
-This is a pragmatic reading of the plan's coarse-grained role descriptions mapped onto this
-codebase's actual mutating endpoints; see the comment at the top of `rbac.ts` for the full
-rationale. `proposals:manage`, `files:manage`, and `templates:manage` are defined now for roles
-that will need them, even though the routes they'd gate (client proposals, file uploads,
-templates) don't exist yet.
+`src/lib/auth/rbac.ts` defines a small capability set (`company:manage`, `projects:create`,
+`projects:update`, `projects:archive`, `boq:edit`, `boq:lock`, `verification:manage`,
+`catalogue:manage`, `clients:manage`, `templates:manage`, `proposals:manage`, `files:manage`,
+`review:comment`) and maps each of the seven roles from the build plan onto it. **Read access
+within a company is not capability-gated — any authenticated member of a company can view its
+projects, BOQs, catalogue, etc.** Only mutating routes call `requireCapability(actor, "...")`,
+throwing `PermissionDeniedError` (403). This is a pragmatic reading of the plan's coarse-grained
+role descriptions mapped onto this codebase's actual mutating endpoints; see the comment at the
+top of `rbac.ts` for the full rationale. `proposals:manage`, `files:manage`, and
+`templates:manage` are defined now for roles that will need them, even though the routes they'd
+gate (client proposals, file uploads, templates) don't exist yet. Projects intentionally split
+into three capabilities (rather than one `projects:manage`) because the Phase 3 role matrix gives
+`SALES_USER` create-only access, `QUANTITY_SURVEYOR`/`ESTIMATOR` create+update, and archive to
+`COMPANY_OWNER`/`ADMINISTRATOR` only.
 
 ## Audit attribution
 
 `src/lib/auth/request-context.ts` uses `AsyncLocalStorage` to make the authenticated actor
 available to repository code for the remainder of a request, without threading a `userId`
-parameter through every one of the ~14 existing `createAuditLog` call sites in
-`boq-repository.ts` and `verification-repository.ts`. `getCurrentActor()` calls
-`storage.enterWith(actor)`; `createAuditLog` reads it back via `getActorFromContext()` and falls
-back to it only when a caller hasn't passed an explicit `actorName` (the BOQ lock/revision routes
-still pass `actor.fullName` explicitly, taking priority). `AuditLog.userId` is nullable with
-`onDelete: SetNull`, so a deleted user never breaks the audit trail — `actorName` remains as a
-point-in-time display label.
+parameter through every `createAuditLog` call site in `boq-repository.ts`,
+`verification-repository.ts`, `client-repository.ts`, and `project-repository.ts`.
+`createAuditLog` reads it via `getActorFromContext()` and falls back to it only when a caller
+hasn't passed an explicit `actorName` (the BOQ lock/revision routes still pass `actor.fullName`
+explicitly, taking priority).
+
+**Every route handler must call `setActorContext(actor)` itself, immediately after `const actor
+= await getCurrentActor();`, in its own function body.** This was originally implemented with
+`getCurrentActor()` calling `enterWith` internally, which looked correct (audit rows recorded
+`companyId` fine) but silently produced `actorName: "System"` and `userId: null` on every audit
+row in production traffic — confirmed by direct database inspection during Phase 3 end-to-end
+testing, not by inspection alone. The root cause: `AsyncLocalStorage.enterWith()` called from
+inside an awaited helper function does not propagate back out through the *caller's own* await
+boundary — the caller's continuation is already linked to the pre-call context by the time the
+helper's internals run. `enterWith` only reliably affects code in the same function frame that
+calls it, plus that frame's own subsequent awaits. All 22 route files (31 call sites) were fixed
+to call `setActorContext(actor)` directly; see the warning comment on `getCurrentActor()` in
+`current-actor.ts`. `AuditLog.userId` is nullable with `onDelete: SetNull`, so a deleted user
+never breaks the audit trail — `actorName` remains as a point-in-time display label.
 
 ## Development-mode email
 

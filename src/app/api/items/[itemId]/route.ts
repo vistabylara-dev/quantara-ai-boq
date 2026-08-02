@@ -1,5 +1,6 @@
 import { apiSuccess, handleApiError, parseJsonBody } from "@/lib/http/api-response";
 import { getCurrentActor } from "@/lib/auth/current-actor";
+import { setActorContext } from "@/lib/auth/request-context";
 import { requireCapability } from "@/lib/auth/rbac";
 import {
   deleteBOQItem,
@@ -17,6 +18,7 @@ type RouteContext = { params: { itemId: string } };
 export async function PUT(request: Request, context: RouteContext) {
   try {
     const actor = await getCurrentActor();
+    setActorContext(actor);
     requireCapability(actor, "boq:edit");
     const { itemId } = itemIdParamsSchema.parse(context.params);
     const input = await parseJsonBody(request, itemUpdateRouteSchema);
@@ -30,6 +32,7 @@ export async function PUT(request: Request, context: RouteContext) {
 export async function DELETE(_request: Request, context: RouteContext) {
   try {
     const actor = await getCurrentActor();
+    setActorContext(actor);
     requireCapability(actor, "boq:edit");
     const { itemId } = itemIdParamsSchema.parse(context.params);
     const data = await deleteBOQItem(actor.companyId, itemId);

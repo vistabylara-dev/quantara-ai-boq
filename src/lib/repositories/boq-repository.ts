@@ -124,14 +124,16 @@ export function toBOQDTO(boq: BOQRecord): BOQ & { databaseId: string; taxRate: n
   };
 }
 
-export async function getBOQRecord(companyId: string, boqId: string) {
-  const boq = await prisma.bOQ.findFirst({ where: { id: boqId, companyId }, include: boqInclude });
+type DbClient = typeof prisma | Prisma.TransactionClient;
+
+export async function getBOQRecord(companyId: string, boqId: string, db: DbClient = prisma) {
+  const boq = await db.bOQ.findFirst({ where: { id: boqId, companyId }, include: boqInclude });
   if (!boq) throw new NotFoundError("BOQ not found.");
   return boq;
 }
 
-export async function getBOQ(companyId: string, boqId: string) {
-  return toBOQDTO(await getBOQRecord(companyId, boqId));
+export async function getBOQ(companyId: string, boqId: string, db: DbClient = prisma) {
+  return toBOQDTO(await getBOQRecord(companyId, boqId, db));
 }
 
 export async function listProjectBOQs(companyId: string, projectIdentifier: string) {
@@ -163,13 +165,29 @@ function engineSectionTemplates(configJson: Prisma.JsonValue): SectionTemplate[]
   });
 }
 
+function engineDefaultBOQTitle(configJson: Prisma.JsonValue, fallback: string): string {
+  if (!configJson || typeof configJson !== "object" || Array.isArray(configJson)) return fallback;
+  const labels = (configJson as Record<string, unknown>).documentLabels;
+  if (!labels || typeof labels !== "object" || Array.isArray(labels)) return fallback;
+  const boqLabel = (labels as Record<string, unknown>).boq;
+  return typeof boqLabel === "string" && boqLabel.trim() ? boqLabel : fallback;
+}
+
+/**
+ * Accepts an optional externally-managed transaction so the project-creation
+ * service can create the project and its default R01 BOQ atomically. Without
+ * one, this opens and commits its own transaction (unchanged standalone
+ * behavior for the existing "create a BOQ for an existing project" route).
+ */
 export async function createProjectBOQ(
   companyId: string,
   projectIdentifier: string,
   input?: { title?: string; sections?: SectionTemplate[] },
+  externalTx?: Prisma.TransactionClient,
 ) {
-  const project = await getProjectRecord(companyId, projectIdentifier);
-  const existing = await prisma.bOQ.findFirst({
+  const db = externalTx ?? prisma;
+  const project = await getProjectRecord(companyId, projectIdentifier, db);
+  const existing = await db.bOQ.findFirst({
     where: { companyId, projectId: project.id },
     orderBy: { revisionNumber: "desc" },
     select: { revisionNumber: true },
@@ -179,12 +197,14 @@ export async function createProjectBOQ(
   }
 
   const templates = input?.sections ?? engineSectionTemplates(project.industryEngine.configJson);
-  const boq = await prisma.$transaction(async (tx) => {
+  const defaultTitle = engineDefaultBOQTitle(project.industryEngine.configJson, `${project.industryEngine.name} BOQ`);
+
+  const run = async (tx: Prisma.TransactionClient) => {
     const created = await tx.bOQ.create({
       data: {
         companyId,
         projectId: project.id,
-        title: input?.title ?? `${project.industryEngine.name} BOQ`,
+        title: input?.title ?? defaultTitle,
         revisionNumber: 1,
         status: BOQStatus.DRAFT,
         taxRate: project.taxRate,
@@ -203,11 +223,13 @@ export async function createProjectBOQ(
       entityType: "BOQ",
       entityId: created.id,
       action: "BOQ_CREATED",
-      payload: { projectId: project.id, revisionNumber: 1 },
+      payload: { projectId: project.id, revisionNumber: 1, sectionCount: templates.length },
     }, tx);
     return created;
-  });
-  return getBOQ(companyId, boq.id);
+  };
+
+  const boq = externalTx ? await run(externalTx) : await prisma.$transaction(run);
+  return getBOQ(companyId, boq.id, db);
 }
 
 function calculatedItemData(item: BOQItem, current?: BOQRecord["sections"][number]["items"][number]) {

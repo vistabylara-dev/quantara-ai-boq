@@ -1,6 +1,7 @@
 import { apiSuccess, handleApiError, parseJsonBody } from "@/lib/http/api-response";
 import { z } from "zod";
 import { getCurrentActor } from "@/lib/auth/current-actor";
+import { setActorContext } from "@/lib/auth/request-context";
 import { requireCapability } from "@/lib/auth/rbac";
 import {
   deleteRateCatalogueItem,
@@ -18,6 +19,7 @@ type RouteContext = {
 export async function PUT(request: Request, { params }: RouteContext) {
   try {
     const actor = await getCurrentActor();
+    setActorContext(actor);
     requireCapability(actor, "catalogue:manage");
     const { itemId } = catalogueItemIdParamsSchema.parse(params);
     const input = await parseJsonBody<CatalogueUpdateRequest>(
@@ -34,6 +36,7 @@ export async function PUT(request: Request, { params }: RouteContext) {
 export async function DELETE(_request: Request, { params }: RouteContext) {
   try {
     const actor = await getCurrentActor();
+    setActorContext(actor);
     requireCapability(actor, "catalogue:manage");
     const { itemId } = catalogueItemIdParamsSchema.parse(params);
     return apiSuccess(await deleteRateCatalogueItem(actor.companyId, itemId));

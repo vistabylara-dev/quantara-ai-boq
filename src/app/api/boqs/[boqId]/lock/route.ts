@@ -1,5 +1,6 @@
 import { apiSuccess, handleApiError } from "@/lib/http/api-response";
 import { getCurrentActor } from "@/lib/auth/current-actor";
+import { setActorContext } from "@/lib/auth/request-context";
 import { requireCapability } from "@/lib/auth/rbac";
 import { getBOQRecord, lockBOQ } from "@/lib/repositories/boq-repository";
 import { runBOQVerification } from "@/lib/repositories/verification-repository";
@@ -10,6 +11,7 @@ export const dynamic = "force-dynamic";
 export async function POST(_request: Request, context: { params: { boqId: string } }) {
   try {
     const actor = await getCurrentActor();
+    setActorContext(actor);
     requireCapability(actor, "boq:lock");
     const { boqId } = boqIdParamsSchema.parse(context.params);
     const current = await getBOQRecord(actor.companyId, boqId);

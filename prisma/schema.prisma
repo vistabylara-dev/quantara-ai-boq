@@ -772,6 +772,7 @@ model Company {
   importMappingTemplates      ImportMappingTemplate[]
   importJobs                  ImportJob[]
   importRows                  ImportRow[]
+  projectFiles                ProjectFile[]
 }
 
 model User {
@@ -801,6 +802,8 @@ model User {
   importMappingTemplates      ImportMappingTemplate[]
   importJobs                  ImportJob[]
   copiedBoqItems              BOQItem[]                   @relation("BoqItemCopiedByUser")
+  uploadedProjectFiles        ProjectFile[]               @relation("ProjectFileUploadedByUser")
+  classificationConfirmedFiles ProjectFile[]              @relation("ProjectFileClassificationConfirmedByUser")
 
   @@index([companyId])
   @@index([role])
@@ -924,6 +927,7 @@ model Project {
   emailDispatches       EmailDispatch[]
   itemUsages            CompanyItemUsage[]
   importJobs            ImportJob[]
+  files                 ProjectFile[]
 
   @@unique([companyId, reference])
   @@unique([companyId, slug])
@@ -1446,4 +1450,105 @@ model EmailDispatch {
   @@index([projectId])
   @@index([clientProposalId])
   @@index([status])
+}
+
+/**
+ * Phase 8 — an uploaded source file (drawing, schedule, photo, spreadsheet,
+ * report, etc.) awaiting or undergoing AI-assisted extraction/inspection
+ * processing. Distinct from GeneratedDocument, which is an already-rendered
+ * *output* of the platform (a BOQ export). The original upload is never
+ * overwritten; derivative artifacts (previews, pages, extracted data,
+ * annotations) are stored separately under their own storage-key prefixes.
+ */
+model ProjectFile {
+  id                            String                     @id @default(uuid()) @db.Uuid
+  companyId                     String                     @db.Uuid
+  projectId                     String                     @db.Uuid
+  uploadedByUserId              String                     @db.Uuid
+  originalName                  String
+  safeFileName                  String
+  storageKey                    String
+  mimeType                      String
+  extension                     String
+  fileSize                      Int
+  checksum                      String
+  classification                ProjectFileClassification @default(UNKNOWN)
+  classificationConfidence      Decimal?                   @db.Decimal(5, 2)
+  classificationConfirmedByUserId String?                  @db.Uuid
+  classificationConfirmedAt     DateTime?
+  status                        ProjectFileStatus          @default(UPLOADED)
+  language                      String?
+  pageCount                     Int?
+  sheetCount                    Int?
+  drawingNumber                 String?
+  drawingTitle                  String?
+  revisionNumber                String?
+  scaleText                     String?
+  detectedScale                 String?
+  measurementUnit               String?
+  metadataJson                  Json?
+  processingErrorCode           String?
+  processingErrorMessage        String?
+  createdAt                     DateTime                   @default(now())
+  updatedAt                     DateTime                   @updatedAt
+  company                       Company                    @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  project                       Project                    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  uploadedByUser                User                       @relation("ProjectFileUploadedByUser", fields: [uploadedByUserId], references: [id], onDelete: Restrict)
+  classificationConfirmedByUser User?                      @relation("ProjectFileClassificationConfirmedByUser", fields: [classificationConfirmedByUserId], references: [id], onDelete: SetNull)
+
+  @@index([companyId])
+  @@index([projectId])
+  @@index([status])
+  @@index([classification])
+  @@index([companyId, checksum])
+}
+
+enum ProjectFileClassification {
+  ARCHITECTURAL_PLAN
+  STRUCTURAL_PLAN
+  FURNITURE_LAYOUT
+  INTERIOR_LAYOUT
+  REFLECTED_CEILING_PLAN
+  FLOORING_PLAN
+  LIGHTING_PLAN
+  ELECTRICAL_PLAN
+  HVAC_PLAN
+  PLUMBING_PLAN
+  DRAINAGE_PLAN
+  FIRE_FIGHTING_PLAN
+  FIRE_ALARM_PLAN
+  ELV_PLAN
+  JOINERY_DRAWING
+  LANDSCAPE_PLAN
+  ELEVATION
+  SECTION
+  DETAIL_DRAWING
+  MATERIAL_SCHEDULE
+  FURNITURE_SCHEDULE
+  EQUIPMENT_SCHEDULE
+  DOOR_SCHEDULE
+  WINDOW_SCHEDULE
+  FINISH_SCHEDULE
+  SUPPLIER_PRICE_LIST
+  EXISTING_BOQ
+  PRODUCT_CATALOGUE
+  SITE_INSPECTION_PHOTO
+  TEST_REPORT
+  METHOD_STATEMENT
+  TECHNICAL_REPORT
+  UNKNOWN
+}
+
+enum ProjectFileStatus {
+  UPLOADED
+  CLASSIFYING
+  CLASSIFIED
+  PREPROCESSING
+  READY_FOR_PROCESSING
+  PROCESSING
+  NEEDS_REVIEW
+  COMPLETED
+  FAILED
+  CANCELLED
+  ARCHIVED
 }

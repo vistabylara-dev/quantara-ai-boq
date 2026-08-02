@@ -7,7 +7,7 @@ Tracks real, verified status per sub-phase (implementation order per
 
 | # | Sub-phase | Status | Notes |
 |---|---|---|---|
-| 1 | File security and storage | NOT_STARTED | |
+| 1 | File security and storage | VERIFIED | `ProjectFile` model + migration (`20260803024610_phase8_project_file`); reused `DocumentStorageAdapter` interface via new `local-project-file-storage-adapter.ts` (`.storage/project-files/`, tenant/project/category-namespaced keys, path-traversal-safe); MIME/extension/size validation (200MB cap) in `src/lib/files/file-security.ts`; sha256 checksum + non-blocking duplicate detection; routes: `POST/GET /api/projects/[projectId]/files`, `GET/DELETE /api/files/[fileId]`, `GET /api/files/[fileId]/download`; upload/delete gated by existing `files:manage` capability (OWNER/ADMIN/DESIGNER), read ungated within company (matches existing convention). 17 automated tests (`tests/phase8-file-storage.test.ts`) + live E2E against running dev server (upload/list/detail/download-byte-match/duplicate-detection/reject-unsupported-type/delete/404-after-delete), all passing. Known limitation: delete has no downstream-reference guard yet (no downstream models exist until later sub-phases — flagged in code for extension). |
 | 2 | Background processing | NOT_STARTED | |
 | 3 | Classification | NOT_STARTED | |
 | 4 | CSV/XLSX/PDF table extraction | NOT_STARTED | |

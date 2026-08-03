@@ -1,59 +1,153 @@
 "use client";
 
+import {
+  AlertTriangle,
+  BookOpen,
+  Building2,
+  Clock,
+  FileCheck2,
+  FolderKanban,
+  Layers,
+  Truck,
+  UploadCloud,
+  Users,
+} from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
-import type { Project } from "@/types/project";
-import { formatDate } from "@/lib/formatting/dates";
 import { apiClient, getApiErrorMessage } from "@/lib/api/client";
+import { formatDate } from "@/lib/formatting/dates";
 import TrialBanner from "@/components/dashboard/trial-banner";
+import WorkspaceHeader from "@/components/dashboard/workspace-header";
+import MetricCard from "@/components/dashboard/metric-card";
+import SectionHeader from "@/components/dashboard/section-header";
+import QuickActionButton from "@/components/dashboard/quick-action-button";
+import EmptyState from "@/components/dashboard/empty-state";
+import LoadingSkeleton from "@/components/dashboard/loading-skeleton";
+import ProjectCard, { type RecentProject } from "@/components/dashboard/project-card";
+import BOQSummaryCard, { type RecentBoq } from "@/components/dashboard/boq-summary-card";
+import FileStatusCard, { type RecentFile } from "@/components/dashboard/file-status-card";
+import DocumentCard, { type RecentDocument } from "@/components/dashboard/document-card";
+import ActivityTimeline, { type ActivityEvent } from "@/components/dashboard/activity-timeline";
+import ResponsiveDataTable, { type ResponsiveTableColumn } from "@/components/dashboard/responsive-data-table";
+import type { StatusTone } from "@/components/dashboard/status-badge";
 
-type IndustrySummary = {
-  id?: string;
-  key?: string;
+type SessionData = {
+  authenticated: boolean;
+  user?: { fullName: string; email: string; role: string };
+};
+
+type DashboardMetrics = {
+  activeProjects: number;
+  totalClients: number;
+  totalBoqs: number;
+  totalUploadedFiles: number;
+  totalGeneratedDocuments: number;
+  catalogueItems: number;
+  pendingApprovals: number;
+  failedOperations: number;
+};
+
+type RecentClient = {
+  id: string;
   name: string;
+  contactName: string;
+  email: string | null;
+  createdAt: string;
+  projectCount: number;
+  lastActivityAt: string | null;
 };
 
-type CommercialSummary = {
-  activeCatalogueItems: number;
-  expiredRates: number;
-  totalSuppliers: number;
-  expiringWithin30Days: number;
-  itemsBelowMinimum: number;
+type SubscriptionSummary = {
+  companyName: string | null;
+  planName: string | null;
+  planType: string | null;
+  status: string;
+  trialExpiresAt: string | null;
+  startsAt: string | null;
+  expiresAt: string | null;
 };
 
-type ProposalSummary = {
-  pending: number;
-  sent: number;
-  approved: number;
-  revisionRequested: number;
-  expiringWithin7Days: number;
+const panel = "rounded-[28px] border border-[#D9E2EC] dark:border-[#1E2A42] bg-white dark:bg-[#0B1426] p-6 sm:p-8";
+
+const SUBSCRIPTION_STATUS_TONE: Record<string, StatusTone> = {
+  TRIAL: "warning",
+  ACTIVE: "success",
+  PAST_DUE: "warning",
+  CANCELLED: "error",
+  EXPIRED: "error",
+  SUSPENDED: "error",
+  NONE: "default",
 };
+
+function formatLabel(value: string): string {
+  return value.replace(/_/g, " ").toLowerCase().replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
 
 export default function DashboardPage() {
-  const [projects, setProjects] = useState<Project[]>([]);
-  const [industryCount, setIndustryCount] = useState(0);
-  const [commercial, setCommercial] = useState<CommercialSummary | null>(null);
-  const [proposals, setProposals] = useState<ProposalSummary | null>(null);
+  const [session, setSession] = useState<SessionData | null>(null);
+  const [metrics, setMetrics] = useState<DashboardMetrics | null>(null);
+  const [subscription, setSubscription] = useState<SubscriptionSummary | null>(null);
+  const [projects, setProjects] = useState<RecentProject[] | null>(null);
+  const [boqs, setBoqs] = useState<RecentBoq[] | null>(null);
+  const [files, setFiles] = useState<RecentFile[] | null>(null);
+  const [documents, setDocuments] = useState<RecentDocument[] | null>(null);
+  const [clients, setClients] = useState<RecentClient[] | null>(null);
+  const [activity, setActivity] = useState<ActivityEvent[] | null>(null);
+  const [panelErrors, setPanelErrors] = useState<Record<string, string>>({});
   const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
-  const loadDashboard = useCallback(async (signal?: AbortSignal) => {
+  const load = useCallback(async (signal?: AbortSignal) => {
     setIsLoading(true);
-    setError(null);
+    setLoadError(null);
     try {
-      const [projectData, industries, commercialData, proposalData] = await Promise.all([
-        apiClient.get<Project[]>("/api/projects", signal),
-        apiClient.get<IndustrySummary[]>("/api/industries", signal),
-        apiClient.get<CommercialSummary>("/api/dashboard/commercial-summary", signal),
-        apiClient.get<ProposalSummary>("/api/dashboard/proposal-summary", signal),
+      const [sessionData, metricsData, subscriptionData] = await Promise.all([
+        apiClient.get<SessionData>("/api/auth/session", signal),
+        apiClient.get<DashboardMetrics>("/api/dashboard/metrics", signal),
+        apiClient.get<SubscriptionSummary>("/api/dashboard/subscription-summary", signal),
       ]);
-      setProjects(projectData);
-      setIndustryCount(industries.length);
-      setCommercial(commercialData);
-      setProposals(proposalData);
-    } catch (loadError) {
-      if (loadError instanceof DOMException && loadError.name === "AbortError") return;
-      setError(getApiErrorMessage(loadError));
+
+      if (!sessionData.authenticated) {
+        throw new Error("Your session could not be verified.");
+      }
+
+      setSession(sessionData);
+      setMetrics(metricsData);
+      setSubscription(subscriptionData);
+
+      const nextPanelErrors: Record<string, string> = {};
+      const [projectsResult, boqsResult, filesResult, documentsResult, clientsResult, activityResult] =
+        await Promise.allSettled([
+          apiClient.get<RecentProject[]>("/api/dashboard/recent-projects", signal),
+          apiClient.get<RecentBoq[]>("/api/dashboard/recent-boqs", signal),
+          apiClient.get<RecentFile[]>("/api/dashboard/recent-files", signal),
+          apiClient.get<RecentDocument[]>("/api/dashboard/recent-documents", signal),
+          apiClient.get<RecentClient[]>("/api/dashboard/recent-clients", signal),
+          apiClient.get<ActivityEvent[]>("/api/dashboard/activity", signal),
+        ]);
+
+      if (projectsResult.status === "fulfilled") setProjects(projectsResult.value);
+      else nextPanelErrors.projects = getApiErrorMessage(projectsResult.reason);
+
+      if (boqsResult.status === "fulfilled") setBoqs(boqsResult.value);
+      else nextPanelErrors.boqs = getApiErrorMessage(boqsResult.reason);
+
+      if (filesResult.status === "fulfilled") setFiles(filesResult.value);
+      else nextPanelErrors.files = getApiErrorMessage(filesResult.reason);
+
+      if (documentsResult.status === "fulfilled") setDocuments(documentsResult.value);
+      else nextPanelErrors.documents = getApiErrorMessage(documentsResult.reason);
+
+      if (clientsResult.status === "fulfilled") setClients(clientsResult.value);
+      else nextPanelErrors.clients = getApiErrorMessage(clientsResult.reason);
+
+      if (activityResult.status === "fulfilled") setActivity(activityResult.value);
+      else nextPanelErrors.activity = getApiErrorMessage(activityResult.reason);
+
+      setPanelErrors(nextPanelErrors);
+    } catch (error) {
+      if (error instanceof DOMException && error.name === "AbortError") return;
+      setLoadError(getApiErrorMessage(error));
     } finally {
       if (!signal?.aborted) setIsLoading(false);
     }
@@ -61,28 +155,36 @@ export default function DashboardPage() {
 
   useEffect(() => {
     const controller = new AbortController();
-    void loadDashboard(controller.signal);
+    void load(controller.signal);
     return () => controller.abort();
-  }, [loadDashboard]);
+  }, [load]);
 
-  if (isLoading) {
+  if (isLoading && !metrics) {
     return (
-      <div className="rounded-[32px] border border-slate-800 bg-slate-950 p-8 text-slate-300">
-        <p className="text-lg font-semibold text-white">Loading project intelligence</p>
-        <p className="mt-2 text-sm text-slate-400">Fetching projects and industry engine coverage...</p>
+      <div className={panel}>
+        <div className="animate-pulse space-y-4 motion-reduce:animate-none" aria-live="polite" aria-busy="true">
+          <div className="h-4 w-40 rounded bg-[#EEF3F8] dark:bg-[#111D33]" />
+          <div className="h-8 w-72 rounded bg-[#EEF3F8] dark:bg-[#111D33]" />
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            {Array.from({ length: 8 }).map((_, index) => (
+              <div key={index} className="h-24 rounded-3xl bg-[#EEF3F8] dark:bg-[#111D33]" />
+            ))}
+          </div>
+        </div>
+        <p className="sr-only">Loading your workspace dashboard.</p>
       </div>
     );
   }
 
-  if (error) {
+  if (loadError || !metrics || !session?.user || !subscription) {
     return (
-      <div className="rounded-[32px] border border-slate-800 bg-slate-950 p-8 text-slate-300">
-        <p className="text-lg font-semibold text-white">Dashboard unavailable</p>
-        <p className="mt-2 text-sm text-rose-300">{error}</p>
+      <div className={panel}>
+        <p className="text-lg font-semibold text-[#0B1630] dark:text-white">Dashboard unavailable</p>
+        <p className="mt-2 text-sm text-[#D84A4A] dark:text-rose-300">{loadError ?? "Your workspace data could not be loaded."}</p>
         <button
           type="button"
-          onClick={() => void loadDashboard()}
-          className="mt-6 rounded-2xl border border-slate-700 bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-500"
+          onClick={() => void load()}
+          className="mt-6 rounded-2xl border border-[#0EA5E9] dark:border-[#22D3EE] bg-[#0EA5E9] dark:bg-[#22D3EE] px-4 py-2 text-sm font-semibold text-white dark:text-[#050B18] hover:opacity-90"
         >
           Try again
         </button>
@@ -90,166 +192,218 @@ export default function DashboardPage() {
     );
   }
 
-  const recentProjects = projects.slice(0, 4);
+  const planLabel = subscription.planName
+    ? `${subscription.planName} · ${formatLabel(subscription.status)}`
+    : "No active plan";
+
+  const clientColumns: ResponsiveTableColumn<RecentClient>[] = [
+    {
+      key: "name",
+      header: "Client",
+      render: (client) => (
+        <Link href={`/clients/${client.id}`} className="font-semibold text-[#0B1630] hover:underline dark:text-white">
+          {client.name}
+        </Link>
+      ),
+    },
+    { key: "contact", header: "Contact", render: (client) => client.contactName },
+    { key: "projects", header: "Projects", render: (client) => client.projectCount },
+    {
+      key: "lastActivity",
+      header: "Last activity",
+      render: (client) => (client.lastActivityAt ? formatDate(client.lastActivityAt) : "No activity yet"),
+    },
+  ];
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
       <TrialBanner />
-      <div className="rounded-[32px] border border-slate-800 bg-slate-950 p-8">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-          <div>
-            <p className="text-sm uppercase tracking-[0.28em] text-slate-500">Workspace dashboard</p>
-            <h1 className="mt-2 text-3xl font-semibold text-white">Project intelligence summary</h1>
-            <p className="mt-3 text-slate-400">Track active projects, recent activity, and industry engine coverage.</p>
-          </div>
-          <Link
-            href="/projects"
-            className="inline-flex rounded-2xl border border-slate-700 bg-blue-600 px-5 py-3 text-sm font-semibold text-white transition hover:bg-blue-500"
-          >
-            Manage projects
-          </Link>
-        </div>
 
-        <div className="mt-8 grid gap-4 md:grid-cols-3">
-          <div className="rounded-3xl border border-slate-800 bg-slate-900 p-6">
-            <p className="text-sm uppercase tracking-[0.28em] text-slate-500">Projects</p>
-            <p className="mt-3 text-4xl font-semibold text-white">{projects.length}</p>
-          </div>
-          <div className="rounded-3xl border border-slate-800 bg-slate-900 p-6">
-            <p className="text-sm uppercase tracking-[0.28em] text-slate-500">Industry engines</p>
-            <p className="mt-3 text-4xl font-semibold text-white">{industryCount}</p>
-          </div>
-          <div className="rounded-3xl border border-slate-800 bg-slate-900 p-6">
-            <p className="text-sm uppercase tracking-[0.28em] text-slate-500">Data source</p>
-            <p className="mt-3 text-4xl font-semibold text-white">Backend</p>
-          </div>
-        </div>
-      </div>
+      <WorkspaceHeader
+        companyName={subscription.companyName ?? "Your workspace"}
+        userName={session.user.fullName}
+        userEmail={session.user.email}
+        userRole={formatLabel(session.user.role)}
+        planLabel={planLabel}
+        planTone={SUBSCRIPTION_STATUS_TONE[subscription.status] ?? "default"}
+      />
 
-      <section className="rounded-[32px] border border-slate-800 bg-slate-950 p-8">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h2 className="text-xl font-semibold text-white">Commercial catalogue</h2>
-            <p className="mt-1 text-sm text-slate-400">Supplier rate coverage and pricing risk.</p>
-          </div>
-          <Link
-            href="/catalogue"
-            className="rounded-2xl border border-slate-700 bg-slate-900 px-4 py-2 text-sm font-semibold text-slate-200 hover:bg-slate-800"
-          >
-            Open catalogue
-          </Link>
-        </div>
-        <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
-          <div className="rounded-3xl border border-slate-800 bg-slate-900 p-5">
-            <p className="text-xs uppercase tracking-[0.24em] text-slate-500">Active rates</p>
-            <p className="mt-2 text-3xl font-semibold text-white">{commercial?.activeCatalogueItems ?? 0}</p>
-          </div>
-          <div className="rounded-3xl border border-slate-800 bg-slate-900 p-5">
-            <p className="text-xs uppercase tracking-[0.24em] text-slate-500">Expired rates</p>
-            <p className="mt-2 text-3xl font-semibold text-white">{commercial?.expiredRates ?? 0}</p>
-          </div>
-          <div className="rounded-3xl border border-slate-800 bg-slate-900 p-5">
-            <p className="text-xs uppercase tracking-[0.24em] text-slate-500">Suppliers</p>
-            <p className="mt-2 text-3xl font-semibold text-white">{commercial?.totalSuppliers ?? 0}</p>
-          </div>
-          <div className="rounded-3xl border border-slate-800 bg-slate-900 p-5">
-            <p className="text-xs uppercase tracking-[0.24em] text-slate-500">Expiring in 30 days</p>
-            <p className="mt-2 text-3xl font-semibold text-white">{commercial?.expiringWithin30Days ?? 0}</p>
-          </div>
-          <div className="rounded-3xl border border-slate-800 bg-slate-900 p-5">
-            <p className="text-xs uppercase tracking-[0.24em] text-slate-500">Below minimum rate</p>
-            <p className="mt-2 text-3xl font-semibold text-white">{commercial?.itemsBelowMinimum ?? 0}</p>
-          </div>
+      {/* KPI cards */}
+      <section aria-label="Workspace key metrics" className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <MetricCard icon={FolderKanban} label="Active projects" value={metrics.activeProjects} />
+        <MetricCard icon={Users} label="Clients" value={metrics.totalClients} />
+        <MetricCard icon={FileCheck2} label="BOQs" value={metrics.totalBoqs} />
+        <MetricCard icon={UploadCloud} label="Uploaded files" value={metrics.totalUploadedFiles} />
+        <MetricCard icon={FileCheck2} label="Generated documents" value={metrics.totalGeneratedDocuments} />
+        <MetricCard icon={Layers} label="Catalogue items" value={metrics.catalogueItems} />
+        <MetricCard icon={Clock} label="Pending approvals" value={metrics.pendingApprovals} tone={metrics.pendingApprovals > 0 ? "warning" : "default"} />
+        <MetricCard icon={AlertTriangle} label="Failed operations" value={metrics.failedOperations} tone={metrics.failedOperations > 0 ? "error" : "default"} />
+      </section>
+
+      {/* Quick actions */}
+      <section aria-label="Quick actions" className={panel}>
+        <SectionHeader title="Quick actions" description="Jump straight into common workspace tasks." />
+        <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <QuickActionButton href="/clients/new" label="Create Client" icon={Users} />
+          <QuickActionButton href="/catalogue" label="Open Catalogue" icon={Layers} />
+          <QuickActionButton href="/suppliers" label="Manage Suppliers" icon={Truck} />
+          <QuickActionButton href="/templates" label="Browse Templates" icon={BookOpen} />
         </div>
       </section>
 
-      <section className="rounded-[32px] border border-slate-800 bg-slate-950 p-8">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h2 className="text-xl font-semibold text-white">Client proposals</h2>
-            <p className="mt-1 text-sm text-slate-400">Delivery pipeline across all projects.</p>
+      {/* Active projects */}
+      <section className={panel}>
+        <SectionHeader
+          title="Active projects"
+          description="Your most recently updated project workspaces."
+          action={<Link href="/projects" className="rounded-2xl border border-[#D9E2EC] dark:border-[#1E2A42] bg-[#EEF3F8] dark:bg-[#111D33] px-4 py-2 text-sm font-semibold text-[#0B1630] dark:text-[#F7FAFC] hover:bg-white dark:hover:bg-[#0B1426]">All projects</Link>}
+        />
+        {panelErrors.projects ? (
+          <PanelError message={panelErrors.projects} />
+        ) : !projects ? (
+          <LoadingSkeleton rows={3} />
+        ) : projects.length === 0 ? (
+          <EmptyState
+            message="No projects yet. Create a project to begin building a BOQ workspace."
+            action={<Link href="/projects/new" className="text-sm font-semibold text-[#0284C7] hover:underline dark:text-[#22D3EE]">Create your first project</Link>}
+          />
+        ) : (
+          <div className="mt-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+            {projects.map((project) => <ProjectCard key={project.id} project={project} />)}
           </div>
-        </div>
-        <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
-          <div className="rounded-3xl border border-slate-800 bg-slate-900 p-5">
-            <p className="text-xs uppercase tracking-[0.24em] text-slate-500">Pending client review</p>
-            <p className="mt-2 text-3xl font-semibold text-white">{proposals?.pending ?? 0}</p>
-          </div>
-          <div className="rounded-3xl border border-slate-800 bg-slate-900 p-5">
-            <p className="text-xs uppercase tracking-[0.24em] text-slate-500">Sent</p>
-            <p className="mt-2 text-3xl font-semibold text-white">{proposals?.sent ?? 0}</p>
-          </div>
-          <div className="rounded-3xl border border-slate-800 bg-slate-900 p-5">
-            <p className="text-xs uppercase tracking-[0.24em] text-slate-500">Approved</p>
-            <p className="mt-2 text-3xl font-semibold text-white">{proposals?.approved ?? 0}</p>
-          </div>
-          <div className="rounded-3xl border border-slate-800 bg-slate-900 p-5">
-            <p className="text-xs uppercase tracking-[0.24em] text-slate-500">Revision requested</p>
-            <p className="mt-2 text-3xl font-semibold text-white">{proposals?.revisionRequested ?? 0}</p>
-          </div>
-          <div className="rounded-3xl border border-slate-800 bg-slate-900 p-5">
-            <p className="text-xs uppercase tracking-[0.24em] text-slate-500">Expiring in 7 days</p>
-            <p className="mt-2 text-3xl font-semibold text-white">{proposals?.expiringWithin7Days ?? 0}</p>
-          </div>
-        </div>
+        )}
       </section>
 
-      <section className="rounded-[32px] border border-slate-800 bg-slate-950 p-8">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h2 className="text-xl font-semibold text-white">Recent projects</h2>
-            <p className="mt-1 text-sm text-slate-400">Open a workspace or continue a sample review.</p>
+      {/* BOQ workspace */}
+      <section className={panel}>
+        <SectionHeader
+          title="BOQ workspace"
+          description="Recent bills of quantities and their calculated totals."
+          action={<Link href="/projects" className="rounded-2xl border border-[#D9E2EC] dark:border-[#1E2A42] bg-[#EEF3F8] dark:bg-[#111D33] px-4 py-2 text-sm font-semibold text-[#0B1630] dark:text-[#F7FAFC] hover:bg-white dark:hover:bg-[#0B1426]">All projects</Link>}
+        />
+        {panelErrors.boqs ? (
+          <PanelError message={panelErrors.boqs} />
+        ) : !boqs ? (
+          <LoadingSkeleton rows={3} />
+        ) : boqs.length === 0 ? (
+          <EmptyState message="No BOQs yet. Open a project to start building a bill of quantities." />
+        ) : (
+          <div className="mt-4 grid gap-4 lg:grid-cols-2">
+            {boqs.map((boq) => <BOQSummaryCard key={boq.id} boq={boq} />)}
           </div>
-          <Link
-            href="/projects"
-            className="rounded-2xl border border-slate-700 bg-slate-900 px-4 py-2 text-sm font-semibold text-slate-200 hover:bg-slate-800"
-          >
-            All projects
-          </Link>
-        </div>
+        )}
+      </section>
 
-        <div className="mt-6 overflow-x-auto rounded-3xl border border-slate-800 bg-slate-900">
-          <table className="min-w-full text-left text-sm text-slate-300">
-            <thead className="bg-slate-950 text-slate-400">
-              <tr>
-                <th className="px-6 py-4">Project</th>
-                <th className="px-6 py-4">Industry</th>
-                <th className="px-6 py-4">Status</th>
-                <th className="px-6 py-4">Updated</th>
-                <th className="px-6 py-4">Action</th>
-              </tr>
-            </thead>
-            <tbody>
-              {recentProjects.map((project) => (
-                <tr key={project.id} className="border-t border-slate-800 hover:bg-slate-900">
-                  <td className="px-6 py-4">
-                    <p className="font-semibold text-white">{project.name}</p>
-                    <p className="text-xs text-slate-500">{project.reference}</p>
-                  </td>
-                  <td className="px-6 py-4 text-slate-300">{project.industryId.replace(/-/g, " ")}</td>
-                  <td className="px-6 py-4 text-slate-300">{project.status}</td>
-                  <td className="px-6 py-4 text-slate-300">{formatDate(project.updatedAt)}</td>
-                  <td className="px-6 py-4">
-                    <Link
-                      href={`/projects/${project.id}`}
-                      className="inline-flex rounded-2xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-200 hover:bg-slate-800"
-                    >
-                      Open
-                    </Link>
-                  </td>
-                </tr>
-              ))}
-              {recentProjects.length === 0 && (
-                <tr>
-                  <td colSpan={5} className="px-6 py-10 text-center text-slate-400">
-                    No projects yet. Create a project to begin building a BOQ workspace.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
+      {/* Files and drawings */}
+      <section className={panel}>
+        <SectionHeader title="Files and drawings" description="Recently uploaded project files." />
+        {panelErrors.files ? (
+          <PanelError message={panelErrors.files} />
+        ) : !files ? (
+          <LoadingSkeleton rows={3} />
+        ) : files.length === 0 ? (
+          <EmptyState
+            message="No files uploaded yet."
+            action={<Link href="/imports" className="text-sm font-semibold text-[#0284C7] hover:underline dark:text-[#22D3EE]">Upload a file</Link>}
+          />
+        ) : (
+          <div className="mt-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+            {files.map((file) => <FileStatusCard key={file.id} file={file} />)}
+          </div>
+        )}
+      </section>
+
+      {/* Generated documents */}
+      <section className={panel}>
+        <SectionHeader title="Generated documents" description="Recent exports across every project." />
+        {panelErrors.documents ? (
+          <PanelError message={panelErrors.documents} />
+        ) : !documents ? (
+          <LoadingSkeleton rows={3} />
+        ) : documents.length === 0 ? (
+          <EmptyState message="No documents generated yet." />
+        ) : (
+          <div className="mt-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+            {documents.map((document) => <DocumentCard key={document.id} document={document} />)}
+          </div>
+        )}
+      </section>
+
+      {/* Clients */}
+      <section className={panel}>
+        <SectionHeader
+          title="Clients"
+          description="Recently active clients across your projects."
+          action={<Link href="/clients" className="rounded-2xl border border-[#D9E2EC] dark:border-[#1E2A42] bg-[#EEF3F8] dark:bg-[#111D33] px-4 py-2 text-sm font-semibold text-[#0B1630] dark:text-[#F7FAFC] hover:bg-white dark:hover:bg-[#0B1426]">All clients</Link>}
+        />
+        {panelErrors.clients ? (
+          <PanelError message={panelErrors.clients} />
+        ) : !clients ? (
+          <LoadingSkeleton rows={3} />
+        ) : clients.length === 0 ? (
+          <EmptyState
+            message="No clients yet. Add a client to start a new project."
+            action={<Link href="/clients/new" className="text-sm font-semibold text-[#0284C7] hover:underline dark:text-[#22D3EE]">Add your first client</Link>}
+          />
+        ) : (
+          <ResponsiveDataTable columns={clientColumns} rows={clients} />
+        )}
+      </section>
+
+      {/* Recent activity + account/subscription */}
+      <section className="grid gap-6 lg:grid-cols-3">
+        <div className={`${panel} lg:col-span-2`}>
+          <SectionHeader title="Recent activity" description="Real audit events for your workspace, newest first." />
+          {panelErrors.activity ? (
+            <PanelError message={panelErrors.activity} />
+          ) : !activity ? (
+            <LoadingSkeleton rows={4} />
+          ) : activity.length === 0 ? (
+            <EmptyState message="No recent activity recorded yet." />
+          ) : (
+            <ActivityTimeline events={activity} />
+          )}
+        </div>
+        <div className={panel}>
+          <SectionHeader title="Account" description="Your subscription and plan." />
+          <dl className="mt-4 space-y-3 text-sm">
+            <div className="flex items-center justify-between gap-4">
+              <dt className="text-[#536078] dark:text-[#B8C4D8]">Plan</dt>
+              <dd className="text-right font-medium text-[#0B1630] dark:text-white">{subscription.planName ?? "None"}</dd>
+            </div>
+            <div className="flex items-center justify-between gap-4">
+              <dt className="text-[#536078] dark:text-[#B8C4D8]">Status</dt>
+              <dd className="text-right font-medium text-[#0B1630] dark:text-white">{formatLabel(subscription.status)}</dd>
+            </div>
+            {subscription.trialExpiresAt && (
+              <div className="flex items-center justify-between gap-4">
+                <dt className="text-[#536078] dark:text-[#B8C4D8]">Trial ends</dt>
+                <dd className="text-right font-medium text-[#0B1630] dark:text-white">{formatDate(subscription.trialExpiresAt)}</dd>
+              </div>
+            )}
+            {subscription.expiresAt && (
+              <div className="flex items-center justify-between gap-4">
+                <dt className="text-[#536078] dark:text-[#B8C4D8]">Renews / expires</dt>
+                <dd className="text-right font-medium text-[#0B1630] dark:text-white">{formatDate(subscription.expiresAt)}</dd>
+              </div>
+            )}
+          </dl>
+          <Link
+            href="/settings/subscription"
+            className="mt-5 inline-flex rounded-2xl border border-[#D9E2EC] dark:border-[#1E2A42] bg-[#EEF3F8] dark:bg-[#111D33] px-4 py-2 text-sm font-semibold text-[#0B1630] dark:text-[#F7FAFC] hover:bg-white dark:hover:bg-[#0B1426]"
+          >
+            Manage subscription
+          </Link>
         </div>
       </section>
     </div>
+  );
+}
+
+function PanelError({ message }: { message: string }) {
+  return (
+    <p className="mt-4 rounded-2xl border border-[#D84A4A]/30 bg-[#D84A4A]/5 px-4 py-3 text-sm text-[#D84A4A] dark:border-rose-900 dark:bg-rose-950/20 dark:text-rose-300">
+      This panel could not load: {message}
+    </p>
   );
 }

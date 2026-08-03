@@ -414,11 +414,9 @@ describe("Phase 7: commercial entitlements + industry data platform (integration
         "IMP-1,Imported Item Duplicate,nos,120",
         ",Missing code row,nos,50",
       ].join("\n");
-      const fileContentBase64 = Buffer.from(csv, "utf-8").toString("base64");
-
       const job = await createImportJob(actor(companyId), {
         uploadedFileName: "test-import.csv",
-        fileContentBase64,
+        buffer: Buffer.from(csv, "utf-8"),
         sourceType: "CSV",
         destinationType: "COMPANY_LIBRARY",
       });
@@ -460,7 +458,7 @@ describe("Phase 7: commercial entitlements + industry data platform (integration
       const csv = "Code,Name,Unit,Cost\nISO-1,Item,nos,10";
       const job = await createImportJob(actor(companyAId), {
         uploadedFileName: "iso.csv",
-        fileContentBase64: Buffer.from(csv).toString("base64"),
+        buffer: Buffer.from(csv),
         sourceType: "CSV",
         destinationType: "COMPANY_LIBRARY",
       });

@@ -7,13 +7,14 @@ import { drawingPageIdParamsSchema } from "@/lib/validation/route-params";
 
 export const dynamic = "force-dynamic";
 
-type RouteContext = { params: { pageId: string } };
+type RouteContext = { params: Promise<{ pageId: string }> };
 
 export async function GET(_request: Request, context: RouteContext) {
   try {
     const actor = await getCurrentActor();
     setActorContext(actor);
-    const { pageId } = drawingPageIdParamsSchema.parse(context.params);
+    const params = await context.params;
+    const { pageId } = drawingPageIdParamsSchema.parse(params);
     const { buffer, mimeType } = await getDrawingPageImage(actor, pageId);
     return new NextResponse(new Uint8Array(buffer), {
       headers: { "Content-Type": mimeType, "Cache-Control": "private, max-age=3600" },

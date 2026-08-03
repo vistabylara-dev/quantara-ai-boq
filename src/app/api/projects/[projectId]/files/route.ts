@@ -7,13 +7,14 @@ import { projectIdParamsSchema } from "@/lib/validation/boq-route-schemas";
 
 export const dynamic = "force-dynamic";
 
-type RouteContext = { params: { projectId: string } };
+type RouteContext = { params: Promise<{ projectId: string }> };
 
 export async function GET(_request: Request, context: RouteContext) {
   try {
     const actor = await getCurrentActor();
     setActorContext(actor);
-    const { projectId } = projectIdParamsSchema.parse(context.params);
+    const params = await context.params;
+    const { projectId } = projectIdParamsSchema.parse(params);
     const data = await listProjectFilesForProject(actor, projectId);
     return apiSuccess(data);
   } catch (error) {
@@ -25,8 +26,8 @@ export async function POST(request: Request, context: RouteContext) {
   try {
     const actor = await getCurrentActor();
     setActorContext(actor);
-    const { projectId } = projectIdParamsSchema.parse(context.params);
-
+    const params = await context.params;
+    const { projectId } = projectIdParamsSchema.parse(params);
     const formData = await request.formData();
     const file = formData.get("file");
     if (!(file instanceof File)) {

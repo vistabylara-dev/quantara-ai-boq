@@ -10,13 +10,14 @@ import { clientUpdateSchema } from "@/lib/validation/client-schema";
 import { clientIdParamsSchema } from "@/lib/validation/route-params";
 
 type RouteContext = {
-  params: { clientId: string };
+  params: Promise<{ clientId: string }>;
 };
 
-export async function GET(_request: Request, { params }: RouteContext) {
+export async function GET(_request: Request, context: RouteContext) {
   try {
     const actor = await getCurrentActor();
     setActorContext(actor);
+    const params = await context.params;
     const { clientId } = clientIdParamsSchema.parse(params);
     return apiSuccess(await getClientForCompany(actor, clientId));
   } catch (error) {
@@ -24,10 +25,11 @@ export async function GET(_request: Request, { params }: RouteContext) {
   }
 }
 
-export async function PUT(request: Request, { params }: RouteContext) {
+export async function PUT(request: Request, context: RouteContext) {
   try {
     const actor = await getCurrentActor();
     setActorContext(actor);
+    const params = await context.params;
     const { clientId } = clientIdParamsSchema.parse(params);
     const input = await parseJsonBody(request, clientUpdateSchema);
     const client = await updateClientForCompany(actor, clientId, input);
@@ -37,10 +39,11 @@ export async function PUT(request: Request, { params }: RouteContext) {
   }
 }
 
-export async function DELETE(_request: Request, { params }: RouteContext) {
+export async function DELETE(_request: Request, context: RouteContext) {
   try {
     const actor = await getCurrentActor();
     setActorContext(actor);
+    const params = await context.params;
     const { clientId } = clientIdParamsSchema.parse(params);
     const client = await archiveClientForCompany(actor, clientId);
     return apiSuccess(client);

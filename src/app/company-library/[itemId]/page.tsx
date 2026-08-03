@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, use } from "react";
 import { apiClient, getApiErrorMessage } from "@/lib/api/client";
 import { formatDate } from "@/lib/formatting/dates";
 
@@ -25,9 +25,10 @@ type Version = { id: string; version: number; changeReason: string; createdAt: s
 type Usage = { id: string; projectName: string | null; projectReference: string | null; usedAt: string };
 type Variant = { id: string; name: string; variantCode: string; defaultSellingRate: number; isActive: boolean };
 
-type PageProps = { params: { itemId: string } };
+type PageProps = { params: Promise<{ itemId: string }> };
 
-export default function CompanyLibraryItemPage({ params }: PageProps) {
+export default function CompanyLibraryItemPage(props: PageProps) {
+  const params = use(props.params);
   const [item, setItem] = useState<LibraryItem | null>(null);
   const [versions, setVersions] = useState<Version[]>([]);
   const [usage, setUsage] = useState<Usage[]>([]);

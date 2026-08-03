@@ -7,7 +7,7 @@ import { projectIdParamsSchema } from "@/lib/validation/boq-route-schemas";
 
 export const dynamic = "force-dynamic";
 
-type RouteContext = { params: { projectId: string } };
+type RouteContext = { params: Promise<{ projectId: string }> };
 
 const bodySchema = z.object({
   reportType: z.string().min(1).max(50),
@@ -20,7 +20,8 @@ export async function GET(_request: Request, context: RouteContext) {
   try {
     const actor = await getCurrentActor();
     setActorContext(actor);
-    const { projectId } = projectIdParamsSchema.parse(context.params);
+    const params = await context.params;
+    const { projectId } = projectIdParamsSchema.parse(params);
     const data = await listInspectionsForProject(actor, projectId);
     return apiSuccess(data);
   } catch (error) {
@@ -32,7 +33,8 @@ export async function POST(request: Request, context: RouteContext) {
   try {
     const actor = await getCurrentActor();
     setActorContext(actor);
-    const { projectId } = projectIdParamsSchema.parse(context.params);
+    const params = await context.params;
+    const { projectId } = projectIdParamsSchema.parse(params);
     const body = await parseJsonBody(request, bodySchema);
     const data = await createInspection(actor, { projectId, ...body });
     return apiSuccess(data, 201);

@@ -12,13 +12,14 @@ import { z } from "zod";
 const supplierIdParamsSchema = z.object({ supplierId: z.string().uuid("A valid supplier ID is required.") });
 
 type RouteContext = {
-  params: { supplierId: string };
+  params: Promise<{ supplierId: string }>;
 };
 
-export async function GET(_request: Request, { params }: RouteContext) {
+export async function GET(_request: Request, context: RouteContext) {
   try {
     const actor = await getCurrentActor();
     setActorContext(actor);
+    const params = await context.params;
     const { supplierId } = supplierIdParamsSchema.parse(params);
     return apiSuccess(await getSupplierForCompany(actor, supplierId));
   } catch (error) {
@@ -26,10 +27,11 @@ export async function GET(_request: Request, { params }: RouteContext) {
   }
 }
 
-export async function PUT(request: Request, { params }: RouteContext) {
+export async function PUT(request: Request, context: RouteContext) {
   try {
     const actor = await getCurrentActor();
     setActorContext(actor);
+    const params = await context.params;
     const { supplierId } = supplierIdParamsSchema.parse(params);
     const input = await parseJsonBody(request, supplierUpdateSchema);
     const supplier = await updateSupplierForCompany(actor, supplierId, input);
@@ -39,10 +41,11 @@ export async function PUT(request: Request, { params }: RouteContext) {
   }
 }
 
-export async function DELETE(_request: Request, { params }: RouteContext) {
+export async function DELETE(_request: Request, context: RouteContext) {
   try {
     const actor = await getCurrentActor();
     setActorContext(actor);
+    const params = await context.params;
     const { supplierId } = supplierIdParamsSchema.parse(params);
     const supplier = await deactivateSupplierForCompany(actor, supplierId);
     return apiSuccess(supplier);

@@ -7,7 +7,7 @@ import { documentIdParamsSchema } from "@/lib/validation/route-params";
 
 export const dynamic = "force-dynamic";
 
-type RouteContext = { params: { documentId: string } };
+type RouteContext = { params: Promise<{ documentId: string }> };
 
 /**
  * The only path that ever reads generated-document bytes off disk. Tenant
@@ -20,7 +20,8 @@ export async function GET(_request: Request, context: RouteContext) {
   try {
     const actor = await getCurrentActor();
     setActorContext(actor);
-    const { documentId } = documentIdParamsSchema.parse(context.params);
+    const params = await context.params;
+    const { documentId } = documentIdParamsSchema.parse(params);
     const { buffer, fileName, mimeType } = await getDocumentForDownload(actor, documentId);
     return new NextResponse(new Uint8Array(buffer), {
       headers: {

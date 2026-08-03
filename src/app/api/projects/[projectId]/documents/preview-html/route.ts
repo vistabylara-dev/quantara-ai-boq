@@ -14,7 +14,7 @@ import { NotFoundError } from "@/lib/errors/app-error";
 
 export const dynamic = "force-dynamic";
 
-type RouteContext = { params: { projectId: string } };
+type RouteContext = { params: Promise<{ projectId: string }> };
 
 /**
  * Live, non-persisted HTML render for the interactive `/documents/preview`
@@ -26,7 +26,8 @@ export async function GET(request: Request, context: RouteContext) {
   try {
     const actor = await getCurrentActor();
     setActorContext(actor);
-    const { projectId } = projectIdParamsSchema.parse(context.params);
+    const params = await context.params;
+    const { projectId } = projectIdParamsSchema.parse(params);
     const url = new URL(request.url);
     const { boqId, templateId, audience } = previewHtmlQuerySchema.parse({
       boqId: url.searchParams.get("boqId"),

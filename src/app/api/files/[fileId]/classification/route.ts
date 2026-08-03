@@ -8,15 +8,15 @@ import { confirmOrReclassifyBodySchema } from "@/lib/validation/project-file-sch
 
 export const dynamic = "force-dynamic";
 
-type RouteContext = { params: { fileId: string } };
+type RouteContext = { params: Promise<{ fileId: string }> };
 
 /** Human confirm-or-change action: omit `classification` in the body (or send an empty body) to confirm the current suggestion as-is, or provide one to reclassify. */
 export async function PUT(request: Request, context: RouteContext) {
   try {
     const actor = await getCurrentActor();
     setActorContext(actor);
-    const { fileId } = projectFileIdParamsSchema.parse(context.params);
-
+    const params = await context.params;
+    const { fileId } = projectFileIdParamsSchema.parse(params);
     const rawBody = await request.text();
     let parsedBody: unknown = {};
     if (rawBody) {

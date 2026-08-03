@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, use } from "react";
 import type { SupplierWithCatalogueCount } from "@/types/supplier";
 import type { CatalogueListResult } from "@/types/catalogue";
 import { formatDate } from "@/lib/formatting/dates";
@@ -10,10 +10,11 @@ import { ApiClientError, apiClient, getApiErrorMessage } from "@/lib/api/client"
 import SupplierForm from "@/components/suppliers/supplier-form";
 
 type PageProps = {
-  params: { supplierId: string };
+  params: Promise<{ supplierId: string }>;
 };
 
-export default function SupplierDetailPage({ params }: PageProps) {
+export default function SupplierDetailPage(props: PageProps) {
+  const params = use(props.params);
   const [supplier, setSupplier] = useState<SupplierWithCatalogueCount | null>(null);
   const [catalogueItems, setCatalogueItems] = useState<CatalogueListResult["items"]>([]);
   const [isLoading, setIsLoading] = useState(true);

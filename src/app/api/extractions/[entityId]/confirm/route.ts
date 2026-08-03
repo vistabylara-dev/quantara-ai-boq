@@ -6,13 +6,14 @@ import { entityIdParamsSchema } from "@/lib/validation/route-params";
 
 export const dynamic = "force-dynamic";
 
-type RouteContext = { params: { entityId: string } };
+type RouteContext = { params: Promise<{ entityId: string }> };
 
 export async function POST(_request: Request, context: RouteContext) {
   try {
     const actor = await getCurrentActor();
     setActorContext(actor);
-    const { entityId } = entityIdParamsSchema.parse(context.params);
+    const params = await context.params;
+    const { entityId } = entityIdParamsSchema.parse(params);
     const data = await confirmExtractedEntity(actor, entityId);
     return apiSuccess(data);
   } catch (error) {

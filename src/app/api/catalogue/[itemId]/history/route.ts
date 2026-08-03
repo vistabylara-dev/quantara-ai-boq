@@ -5,13 +5,14 @@ import { getCatalogueItemHistoryForCompany } from "@/lib/services/catalogue-serv
 import { catalogueItemIdParamsSchema } from "@/lib/validation/route-params";
 
 type RouteContext = {
-  params: { itemId: string };
+  params: Promise<{ itemId: string }>;
 };
 
-export async function GET(_request: Request, { params }: RouteContext) {
+export async function GET(_request: Request, context: RouteContext) {
   try {
     const actor = await getCurrentActor();
     setActorContext(actor);
+    const params = await context.params;
     const { itemId } = catalogueItemIdParamsSchema.parse(params);
     return apiSuccess(await getCatalogueItemHistoryForCompany(actor, itemId));
   } catch (error) {

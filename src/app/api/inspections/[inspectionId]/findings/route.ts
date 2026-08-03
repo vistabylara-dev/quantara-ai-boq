@@ -7,7 +7,7 @@ import { inspectionIdParamsSchema } from "@/lib/validation/route-params";
 
 export const dynamic = "force-dynamic";
 
-type RouteContext = { params: { inspectionId: string } };
+type RouteContext = { params: Promise<{ inspectionId: string }> };
 
 const bodySchema = z.object({
   title: z.string().min(1).max(200),
@@ -22,7 +22,8 @@ export async function POST(request: Request, context: RouteContext) {
   try {
     const actor = await getCurrentActor();
     setActorContext(actor);
-    const { inspectionId } = inspectionIdParamsSchema.parse(context.params);
+    const params = await context.params;
+    const { inspectionId } = inspectionIdParamsSchema.parse(params);
     const body = await parseJsonBody(request, bodySchema);
     const data = await createFinding(actor, inspectionId, body);
     return apiSuccess(data, 201);

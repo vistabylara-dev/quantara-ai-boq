@@ -5,7 +5,7 @@ import { proposalTokenParamsSchema } from "@/lib/validation/route-params";
 
 export const dynamic = "force-dynamic";
 
-type RouteContext = { params: { token: string } };
+type RouteContext = { params: Promise<{ token: string }> };
 
 const REASON_STATUS: Record<string, number> = { NOT_FOUND: 404, REVOKED: 410, EXPIRED: 410, INVALID_STATUS: 409 };
 const REASON_MESSAGE: Record<string, string> = {
@@ -17,7 +17,8 @@ const REASON_MESSAGE: Record<string, string> = {
 
 export async function GET(request: Request, context: RouteContext) {
   try {
-    const { token } = proposalTokenParamsSchema.parse(context.params);
+    const params = await context.params;
+    const { token } = proposalTokenParamsSchema.parse(params);
     const result = await getPublicProposalView(token, request);
     if (!result.ok) {
       throw new AppError(`PROPOSAL_${result.reason}`, REASON_MESSAGE[result.reason], REASON_STATUS[result.reason]);

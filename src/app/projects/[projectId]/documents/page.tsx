@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, use } from "react";
 import type { BOQ } from "@/types/boq";
 import type { Project } from "@/types/project";
 import { apiClient, getApiErrorMessage } from "@/lib/api/client";
@@ -50,9 +50,10 @@ function formatFileSize(bytes: number | null): string {
   return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
 }
 
-type PageProps = { params: { projectId: string } };
+type PageProps = { params: Promise<{ projectId: string }> };
 
-export default function ProjectDocumentsPage({ params }: PageProps) {
+export default function ProjectDocumentsPage(props: PageProps) {
+  const params = use(props.params);
   const [project, setProject] = useState<Project | null>(null);
   const [boqs, setBoqs] = useState<BOQ[]>([]);
   const [templates, setTemplates] = useState<DocumentTemplateSummary[]>([]);

@@ -8,14 +8,15 @@ import { setIndustryEnabled } from "@/lib/repositories/industry-repository";
 const industryUpdateSchema = z.object({ enabled: z.boolean() }).strict();
 
 type RouteContext = {
-  params: { industryId: string };
+  params: Promise<{ industryId: string }>;
 };
 
-export async function PATCH(request: Request, { params }: RouteContext) {
+export async function PATCH(request: Request, context: RouteContext) {
   try {
     const actor = await getCurrentActor();
     setActorContext(actor);
     requireCapability(actor, "company:manage");
+    const params = await context.params;
     const input = await parseJsonBody(request, industryUpdateSchema);
     const link = await setIndustryEnabled(
       actor.companyId,

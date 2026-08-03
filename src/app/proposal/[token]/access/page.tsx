@@ -1,13 +1,14 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useState, use } from "react";
 import { useRouter } from "next/navigation";
 import { apiClient, getApiErrorMessage } from "@/lib/api/client";
 import { PortalShell } from "../../portal-shell";
 
-type PageProps = { params: { token: string } };
+type PageProps = { params: Promise<{ token: string }> };
 
-export default function ProposalAccessPage({ params }: PageProps) {
+export default function ProposalAccessPage(props: PageProps) {
+  const params = use(props.params);
   const router = useRouter();
   const [passcode, setPasscode] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);

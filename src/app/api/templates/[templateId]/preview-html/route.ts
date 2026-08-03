@@ -9,14 +9,15 @@ import { templateIdParamsSchema } from "@/lib/validation/route-params";
 
 export const dynamic = "force-dynamic";
 
-type RouteContext = { params: { templateId: string } };
+type RouteContext = { params: Promise<{ templateId: string }> };
 
 /** Renders the template against hardcoded sample data — used by the template management UI's "Preview" action, where no real project/BOQ is selected. */
 export async function GET(_request: Request, context: RouteContext) {
   try {
     const actor = await getCurrentActor();
     setActorContext(actor);
-    const { templateId } = templateIdParamsSchema.parse(context.params);
+    const params = await context.params;
+    const { templateId } = templateIdParamsSchema.parse(params);
     const template = await getTemplateForCompany(actor, templateId);
 
     const documentData = buildSampleDocumentData({

@@ -7,13 +7,14 @@ import { packageIdParamsSchema } from "@/lib/validation/route-params";
 
 export const dynamic = "force-dynamic";
 
-type RouteContext = { params: { packageId: string } };
+type RouteContext = { params: Promise<{ packageId: string }> };
 
 export async function GET(_request: Request, context: RouteContext) {
   try {
     const actor = await getCurrentActor();
     setActorContext(actor);
-    const { packageId } = packageIdParamsSchema.parse(context.params);
+    const params = await context.params;
+    const { packageId } = packageIdParamsSchema.parse(params);
     const pkg = await getPackage(packageId);
     const hasAccess = await companyHasPackageAccess(actor.companyId, pkg.id);
     return apiSuccess({ ...pkg, hasAccess });

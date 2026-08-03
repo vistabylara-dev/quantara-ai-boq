@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, use } from "react";
 import { apiClient, getApiErrorMessage } from "@/lib/api/client";
 import { formatDate } from "@/lib/formatting/dates";
 
@@ -80,9 +80,10 @@ const STATUS_COLORS: Record<string, string> = {
   EXPIRED: "text-slate-500",
 };
 
-type PageProps = { params: { projectId: string; proposalId: string } };
+type PageProps = { params: Promise<{ projectId: string; proposalId: string }> };
 
-export default function ProposalDetailPage({ params }: PageProps) {
+export default function ProposalDetailPage(props: PageProps) {
+  const params = use(props.params);
   const [proposal, setProposal] = useState<Proposal | null>(null);
   const [events, setEvents] = useState<ProposalEvent[]>([]);
   const [dispatches, setDispatches] = useState<EmailDispatch[]>([]);

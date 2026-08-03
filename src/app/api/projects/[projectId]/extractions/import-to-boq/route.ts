@@ -7,7 +7,7 @@ import { projectIdParamsSchema } from "@/lib/validation/boq-route-schemas";
 
 export const dynamic = "force-dynamic";
 
-type RouteContext = { params: { projectId: string } };
+type RouteContext = { params: Promise<{ projectId: string }> };
 
 const bodySchema = z.object({
   boqId: z.string().uuid(),
@@ -27,7 +27,8 @@ export async function POST(request: Request, context: RouteContext) {
   try {
     const actor = await getCurrentActor();
     setActorContext(actor);
-    projectIdParamsSchema.parse(context.params);
+    const params = await context.params;
+    projectIdParamsSchema.parse(params);
     const body = await parseJsonBody(request, bodySchema);
     const data = await importExtractedEntityToBoq(actor, body.boqId, body.entityId, body);
     return apiSuccess(data, 201);

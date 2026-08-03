@@ -13,14 +13,15 @@ import {
 
 export const dynamic = "force-dynamic";
 
-type RouteContext = { params: { itemId: string } };
+type RouteContext = { params: Promise<{ itemId: string }> };
 
 export async function PUT(request: Request, context: RouteContext) {
   try {
     const actor = await getCurrentActor();
     setActorContext(actor);
     requireCapability(actor, "boq:edit");
-    const { itemId } = itemIdParamsSchema.parse(context.params);
+    const params = await context.params;
+    const { itemId } = itemIdParamsSchema.parse(params);
     const input = await parseJsonBody(request, itemUpdateRouteSchema);
     const data = await updateBOQItem(actor.companyId, itemId, input);
     return apiSuccess(data);
@@ -34,7 +35,8 @@ export async function DELETE(_request: Request, context: RouteContext) {
     const actor = await getCurrentActor();
     setActorContext(actor);
     requireCapability(actor, "boq:edit");
-    const { itemId } = itemIdParamsSchema.parse(context.params);
+    const params = await context.params;
+    const { itemId } = itemIdParamsSchema.parse(params);
     const data = await deleteBOQItem(actor.companyId, itemId);
     return apiSuccess(data);
   } catch (error) {

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, use } from "react";
 import type { BOQ } from "@/types/boq";
 import type { Project } from "@/types/project";
 import { apiClient, getApiErrorMessage } from "@/lib/api/client";
@@ -43,12 +43,13 @@ type VerificationData = {
 };
 
 type PageProps = {
-  params: {
+  params: Promise<{
     projectId: string;
-  };
+  }>;
 };
 
-export default function ProjectVerificationPage({ params }: PageProps) {
+export default function ProjectVerificationPage(props: PageProps) {
+  const params = use(props.params);
   const [project, setProject] = useState<Project | null>(null);
   const [boqs, setBoqs] = useState<BOQ[]>([]);
   const [verification, setVerification] = useState<VerificationData | null>(null);

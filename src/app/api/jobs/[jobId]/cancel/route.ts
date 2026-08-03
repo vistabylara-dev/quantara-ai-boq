@@ -6,13 +6,14 @@ import { extractionJobIdParamsSchema } from "@/lib/validation/route-params";
 
 export const dynamic = "force-dynamic";
 
-type RouteContext = { params: { jobId: string } };
+type RouteContext = { params: Promise<{ jobId: string }> };
 
 export async function POST(_request: Request, context: RouteContext) {
   try {
     const actor = await getCurrentActor();
     setActorContext(actor);
-    const { jobId } = extractionJobIdParamsSchema.parse(context.params);
+    const params = await context.params;
+    const { jobId } = extractionJobIdParamsSchema.parse(params);
     const data = await cancelExtractionJob(actor, jobId);
     return apiSuccess(data);
   } catch (error) {

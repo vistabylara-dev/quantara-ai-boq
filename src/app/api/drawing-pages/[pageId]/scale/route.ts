@@ -7,7 +7,7 @@ import { drawingPageIdParamsSchema } from "@/lib/validation/route-params";
 
 export const dynamic = "force-dynamic";
 
-type RouteContext = { params: { pageId: string } };
+type RouteContext = { params: Promise<{ pageId: string }> };
 
 const setScaleBodySchema = z.object({
   scaleRatio: z.number().positive(),
@@ -19,7 +19,8 @@ export async function GET(_request: Request, context: RouteContext) {
   try {
     const actor = await getCurrentActor();
     setActorContext(actor);
-    const { pageId } = drawingPageIdParamsSchema.parse(context.params);
+    const params = await context.params;
+    const { pageId } = drawingPageIdParamsSchema.parse(params);
     const data = await getPageScale(actor, pageId);
     return apiSuccess(data);
   } catch (error) {
@@ -31,7 +32,8 @@ export async function POST(request: Request, context: RouteContext) {
   try {
     const actor = await getCurrentActor();
     setActorContext(actor);
-    const { pageId } = drawingPageIdParamsSchema.parse(context.params);
+    const params = await context.params;
+    const { pageId } = drawingPageIdParamsSchema.parse(params);
     const body = await parseJsonBody(request, setScaleBodySchema);
     const data = await setManualScale(actor, pageId, body);
     return apiSuccess(data, 201);

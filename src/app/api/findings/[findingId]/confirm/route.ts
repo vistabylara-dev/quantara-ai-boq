@@ -6,13 +6,14 @@ import { findingIdParamsSchema } from "@/lib/validation/route-params";
 
 export const dynamic = "force-dynamic";
 
-type RouteContext = { params: { findingId: string } };
+type RouteContext = { params: Promise<{ findingId: string }> };
 
 export async function POST(_request: Request, context: RouteContext) {
   try {
     const actor = await getCurrentActor();
     setActorContext(actor);
-    const { findingId } = findingIdParamsSchema.parse(context.params);
+    const params = await context.params;
+    const { findingId } = findingIdParamsSchema.parse(params);
     const data = await confirmFinding(actor, findingId);
     return apiSuccess(data);
   } catch (error) {

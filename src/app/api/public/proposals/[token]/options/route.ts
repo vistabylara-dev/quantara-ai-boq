@@ -5,11 +5,12 @@ import { proposalTokenParamsSchema } from "@/lib/validation/route-params";
 
 export const dynamic = "force-dynamic";
 
-type RouteContext = { params: { token: string } };
+type RouteContext = { params: Promise<{ token: string }> };
 
 export async function POST(request: Request, context: RouteContext) {
   try {
-    const { token } = proposalTokenParamsSchema.parse(context.params);
+    const params = await context.params;
+    const { token } = proposalTokenParamsSchema.parse(params);
     const input = await parseJsonBody(request, publicOptionSelectionSchema);
     const data = await selectProposalOption(token, input, request);
     return apiSuccess(data);

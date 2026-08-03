@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, use } from "react";
 import { apiClient, getApiErrorMessage } from "@/lib/api/client";
 
 type ItemDetail = {
@@ -18,9 +18,10 @@ type ItemDetail = {
   packageNames?: string[];
 };
 
-type PageProps = { params: { itemId: string } };
+type PageProps = { params: Promise<{ itemId: string }> };
 
-export default function DataLibraryItemPage({ params }: PageProps) {
+export default function DataLibraryItemPage(props: PageProps) {
+  const params = use(props.params);
   const [item, setItem] = useState<ItemDetail | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);

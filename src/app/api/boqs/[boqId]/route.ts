@@ -10,13 +10,14 @@ import {
 
 export const dynamic = "force-dynamic";
 
-type RouteContext = { params: { boqId: string } };
+type RouteContext = { params: Promise<{ boqId: string }> };
 
 export async function GET(_request: Request, context: RouteContext) {
   try {
     const actor = await getCurrentActor();
     setActorContext(actor);
-    const { boqId } = boqIdParamsSchema.parse(context.params);
+    const params = await context.params;
+    const { boqId } = boqIdParamsSchema.parse(params);
     const data = await getBOQ(actor.companyId, boqId);
     return apiSuccess(data);
   } catch (error) {
@@ -29,7 +30,8 @@ export async function PUT(request: Request, context: RouteContext) {
     const actor = await getCurrentActor();
     setActorContext(actor);
     requireCapability(actor, "boq:edit");
-    const { boqId } = boqIdParamsSchema.parse(context.params);
+    const params = await context.params;
+    const { boqId } = boqIdParamsSchema.parse(params);
     const input = await parseJsonBody(request, frontendBOQUpdateSchema);
     const companyId = actor.companyId;
     const current = await getBOQ(companyId, boqId);

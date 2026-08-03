@@ -7,13 +7,14 @@ import { importJobIdParamsSchema } from "@/lib/validation/route-params";
 
 export const dynamic = "force-dynamic";
 
-type RouteContext = { params: { importJobId: string } };
+type RouteContext = { params: Promise<{ importJobId: string }> };
 
 export async function PUT(request: Request, context: RouteContext) {
   try {
     const actor = await getCurrentActor();
     setActorContext(actor);
-    const { importJobId } = importJobIdParamsSchema.parse(context.params);
+    const params = await context.params;
+    const { importJobId } = importJobIdParamsSchema.parse(params);
     const input = await parseJsonBody(request, importMappingUpdateSchema);
     const data = await updateImportMapping(actor, importJobId, input);
     return apiSuccess(data);

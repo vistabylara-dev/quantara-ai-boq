@@ -1,15 +1,15 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, use } from "react";
 import type { Project } from "@/types/project";
 import { ApiClientError, apiClient, getApiErrorMessage } from "@/lib/api/client";
 import { formatDate } from "@/lib/formatting/dates";
 
 type PageProps = {
-  params: {
+  params: Promise<{
     projectId: string;
-  };
+  }>;
 };
 
 type ProposalSummary = { id: string; status: string; recipientName: string; expiresAt: string };
@@ -27,7 +27,8 @@ const PROPOSAL_STATUS_COLORS: Record<string, string> = {
   EXPIRED: "text-slate-500",
 };
 
-export default function ProjectOverviewPage({ params }: PageProps) {
+export default function ProjectOverviewPage(props: PageProps) {
+  const params = use(props.params);
   const [project, setProject] = useState<Project | null>(null);
   const [latestProposal, setLatestProposal] = useState<ProposalSummary | null>(null);
   const [isLoading, setIsLoading] = useState(true);

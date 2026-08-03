@@ -13,13 +13,14 @@ import {
 
 export const dynamic = "force-dynamic";
 
-type RouteContext = { params: { projectId: string } };
+type RouteContext = { params: Promise<{ projectId: string }> };
 
 export async function GET(_request: Request, context: RouteContext) {
   try {
     const actor = await getCurrentActor();
     setActorContext(actor);
-    const { projectId } = projectIdParamsSchema.parse(context.params);
+    const params = await context.params;
+    const { projectId } = projectIdParamsSchema.parse(params);
     const data = await listProjectBOQs(actor.companyId, projectId);
     return apiSuccess(data);
   } catch (error) {
@@ -32,7 +33,8 @@ export async function POST(request: Request, context: RouteContext) {
     const actor = await getCurrentActor();
     setActorContext(actor);
     requireCapability(actor, "boq:edit");
-    const { projectId } = projectIdParamsSchema.parse(context.params);
+    const params = await context.params;
+    const { projectId } = projectIdParamsSchema.parse(params);
     const input = request.body === null
       ? undefined
       : await parseJsonBody(request, projectBOQCreateSchema);

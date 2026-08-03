@@ -6,13 +6,14 @@ import { inspectionIdParamsSchema } from "@/lib/validation/route-params";
 
 export const dynamic = "force-dynamic";
 
-type RouteContext = { params: { inspectionId: string } };
+type RouteContext = { params: Promise<{ inspectionId: string }> };
 
 export async function GET(_request: Request, context: RouteContext) {
   try {
     const actor = await getCurrentActor();
     setActorContext(actor);
-    const { inspectionId } = inspectionIdParamsSchema.parse(context.params);
+    const params = await context.params;
+    const { inspectionId } = inspectionIdParamsSchema.parse(params);
     const data = await getInspectionRecord(actor, inspectionId);
     return apiSuccess(data);
   } catch (error) {

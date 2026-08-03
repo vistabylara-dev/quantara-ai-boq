@@ -6,11 +6,12 @@ import { verificationBOQIdParamsSchema } from "@/lib/validation/route-params";
 
 export const dynamic = "force-dynamic";
 
-export async function GET(_request: Request, context: { params: { boqId: string } }) {
+export async function GET(_request: Request, context: { params: Promise<{ boqId: string }> }) {
   try {
     const actor = await getCurrentActor();
     setActorContext(actor);
-    const { boqId } = verificationBOQIdParamsSchema.parse(context.params);
+    const params = await context.params;
+    const { boqId } = verificationBOQIdParamsSchema.parse(params);
     const data = await getBOQVerification(actor.companyId, boqId);
     return apiSuccess(data);
   } catch (error) {

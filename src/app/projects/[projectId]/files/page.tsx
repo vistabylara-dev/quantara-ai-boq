@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, use } from "react";
 import { apiClient, getApiErrorMessage } from "@/lib/api/client";
 
 type FileView = {
@@ -28,7 +28,8 @@ type TableView = {
   rows: Array<{ id: string; parentRowId: string | null; cells: Array<{ columnKey: string; rawValue: string | null }> }>;
 };
 
-export default function ProjectFilesPage({ params }: { params: { projectId: string } }) {
+export default function ProjectFilesPage(props: { params: Promise<{ projectId: string }> }) {
+  const params = use(props.params);
   const [files, setFiles] = useState<FileView[]>([]);
   const [selectedFileId, setSelectedFileId] = useState<string | null>(null);
   const [pages, setPages] = useState<PageView[]>([]);

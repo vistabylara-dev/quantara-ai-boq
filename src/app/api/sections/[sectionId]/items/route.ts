@@ -13,12 +13,13 @@ import {
 
 export const dynamic = "force-dynamic";
 
-export async function POST(request: Request, context: { params: { sectionId: string } }) {
+export async function POST(request: Request, context: { params: Promise<{ sectionId: string }> }) {
   try {
     const actor = await getCurrentActor();
     setActorContext(actor);
     requireCapability(actor, "boq:edit");
-    const { sectionId } = sectionIdParamsSchema.parse(context.params);
+    const params = await context.params;
+    const { sectionId } = sectionIdParamsSchema.parse(params);
     const input = await parseJsonBody(request, itemCreateRouteSchema) as BOQItemWriteInput;
     const data = await createBOQItem(actor.companyId, sectionId, input);
     return apiSuccess(data, 201);

@@ -7,13 +7,14 @@ import { templateIdParamsSchema } from "@/lib/validation/route-params";
 
 export const dynamic = "force-dynamic";
 
-type RouteContext = { params: { templateId: string } };
+type RouteContext = { params: Promise<{ templateId: string }> };
 
 export async function GET(_request: Request, context: RouteContext) {
   try {
     const actor = await getCurrentActor();
     setActorContext(actor);
-    const { templateId } = templateIdParamsSchema.parse(context.params);
+    const params = await context.params;
+    const { templateId } = templateIdParamsSchema.parse(params);
     const data = await getEmailTemplateForCompany(actor, templateId);
     return apiSuccess(data);
   } catch (error) {
@@ -25,7 +26,8 @@ export async function PUT(request: Request, context: RouteContext) {
   try {
     const actor = await getCurrentActor();
     setActorContext(actor);
-    const { templateId } = templateIdParamsSchema.parse(context.params);
+    const params = await context.params;
+    const { templateId } = templateIdParamsSchema.parse(params);
     const input = await parseJsonBody(request, emailTemplateUpdateSchema);
     const data = await updateEmailTemplateForCompany(actor, templateId, input);
     return apiSuccess(data);

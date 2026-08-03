@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, use } from "react";
 import type { ClientWithProjectCount } from "@/types/client";
 import type { Project } from "@/types/project";
 import { formatDate } from "@/lib/formatting/dates";
@@ -9,10 +9,11 @@ import { ApiClientError, apiClient, getApiErrorMessage } from "@/lib/api/client"
 import ClientForm from "@/components/clients/client-form";
 
 type PageProps = {
-  params: { clientId: string };
+  params: Promise<{ clientId: string }>;
 };
 
-export default function ClientDetailPage({ params }: PageProps) {
+export default function ClientDetailPage(props: PageProps) {
+  const params = use(props.params);
   const [client, setClient] = useState<ClientWithProjectCount | null>(null);
   const [projects, setProjects] = useState<Project[]>([]);
   const [isLoading, setIsLoading] = useState(true);

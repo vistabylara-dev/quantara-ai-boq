@@ -7,7 +7,7 @@ import { projectFileIdParamsSchema } from "@/lib/validation/route-params";
 
 export const dynamic = "force-dynamic";
 
-type RouteContext = { params: { fileId: string } };
+type RouteContext = { params: Promise<{ fileId: string }> };
 
 /**
  * The only path that ever streams project-file bytes to a client. Tenant
@@ -18,7 +18,8 @@ export async function GET(_request: Request, context: RouteContext) {
   try {
     const actor = await getCurrentActor();
     setActorContext(actor);
-    const { fileId } = projectFileIdParamsSchema.parse(context.params);
+    const params = await context.params;
+    const { fileId } = projectFileIdParamsSchema.parse(params);
     const { buffer, fileName, mimeType } = await getProjectFileForDownload(actor, fileId);
     return new NextResponse(new Uint8Array(buffer), {
       headers: {

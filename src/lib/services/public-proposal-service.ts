@@ -49,15 +49,15 @@ async function resolveAccessRecord(rawToken: string): Promise<ProposalAccessReco
   throw new AppError(`PROPOSAL_${result.reason}`, messages[result.reason], statusCodes[result.reason]);
 }
 
-function hasPasscodeGrant(record: ProposalAccessRecord): boolean {
+async function hasPasscodeGrant(record: ProposalAccessRecord): Promise<boolean> {
   const settings = mergeProposalSettings(record.settingsJson as Partial<ClientProposalSettings> | null);
   if (!settings.requireAccessPasscode) return true;
-  const cookie = cookies().get(accessCookieName(record.id))?.value;
+  const cookie = (await cookies()).get(accessCookieName(record.id))?.value;
   return verifyAccessGrant(cookie, record.id);
 }
 
-function assertPasscodeUnlocked(record: ProposalAccessRecord): void {
-  if (!hasPasscodeGrant(record)) {
+async function assertPasscodeUnlocked(record: ProposalAccessRecord): Promise<void> {
+  if (!(await hasPasscodeGrant(record))) {
     throw new AppError("PASSCODE_REQUIRED", "Enter the access passcode to continue.", 401);
   }
 }
@@ -115,7 +115,7 @@ export async function getPublicProposalView(rawToken: string, request: Request):
   }
   const record = result.proposal;
 
-  if (!hasPasscodeGrant(record)) {
+  if (!(await hasPasscodeGrant(record))) {
     return { ok: true, view: null, proposal: null, passcodeRequired: true, proposalId: record.id };
   }
 
@@ -148,7 +148,7 @@ export async function submitProposalPasscode(rawToken: string, passcode: string,
   }
 
   const grant = createAccessGrant(record.id);
-  cookies().set(accessCookieName(record.id), grant, {
+  (await cookies()).set(accessCookieName(record.id), grant, {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
     sameSite: "lax",
@@ -160,7 +160,7 @@ export async function submitProposalPasscode(rawToken: string, passcode: string,
 
 export async function selectProposalOption(rawToken: string, input: { boqItemId: string; optionId: string | null }, request: Request) {
   const record = await resolveAccessRecord(rawToken);
-  assertPasscodeUnlocked(record);
+  await assertPasscodeUnlocked(record);
   const settings = mergeProposalSettings(record.settingsJson as Partial<ClientProposalSettings> | null);
   if (!settings.allowOptionSelection) {
     throw new AppError("OPTIONS_NOT_ALLOWED", "Option selection is not enabled for this proposal.", 409);
@@ -194,7 +194,7 @@ export async function selectProposalOption(rawToken: string, input: { boqItemId:
 
 export async function submitProposalComment(rawToken: string, input: { comment: string; actorName?: string; actorEmail?: string }, request: Request) {
   const record = await resolveAccessRecord(rawToken);
-  assertPasscodeUnlocked(record);
+  await assertPasscodeUnlocked(record);
   const settings = mergeProposalSettings(record.settingsJson as Partial<ClientProposalSettings> | null);
   if (!settings.allowComments) throw new AppError("COMMENTS_NOT_ALLOWED", "Comments are not enabled for this proposal.", 409);
 
@@ -218,7 +218,7 @@ export async function submitProposalComment(rawToken: string, input: { comment: 
 
 export async function requestProposalRevision(rawToken: string, input: { name: string; email: string; comment: string }, request: Request) {
   const record = await resolveAccessRecord(rawToken);
-  assertPasscodeUnlocked(record);
+  await assertPasscodeUnlocked(record);
   const signals = extractRequestSignals(request);
   assertNotRateLimited(revisionRequestLimiter, `${record.id}:${signals.ipHash ?? "unknown"}`);
 
@@ -245,7 +245,7 @@ export async function approveProposalPublic(
   request: Request,
 ) {
   const record = await resolveAccessRecord(rawToken);
-  assertPasscodeUnlocked(record);
+  await assertPasscodeUnlocked(record);
   const signals = extractRequestSignals(request);
   assertNotRateLimited(approvalLimiter, `${record.id}:${signals.ipHash ?? "unknown"}`);
 
@@ -280,7 +280,7 @@ export async function approveProposalPublic(
 
 export async function rejectProposalPublic(rawToken: string, input: { name: string; email: string; reason: string }, request: Request) {
   const record = await resolveAccessRecord(rawToken);
-  assertPasscodeUnlocked(record);
+  await assertPasscodeUnlocked(record);
   const signals = extractRequestSignals(request);
   assertNotRateLimited(rejectionLimiter, `${record.id}:${signals.ipHash ?? "unknown"}`);
 
@@ -303,7 +303,7 @@ export async function rejectProposalPublic(rawToken: string, input: { name: stri
 
 export async function downloadProposalDocument(rawToken: string, documentId: string, request: Request) {
   const record = await resolveAccessRecord(rawToken);
-  assertPasscodeUnlocked(record);
+  await assertPasscodeUnlocked(record);
   const settings = mergeProposalSettings(record.settingsJson as Partial<ClientProposalSettings> | null);
   if (!settings.allowDocumentDownload) {
     throw new AppError("DOWNLOAD_NOT_ALLOWED", "Document downloads are not enabled for this proposal.", 409);

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, use } from "react";
 import type { BOQ } from "@/types/boq";
 import type { Project } from "@/types/project";
 import { apiClient, getApiErrorMessage } from "@/lib/api/client";
@@ -12,11 +12,13 @@ type DocumentTemplateSummary = {
 };
 
 type PageProps = {
-  params: { projectId: string };
-  searchParams: { boqId?: string; templateId?: string; audience?: string };
+  params: Promise<{ projectId: string }>;
+  searchParams: Promise<{ boqId?: string; templateId?: string; audience?: string }>;
 };
 
-export default function DocumentPreviewPage({ params, searchParams }: PageProps) {
+export default function DocumentPreviewPage(props: PageProps) {
+  const params = use(props.params);
+  const searchParams = use(props.searchParams);
   const [project, setProject] = useState<Project | null>(null);
   const [boqs, setBoqs] = useState<BOQ[]>([]);
   const [templates, setTemplates] = useState<DocumentTemplateSummary[]>([]);

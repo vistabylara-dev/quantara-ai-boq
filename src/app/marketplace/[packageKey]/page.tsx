@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, use } from "react";
 import Link from "next/link";
 import { apiClient, getApiErrorMessage } from "@/lib/api/client";
 
@@ -20,9 +20,10 @@ type PackageDetail = {
 
 type ItemRow = { id: string; itemCode: string; name: string; shortDescription: string; defaultUnit: string; locked?: boolean; packageNames?: string[] };
 
-type PageProps = { params: { packageKey: string } };
+type PageProps = { params: Promise<{ packageKey: string }> };
 
-export default function MarketplacePackagePage({ params }: PageProps) {
+export default function MarketplacePackagePage(props: PageProps) {
+  const params = use(props.params);
   const [pkg, setPkg] = useState<PackageDetail | null>(null);
   const [items, setItems] = useState<ItemRow[]>([]);
   const [isLoading, setIsLoading] = useState(true);

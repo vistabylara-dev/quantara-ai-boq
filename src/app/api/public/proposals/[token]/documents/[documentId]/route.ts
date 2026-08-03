@@ -5,7 +5,7 @@ import { proposalTokenDocumentParamsSchema } from "@/lib/validation/route-params
 
 export const dynamic = "force-dynamic";
 
-type RouteContext = { params: { token: string; documentId: string } };
+type RouteContext = { params: Promise<{ token: string; documentId: string }> };
 
 /**
  * The only path a client ever reads generated-document bytes through.
@@ -16,7 +16,8 @@ type RouteContext = { params: { token: string; documentId: string } };
  */
 export async function GET(request: Request, context: RouteContext) {
   try {
-    const { token, documentId } = proposalTokenDocumentParamsSchema.parse(context.params);
+    const params = await context.params;
+    const { token, documentId } = proposalTokenDocumentParamsSchema.parse(params);
     const { buffer, fileName, mimeType } = await downloadProposalDocument(token, documentId, request);
     return new NextResponse(new Uint8Array(buffer), {
       headers: {

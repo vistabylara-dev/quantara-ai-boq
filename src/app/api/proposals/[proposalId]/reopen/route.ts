@@ -6,14 +6,15 @@ import { proposalIdParamsSchema } from "@/lib/validation/route-params";
 
 export const dynamic = "force-dynamic";
 
-type RouteContext = { params: { proposalId: string } };
+type RouteContext = { params: Promise<{ proposalId: string }> };
 
 /** Internal-only escape hatch: brings a REVISION_REQUESTED proposal back to OPENED so the same link can be approved after the requested changes are addressed out of band. */
 export async function POST(_request: Request, context: RouteContext) {
   try {
     const actor = await getCurrentActor();
     setActorContext(actor);
-    const { proposalId } = proposalIdParamsSchema.parse(context.params);
+    const params = await context.params;
+    const { proposalId } = proposalIdParamsSchema.parse(params);
     const data = await reopenProposalForCompany(actor, proposalId);
     return apiSuccess(data);
   } catch (error) {

@@ -12,10 +12,11 @@ const MESSAGES: Record<string, string> = {
   INVALID_STATUS: "This proposal is not yet available. Please contact the sender.",
 };
 
-type PageProps = { searchParams: { reason?: string } };
+type PageProps = { searchParams: Promise<{ reason?: string }> };
 
-export default function ProposalExpiredPage({ searchParams }: PageProps) {
-  const message = MESSAGES[searchParams.reason ?? ""] ?? MESSAGES.NOT_FOUND;
+export default async function ProposalExpiredPage({ searchParams }: PageProps) {
+  const params = await searchParams;
+  const message = MESSAGES[params.reason ?? ""] ?? MESSAGES.NOT_FOUND;
   return (
     <PortalShell>
       <div className="mx-auto max-w-lg rounded-2xl border border-slate-200 bg-white p-8 text-center">

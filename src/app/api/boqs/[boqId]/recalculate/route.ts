@@ -7,12 +7,13 @@ import { boqIdParamsSchema } from "@/lib/validation/boq-route-schemas";
 
 export const dynamic = "force-dynamic";
 
-export async function POST(_request: Request, context: { params: { boqId: string } }) {
+export async function POST(_request: Request, context: { params: Promise<{ boqId: string }> }) {
   try {
     const actor = await getCurrentActor();
     setActorContext(actor);
     requireCapability(actor, "boq:edit");
-    const { boqId } = boqIdParamsSchema.parse(context.params);
+    const params = await context.params;
+    const { boqId } = boqIdParamsSchema.parse(params);
     const data = await recalculateBOQ(actor.companyId, boqId);
     return apiSuccess(data);
   } catch (error) {

@@ -3,18 +3,20 @@ import type { Metadata } from "next";
 import Link from "next/link";
 
 type PageProps = {
-  params: { industryId: string };
+  params: Promise<{ industryId: string }>;
 };
 
-export function generateMetadata({ params }: PageProps): Metadata {
-  const industry = demoIndustries.find((item) => item.id === params.industryId);
+export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
+  const { industryId } = await params;
+  const industry = demoIndustries.find((item) => item.id === industryId);
   return {
     title: industry ? `${industry.name} Engine | Quantara AI BOQ` : "Industry Engine | Quantara AI BOQ",
   };
 }
 
-export default function IndustryDetailPage({ params }: PageProps) {
-  const industry = demoIndustries.find((item) => item.id === params.industryId);
+export default async function IndustryDetailPage({ params }: PageProps) {
+  const { industryId } = await params;
+  const industry = demoIndustries.find((item) => item.id === industryId);
   if (!industry) {
     return (
       <div className="min-h-screen bg-[#07111F] text-white">

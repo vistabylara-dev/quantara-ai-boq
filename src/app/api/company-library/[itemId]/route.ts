@@ -7,13 +7,14 @@ import { libraryItemIdParamsSchema } from "@/lib/validation/route-params";
 
 export const dynamic = "force-dynamic";
 
-type RouteContext = { params: { itemId: string } };
+type RouteContext = { params: Promise<{ itemId: string }> };
 
 export async function GET(_request: Request, context: RouteContext) {
   try {
     const actor = await getCurrentActor();
     setActorContext(actor);
-    const { itemId } = libraryItemIdParamsSchema.parse(context.params);
+    const params = await context.params;
+    const { itemId } = libraryItemIdParamsSchema.parse(params);
     const data = await getLibraryItemForCompany(actor, itemId);
     return apiSuccess(data);
   } catch (error) {
@@ -25,7 +26,8 @@ export async function PUT(request: Request, context: RouteContext) {
   try {
     const actor = await getCurrentActor();
     setActorContext(actor);
-    const { itemId } = libraryItemIdParamsSchema.parse(context.params);
+    const params = await context.params;
+    const { itemId } = libraryItemIdParamsSchema.parse(params);
     const { changeReason, ...input } = await parseJsonBody(request, companyLibraryUpdateSchema);
     const data = await updateLibraryItemForCompany(actor, itemId, input, changeReason);
     return apiSuccess(data);
@@ -39,7 +41,8 @@ export async function DELETE(_request: Request, context: RouteContext) {
   try {
     const actor = await getCurrentActor();
     setActorContext(actor);
-    const { itemId } = libraryItemIdParamsSchema.parse(context.params);
+    const params = await context.params;
+    const { itemId } = libraryItemIdParamsSchema.parse(params);
     const data = await archiveLibraryItemForCompany(actor, itemId, false);
     return apiSuccess(data);
   } catch (error) {

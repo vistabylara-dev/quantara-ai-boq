@@ -8,7 +8,7 @@ import { prisma } from "@/lib/db/prisma";
 
 export const dynamic = "force-dynamic";
 
-type RouteContext = { params: { itemId: string } };
+type RouteContext = { params: Promise<{ itemId: string }> };
 
 /**
  * Server-side entitlement gate — full technical data (fullDescription,
@@ -20,7 +20,8 @@ export async function GET(_request: Request, context: RouteContext) {
   try {
     const actor = await getCurrentActor();
     setActorContext(actor);
-    const { itemId } = masterItemIdParamsSchema.parse(context.params);
+    const params = await context.params;
+    const { itemId } = masterItemIdParamsSchema.parse(params);
     const row = await getMasterItemRecord(itemId);
 
     if (!row.isPremium) {

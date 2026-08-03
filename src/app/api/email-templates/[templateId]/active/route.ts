@@ -9,13 +9,14 @@ export const dynamic = "force-dynamic";
 
 const activeBodySchema = z.object({ isActive: z.boolean() }).strict();
 
-type RouteContext = { params: { templateId: string } };
+type RouteContext = { params: Promise<{ templateId: string }> };
 
 export async function PUT(request: Request, context: RouteContext) {
   try {
     const actor = await getCurrentActor();
     setActorContext(actor);
-    const { templateId } = templateIdParamsSchema.parse(context.params);
+    const params = await context.params;
+    const { templateId } = templateIdParamsSchema.parse(params);
     const { isActive } = await parseJsonBody(request, activeBodySchema);
     const data = await setEmailTemplateActiveForCompany(actor, templateId, isActive);
     return apiSuccess(data);

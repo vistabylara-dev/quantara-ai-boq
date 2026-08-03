@@ -7,13 +7,14 @@ import { proposalIdParamsSchema } from "@/lib/validation/route-params";
 
 export const dynamic = "force-dynamic";
 
-type RouteContext = { params: { proposalId: string } };
+type RouteContext = { params: Promise<{ proposalId: string }> };
 
 export async function GET(_request: Request, context: RouteContext) {
   try {
     const actor = await getCurrentActor();
     setActorContext(actor);
-    const { proposalId } = proposalIdParamsSchema.parse(context.params);
+    const params = await context.params;
+    const { proposalId } = proposalIdParamsSchema.parse(params);
     const data = await getProposalForCompany(actor, proposalId);
     return apiSuccess(data);
   } catch (error) {
@@ -25,7 +26,8 @@ export async function PUT(request: Request, context: RouteContext) {
   try {
     const actor = await getCurrentActor();
     setActorContext(actor);
-    const { proposalId } = proposalIdParamsSchema.parse(context.params);
+    const params = await context.params;
+    const { proposalId } = proposalIdParamsSchema.parse(params);
     const input = await parseJsonBody(request, updateProposalSchema);
     const data = await updateProposalForCompany(actor, proposalId, input);
     return apiSuccess(data);

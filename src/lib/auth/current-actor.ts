@@ -13,7 +13,7 @@ export type CurrentActor = {
 };
 
 async function resolveActorFromCookie(): Promise<CurrentActor | null> {
-  const rawToken = readSessionTokenFromCookies();
+  const rawToken = await readSessionTokenFromCookies();
   if (!rawToken) {
     return null;
   }

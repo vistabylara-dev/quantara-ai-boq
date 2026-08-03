@@ -7,13 +7,14 @@ import { libraryItemIdParamsSchema } from "@/lib/validation/route-params";
 
 export const dynamic = "force-dynamic";
 
-type RouteContext = { params: { itemId: string } };
+type RouteContext = { params: Promise<{ itemId: string }> };
 
 export async function GET(_request: Request, context: RouteContext) {
   try {
     const actor = await getCurrentActor();
     setActorContext(actor);
-    const { itemId } = libraryItemIdParamsSchema.parse(context.params);
+    const params = await context.params;
+    const { itemId } = libraryItemIdParamsSchema.parse(params);
     const data = await listVariantsForCompany(actor, itemId);
     return apiSuccess(data);
   } catch (error) {
@@ -25,7 +26,8 @@ export async function POST(request: Request, context: RouteContext) {
   try {
     const actor = await getCurrentActor();
     setActorContext(actor);
-    const { itemId } = libraryItemIdParamsSchema.parse(context.params);
+    const params = await context.params;
+    const { itemId } = libraryItemIdParamsSchema.parse(params);
     const input = await parseJsonBody(request, companyLibraryVariantSchema);
     const data = await createVariantForCompany(actor, itemId, input);
     return apiSuccess(data, 201);

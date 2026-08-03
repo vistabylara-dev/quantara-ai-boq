@@ -7,7 +7,7 @@ import { findingIdParamsSchema } from "@/lib/validation/route-params";
 
 export const dynamic = "force-dynamic";
 
-type RouteContext = { params: { findingId: string } };
+type RouteContext = { params: Promise<{ findingId: string }> };
 
 const bodySchema = z.object({
   boqId: z.string().uuid(),
@@ -27,7 +27,8 @@ export async function POST(request: Request, context: RouteContext) {
   try {
     const actor = await getCurrentActor();
     setActorContext(actor);
-    const { findingId } = findingIdParamsSchema.parse(context.params);
+    const params = await context.params;
+    const { findingId } = findingIdParamsSchema.parse(params);
     const body = await parseJsonBody(request, bodySchema);
     const data = await createBoqItemsFromFinding(actor, body.boqId, findingId, body);
     return apiSuccess(data, 201);

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, use } from "react";
 import type { BOQ } from "@/types/boq";
 import type { Project } from "@/types/project";
 import { apiClient, getApiErrorMessage } from "@/lib/api/client";
@@ -11,9 +11,9 @@ import BoqEditor from "@/components/boq/boq-editor";
 import AddItemFromSourceModal from "@/components/boq/add-item-from-source-modal";
 
 type PageProps = {
-  params: {
+  params: Promise<{
     projectId: string;
-  };
+  }>;
 };
 
 type PendingAction = "save" | "create" | "revision" | "lock" | null;
@@ -30,7 +30,8 @@ function isReadOnlyBOQ(boq: BOQ | null): boolean {
   return Boolean(boq?.isLocked) || boq?.status === "locked" || boq?.status === "approved";
 }
 
-export default function ProjectBOQPage({ params }: PageProps) {
+export default function ProjectBOQPage(props: PageProps) {
+  const params = use(props.params);
   const [project, setProject] = useState<Project | null>(null);
   const [revisions, setRevisions] = useState<BOQ[]>([]);
   const [activeBoq, setActiveBoq] = useState<BOQ | null>(null);

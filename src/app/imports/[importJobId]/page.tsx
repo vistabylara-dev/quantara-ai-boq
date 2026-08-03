@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, use } from "react";
 import { apiClient, getApiErrorMessage } from "@/lib/api/client";
 
 type ImportJob = {
@@ -41,9 +41,10 @@ const STATUS_COLOR: Record<string, string> = {
   REJECTED: "text-slate-500",
 };
 
-type PageProps = { params: { importJobId: string } };
+type PageProps = { params: Promise<{ importJobId: string }> };
 
-export default function ImportJobPage({ params }: PageProps) {
+export default function ImportJobPage(props: PageProps) {
+  const params = use(props.params);
   const [job, setJob] = useState<ImportJob | null>(null);
   const [rows, setRows] = useState<ImportRow[]>([]);
   const [mapping, setMapping] = useState<Record<string, string>>({});

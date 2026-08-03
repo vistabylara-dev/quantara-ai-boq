@@ -22,3 +22,11 @@ coverage
 
 # Locally generated document files (never committed, never public)
 .storage/
+
+# OpenNext
+.open-next
+
+# wrangler files
+.wrangler
+.dev.vars*
+!.dev.vars.example

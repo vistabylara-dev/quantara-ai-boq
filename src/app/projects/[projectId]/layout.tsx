@@ -4,17 +4,19 @@ import type { ReactNode } from "react";
 
 type ProjectLayoutProps = {
   children: ReactNode;
-  params: { projectId: string };
+  params: Promise<{ projectId: string }>;
 };
 
-export function generateMetadata({ params }: ProjectLayoutProps): Metadata {
+export async function generateMetadata({ params }: ProjectLayoutProps): Promise<Metadata> {
+  const { projectId } = await params;
   return {
-    title: `Project ${params.projectId} | Quantara AI BOQ`,
+    title: `Project ${projectId} | Quantara AI BOQ`,
   };
 }
 
-export default function ProjectLayout({ children, params }: ProjectLayoutProps) {
-  const basePath = `/projects/${params.projectId}`;
+export default async function ProjectLayout({ children, params }: ProjectLayoutProps) {
+  const { projectId } = await params;
+  const basePath = `/projects/${projectId}`;
 
   return (
     <div className="space-y-6">
@@ -22,7 +24,7 @@ export default function ProjectLayout({ children, params }: ProjectLayoutProps) 
         <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div>
             <p className="text-sm uppercase tracking-[0.28em] text-slate-500">Project workspace</p>
-            <h1 className="mt-2 text-3xl font-semibold text-white">{params.projectId.replace(/-/g, " ")}</h1>
+            <h1 className="mt-2 text-3xl font-semibold text-white">{projectId.replace(/-/g, " ")}</h1>
             <p className="mt-2 text-sm text-slate-400">Review the project BOQ, verification checks, documents, and client preview.</p>
           </div>
 

@@ -8,12 +8,13 @@ import { verificationExceptionIdParamsSchema } from "@/lib/validation/route-para
 
 export const dynamic = "force-dynamic";
 
-export async function POST(request: Request, context: { params: { exceptionId: string } }) {
+export async function POST(request: Request, context: { params: Promise<{ exceptionId: string }> }) {
   try {
     const actor = await getCurrentActor();
     setActorContext(actor);
     requireCapability(actor, "verification:manage");
-    const { exceptionId } = verificationExceptionIdParamsSchema.parse(context.params);
+    const params = await context.params;
+    const { exceptionId } = verificationExceptionIdParamsSchema.parse(params);
     const input = await parseJsonBody(request, verificationResolutionSchema);
     const data = await resolveVerificationException(
       actor.companyId,

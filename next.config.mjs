@@ -10,9 +10,9 @@ const nextConfig = {
   // breaks its own top-level environment feature-detection ("Object.
   // defineProperty called on non-object") inside Next's RSC/route-handler
   // module wrapping — same class of problem, same fix.
-  experimental: {
-    serverComponentsExternalPackages: ["pdfkit", "pdf-parse", "pdfjs-dist"],
-  },
+  serverExternalPackages: ["pdfkit", "pdf-parse", "pdfjs-dist"],
 };
 
 export default nextConfig;
+
+import('@opennextjs/cloudflare').then(m => m.initOpenNextCloudflareForDev());

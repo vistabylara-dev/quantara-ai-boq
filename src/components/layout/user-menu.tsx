@@ -1,6 +1,7 @@
 "use client";
 
-import { User } from "lucide-react";
+import { ShieldCheck, User } from "lucide-react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { apiClient } from "@/lib/api/client";
@@ -9,6 +10,7 @@ type SessionUser = {
   fullName: string;
   email: string;
   role: string;
+  platformRole: "PLATFORM_OWNER" | "PLATFORM_ADMIN" | "PLATFORM_SUPPORT" | null;
 };
 
 export default function UserMenu() {
@@ -67,11 +69,21 @@ export default function UserMenu() {
           <p className="mt-1 text-xs uppercase tracking-[0.2em] text-slate-500">
             {user.role.replace(/_/g, " ")}
           </p>
+          {user.platformRole && (
+            <Link
+              href="/admin"
+              onClick={() => setIsOpen(false)}
+              className="mt-4 flex w-full items-center gap-2 rounded-2xl border border-slate-700 bg-slate-900 px-4 py-2 text-sm font-semibold text-slate-200 hover:bg-slate-800"
+            >
+              <ShieldCheck className="h-4 w-4" />
+              Platform Admin
+            </Link>
+          )}
           <button
             type="button"
             onClick={() => void handleSignOut()}
             disabled={isSigningOut}
-            className="mt-4 w-full rounded-2xl border border-slate-700 bg-slate-900 px-4 py-2 text-sm font-semibold text-slate-200 hover:bg-slate-800 disabled:opacity-60"
+            className={`${user.platformRole ? "mt-2" : "mt-4"} w-full rounded-2xl border border-slate-700 bg-slate-900 px-4 py-2 text-sm font-semibold text-slate-200 hover:bg-slate-800 disabled:opacity-60`}
           >
             {isSigningOut ? "Signing out..." : "Sign out"}
           </button>

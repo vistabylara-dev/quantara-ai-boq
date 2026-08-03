@@ -66,6 +66,12 @@ enum UserRole {
   REVIEWER
 }
 
+enum PlatformRole {
+  PLATFORM_OWNER
+  PLATFORM_ADMIN
+  PLATFORM_SUPPORT
+}
+
 enum DocumentTemplateType {
   CORPORATE_TECHNICAL
   EXECUTIVE_PREMIUM
@@ -801,6 +807,7 @@ model User {
   passwordHash                String
   fullName                    String
   role                        UserRole                    @default(ESTIMATOR)
+  platformRole                PlatformRole?
   emailVerifiedAt             DateTime?
   isActive                    Boolean                     @default(true)
   createdAt                   DateTime                    @default(now())
@@ -824,9 +831,11 @@ model User {
   uploadedProjectFiles        ProjectFile[]               @relation("ProjectFileUploadedByUser")
   classificationConfirmedFiles ProjectFile[]              @relation("ProjectFileClassificationConfirmedByUser")
   createdExtractionJobs        ExtractionJob[]
+  platformAuditLogs            PlatformAuditLog[]          @relation("PlatformAuditActor")
 
   @@index([companyId])
   @@index([role])
+  @@index([platformRole])
 }
 
 model Session {
@@ -1267,6 +1276,25 @@ model AuditLog {
   @@index([entityType, entityId])
   @@index([action])
   @@index([userId])
+}
+
+model PlatformAuditLog {
+  id                  String        @id @default(uuid()) @db.Uuid
+  actorUserId         String?       @db.Uuid
+  actorPlatformRole   PlatformRole?
+  action              String
+  targetType          String
+  targetId            String?
+  requestMetadataJson Json?
+  beforeJson          Json?
+  afterJson           Json?
+  createdAt           DateTime      @default(now())
+  actorUser           User?         @relation("PlatformAuditActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@index([actorUserId])
+  @@index([action])
+  @@index([targetType, targetId])
+  @@index([createdAt])
 }
 
 model DocumentTemplate {

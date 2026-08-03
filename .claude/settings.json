@@ -18,7 +18,8 @@
       "Grep",
       "WebSearch",
       "WebFetch",
-      "Bash(docker exec *)"
+      "Bash(docker exec *)",
+      "Bash(docker compose *)"
     ],
     "deny": [
       "Bash(rm -rf /*)",

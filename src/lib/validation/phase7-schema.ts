@@ -140,3 +140,9 @@ export const importRowActionSchema = z
     action: z.enum(["CREATE_NEW", "SKIP", "REJECT"]),
   })
   .strict();
+
+export const importRowUpdateSchema = z
+  .object({
+    normalizedDataJson: z.record(z.string(), z.string()),
+  })
+  .strict();

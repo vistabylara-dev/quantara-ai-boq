@@ -12,6 +12,78 @@ import { getProjectRecord } from "@/lib/repositories/project-repository";
 
 const MAX_ROWS = 2_000;
 
+/**
+ * Maps a keyword that might appear in an uploaded file's name to the taxonomy key it should
+ * resolve to. Two separate taxonomies exist in this codebase with inconsistent key naming —
+ * MasterDiscipline (prisma/seed-data/master-data.ts, e.g. "mechanical" covers HVAC) for
+ * CompanyLibraryItem, and IndustryEngine (prisma/seed.ts, e.g. "hvac") for RateCatalogueItem — so
+ * two maps are kept deliberately separate rather than guessed from one shared list. Sorted
+ * longest-keyword-first when matched so "fire-fighting" isn't shadowed by a shorter partial hit.
+ */
+const FILENAME_TO_MASTER_DISCIPLINE_KEY: [string, string][] = [
+  ["fire-fighting", "fire-fighting"],
+  ["firefighting", "fire-fighting"],
+  ["interior-fit-out", "interior-fit-out"],
+  ["interior-fitout", "interior-fit-out"],
+  ["fitout", "interior-fit-out"],
+  ["landscaping", "landscaping"],
+  ["construction", "construction"],
+  ["furniture", "furniture"],
+  ["electrical", "electrical"],
+  ["plumbing", "plumbing"],
+  ["mechanical", "mechanical"],
+  ["joinery", "joinery"],
+  ["hvac", "mechanical"],
+];
+
+const FILENAME_TO_INDUSTRY_ENGINE_KEY: [string, string][] = [
+  ["interior-fit-out", "interior-fitout"],
+  ["interior-fitout", "interior-fitout"],
+  ["fitout", "interior-fitout"],
+  ["fire-fighting", "firefighting"],
+  ["firefighting", "firefighting"],
+  ["construction", "construction"],
+  ["furniture", "furniture"],
+  ["electrical", "electrical"],
+  ["plumbing", "plumbing"],
+  ["landscaping", "landscaping"],
+  ["joinery", "joinery"],
+  ["hvac", "hvac"],
+  ["mep", "mep"],
+];
+
+function matchKeywordKey(fileName: string, map: [string, string][]): string | null {
+  const lower = fileName.toLowerCase();
+  const sorted = [...map].sort((a, b) => b[0].length - a[0].length);
+  for (const [keyword, key] of sorted) {
+    if (lower.includes(keyword)) return key;
+  }
+  return null;
+}
+
+/** Resolves the MasterDiscipline to attach a COMPANY_LIBRARY import's items to, from a keyword in
+ * the uploaded file's name (e.g. "hvac-company-library-import.csv" -> "mechanical"). Returns null
+ * if nothing matches or the discipline doesn't exist in this deployment — callers leave
+ * disciplineId unset in that case rather than guessing. */
+async function resolveDisciplineIdFromFilename(fileName: string): Promise<string | null> {
+  const key = matchKeywordKey(fileName, FILENAME_TO_MASTER_DISCIPLINE_KEY);
+  if (!key) return null;
+  const discipline = await prisma.masterDiscipline.findUnique({ where: { key } });
+  return discipline?.id ?? null;
+}
+
+/** Resolves the IndustryEngine to attach a RATE_CATALOGUE import's items to, from a keyword in the
+ * uploaded file's name. Only returns an ID if that industry is already enabled for this company —
+ * silently turning on an industry the company hasn't enabled would be a scope change, not just a
+ * data-mapping shortcut. Falls back to null so the caller keeps its existing "any enabled
+ * industry" behavior. */
+async function resolveIndustryEngineIdFromFilename(companyId: string, fileName: string): Promise<string | null> {
+  const key = matchKeywordKey(fileName, FILENAME_TO_INDUSTRY_ENGINE_KEY);
+  if (!key) return null;
+  const match = await prisma.companyIndustryEngine.findFirst({ where: { companyId, enabled: true, industryEngine: { key } } });
+  return match?.industryEngineId ?? null;
+}
+
 /** Normalized field keys a mapping can target — deliberately flat, matching spec section 21's column list. */
 export const IMPORT_FIELD_KEYS = [
   "itemCode",
@@ -187,13 +259,78 @@ const REQUIRED_FIELDS_BY_DESTINATION: Record<string, ImportFieldKey[]> = {
   STAGING_REVIEW: [],
 };
 
-/** Validates every mapped row, flags duplicates as warnings (never auto-merged), and updates the job's row-status counts. */
-export async function validateImportJob(actor: CurrentActor, importJobId: string) {
-  requireCapability(actor, "imports:manage");
-  const job = await getJobRecord(actor.companyId, importJobId);
-  const requiredFields = REQUIRED_FIELDS_BY_DESTINATION[job.destinationType] ?? [];
+/**
+ * Evaluates one row's normalized data. A missing required field is deliberately a WARNING, not an
+ * ERROR: ERROR rows have no checkbox in the review table and can never be approved, which used to
+ * hard-block an entire row over one empty cell with no way to proceed except re-uploading a fixed
+ * file. WARNING rows stay selectable/approvable as-is (imported with that field blank/defaulted)
+ * or can be fixed in place via updateImportRow before approving. Only genuinely malformed data
+ * (a cost/quantity that isn't a number) stays a hard ERROR, since there's no sane default for that.
+ *
+ * A duplicate item code (matches an existing record, or repeats an earlier row in this same file)
+ * is auto-REJECTED rather than flagged as a reviewable warning — per an explicit product decision,
+ * duplicates are skipped automatically with no manual step, and the existing record is never
+ * touched, overwritten, or deleted. The first occurrence of a code within a batch is not treated
+ * as a duplicate of itself; only repeats after it are skipped.
+ */
+function evaluateNormalizedRow(
+  normalized: Record<string, string>,
+  requiredFields: ImportFieldKey[],
+  destinationType: string,
+  existingLibraryCodes: Set<string>,
+  existingCatalogueCodes: Set<string>,
+  seenInBatch: Set<string>,
+): { status: ImportRowStatus; errors: string[]; warnings: string[] } {
+  const errors: string[] = [];
+  const warnings: string[] = [];
+  let isDuplicate = false;
 
-  const rows = await prisma.importRow.findMany({ where: { companyId: actor.companyId, importJobId }, orderBy: { rowNumber: "asc" } });
+  for (const field of requiredFields) {
+    if (!normalized[field]?.trim()) {
+      warnings.push(`Column mapped to "${field}" is required but missing on this row — edit the row to fill it in, or approve anyway to import it blank.`);
+    }
+  }
+  if (normalized.quantity !== undefined && normalized.quantity.trim() && Number.isNaN(Number(normalized.quantity))) {
+    errors.push("Quantity is not a valid number.");
+  }
+  if (normalized.cost !== undefined && normalized.cost.trim() && Number.isNaN(Number(normalized.cost))) {
+    errors.push("Cost is not a valid number.");
+  }
+
+  const code = normalized.itemCode?.trim().toLowerCase();
+  if (code) {
+    if (destinationType === "COMPANY_LIBRARY" && existingLibraryCodes.has(code)) {
+      warnings.push("Skipped automatically — an existing company library item already uses this item code. That item was not changed.");
+      isDuplicate = true;
+    }
+    if (destinationType === "RATE_CATALOGUE" && existingCatalogueCodes.has(code)) {
+      warnings.push("Skipped automatically — an existing rate catalogue item already uses this item code. That item was not changed.");
+      isDuplicate = true;
+    }
+    if (seenInBatch.has(code)) {
+      warnings.push("Skipped automatically — duplicate item code within this import file.");
+      isDuplicate = true;
+    }
+    seenInBatch.add(code);
+  }
+
+  const status = errors.length > 0
+    ? ImportRowStatus.ERROR
+    : isDuplicate
+      ? ImportRowStatus.REJECTED
+      : warnings.length > 0
+        ? ImportRowStatus.WARNING
+        : ImportRowStatus.VALID;
+
+  return { status, errors, warnings };
+}
+
+/** Shared by the initial validate pass and by updateImportRow after a manual edit — re-runs
+ * against every row in the job (not just the changed one) so duplicate-item-code detection across
+ * the batch stays correct. */
+async function revalidateAllRows(actor: CurrentActor, job: Awaited<ReturnType<typeof getJobRecord>>) {
+  const requiredFields = REQUIRED_FIELDS_BY_DESTINATION[job.destinationType] ?? [];
+  const rows = await prisma.importRow.findMany({ where: { companyId: actor.companyId, importJobId: job.id }, orderBy: { rowNumber: "asc" } });
   const existingLibraryCodes = new Set((await prisma.companyLibraryItem.findMany({ where: { companyId: actor.companyId }, select: { companyItemCode: true } })).map((r) => r.companyItemCode.toLowerCase()));
   const existingCatalogueCodes = new Set((await prisma.rateCatalogueItem.findMany({ where: { companyId: actor.companyId }, select: { itemCode: true } })).map((r) => r.itemCode.toLowerCase()));
   const seenInBatch = new Set<string>();
@@ -205,28 +342,7 @@ export async function validateImportJob(actor: CurrentActor, importJobId: string
   await prisma.$transaction(async (tx) => {
     for (const row of rows) {
       const normalized = (row.normalizedDataJson as Record<string, string> | null) ?? {};
-      const errors: string[] = [];
-      const warnings: string[] = [];
-
-      for (const field of requiredFields) {
-        if (!normalized[field]?.trim()) errors.push(`Column mapped to "${field}" is required and missing on this row.`);
-      }
-      if (normalized.quantity !== undefined && normalized.quantity.trim() && Number.isNaN(Number(normalized.quantity))) {
-        errors.push("Quantity is not a valid number.");
-      }
-      if (normalized.cost !== undefined && normalized.cost.trim() && Number.isNaN(Number(normalized.cost))) {
-        errors.push("Cost is not a valid number.");
-      }
-
-      const code = normalized.itemCode?.trim().toLowerCase();
-      if (code) {
-        if (job.destinationType === "COMPANY_LIBRARY" && existingLibraryCodes.has(code)) warnings.push("An existing company library item already uses this item code.");
-        if (job.destinationType === "RATE_CATALOGUE" && existingCatalogueCodes.has(code)) warnings.push("An existing rate catalogue item already uses this item code.");
-        if (seenInBatch.has(code)) warnings.push("Duplicate item code within this import file.");
-        seenInBatch.add(code);
-      }
-
-      const status = errors.length > 0 ? ImportRowStatus.ERROR : warnings.length > 0 ? ImportRowStatus.WARNING : ImportRowStatus.VALID;
+      const { status, errors, warnings } = evaluateNormalizedRow(normalized, requiredFields, job.destinationType, existingLibraryCodes, existingCatalogueCodes, seenInBatch);
       if (status === ImportRowStatus.ERROR) errorCount += 1;
       else if (status === ImportRowStatus.WARNING) warningCount += 1;
       else validCount += 1;
@@ -244,7 +360,36 @@ export async function validateImportJob(actor: CurrentActor, importJobId: string
     await createAuditLog(actor.companyId, { entityType: "ImportJob", entityId: job.id, action: "IMPORT_JOB_VALIDATED", payload: { validCount, warningCount, errorCount } }, tx);
   });
 
-  return getImportJobForCompany(actor, importJobId);
+  return getImportJobForCompany(actor, job.id);
+}
+
+/** Validates every mapped row, flags duplicates and missing-required-field gaps as warnings (never auto-merged or auto-blocked), and updates the job's row-status counts. */
+export async function validateImportJob(actor: CurrentActor, importJobId: string) {
+  requireCapability(actor, "imports:manage");
+  const job = await getJobRecord(actor.companyId, importJobId);
+  return revalidateAllRows(actor, job);
+}
+
+export type UpdateImportRowInput = { normalizedDataJson: Record<string, string> };
+
+/**
+ * Lets a reviewer patch in values the source file was missing, or correct a bad mapping, without
+ * re-uploading the whole file. Merges the patch into the row's existing normalized data, then
+ * re-validates the whole job so status/counts stay consistent.
+ */
+export async function updateImportRow(actor: CurrentActor, importJobId: string, rowId: string, input: UpdateImportRowInput) {
+  requireCapability(actor, "imports:manage");
+  const job = await getJobRecord(actor.companyId, importJobId);
+
+  const target = await prisma.importRow.findFirst({ where: { id: rowId, companyId: actor.companyId, importJobId } });
+  if (!target) throw new NotFoundError("Import row not found.");
+
+  const currentNormalized = (target.normalizedDataJson as Record<string, string> | null) ?? {};
+  const patchedNormalized = { ...currentNormalized, ...input.normalizedDataJson };
+  await prisma.importRow.update({ where: { id: rowId, companyId: actor.companyId }, data: { normalizedDataJson: patchedNormalized, status: ImportRowStatus.PENDING } });
+  await createAuditLog(actor.companyId, { entityType: "ImportRow", entityId: rowId, action: "IMPORT_ROW_EDITED", payload: { fields: Object.keys(input.normalizedDataJson) } });
+
+  return revalidateAllRows(actor, job);
 }
 
 export type RowActionInput = { rowIds: string[]; action: "CREATE_NEW" | "SKIP" | "REJECT" };
@@ -264,13 +409,14 @@ export async function actOnImportRows(actor: CurrentActor, importJobId: string, 
   return getImportJobForCompany(actor, importJobId);
 }
 
-async function executeCompanyLibraryRow(actor: CurrentActor, normalized: Record<string, string>) {
+async function executeCompanyLibraryRow(actor: CurrentActor, normalized: Record<string, string>, disciplineId: string | null) {
   return createLibraryItem(
     actor.companyId,
     {
       companyItemCode: normalized.itemCode,
       name: normalized.description,
       description: normalized.specification ?? "",
+      disciplineId,
       unit: normalized.unit,
       defaultCost: normalized.cost ? Number(normalized.cost) : 0,
       defaultMargin: normalized.margin ? Number(normalized.margin) : 0,
@@ -281,15 +427,19 @@ async function executeCompanyLibraryRow(actor: CurrentActor, normalized: Record<
   );
 }
 
-async function executeRateCatalogueRow(actor: CurrentActor, normalized: Record<string, string>) {
-  const industry = await prisma.companyIndustryEngine.findFirst({ where: { companyId: actor.companyId, enabled: true }, include: { industryEngine: true } });
-  if (!industry) throw new AppError("NO_INDUSTRY_AVAILABLE", "No enabled industry is available to attach this catalogue rate to.", 409);
+async function executeRateCatalogueRow(actor: CurrentActor, normalized: Record<string, string>, resolvedIndustryEngineId: string | null) {
+  let industryEngineId = resolvedIndustryEngineId;
+  if (!industryEngineId) {
+    const industry = await prisma.companyIndustryEngine.findFirst({ where: { companyId: actor.companyId, enabled: true }, include: { industryEngine: true } });
+    if (!industry) throw new AppError("NO_INDUSTRY_AVAILABLE", "No enabled industry is available to attach this catalogue rate to.", 409);
+    industryEngineId = industry.industryEngineId;
+  }
 
   const cost = normalized.cost ? Number(normalized.cost) : 0;
   return prisma.rateCatalogueItem.create({
     data: {
       companyId: actor.companyId,
-      industryEngineId: industry.industryEngineId,
+      industryEngineId,
       itemCode: normalized.itemCode,
       category: normalized.category || "Imported",
       description: normalized.description,
@@ -346,16 +496,22 @@ export async function executeImportJob(actor: CurrentActor, importJobId: string)
     orderBy: { rowNumber: "asc" },
   });
 
+  // Resolved once per job (not per row) from the uploaded file's name — e.g. an upload named
+  // "hvac-company-library-import.csv" lands its items under the Mechanical discipline
+  // automatically instead of everyone having to map a "discipline" column by hand.
+  const resolvedDisciplineId = job.destinationType === "COMPANY_LIBRARY" ? await resolveDisciplineIdFromFilename(job.uploadedFileName) : null;
+  const resolvedIndustryEngineId = job.destinationType === "RATE_CATALOGUE" ? await resolveIndustryEngineIdFromFilename(actor.companyId, job.uploadedFileName) : null;
+
   let imported = 0;
   for (const row of approvedRows) {
     const normalized = (row.normalizedDataJson as Record<string, string> | null) ?? {};
     try {
       let destinationEntityId: string | null = null;
       if (job.destinationType === "COMPANY_LIBRARY") {
-        const created = await executeCompanyLibraryRow(actor, normalized);
+        const created = await executeCompanyLibraryRow(actor, normalized, resolvedDisciplineId);
         destinationEntityId = created.id;
       } else if (job.destinationType === "RATE_CATALOGUE") {
-        const created = await executeRateCatalogueRow(actor, normalized);
+        const created = await executeRateCatalogueRow(actor, normalized, resolvedIndustryEngineId);
         destinationEntityId = created.id;
       } else if (job.destinationType === "DRAFT_BOQ") {
         const created = await executeDraftBoqRow(actor, job.projectId!, normalized, row.rowNumber);
@@ -376,6 +532,24 @@ export async function executeImportJob(actor: CurrentActor, importJobId: string)
   await createAuditLog(actor.companyId, { entityType: "ImportJob", entityId: job.id, action: "IMPORT_JOB_EXECUTED", payload: { imported } });
 
   return getImportJobForCompany(actor, importJobId);
+}
+
+/**
+ * Deletes the import job and its staged rows (ImportRow cascades via the FK in schema.prisma).
+ * This only removes the job's own audit/staging trail — it never touches CompanyLibraryItem or
+ * RateCatalogueItem rows that were already created by a prior execute, since those records have
+ * no cascading relation back to ImportJob (only a plain destinationEntityId reference). Safe to
+ * call on a job in any status: a bad upload before you've mapped/validated it, or a completed job
+ * you just want to clear off the list.
+ */
+export async function deleteImportJob(actor: CurrentActor, importJobId: string) {
+  requireCapability(actor, "imports:manage");
+  const job = await getJobRecord(actor.companyId, importJobId);
+
+  await prisma.importJob.delete({ where: { id: job.id, companyId: actor.companyId } });
+  await createAuditLog(actor.companyId, { entityType: "ImportJob", entityId: job.id, action: "IMPORT_JOB_DELETED", payload: { uploadedFileName: job.uploadedFileName, status: job.status } });
+
+  return { id: job.id };
 }
 
 export async function listImportMappingTemplates(actor: CurrentActor) {

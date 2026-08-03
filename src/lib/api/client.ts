@@ -102,6 +102,13 @@ export const apiClient = {
       signal,
     });
   },
+  patch<T>(path: string, body: unknown, signal?: AbortSignal) {
+    return request<T>(path, {
+      method: "PATCH",
+      body: JSON.stringify(body),
+      signal,
+    });
+  },
   delete<T>(path: string, signal?: AbortSignal) {
     return request<T>(path, { method: "DELETE", signal });
   },

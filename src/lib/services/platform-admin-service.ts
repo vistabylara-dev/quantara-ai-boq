@@ -6,6 +6,9 @@ import {
   platformListAuditLogs,
   platformListCompanies,
   platformListDataPackages,
+  platformListRecentCompanies,
+  platformListRecentProjects,
+  platformListRecentUsers,
   platformListSoftwareSubscriptions,
   platformListUsers,
   platformRecordReadAudit,
@@ -87,6 +90,11 @@ function deployedVersion(): string {
   return sha ? sha.slice(0, 7) : "unknown";
 }
 
+/** Whether real SMTP delivery is opted into — never a live send/connectivity check. */
+function emailProviderStatus(): "smtp" | "development" {
+  return process.env.EMAIL_PROVIDER === "smtp" ? "smtp" : "development";
+}
+
 export function buildPlatformRequestMetadata(request: Request): PlatformRequestMetadata {
   const url = new URL(request.url);
   const requestIdHeader = request.headers.get("x-vercel-id") ?? request.headers.get("x-request-id");
@@ -122,9 +130,55 @@ export async function getPlatformOverview(
       database: overview.database,
       applicationEnvironment: applicationEnvironment(),
       storageProvider: storageConfigurationStatus(),
+      emailProvider: emailProviderStatus(),
       deployedVersion: deployedVersion(),
     },
   };
+}
+
+export async function listPlatformRecentCompanies(
+  actor: PlatformActor,
+  requestMetadata: PlatformRequestMetadata,
+) {
+  assertPlatformActor(actor);
+  const result = await platformListRecentCompanies();
+  await platformRecordReadAudit({
+    actorUserId: actor.userId,
+    action: "PLATFORM_COMPANY_LIST_VIEWED",
+    targetType: "RecentCompanyList",
+    requestMetadata,
+  });
+  return result;
+}
+
+export async function listPlatformRecentUsers(
+  actor: PlatformActor,
+  requestMetadata: PlatformRequestMetadata,
+) {
+  assertPlatformActor(actor);
+  const result = await platformListRecentUsers();
+  await platformRecordReadAudit({
+    actorUserId: actor.userId,
+    action: "PLATFORM_USER_LIST_VIEWED",
+    targetType: "RecentUserList",
+    requestMetadata,
+  });
+  return result;
+}
+
+export async function listPlatformRecentProjects(
+  actor: PlatformActor,
+  requestMetadata: PlatformRequestMetadata,
+) {
+  assertPlatformActor(actor);
+  const result = await platformListRecentProjects();
+  await platformRecordReadAudit({
+    actorUserId: actor.userId,
+    action: "PLATFORM_PROJECT_LIST_VIEWED",
+    targetType: "RecentProjectList",
+    requestMetadata,
+  });
+  return result;
 }
 
 export async function listPlatformCompanies(

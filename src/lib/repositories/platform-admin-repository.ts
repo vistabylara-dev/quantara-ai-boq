@@ -3,6 +3,7 @@ import {
   PlatformRole,
   Prisma,
   SubscriptionStatus,
+  UserRole,
 } from "@prisma/client";
 import { prisma } from "@/lib/db/prisma";
 import { AppError, NotFoundError } from "@/lib/errors/app-error";
@@ -26,7 +27,8 @@ export type PlatformReadAuditAction =
   | "PLATFORM_USER_LIST_VIEWED"
   | "PLATFORM_SUBSCRIPTION_LIST_VIEWED"
   | "PLATFORM_DATA_PACKAGE_LIST_VIEWED"
-  | "PLATFORM_AUDIT_LOG_VIEWED";
+  | "PLATFORM_AUDIT_LOG_VIEWED"
+  | "PLATFORM_PROJECT_LIST_VIEWED";
 
 const companyListSelect = {
   id: true,
@@ -372,6 +374,125 @@ export async function platformGetOverviewMetrics() {
     },
     database: "healthy" as const,
   };
+}
+
+const RECENT_LIST_LIMIT = 8;
+
+/**
+ * Compact, fixed-size "recent" views for the dashboard's summary panels —
+ * deliberately separate from platformListCompanies/platformListUsers (the
+ * full paginated management tables), which stay unchanged. Bounded to
+ * RECENT_LIST_LIMIT so this can never load an unbounded result set.
+ */
+export async function platformListRecentCompanies() {
+  const companies = await prisma.company.findMany({
+    select: {
+      id: true,
+      legalName: true,
+      tradeName: true,
+      createdAt: true,
+      softwareSubscriptions: {
+        select: { status: true },
+        orderBy: [{ createdAt: "desc" }, { id: "asc" }],
+        take: 1,
+      },
+    },
+    orderBy: [{ createdAt: "desc" }, { id: "asc" }],
+    take: RECENT_LIST_LIMIT,
+  });
+  const companyIds = companies.map((company) => company.id);
+
+  const [owners, userCounts, projectCounts] = await Promise.all([
+    prisma.user.findMany({
+      where: { companyId: { in: companyIds }, role: UserRole.COMPANY_OWNER },
+      select: { companyId: true, fullName: true, email: true },
+      orderBy: { createdAt: "asc" },
+    }),
+    prisma.user.groupBy({ by: ["companyId"], where: { companyId: { in: companyIds } }, _count: { _all: true } }),
+    prisma.project.groupBy({ by: ["companyId"], where: { companyId: { in: companyIds } }, _count: { _all: true } }),
+  ]);
+  const ownerByCompany = new Map(owners.map((owner) => [owner.companyId, owner]));
+  const userCountByCompany = countMap(userCounts);
+  const projectCountByCompany = countMap(projectCounts);
+
+  return companies.map((company) => {
+    const owner = ownerByCompany.get(company.id);
+    return {
+      id: company.id,
+      name: company.tradeName || company.legalName,
+      owner: owner ? { fullName: owner.fullName, email: owner.email } : null,
+      createdAt: company.createdAt.toISOString(),
+      status: company.softwareSubscriptions[0]?.status ?? "NONE",
+      userCount: userCountByCompany.get(company.id) ?? 0,
+      projectCount: projectCountByCompany.get(company.id) ?? 0,
+    };
+  });
+}
+
+export async function platformListRecentUsers() {
+  const users = await prisma.user.findMany({
+    select: {
+      id: true,
+      email: true,
+      fullName: true,
+      role: true,
+      platformRole: true,
+      emailVerifiedAt: true,
+      isActive: true,
+      createdAt: true,
+      company: { select: { id: true, legalName: true, tradeName: true } },
+    },
+    orderBy: [{ createdAt: "desc" }, { id: "asc" }],
+    take: RECENT_LIST_LIMIT,
+  });
+
+  return users.map((user) => ({
+    id: user.id,
+    email: user.email,
+    fullName: user.fullName,
+    companyRole: user.role,
+    platformRole: user.platformRole,
+    isActive: user.isActive,
+    emailVerifiedAt: user.emailVerifiedAt?.toISOString() ?? null,
+    createdAt: user.createdAt.toISOString(),
+    company: user.company,
+  }));
+}
+
+export async function platformListRecentProjects() {
+  const projects = await prisma.project.findMany({
+    select: {
+      id: true,
+      name: true,
+      reference: true,
+      status: true,
+      createdAt: true,
+      updatedAt: true,
+      company: { select: { id: true, legalName: true, tradeName: true } },
+    },
+    orderBy: [{ createdAt: "desc" }, { id: "asc" }],
+    take: RECENT_LIST_LIMIT,
+  });
+  const projectIds = projects.map((project) => project.id);
+
+  const [boqCounts, fileCounts] = await Promise.all([
+    prisma.bOQ.groupBy({ by: ["projectId"], where: { projectId: { in: projectIds } }, _count: { _all: true } }),
+    prisma.projectFile.groupBy({ by: ["projectId"], where: { projectId: { in: projectIds } }, _count: { _all: true } }),
+  ]);
+  const boqCountByProject = new Map(boqCounts.map((row) => [row.projectId, row._count._all]));
+  const fileCountByProject = new Map(fileCounts.map((row) => [row.projectId, row._count._all]));
+
+  return projects.map((project) => ({
+    id: project.id,
+    name: project.name,
+    reference: project.reference,
+    status: project.status,
+    createdAt: project.createdAt.toISOString(),
+    updatedAt: project.updatedAt.toISOString(),
+    company: project.company,
+    boqCount: boqCountByProject.get(project.id) ?? 0,
+    fileCount: fileCountByProject.get(project.id) ?? 0,
+  }));
 }
 
 /** Explicit cross-company company listing for authenticated platform actors. */

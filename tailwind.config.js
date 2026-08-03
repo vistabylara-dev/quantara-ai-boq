@@ -1,4 +1,10 @@
 module.exports = {
+  // Matches our data-theme attribute (see src/lib/theme.ts), not raw OS
+  // preference — Tailwind's default 'media' strategy would ignore the
+  // user's explicit light/dark/system choice entirely. No existing file
+  // used the `dark:` variant before this, so this has zero effect on any
+  // page outside the admin dashboard, which is the first consumer of it.
+  darkMode: ["selector", '[data-theme="dark"]'],
   content: [
     "./src/app/**/*.{js,ts,jsx,tsx}",
     "./src/components/**/*.{js,ts,jsx,tsx}"

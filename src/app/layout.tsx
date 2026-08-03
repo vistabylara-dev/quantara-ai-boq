@@ -20,13 +20,22 @@ export const metadata: Metadata = {
 const THEME_INIT_SCRIPT = `
 (function () {
   try {
-    var stored = window.localStorage.getItem(${JSON.stringify(THEME_MODE_KEY)});
-    var mode = (stored === "light" || stored === "dark" || stored === "system") ? stored : "light";
-    if (mode === "system") {
-      document.documentElement.removeAttribute("data-theme");
-    } else {
-      document.documentElement.setAttribute("data-theme", mode);
+    var KEY = ${JSON.stringify(THEME_MODE_KEY)};
+    function getMode() {
+      var stored = window.localStorage.getItem(KEY);
+      return (stored === "light" || stored === "dark" || stored === "system") ? stored : "light";
     }
+    var mql = window.matchMedia("(prefers-color-scheme: dark)");
+    function resolve(mode) {
+      return mode === "system" ? (mql.matches ? "dark" : "light") : mode;
+    }
+    function apply(mode) {
+      document.documentElement.setAttribute("data-theme", resolve(mode));
+    }
+    apply(getMode());
+    mql.addEventListener("change", function () {
+      if (getMode() === "system") apply("system");
+    });
   } catch (e) {}
 })();
 `;

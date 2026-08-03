@@ -7,6 +7,7 @@ import {
   getSavedThemeMode,
   resolveTheme,
   saveThemeMode,
+  watchSystemThemeChanges,
 } from "../src/lib/theme";
 
 function createLocalStorageMock() {
@@ -34,12 +35,25 @@ describe("theme mode persistence", () => {
   let documentElement: ReturnType<typeof createDocumentElementMock>;
   let prefersDark: boolean;
 
+  let mediaQueryListeners: Array<() => void>;
+
   beforeEach(() => {
     documentElement = createDocumentElementMock();
     prefersDark = true;
+    mediaQueryListeners = [];
     vi.stubGlobal("window", {
       localStorage: createLocalStorageMock(),
-      matchMedia: (query: string) => ({ matches: query.includes("dark") && prefersDark }),
+      matchMedia: (query: string) => ({
+        get matches() {
+          return query.includes("dark") && prefersDark;
+        },
+        addEventListener: (_event: string, listener: () => void) => {
+          mediaQueryListeners.push(listener);
+        },
+        removeEventListener: (_event: string, listener: () => void) => {
+          mediaQueryListeners = mediaQueryListeners.filter((l) => l !== listener);
+        },
+      }),
     });
     vi.stubGlobal("document", { documentElement });
   });
@@ -69,10 +83,40 @@ describe("theme mode persistence", () => {
     expect(documentElement.getAttribute("data-theme")).toBe("dark");
   });
 
-  it("removes the data-theme attribute for system mode instead of setting it", () => {
-    saveThemeMode("dark");
+  it("applies the resolved value (not a missing attribute) for system mode, for Tailwind's attribute-based dark strategy", () => {
+    prefersDark = true;
     applyThemeMode("system");
-    expect(documentElement.getAttribute("data-theme")).toBeNull();
+    expect(documentElement.getAttribute("data-theme")).toBe("dark");
+
+    prefersDark = false;
+    applyThemeMode("system");
+    expect(documentElement.getAttribute("data-theme")).toBe("light");
+  });
+
+  it("watchSystemThemeChanges re-applies the resolved theme only while mode is system", () => {
+    let currentMode: "light" | "dark" | "system" = "system";
+    prefersDark = true;
+    applyThemeMode(currentMode);
+    expect(documentElement.getAttribute("data-theme")).toBe("dark");
+
+    const unsubscribe = watchSystemThemeChanges(() => currentMode);
+    expect(mediaQueryListeners).toHaveLength(1);
+
+    prefersDark = false;
+    mediaQueryListeners.forEach((listener) => listener());
+    expect(documentElement.getAttribute("data-theme")).toBe("light");
+
+    // Once the user has switched to an explicit choice, an OS change must
+    // not silently override it.
+    currentMode = "dark";
+    prefersDark = true;
+    applyThemeMode(currentMode);
+    prefersDark = false;
+    mediaQueryListeners.forEach((listener) => listener());
+    expect(documentElement.getAttribute("data-theme")).toBe("dark");
+
+    unsubscribe();
+    expect(mediaQueryListeners).toHaveLength(0);
   });
 
   it("keeps the persisted value literally 'system', never a resolved light/dark value", () => {

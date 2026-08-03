@@ -15,18 +15,40 @@ export function getSavedThemeMode(): ThemeMode {
   return "light";
 }
 
+/**
+ * Always sets an explicit resolved value ("light"/"dark"), never removes the
+ * attribute — Tailwind's attribute-based dark-mode strategy (configured for
+ * the admin dashboard) needs a concrete value to match against, which a
+ * missing attribute can't provide. The saved preference in localStorage
+ * still records "system" untouched; only the applied DOM attribute is ever
+ * the resolved value.
+ */
 export function applyThemeMode(mode: ThemeMode): void {
   if (typeof document === "undefined") {
     return;
   }
 
-  const html = document.documentElement;
-  if (mode === "system") {
-    html.removeAttribute("data-theme");
-    return;
+  document.documentElement.setAttribute("data-theme", resolveTheme(mode));
+}
+
+/**
+ * Registers live reactivity for system mode: when the OS preference changes
+ * while the saved mode is "system", re-resolves and re-applies the
+ * attribute. Returns an unsubscribe function. No-op outside the browser.
+ */
+export function watchSystemThemeChanges(getCurrentMode: () => ThemeMode): () => void {
+  if (typeof window === "undefined") {
+    return () => {};
   }
 
-  html.setAttribute("data-theme", mode);
+  const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
+  const handleChange = () => {
+    if (getCurrentMode() === "system") {
+      applyThemeMode("system");
+    }
+  };
+  mediaQuery.addEventListener("change", handleChange);
+  return () => mediaQuery.removeEventListener("change", handleChange);
 }
 
 export function saveThemeMode(mode: ThemeMode): void {

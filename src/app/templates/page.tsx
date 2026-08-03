@@ -225,6 +225,43 @@ export default function TemplatesPage() {
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
         {filteredTemplates.map((template) => (
           <div key={template.id} className="rounded-[32px] border border-slate-800 bg-slate-900 p-6 text-slate-300">
+            <div
+              aria-hidden="true"
+              className="mb-4 overflow-hidden rounded-2xl border border-slate-800"
+            >
+              {template.styleConfig.coverStyle !== "none" && (
+                <div
+                  className="flex h-10 items-center gap-2 px-3"
+                  style={{
+                    backgroundColor: template.styleConfig.coverStyle === "dark" ? template.styleConfig.primaryColor : "#0F172A",
+                    flexDirection: template.styleConfig.direction === "rtl" ? "row-reverse" : "row",
+                  }}
+                >
+                  {template.styleConfig.showLogo && (
+                    <span className="h-3 w-3 rounded-sm" style={{ backgroundColor: template.styleConfig.accentColor }} />
+                  )}
+                  <span className="h-1.5 w-12 rounded-full bg-white/40" />
+                </div>
+              )}
+              <div className="space-y-1.5 bg-slate-950 p-3">
+                <span
+                  className="block h-1.5 rounded-full bg-slate-700"
+                  style={{ width: "60%", marginLeft: template.styleConfig.direction === "rtl" ? "auto" : undefined }}
+                />
+                {Array.from({ length: template.contentConfig.denseTechnicalTable ? 4 : 3 }).map((_, rowIndex) => (
+                  <div
+                    key={rowIndex}
+                    className="flex gap-1"
+                    style={{ flexDirection: template.styleConfig.direction === "rtl" ? "row-reverse" : "row" }}
+                  >
+                    <span className="h-1 flex-[2] rounded-full bg-slate-800" />
+                    <span className="h-1 flex-1 rounded-full bg-slate-800" />
+                    {template.contentConfig.denseTechnicalTable && <span className="h-1 flex-1 rounded-full bg-slate-800" />}
+                  </div>
+                ))}
+              </div>
+            </div>
+
             <div className="flex items-start justify-between gap-2">
               <div>
                 <p className="text-sm uppercase tracking-[0.28em] text-slate-500">{template.type.replace(/_/g, " ")}</p>

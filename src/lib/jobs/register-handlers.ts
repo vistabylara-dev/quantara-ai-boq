@@ -7,3 +7,4 @@
  * function reference for that engine type.
  */
 import "@/lib/files/classification-handler";
+import "@/lib/files/table-extraction-handler";

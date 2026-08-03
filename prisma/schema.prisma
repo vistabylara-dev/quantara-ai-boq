@@ -774,6 +774,9 @@ model Company {
   importRows                  ImportRow[]
   projectFiles                ProjectFile[]
   extractionJobs               ExtractionJob[]
+  extractedTables               ExtractedTable[]
+  extractedTableRows            ExtractedTableRow[]
+  extractedTableCells           ExtractedTableCell[]
 }
 
 model User {
@@ -1499,6 +1502,7 @@ model ProjectFile {
   uploadedByUser                User                       @relation("ProjectFileUploadedByUser", fields: [uploadedByUserId], references: [id], onDelete: Restrict)
   classificationConfirmedByUser User?                      @relation("ProjectFileClassificationConfirmedByUser", fields: [classificationConfirmedByUserId], references: [id], onDelete: SetNull)
   extractionJobs                 ExtractionJob[]
+  extractedTables                 ExtractedTable[]
 
   @@index([companyId])
   @@index([projectId])
@@ -1628,4 +1632,109 @@ enum ExtractionJobStatus {
   COMPLETED
   FAILED
   CANCELLED
+}
+
+/**
+ * Phase 8 section 11 — a table/schedule extracted from a source file (CSV,
+ * XLSX, or a text-based PDF). `drawingPageId` is included per the spec's
+ * field list for a future sub-phase (drawing viewer) that introduces the
+ * DrawingPage model; it is a plain nullable id column with no FK constraint
+ * yet — the constraint is added once DrawingPage exists, in that sub-phase's
+ * own migration, rather than guessing at that model's shape now.
+ */
+model ExtractedTable {
+  id                  String             @id @default(uuid()) @db.Uuid
+  companyId           String             @db.Uuid
+  projectFileId       String             @db.Uuid
+  drawingPageId       String?            @db.Uuid
+  sheetName           String?
+  title               String?
+  tableType           ExtractedTableType @default(UNKNOWN)
+  confidence          Decimal            @db.Decimal(5, 2)
+  boundingGeometryJson Json?
+  sourceReference     String?
+  status              ExtractedTableStatus @default(EXTRACTED)
+  createdAt           DateTime           @default(now())
+  updatedAt           DateTime           @updatedAt
+  company             Company            @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  projectFile         ProjectFile        @relation(fields: [projectFileId], references: [id], onDelete: Cascade)
+  rows                ExtractedTableRow[]
+
+  @@index([companyId])
+  @@index([projectFileId])
+  @@index([status])
+  @@index([tableType])
+}
+
+/**
+ * A parent row carries the columns shared across a merged/grouped range
+ * (e.g. "Element: Foundations", "Concrete: 53 m3" spanning several source
+ * rows); its child rows carry only the columns that vary per source row
+ * (e.g. reinforcement diameter + quantity) — never a copy of the parent's
+ * quantity columns, so summing children never double-counts the parent
+ * value (spec section 12).
+ */
+model ExtractedTableRow {
+  id                 String              @id @default(uuid()) @db.Uuid
+  companyId          String              @db.Uuid
+  extractedTableId   String              @db.Uuid
+  rowNumber          Int
+  parentRowId        String?             @db.Uuid
+  normalizedDataJson Json?
+  rawDataJson        Json?
+  confidence         Decimal             @db.Decimal(5, 2)
+  status             ExtractedTableStatus @default(EXTRACTED)
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+  company            Company             @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  extractedTable     ExtractedTable      @relation(fields: [extractedTableId], references: [id], onDelete: Cascade)
+  parentRow          ExtractedTableRow?  @relation("ExtractedTableRowParent", fields: [parentRowId], references: [id], onDelete: Cascade)
+  childRows          ExtractedTableRow[] @relation("ExtractedTableRowParent")
+  cells              ExtractedTableCell[]
+
+  @@index([companyId])
+  @@index([extractedTableId])
+  @@index([parentRowId])
+  @@index([status])
+}
+
+model ExtractedTableCell {
+  id                   String            @id @default(uuid()) @db.Uuid
+  companyId            String            @db.Uuid
+  extractedTableRowId  String            @db.Uuid
+  columnKey            String
+  rawValue             String?
+  normalizedValue      String?
+  confidence           Decimal           @db.Decimal(5, 2)
+  sourceCellReference  String?
+  boundingGeometryJson Json?
+  createdAt            DateTime          @default(now())
+  updatedAt            DateTime          @updatedAt
+  company              Company           @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  extractedTableRow    ExtractedTableRow @relation(fields: [extractedTableRowId], references: [id], onDelete: Cascade)
+
+  @@index([companyId])
+  @@index([extractedTableRowId])
+}
+
+enum ExtractedTableType {
+  SUPPLIER_QUOTATION
+  EXISTING_BOQ
+  FURNITURE_SCHEDULE
+  EQUIPMENT_SCHEDULE
+  STRUCTURAL_QUANTITY_SCHEDULE
+  DOOR_SCHEDULE
+  WINDOW_SCHEDULE
+  FINISH_SCHEDULE
+  MATERIAL_SCHEDULE
+  GENERIC_TABLE
+  UNKNOWN
+}
+
+enum ExtractedTableStatus {
+  EXTRACTED
+  NEEDS_REVIEW
+  CONFIRMED
+  CORRECTED
+  REJECTED
 }

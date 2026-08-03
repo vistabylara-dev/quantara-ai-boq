@@ -1,6 +1,8 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { SESSION_COOKIE_NAME } from "@/lib/auth/session-cookie-name";
 
+const ADMIN_LOGIN_PAGE = "/admin/login";
+
 const PUBLIC_PAGE_PREFIXES = [
   "/",
   "/login",
@@ -9,6 +11,7 @@ const PUBLIC_PAGE_PREFIXES = [
   "/forgot-password",
   "/reset-password",
   "/proposal",
+  ADMIN_LOGIN_PAGE,
 ];
 
 const AUTH_ENTRY_PAGES = ["/login", "/register"];
@@ -44,7 +47,8 @@ export function middleware(request: NextRequest) {
   }
 
   if (!isPublicPage(pathname) && !hasSessionCookie) {
-    const loginUrl = new URL("/login", request.url);
+    const isAdminPage = pathname === "/admin" || pathname.startsWith("/admin/");
+    const loginUrl = new URL(isAdminPage ? ADMIN_LOGIN_PAGE : "/login", request.url);
     loginUrl.searchParams.set("next", pathname);
     return NextResponse.redirect(loginUrl);
   }

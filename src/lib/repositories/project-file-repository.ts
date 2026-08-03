@@ -25,6 +25,7 @@ export type CreateProjectFileInput = {
   drawingTitle?: string | null;
   revisionNumber?: string | null;
   scaleText?: string | null;
+  pageCount?: number | null;
   metadataJson?: Prisma.InputJsonValue;
 };
 
@@ -83,6 +84,7 @@ export async function createProjectFile(companyId: string, input: CreateProjectF
       drawingTitle: input.drawingTitle,
       revisionNumber: input.revisionNumber,
       scaleText: input.scaleText,
+      pageCount: input.pageCount,
       metadataJson: input.metadataJson,
     },
     include: projectFileInclude,

@@ -15,6 +15,7 @@ export type DrawingView = {
   discipline: string | null;
   drawingType: string | null;
   issueDate: string | null;
+  pageCount: number | null;
   previewAvailable: boolean;
   analysisStatus: string;
   securityScanStatus: string;
@@ -94,6 +95,12 @@ export default function DrawingCard({
           <div>
             <dt className="inline text-[#7B879C] dark:text-[#7F8DA6]">Issued </dt>
             <dd className="inline">{drawing.issueDate}</dd>
+          </div>
+        )}
+        {drawing.pageCount !== null && (
+          <div>
+            <dt className="inline text-[#7B879C] dark:text-[#7F8DA6]">Pages </dt>
+            <dd className="inline">{drawing.pageCount}</dd>
           </div>
         )}
       </dl>

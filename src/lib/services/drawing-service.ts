@@ -23,6 +23,26 @@ import {
   type DrawingMetadataInput,
 } from "@/lib/validation/drawing-schema";
 import { randomUUID } from "node:crypto";
+import { PDFParse } from "pdf-parse";
+
+/**
+ * Deterministic, real page count via pdf-parse's document-info reader (no
+ * rasterization — cheap, metadata-only). Returns null on any parse failure
+ * rather than throwing: a page count is a nice-to-have enrichment, never a
+ * reason to fail an otherwise-valid upload. This is genuinely CONFIRMED data
+ * (parsed straight from the PDF's own page tree), never inferred or guessed.
+ */
+async function extractPdfPageCount(buffer: Buffer): Promise<number | null> {
+  const parser = new PDFParse({ data: buffer });
+  try {
+    const info = await parser.getInfo();
+    return typeof info.total === "number" && info.total > 0 ? info.total : null;
+  } catch {
+    return null;
+  } finally {
+    await parser.destroy();
+  }
+}
 
 const DRAWING_MIME_BY_EXTENSION: Record<string, readonly string[] | null> = {
   pdf: ["application/pdf"],
@@ -150,7 +170,10 @@ export async function uploadProjectDrawing(actor: CurrentActor, projectId: strin
 
   const { extension, safeFileName } = validateDrawingUpload(input.originalName, input.mimeType, input.buffer.byteLength);
   const checksum = computeChecksum(input.buffer);
-  const duplicate = await findDuplicateByChecksum(actor.companyId, projectId, checksum);
+  const [duplicate, pageCount] = await Promise.all([
+    findDuplicateByChecksum(actor.companyId, projectId, checksum),
+    extension === "pdf" ? extractPdfPageCount(input.buffer) : Promise.resolve(null),
+  ]);
 
   const drawingId = randomUUID();
   const storageKey = buildDrawingStorageKey(actor.companyId, projectId, drawingId, safeFileName);
@@ -190,6 +213,7 @@ export async function uploadProjectDrawing(actor: CurrentActor, projectId: strin
       drawingTitle: title ?? null,
       revisionNumber: revision ?? null,
       scaleText: scale ?? null,
+      pageCount,
       metadataJson: { recordKind: "drawing", discipline, drawingType, issueDate, sheetNumber, preparedBy, checkedBy, approvedBy, notes },
     });
   } catch (error) {

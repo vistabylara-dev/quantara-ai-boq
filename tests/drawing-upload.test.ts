@@ -36,11 +36,28 @@ import { DRAWING_MAX_FILE_SIZE_BYTES } from "../src/lib/validation/drawing-schem
 import { localProjectFileStorageAdapter } from "../src/lib/storage/local-project-file-storage-adapter";
 import { AppError, NotFoundError, PermissionDeniedError, UnauthorizedError } from "../src/lib/errors/app-error";
 import type { CurrentActor } from "../src/lib/auth/current-actor";
+import PDFDocument from "pdfkit";
 
 const RUN_ID = Date.now();
 
 function pdfBuffer(content: string): Buffer {
   return Buffer.from(`%PDF-1.4\n${content}\n%%EOF`);
+}
+
+/** A real, valid, generated (never a confidential sample) multi-page PDF — proves page-count extraction against actual PDF structure, not a fake header. */
+function generateRealPdf(pageCount: number): Promise<Buffer> {
+  return new Promise((resolve, reject) => {
+    const doc = new PDFDocument({ autoFirstPage: false });
+    const chunks: Buffer[] = [];
+    doc.on("data", (chunk: Buffer) => chunks.push(chunk));
+    doc.on("end", () => resolve(Buffer.concat(chunks)));
+    doc.on("error", reject);
+    for (let i = 1; i <= pageCount; i += 1) {
+      doc.addPage();
+      doc.text(`Test fixture page ${i} of ${pageCount}`);
+    }
+    doc.end();
+  });
 }
 
 describe("Drawing upload & intake pipeline (integration, real local Postgres)", () => {
@@ -240,6 +257,31 @@ describe("Drawing upload & intake pipeline (integration, real local Postgres)", 
     });
   });
 
+  describe("PDF page-count extraction (real, deterministic — CONFIRMED, never inferred)", () => {
+    it("extracts the real page count from a valid multi-page PDF", async () => {
+      const buffer = await generateRealPdf(11);
+      const result = await uploadProjectDrawing(ownerActorA, projectAId, { originalName: "eleven-pages.pdf", mimeType: "application/pdf", buffer, metadata: {} });
+      expect(result.drawing.pageCount).toBe(11);
+    });
+
+    it("extracts a different real page count for a differently-sized PDF", async () => {
+      const buffer = await generateRealPdf(5);
+      const result = await uploadProjectDrawing(ownerActorA, projectAId, { originalName: "five-pages.pdf", mimeType: "application/pdf", buffer, metadata: {} });
+      expect(result.drawing.pageCount).toBe(5);
+    });
+
+    it("never fails the upload when page-count extraction can't parse the bytes — pageCount is a nice-to-have, not a gate", async () => {
+      const result = await uploadProjectDrawing(ownerActorA, projectAId, { originalName: "not-really-a-pdf.pdf", mimeType: "application/pdf", buffer: pdfBuffer("not real pdf structure"), metadata: {} });
+      expect(result.drawing.status).toBe("UPLOADED");
+      expect(result.drawing.pageCount).toBeNull();
+    });
+
+    it("does not attempt page-count extraction for non-PDF drawings", async () => {
+      const result = await uploadProjectDrawing(ownerActorA, projectAId, { originalName: "image.png", mimeType: "image/png", buffer: Buffer.from("fake png bytes"), metadata: {} });
+      expect(result.drawing.pageCount).toBeNull();
+    });
+  });
+
   describe("preview availability (truthful, never fabricated)", () => {
     it("marks PDF and image drawings as preview-available", async () => {
       const pdf = await uploadProjectDrawing(ownerActorA, projectAId, { originalName: "preview.pdf", mimeType: "application/pdf", buffer: pdfBuffer("x"), metadata: {} });
@@ -338,6 +380,40 @@ describe("Drawing upload & intake pipeline (integration, real local Postgres)", 
       expect(failureEvents.some((e) => (e.payloadJson as { stage?: string })?.stage === "db_write")).toBe(true);
 
       deleteSpy.mockRestore();
+    });
+  });
+
+  describe("duplicate detection (explicit policy — never silently overwritten)", () => {
+    it("flags a same-checksum re-upload of the same drawing without blocking or overwriting the original", async () => {
+      const bytes = pdfBuffer("identical drawing content for duplicate test");
+      const first = await uploadProjectDrawing(ownerActorA, projectAId, { originalName: "rev-a.pdf", mimeType: "application/pdf", buffer: bytes, metadata: {} });
+      expect(first.duplicateOfFileId).toBeNull();
+
+      const second = await uploadProjectDrawing(ownerActorA, projectAId, { originalName: "rev-b.pdf", mimeType: "application/pdf", buffer: bytes, metadata: {} });
+      expect(second.duplicateOfFileId).toBe(first.drawing.id);
+      // Both records exist independently — the original is never overwritten or deleted.
+      expect(await getProjectDrawing(ownerActorA, first.drawing.id)).toBeTruthy();
+      expect(await getProjectDrawing(ownerActorA, second.drawing.id)).toBeTruthy();
+    });
+
+    it("does not flag two different files with the same filename but different checksums as duplicates", async () => {
+      const first = await uploadProjectDrawing(ownerActorA, projectAId, { originalName: "revision.pdf", mimeType: "application/pdf", buffer: pdfBuffer("version one"), metadata: {} });
+      const second = await uploadProjectDrawing(ownerActorA, projectAId, { originalName: "revision.pdf", mimeType: "application/pdf", buffer: pdfBuffer("version two — materially different"), metadata: {} });
+      expect(second.duplicateOfFileId).toBeNull();
+      expect(first.drawing.checksum).not.toBe(second.drawing.checksum);
+    });
+  });
+
+  describe("missing Blob object with an existing DB record", () => {
+    it("fails safely (does not crash, does not fabricate content) when the stored object is gone but the database row remains", async () => {
+      const uploaded = await uploadProjectDrawing(ownerActorA, projectAId, { originalName: "orphaned.pdf", mimeType: "application/pdf", buffer: pdfBuffer("will be deleted out of band"), metadata: {} });
+      // Simulate the object having been removed directly from storage, out of band from the app (e.g. manual Blob console deletion).
+      const row = await prisma.projectFile.findUniqueOrThrow({ where: { id: uploaded.drawing.id } });
+      await localProjectFileStorageAdapter.deleteObject(row.storageKey);
+
+      await expect(getProjectFileForDownload(ownerActorA, uploaded.drawing.id)).rejects.toThrow();
+      // The database record itself is still readable — only the byte fetch fails, not the metadata layer.
+      expect(await getProjectDrawing(ownerActorA, uploaded.drawing.id)).toBeTruthy();
     });
   });
 

@@ -35,7 +35,7 @@ function formatFileSize(bytes: number): string {
 
 export default function FileStatusCard({ file }: { file: RecentFile }) {
   return (
-    <div className="rounded-2xl border border-[#D9E2EC] dark:border-[#1E2A42] bg-[#EEF3F8] dark:bg-[#111D33] p-5 transition-colors hover:border-[#B9C7D6] dark:hover:border-[#31405F]">
+    <div className="rounded-2xl border border-[#D9E2EC] dark:border-[#1E2A42] bg-[#EEF3F8] dark:bg-[#111D33] p-5 transition-all duration-200 hover:-translate-y-0.5 hover:border-[#B9C7D6] hover:shadow-md dark:hover:border-[#31405F] motion-reduce:transition-none motion-reduce:hover:translate-y-0">
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div>
           <p className="font-semibold text-[#0B1630] dark:text-white">{file.name}</p>

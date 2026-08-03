@@ -14,6 +14,21 @@ const PROJECT_STATUS_TONE: Record<string, StatusTone> = {
   ARCHIVED: "default",
 };
 
+const STATUS_PROGRESS_ORDER = ["DRAFT", "ACTIVE", "NEEDS_REVIEW", "INTERNALLY_APPROVED", "SENT", "CLIENT_APPROVED", "ARCHIVED"];
+
+function statusProgress(status: string): { fraction: number; barClass: string } {
+  if (status === "REVISION_REQUESTED") {
+    return { fraction: 2 / (STATUS_PROGRESS_ORDER.length - 1), barClass: "bg-[#D98A16] dark:bg-[#FBBF24]" };
+  }
+  if (status === "REJECTED") {
+    return { fraction: 4 / (STATUS_PROGRESS_ORDER.length - 1), barClass: "bg-[#D84A4A] dark:bg-[#F87171]" };
+  }
+  const index = STATUS_PROGRESS_ORDER.indexOf(status);
+  const fraction = index === -1 ? 0 : index / (STATUS_PROGRESS_ORDER.length - 1);
+  const barClass = status === "ARCHIVED" ? "bg-[#159A6A] dark:bg-emerald-400" : "bg-[#0EA5E9] dark:bg-[#22D3EE]";
+  return { fraction, barClass };
+}
+
 export type RecentProject = {
   id: string;
   name: string;
@@ -27,8 +42,9 @@ export type RecentProject = {
 };
 
 export default function ProjectCard({ project }: { project: RecentProject }) {
+  const progress = statusProgress(project.status);
   return (
-    <div className="rounded-2xl border border-[#D9E2EC] dark:border-[#1E2A42] bg-[#EEF3F8] dark:bg-[#111D33] p-5 transition-colors hover:border-[#B9C7D6] dark:hover:border-[#31405F]">
+    <div className="rounded-2xl border border-[#D9E2EC] dark:border-[#1E2A42] bg-[#EEF3F8] dark:bg-[#111D33] p-5 transition-all duration-200 hover:-translate-y-0.5 hover:border-[#B9C7D6] hover:shadow-md dark:hover:border-[#31405F] motion-reduce:transition-none motion-reduce:hover:translate-y-0">
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div>
           <p className="font-semibold text-[#0B1630] dark:text-white">{project.name}</p>
@@ -38,6 +54,15 @@ export default function ProjectCard({ project }: { project: RecentProject }) {
         </div>
         <StatusBadge label={project.status} tone={PROJECT_STATUS_TONE[project.status] ?? "default"} />
       </div>
+
+      <div
+        className="mt-4 h-1.5 w-full overflow-hidden rounded-full bg-[#D9E2EC] dark:bg-[#1E2A42]"
+        role="img"
+        aria-label={`Project lifecycle progress: ${Math.round(progress.fraction * 100)}%`}
+      >
+        <span className={`block h-full rounded-full ${progress.barClass}`} style={{ width: `${Math.max(6, progress.fraction * 100)}%` }} />
+      </div>
+
       <div className="mt-4 flex flex-wrap gap-4 text-xs text-[#536078] dark:text-[#B8C4D8]">
         <span>{project.boqCount} BOQ{project.boqCount === 1 ? "" : "s"}</span>
         <span>{project.fileCount} file{project.fileCount === 1 ? "" : "s"}</span>

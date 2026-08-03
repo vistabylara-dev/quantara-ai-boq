@@ -273,7 +273,11 @@ function toAuditDTO(entry: PlatformAuditRecord) {
  * Global platform metrics. This function is intentionally separate from all
  * tenant repositories; none of the ordinary company-scoped data paths call it.
  */
+const RECENT_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
+
 export async function platformGetOverviewMetrics() {
+  const recentSince = new Date(Date.now() - RECENT_WINDOW_MS);
+
   const [
     totalCompanies,
     activeUsers,
@@ -288,6 +292,12 @@ export async function platformGetOverviewMetrics() {
     trialDataPackageEntitlementRecords,
     suspendedDataPackageEntitlementRecords,
     failedEmailDeliveries,
+    platformRoleHolders,
+    totalUploadedFiles,
+    totalGeneratedDocuments,
+    recentRegistrations,
+    recentCompanies,
+    companyStatusRows,
     databaseProbe,
   ] = await Promise.all([
     prisma.company.count(),
@@ -303,6 +313,24 @@ export async function platformGetOverviewMetrics() {
     prisma.companyPackageSubscription.count({ where: { status: SubscriptionStatus.TRIAL } }),
     prisma.companyPackageSubscription.count({ where: { status: SubscriptionStatus.SUSPENDED } }),
     prisma.emailDispatch.count({ where: { status: EmailDispatchStatus.FAILED } }),
+    prisma.user.count({ where: { platformRole: { not: null } } }),
+    prisma.projectFile.count(),
+    prisma.generatedDocument.count(),
+    prisma.user.count({ where: { createdAt: { gte: recentSince } } }),
+    prisma.company.count({ where: { createdAt: { gte: recentSince } } }),
+    // A company's status is defined by its most recent subscription record,
+    // not by any field on Company itself — DISTINCT ON picks that one row
+    // per company before grouping, so a company with several historical
+    // subscription records is only ever counted once, under its latest status.
+    prisma.$queryRaw<Array<{ status: SubscriptionStatus; count: number }>>(Prisma.sql`
+      SELECT status, COUNT(*)::int AS count
+      FROM (
+        SELECT DISTINCT ON ("companyId") "companyId", status
+        FROM "CompanySoftwareSubscription"
+        ORDER BY "companyId", "createdAt" DESC
+      ) latest
+      GROUP BY status
+    `),
     prisma.$queryRaw<Array<{ ok: number }>>(Prisma.sql`SELECT 1 AS ok`),
   ]);
 
@@ -310,14 +338,26 @@ export async function platformGetOverviewMetrics() {
     throw new AppError("DATABASE_HEALTH_CHECK_FAILED", "The database health check failed.", 503);
   }
 
+  const companyStatusCount = (status: SubscriptionStatus) =>
+    companyStatusRows.find((row) => row.status === status)?.count ?? 0;
+
   return {
     metrics: {
       totalCompanies,
+      activeCompanies: companyStatusCount(SubscriptionStatus.ACTIVE),
+      suspendedCompanies: companyStatusCount(SubscriptionStatus.SUSPENDED),
+      trialCompanies: companyStatusCount(SubscriptionStatus.TRIAL),
+      totalUsers: activeUsers + inactiveUsers,
       activeUsers,
       inactiveUsers,
+      platformRoleHolders,
       totalProjects,
       totalBoqRevisionRecords,
       totalClients,
+      totalUploadedFiles,
+      totalGeneratedDocuments,
+      recentRegistrations,
+      recentCompanies,
       activeSoftwareSubscriptionRecords,
       trialSoftwareSubscriptionRecords,
       suspendedSoftwareSubscriptionRecords,

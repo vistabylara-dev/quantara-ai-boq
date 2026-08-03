@@ -264,6 +264,23 @@ describe("platform administration services and routes (integration)", () => {
       blockedStatusAvailable: false,
     });
     expect(overview.generatedAt).toEqual(expect.any(String));
+
+    // Phase 1 — real dashboard metrics, not fixed to exact counts (other
+    // tests' fixtures share this database), but must be real, well-typed
+    // numbers consistent with each other.
+    expect(overview.metrics.totalUsers).toBe(overview.metrics.activeUsers + overview.metrics.inactiveUsers);
+    expect(overview.metrics.activeCompanies).toBeGreaterThanOrEqual(0);
+    expect(overview.metrics.suspendedCompanies).toBeGreaterThanOrEqual(0);
+    expect(overview.metrics.trialCompanies).toBeGreaterThanOrEqual(0);
+    // Owner + admin + support fixtures in this file all carry a platform role.
+    expect(overview.metrics.platformRoleHolders).toBeGreaterThanOrEqual(3);
+    expect(overview.metrics.totalUploadedFiles).toBeGreaterThanOrEqual(0);
+    expect(overview.metrics.totalGeneratedDocuments).toBeGreaterThanOrEqual(0);
+    // Every fixture user/company in this suite was just created.
+    expect(overview.metrics.recentRegistrations).toBeGreaterThanOrEqual(5);
+    expect(overview.metrics.recentCompanies).toBeGreaterThanOrEqual(2);
+    expect(["vercel-blob", "local", "unconfigured"]).toContain(overview.system.storageProvider);
+    expect(overview.system.deployedVersion).toEqual(expect.any(String));
   });
 
   it("keeps pagination bounded and rejects unknown query fields", () => {

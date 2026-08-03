@@ -20,11 +20,20 @@ type Overview = {
   generatedAt: string;
   metrics: {
     totalCompanies: number;
+    activeCompanies: number;
+    suspendedCompanies: number;
+    trialCompanies: number;
+    totalUsers: number;
     activeUsers: number;
     inactiveUsers: number;
+    platformRoleHolders: number;
     totalProjects: number;
     totalBoqRevisionRecords: number;
     totalClients: number;
+    totalUploadedFiles: number;
+    totalGeneratedDocuments: number;
+    recentRegistrations: number;
+    recentCompanies: number;
     activeSoftwareSubscriptionRecords: number;
     trialSoftwareSubscriptionRecords: number;
     suspendedSoftwareSubscriptionRecords: number;
@@ -40,6 +49,8 @@ type Overview = {
   system: {
     database: "healthy";
     applicationEnvironment: "production" | "preview" | "development" | "test" | "unknown";
+    storageProvider: "vercel-blob" | "local" | "unconfigured";
+    deployedVersion: string;
   };
 };
 
@@ -323,11 +334,20 @@ export default function AdminDashboard() {
 
         <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <MetricCard label="Companies" value={overview.metrics.totalCompanies} />
+          <MetricCard label="Active companies" value={overview.metrics.activeCompanies} />
+          <MetricCard label="Suspended companies" value={overview.metrics.suspendedCompanies} />
+          <MetricCard label="Trial companies" value={overview.metrics.trialCompanies} />
+          <MetricCard label="Total users" value={overview.metrics.totalUsers} />
           <MetricCard label="Active users" value={overview.metrics.activeUsers} />
           <MetricCard label="Inactive users" value={overview.metrics.inactiveUsers} />
+          <MetricCard label="Platform administrators" value={overview.metrics.platformRoleHolders} />
           <MetricCard label="Projects" value={overview.metrics.totalProjects} />
           <MetricCard label="BOQ revision records" value={overview.metrics.totalBoqRevisionRecords} />
           <MetricCard label="Clients" value={overview.metrics.totalClients} />
+          <MetricCard label="Uploaded project files" value={overview.metrics.totalUploadedFiles} />
+          <MetricCard label="Generated documents" value={overview.metrics.totalGeneratedDocuments} />
+          <MetricCard label="New registrations (7d)" value={overview.metrics.recentRegistrations} />
+          <MetricCard label="New companies (7d)" value={overview.metrics.recentCompanies} />
           <MetricCard label="Active software subscriptions" value={overview.metrics.activeSoftwareSubscriptionRecords} />
           <MetricCard label="Trial software subscriptions" value={overview.metrics.trialSoftwareSubscriptionRecords} />
           <MetricCard label="Suspended software subscriptions" value={overview.metrics.suspendedSoftwareSubscriptionRecords} />
@@ -339,6 +359,15 @@ export default function AdminDashboard() {
         <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <StatusCard label="Database" value={overview.system.database} />
           <StatusCard label="Environment" value={overview.system.applicationEnvironment} />
+          <StatusCard label="Deployed version" value={overview.system.deployedVersion} />
+          <StatusCard
+            label="Storage provider"
+            value={overview.system.storageProvider === "vercel-blob"
+              ? "Vercel Blob (configured)"
+              : overview.system.storageProvider === "local"
+                ? "Local (dev only)"
+                : "Not configured"}
+          />
           <StatusCard label="Failed email deliveries" value={String(overview.emailDelivery.failedCount)} />
           <StatusCard
             label="Blocked email deliveries"
@@ -347,8 +376,7 @@ export default function AdminDashboard() {
               : "Not tracked"}
           />
         </div>
-        <div className="mt-4 grid gap-4 sm:grid-cols-2">
-          <NotImplementedCard label="Storage status" note="Durable object storage has not been implemented yet." />
+        <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <NotImplementedCard label="Background jobs" note="A durable background job queue has not been implemented yet." />
         </div>
         <p className="mt-4 text-xs text-slate-500">Generated {formatDateTime(overview.generatedAt)}</p>

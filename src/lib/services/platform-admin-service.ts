@@ -71,6 +71,22 @@ function applicationEnvironment(): "production" | "preview" | "development" | "t
   return "unknown";
 }
 
+/**
+ * Reports only whether STORAGE_PROVIDER is configured, never a live
+ * connectivity check — an actual Blob call from a dashboard page load would
+ * be a functional test, not a status read, and does not belong here.
+ */
+function storageConfigurationStatus(): "vercel-blob" | "local" | "unconfigured" {
+  const provider = process.env.STORAGE_PROVIDER;
+  if (provider === "vercel-blob" || provider === "local") return provider;
+  return "unconfigured";
+}
+
+function deployedVersion(): string {
+  const sha = process.env.VERCEL_GIT_COMMIT_SHA;
+  return sha ? sha.slice(0, 7) : "unknown";
+}
+
 export function buildPlatformRequestMetadata(request: Request): PlatformRequestMetadata {
   const url = new URL(request.url);
   const requestIdHeader = request.headers.get("x-vercel-id") ?? request.headers.get("x-request-id");
@@ -105,6 +121,8 @@ export async function getPlatformOverview(
     system: {
       database: overview.database,
       applicationEnvironment: applicationEnvironment(),
+      storageProvider: storageConfigurationStatus(),
+      deployedVersion: deployedVersion(),
     },
   };
 }

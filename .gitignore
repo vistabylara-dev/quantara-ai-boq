@@ -31,3 +31,4 @@ coverage
 .wrangler
 .dev.vars*
 !.dev.vars.example
+.env*

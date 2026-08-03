@@ -1,9 +1,10 @@
 export type ThemeMode = "light" | "dark" | "system";
 export const THEME_MODE_KEY = "quantara-theme-mode";
 
+/** Light is the default for a first-time visitor with no saved preference. */
 export function getSavedThemeMode(): ThemeMode {
   if (typeof window === "undefined") {
-    return "system";
+    return "light";
   }
 
   const stored = window.localStorage.getItem(THEME_MODE_KEY);
@@ -11,7 +12,7 @@ export function getSavedThemeMode(): ThemeMode {
     return stored;
   }
 
-  return "system";
+  return "light";
 }
 
 export function applyThemeMode(mode: ThemeMode): void {

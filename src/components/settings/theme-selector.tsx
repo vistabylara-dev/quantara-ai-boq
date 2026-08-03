@@ -10,7 +10,7 @@ const options: { label: string; value: ThemeMode }[] = [
 ];
 
 export default function ThemeSelector() {
-  const [themeMode, setThemeMode] = useState<ThemeMode>("system");
+  const [themeMode, setThemeMode] = useState<ThemeMode>("light");
 
   useEffect(() => {
     const stored = getSavedThemeMode();

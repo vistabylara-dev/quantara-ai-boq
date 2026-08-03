@@ -21,13 +21,13 @@ html:not([data-theme]) {
   }
 }
 
-html[data-theme="light"], body[data-theme="light"] {
+html[data-theme="light"] {
   color-scheme: light;
   background-color: #F8FAFC;
   color: #0F172A;
 }
 
-html[data-theme="dark"], body[data-theme="dark"] {
+html[data-theme="dark"] {
   color-scheme: dark;
   background-color: #0F172A;
   color: white;
@@ -35,13 +35,19 @@ html[data-theme="dark"], body[data-theme="dark"] {
 
 html, body {
   min-height: 100%;
-  background-color: #0F172A;
 }
 
+/*
+ * body always mirrors whatever html resolved to (default/dark, the light
+ * media query, or an explicit data-theme attribute) instead of redeclaring
+ * its own copy of the same colors — the previous unconditional
+ * `body { background-color: #0F172A }` rule always won regardless of theme,
+ * since data-theme is only ever set on <html>, never on <body>.
+ */
 body {
   margin: 0;
-  background-color: #0F172A;
-  color: white;
+  background-color: inherit;
+  color: inherit;
 }
 
 * {

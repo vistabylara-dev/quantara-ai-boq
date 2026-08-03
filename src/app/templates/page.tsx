@@ -1,7 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { X } from "lucide-react";
 import { apiClient, getApiErrorMessage } from "@/lib/api/client";
+import ExecutiveTemplateThumbnail from "@/components/visuals/executive-template-thumbnail";
+import ContractorTemplateThumbnail from "@/components/visuals/contractor-template-thumbnail";
+import ConsultantTemplateThumbnail from "@/components/visuals/consultant-template-thumbnail";
+import EmptyStateIllustration from "@/components/visuals/empty-state-illustration";
 
 type TemplateStyleConfig = {
   direction: "ltr" | "rtl";
@@ -46,6 +51,56 @@ type TemplateView = {
   isActive: boolean;
 };
 
+type Archetype = "executive" | "contractor" | "consultant";
+
+const ARCHETYPE_BY_TYPE: Record<string, Archetype> = {
+  EXECUTIVE_PREMIUM: "executive",
+  CORPORATE_TECHNICAL: "contractor",
+  MEP_TENDER: "contractor",
+  FURNITURE_CATALOGUE: "contractor",
+  ARABIC_FORMAL: "consultant",
+};
+
+const ARCHETYPE_META: Record<Archetype, { label: string; audience: string; style: string; card: string; thumbnail: (props: { className?: string }) => JSX.Element }> = {
+  executive: {
+    label: "Executive BOQ",
+    audience: "Executives & commercial stakeholders",
+    style: "Minimal cover, restrained gold accents, concise commercial totals",
+    card: "border-[#C99A3D]/30 hover:border-[#C99A3D]/60 dark:border-[#DDB35E]/25 dark:hover:border-[#DDB35E]/50",
+    thumbnail: ExecutiveTemplateThumbnail,
+  },
+  contractor: {
+    label: "Detailed Contractor BOQ",
+    audience: "Contractors & site delivery teams",
+    style: "Item-dense technical table, labor and material detail, industrial cyan/teal accents",
+    card: "border-[#009FE3]/30 hover:border-[#009FE3]/60 dark:border-[#21C7F3]/25 dark:hover:border-[#21C7F3]/50",
+    thumbnail: ContractorTemplateThumbnail,
+  },
+  consultant: {
+    label: "Consultant BOQ",
+    audience: "Consultants & regulatory review",
+    style: "Formal structure, revision control, signature sections, deep navy and gold",
+    card: "border-[#20304D]/60 hover:border-[#DDB35E]/50 dark:border-[#20304D] dark:hover:border-[#DDB35E]/40",
+    thumbnail: ConsultantTemplateThumbnail,
+  },
+};
+
+const AVAILABLE_FORMATS = ["CSV", "XLSX", "PDF", "DOCX", "HTML"];
+
+function keySections(content: TemplateContentConfig): string[] {
+  const sections: string[] = [];
+  if (content.showCoverPage) sections.push("Cover page");
+  if (content.showCompanyInfo) sections.push("Company info");
+  if (content.showProjectInfo) sections.push("Project & client info");
+  if (content.showTermsSection || content.showExclusionsSection) sections.push("Terms & exclusions");
+  if (content.showSignatureSection) sections.push("Signature section");
+  if (content.denseTechnicalTable) sections.push("Dense technical table");
+  return sections.length > 0 ? sections : ["Standard BOQ layout"];
+}
+
+const panel = "rounded-[28px] border border-[#D5E0EC] dark:border-[#20304D] bg-white dark:bg-[#091326] p-6 sm:p-8";
+const pill = "rounded-full px-4 py-2 text-sm font-medium transition-colors";
+
 export default function TemplatesPage() {
   const [templates, setTemplates] = useState<TemplateView[]>([]);
   const [industryFilter, setIndustryFilter] = useState<string>("all");
@@ -56,6 +111,7 @@ export default function TemplatesPage() {
   const [draft, setDraft] = useState<{ name: string; footerText: string; primaryColor: string; accentColor: string; content: TemplateContentConfig; showLogo: boolean } | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [previewTemplate, setPreviewTemplate] = useState<TemplateView | null>(null);
 
   const load = useCallback(async (signal?: AbortSignal) => {
     setIsLoading(true);
@@ -76,6 +132,15 @@ export default function TemplatesPage() {
     void load(controller.signal);
     return () => controller.abort();
   }, [load]);
+
+  useEffect(() => {
+    if (!previewTemplate) return;
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") setPreviewTemplate(null);
+    }
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [previewTemplate]);
 
   const industries = useMemo(() => {
     const set = new Set(templates.map((t) => t.industryName).filter((name): name is string => Boolean(name)));
@@ -161,40 +226,44 @@ export default function TemplatesPage() {
 
   if (isLoading) {
     return (
-      <div className="rounded-[32px] border border-slate-800 bg-slate-950 p-8 text-slate-300">
-        <p className="text-lg font-semibold text-white">Loading templates</p>
+      <div className={panel}>
+        <p className="text-lg font-semibold text-[#08152E] dark:text-white">Loading templates</p>
       </div>
     );
   }
 
   if (loadError) {
     return (
-      <div className="rounded-[32px] border border-slate-800 bg-slate-950 p-8 text-slate-300">
-        <p className="text-lg font-semibold text-white">Templates unavailable</p>
-        <p className="mt-2 text-sm text-rose-300">{loadError}</p>
+      <div className={panel}>
+        <p className="text-lg font-semibold text-[#08152E] dark:text-white">Templates unavailable</p>
+        <p className="mt-2 text-sm text-[#D84A4A] dark:text-rose-300">{loadError}</p>
       </div>
     );
   }
 
   return (
     <div className="space-y-8">
-      <div className="rounded-[32px] border border-slate-800 bg-slate-950 p-8">
-        <p className="text-sm uppercase tracking-[0.28em] text-slate-500">Templates</p>
-        <h1 className="mt-2 text-3xl font-semibold text-white">Document templates</h1>
-        <p className="mt-3 text-slate-400">Manage the document layouts used for BOQ generation. Click Preview to see how each one actually looks.</p>
+      <div className={panel}>
+        <p className="text-sm uppercase tracking-[0.28em] text-[#7B879C] dark:text-[#8CA0BE]">Template gallery</p>
+        <h1 className="mt-2 text-3xl font-semibold text-[#08152E] dark:text-white">BOQ document templates</h1>
+        <p className="mt-3 max-w-2xl text-[#536078] dark:text-[#8CA0BE]">
+          Three archetypes, one financial engine. Executive summaries for stakeholders, item-dense
+          layouts for contractors, and formal structured reports for consultants — pick the one that
+          matches who is reading it.
+        </p>
 
         <div className="mt-6 flex flex-wrap gap-2">
           <button
             type="button"
             onClick={() => setIndustryFilter("all")}
-            className={`rounded-full px-4 py-2 text-sm ${industryFilter === "all" ? "bg-blue-600 text-white" : "border border-slate-800 bg-slate-900 text-slate-300 hover:bg-slate-800"}`}
+            className={`${pill} ${industryFilter === "all" ? "bg-[#009FE3] text-white dark:bg-[#21C7F3] dark:text-[#040A16]" : "border border-[#D5E0EC] bg-[#EAF1F8] text-[#536078] hover:bg-white dark:border-[#20304D] dark:bg-[#101D34] dark:text-[#8CA0BE] dark:hover:bg-[#091326]"}`}
           >
             All
           </button>
           <button
             type="button"
             onClick={() => setIndustryFilter("global")}
-            className={`rounded-full px-4 py-2 text-sm ${industryFilter === "global" ? "bg-blue-600 text-white" : "border border-slate-800 bg-slate-900 text-slate-300 hover:bg-slate-800"}`}
+            className={`${pill} ${industryFilter === "global" ? "bg-[#009FE3] text-white dark:bg-[#21C7F3] dark:text-[#040A16]" : "border border-[#D5E0EC] bg-[#EAF1F8] text-[#536078] hover:bg-white dark:border-[#20304D] dark:bg-[#101D34] dark:text-[#8CA0BE] dark:hover:bg-[#091326]"}`}
           >
             All industries
           </button>
@@ -203,7 +272,7 @@ export default function TemplatesPage() {
               key={name}
               type="button"
               onClick={() => setIndustryFilter(name)}
-              className={`rounded-full px-4 py-2 text-sm ${industryFilter === name ? "bg-blue-600 text-white" : "border border-slate-800 bg-slate-900 text-slate-300 hover:bg-slate-800"}`}
+              className={`${pill} ${industryFilter === name ? "bg-[#009FE3] text-white dark:bg-[#21C7F3] dark:text-[#040A16]" : "border border-[#D5E0EC] bg-[#EAF1F8] text-[#536078] hover:bg-white dark:border-[#20304D] dark:bg-[#101D34] dark:text-[#8CA0BE] dark:hover:bg-[#091326]"}`}
             >
               {name}
             </button>
@@ -212,10 +281,10 @@ export default function TemplatesPage() {
       </div>
 
       {actionError && (
-        <div className="rounded-[28px] border border-rose-900 bg-rose-950/40 p-5 text-sm text-rose-200" role="alert">
+        <div className="rounded-[28px] border border-rose-300 bg-rose-50 p-5 text-sm text-rose-700 dark:border-rose-900 dark:bg-rose-950/40 dark:text-rose-200" role="alert">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <p>{actionError}</p>
-            <button type="button" onClick={() => setActionError(null)} className="rounded-2xl border border-rose-800 px-3 py-2 font-semibold hover:bg-rose-900/40">
+            <button type="button" onClick={() => setActionError(null)} className="rounded-2xl border border-rose-400 px-3 py-2 font-semibold hover:bg-rose-100 dark:border-rose-800 dark:hover:bg-rose-900/40">
               Dismiss
             </button>
           </div>
@@ -223,170 +292,212 @@ export default function TemplatesPage() {
       )}
 
       <div>
-        <h2 className="mb-1 text-lg font-semibold text-white">BOQ templates</h2>
-        <p className="mb-4 text-sm text-slate-500">Used when generating a Bill of Quantities document for a project.</p>
+        <h2 className="mb-1 text-lg font-semibold text-[#08152E] dark:text-white">BOQ templates</h2>
+        <p className="mb-4 text-sm text-[#7B879C] dark:text-[#8CA0BE]">Used when generating a Bill of Quantities document for a project.</p>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-        {filteredTemplates.map((template) => (
-          <div key={template.id} className="rounded-[32px] border border-slate-800 bg-slate-900 p-6 text-slate-300">
-            <div
-              aria-hidden="true"
-              className="mb-4 overflow-hidden rounded-2xl border border-slate-800"
-            >
-              {template.styleConfig.coverStyle !== "none" && (
-                <div
-                  className="flex h-10 items-center gap-2 px-3"
-                  style={{
-                    backgroundColor: template.styleConfig.coverStyle === "dark" ? template.styleConfig.primaryColor : "#0F172A",
-                    flexDirection: template.styleConfig.direction === "rtl" ? "row-reverse" : "row",
-                  }}
-                >
-                  {template.styleConfig.showLogo && (
-                    <span className="h-3 w-3 rounded-sm" style={{ backgroundColor: template.styleConfig.accentColor }} />
-                  )}
-                  <span className="h-1.5 w-12 rounded-full bg-white/40" />
-                </div>
-              )}
-              <div className="space-y-1.5 bg-slate-950 p-3">
-                <span
-                  className="block h-1.5 rounded-full bg-slate-700"
-                  style={{ width: "60%", marginLeft: template.styleConfig.direction === "rtl" ? "auto" : undefined }}
-                />
-                {Array.from({ length: template.contentConfig.denseTechnicalTable ? 4 : 3 }).map((_, rowIndex) => (
-                  <div
-                    key={rowIndex}
-                    className="flex gap-1"
-                    style={{ flexDirection: template.styleConfig.direction === "rtl" ? "row-reverse" : "row" }}
-                  >
-                    <span className="h-1 flex-[2] rounded-full bg-slate-800" />
-                    <span className="h-1 flex-1 rounded-full bg-slate-800" />
-                    {template.contentConfig.denseTechnicalTable && <span className="h-1 flex-1 rounded-full bg-slate-800" />}
-                  </div>
-                ))}
-              </div>
+      {filteredTemplates.length === 0 ? (
+        <div className={panel}>
+          <div className="flex flex-col items-center py-6 text-center">
+            <div className="h-24 w-36 text-[#0077B6] dark:text-[#21C7F3]">
+              <EmptyStateIllustration className="h-full w-full" />
             </div>
-
-            <div className="flex items-start justify-between gap-2">
-              <div>
-                <p className="text-sm uppercase tracking-[0.28em] text-slate-500">{template.type.replace(/_/g, " ")}</p>
-                <h3 className="mt-2 text-lg font-semibold text-white">{template.name}</h3>
-              </div>
-              <div className="flex flex-col items-end gap-1">
-                {template.isDefault && <span className="rounded-full bg-blue-950/60 px-2 py-0.5 text-[0.65rem] uppercase tracking-[0.2em] text-blue-300">Default</span>}
-                <span className={`rounded-full px-2 py-0.5 text-[0.65rem] uppercase tracking-[0.2em] ${template.isActive ? "bg-emerald-950/60 text-emerald-300" : "bg-slate-800 text-slate-400"}`}>
-                  {template.isActive ? "Active" : "Inactive"}
-                </span>
-              </div>
-            </div>
-            <p className="mt-3 text-sm text-slate-400">{template.description}</p>
-            <p className="mt-2 text-xs text-slate-500">{template.industryName ?? "All industries"} · {template.code}</p>
-
-            <div className="mt-6 flex flex-wrap gap-2">
-              <a
-                href={`/api/templates/${encodeURIComponent(template.id)}/preview-html`}
-                target="_blank"
-                rel="noreferrer"
-                className="rounded-2xl border border-slate-700 bg-slate-950 px-3 py-2 text-xs font-semibold text-slate-200 hover:bg-slate-800"
-              >
-                Preview
-              </a>
-              <button
-                type="button"
-                onClick={() => startEdit(template)}
-                className="rounded-2xl border border-slate-700 bg-slate-950 px-3 py-2 text-xs font-semibold text-slate-200 hover:bg-slate-800"
-              >
-                Edit
-              </button>
-              <button
-                type="button"
-                onClick={() => void duplicate(template.id)}
-                disabled={busyId === template.id}
-                className="rounded-2xl border border-slate-700 bg-slate-950 px-3 py-2 text-xs font-semibold text-slate-200 hover:bg-slate-800 disabled:opacity-50"
-              >
-                Duplicate
-              </button>
-              {!template.isDefault && (
+            <p className="mt-3 text-sm font-semibold text-[#08152E] dark:text-white">No templates in this filter</p>
+            <p className="mt-1 text-sm text-[#7B879C] dark:text-[#8CA0BE]">Choose a different industry filter, or check back once templates are configured.</p>
+          </div>
+        </div>
+      ) : (
+        <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
+          {filteredTemplates.map((template) => {
+            const archetype = ARCHETYPE_BY_TYPE[template.type] ?? "contractor";
+            const meta = ARCHETYPE_META[archetype];
+            const Thumbnail = meta.thumbnail;
+            return (
+              <div key={template.id} className={`rounded-[28px] border-2 bg-white p-5 transition-all duration-200 hover:-translate-y-1 hover:shadow-lg dark:bg-[#091326] motion-reduce:transition-none motion-reduce:hover:translate-y-0 ${meta.card}`}>
                 <button
                   type="button"
-                  onClick={() => void setDefault(template.id)}
-                  disabled={busyId === template.id}
-                  className="rounded-2xl border border-slate-700 bg-slate-950 px-3 py-2 text-xs font-semibold text-slate-200 hover:bg-slate-800 disabled:opacity-50"
+                  onClick={() => setPreviewTemplate(template)}
+                  className="block w-full overflow-hidden rounded-2xl border border-[#D5E0EC] dark:border-[#20304D] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#009FE3] dark:focus-visible:outline-[#21C7F3]"
+                  aria-label={`Preview ${template.name}`}
                 >
-                  Set default
+                  <Thumbnail className="h-40 w-full" />
                 </button>
-              )}
-              <button
-                type="button"
-                onClick={() => void toggleActive(template.id, template.isActive)}
-                disabled={busyId === template.id}
-                className="rounded-2xl border border-rose-900 bg-rose-950/30 px-3 py-2 text-xs font-semibold text-rose-300 hover:bg-rose-900/40 disabled:opacity-50"
-              >
-                {template.isActive ? "Deactivate" : "Activate"}
-              </button>
-            </div>
-          </div>
-        ))}
-      </div>
+
+                <div className="mt-4 flex items-start justify-between gap-2">
+                  <div>
+                    <p className="text-xs uppercase tracking-[0.24em] text-[#7B879C] dark:text-[#8CA0BE]">{meta.label}</p>
+                    <h3 className="mt-1 text-lg font-semibold text-[#08152E] dark:text-white">{template.name}</h3>
+                  </div>
+                  <div className="flex flex-col items-end gap-1">
+                    {template.isDefault && (
+                      <span className="rounded-full bg-[#009FE3]/10 px-2 py-0.5 text-[0.65rem] uppercase tracking-[0.2em] text-[#0077B6] dark:bg-[#21C7F3]/10 dark:text-[#21C7F3]">
+                        Selected
+                      </span>
+                    )}
+                    <span className={`rounded-full px-2 py-0.5 text-[0.65rem] uppercase tracking-[0.2em] ${template.isActive ? "bg-[#159A6A]/10 text-[#159A6A] dark:bg-emerald-400/10 dark:text-emerald-300" : "bg-[#EAF1F8] text-[#7B879C] dark:bg-[#101D34] dark:text-[#8CA0BE]"}`}>
+                      {template.isActive ? "Active" : "Inactive"}
+                    </span>
+                  </div>
+                </div>
+
+                <p className="mt-2 text-xs text-[#536078] dark:text-[#8CA0BE]">{meta.audience}</p>
+                <p className="mt-2 text-sm text-[#536078] dark:text-[#8CA0BE]">{template.description || meta.style}</p>
+
+                <div className="mt-3 flex flex-wrap gap-1.5">
+                  {keySections(template.contentConfig).map((section) => (
+                    <span key={section} className="rounded-full border border-[#D5E0EC] bg-[#EAF1F8] px-2 py-0.5 text-[10px] text-[#536078] dark:border-[#20304D] dark:bg-[#101D34] dark:text-[#8CA0BE]">
+                      {section}
+                    </span>
+                  ))}
+                </div>
+
+                <p className="mt-3 text-[10px] uppercase tracking-[0.18em] text-[#7B879C] dark:text-[#8CA0BE]">
+                  Formats: {AVAILABLE_FORMATS.join(", ")}
+                </p>
+                <p className="mt-1 text-xs text-[#7B879C] dark:text-[#8CA0BE]">{template.industryName ?? "All industries"} · {template.code}</p>
+
+                <div className="mt-5 flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setPreviewTemplate(template)}
+                    className="rounded-2xl border border-[#D5E0EC] bg-[#EAF1F8] px-3 py-2 text-xs font-semibold text-[#08152E] hover:bg-white dark:border-[#20304D] dark:bg-[#101D34] dark:text-[#F4F8FF] dark:hover:bg-[#091326]"
+                  >
+                    Preview
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => startEdit(template)}
+                    className="rounded-2xl border border-[#D5E0EC] bg-[#EAF1F8] px-3 py-2 text-xs font-semibold text-[#08152E] hover:bg-white dark:border-[#20304D] dark:bg-[#101D34] dark:text-[#F4F8FF] dark:hover:bg-[#091326]"
+                  >
+                    Edit
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void duplicate(template.id)}
+                    disabled={busyId === template.id}
+                    className="rounded-2xl border border-[#D5E0EC] bg-[#EAF1F8] px-3 py-2 text-xs font-semibold text-[#08152E] hover:bg-white disabled:opacity-50 dark:border-[#20304D] dark:bg-[#101D34] dark:text-[#F4F8FF] dark:hover:bg-[#091326]"
+                  >
+                    Duplicate
+                  </button>
+                  {!template.isDefault && (
+                    <button
+                      type="button"
+                      onClick={() => void setDefault(template.id)}
+                      disabled={busyId === template.id}
+                      className="rounded-2xl border border-[#009FE3]/40 bg-[#009FE3]/10 px-3 py-2 text-xs font-semibold text-[#0077B6] hover:bg-[#009FE3]/20 disabled:opacity-50 dark:border-[#21C7F3]/40 dark:bg-[#21C7F3]/10 dark:text-[#21C7F3] dark:hover:bg-[#21C7F3]/20"
+                    >
+                      Select
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => void toggleActive(template.id, template.isActive)}
+                    disabled={busyId === template.id}
+                    className="rounded-2xl border border-rose-300 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-700 hover:bg-rose-100 disabled:opacity-50 dark:border-rose-900 dark:bg-rose-950/30 dark:text-rose-300 dark:hover:bg-rose-900/40"
+                  >
+                    {template.isActive ? "Deactivate" : "Activate"}
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
 
       <div>
-        <h2 className="mb-1 text-lg font-semibold text-white">Technical report templates</h2>
-        <p className="mb-4 text-sm text-slate-500">Used when generating an inspection technical report. Not available yet.</p>
+        <h2 className="mb-1 text-lg font-semibold text-[#08152E] dark:text-white">Technical report templates</h2>
+        <p className="mb-4 text-sm text-[#7B879C] dark:text-[#8CA0BE]">Used when generating an inspection technical report. Not available yet.</p>
       </div>
 
-      <div className="rounded-[32px] border border-dashed border-slate-800 bg-slate-950 p-8 text-center">
-        <p className="text-sm font-semibold text-slate-300">Coming soon</p>
-        <p className="mt-2 text-sm text-slate-500">
-          Technical report generation hasn&apos;t been built yet. Once it is, its templates will appear in this section automatically.
-        </p>
+      <div className={panel}>
+        <div className="flex flex-col items-center py-4 text-center">
+          <div className="h-20 w-32 text-[#7B879C] dark:text-[#8CA0BE]">
+            <EmptyStateIllustration className="h-full w-full" />
+          </div>
+          <p className="mt-3 text-sm font-semibold text-[#08152E] dark:text-white">Coming soon</p>
+          <p className="mt-2 max-w-sm text-sm text-[#7B879C] dark:text-[#8CA0BE]">
+            Technical report generation hasn&apos;t been built yet. Once it is, its templates will appear in this section automatically.
+          </p>
+        </div>
       </div>
+
+      {previewTemplate && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label={`Preview: ${previewTemplate.name}`}
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+        >
+          <div className="flex h-[90vh] w-full max-w-5xl flex-col overflow-hidden rounded-[28px] border border-[#D5E0EC] bg-white dark:border-[#20304D] dark:bg-[#091326]">
+            <div className="flex items-center justify-between border-b border-[#D5E0EC] px-6 py-4 dark:border-[#20304D]">
+              <div>
+                <p className="text-xs uppercase tracking-[0.2em] text-[#7B879C] dark:text-[#8CA0BE]">{ARCHETYPE_META[ARCHETYPE_BY_TYPE[previewTemplate.type] ?? "contractor"].label}</p>
+                <h3 className="text-lg font-semibold text-[#08152E] dark:text-white">{previewTemplate.name}</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setPreviewTemplate(null)}
+                aria-label="Close preview"
+                className="flex h-9 w-9 items-center justify-center rounded-xl border border-[#D5E0EC] text-[#536078] hover:bg-[#EAF1F8] dark:border-[#20304D] dark:text-[#8CA0BE] dark:hover:bg-[#101D34]"
+              >
+                <X className="h-4 w-4" aria-hidden="true" />
+              </button>
+            </div>
+            <iframe
+              src={`/api/templates/${encodeURIComponent(previewTemplate.id)}/preview-html`}
+              title={`Preview of ${previewTemplate.name}`}
+              className="h-full w-full flex-1 bg-white"
+            />
+          </div>
+        </div>
+      )}
 
       {editingId && draft && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-          <div className="max-h-[85vh] w-full max-w-lg overflow-y-auto rounded-[32px] border border-slate-800 bg-slate-950 p-8">
-            <h3 className="text-xl font-semibold text-white">Edit template</h3>
+          <div className="max-h-[85vh] w-full max-w-lg overflow-y-auto rounded-[32px] border border-[#D5E0EC] bg-white p-8 dark:border-[#20304D] dark:bg-[#091326]">
+            <h3 className="text-xl font-semibold text-[#08152E] dark:text-white">Edit template</h3>
 
-            <label className="mt-5 block text-sm text-slate-300">
-              <span className="text-slate-400">Name</span>
+            <label className="mt-5 block text-sm text-[#536078] dark:text-[#8CA0BE]">
+              <span>Name</span>
               <input
                 value={draft.name}
                 onChange={(event) => setDraft({ ...draft, name: event.target.value })}
-                className="mt-2 w-full rounded-2xl border border-slate-800 bg-slate-900 px-4 py-3 text-white outline-none focus:border-blue-500"
+                className="mt-2 w-full rounded-2xl border border-[#D5E0EC] bg-[#EAF1F8] px-4 py-3 text-[#08152E] outline-none focus:border-[#009FE3] dark:border-[#20304D] dark:bg-[#101D34] dark:text-white dark:focus:border-[#21C7F3]"
               />
             </label>
 
-            <label className="mt-4 block text-sm text-slate-300">
-              <span className="text-slate-400">Footer text</span>
+            <label className="mt-4 block text-sm text-[#536078] dark:text-[#8CA0BE]">
+              <span>Footer text</span>
               <input
                 value={draft.footerText}
                 onChange={(event) => setDraft({ ...draft, footerText: event.target.value })}
-                className="mt-2 w-full rounded-2xl border border-slate-800 bg-slate-900 px-4 py-3 text-white outline-none focus:border-blue-500"
+                className="mt-2 w-full rounded-2xl border border-[#D5E0EC] bg-[#EAF1F8] px-4 py-3 text-[#08152E] outline-none focus:border-[#009FE3] dark:border-[#20304D] dark:bg-[#101D34] dark:text-white dark:focus:border-[#21C7F3]"
               />
             </label>
 
             <div className="mt-4 grid grid-cols-2 gap-4">
-              <label className="block text-sm text-slate-300">
-                <span className="text-slate-400">Primary colour</span>
+              <label className="block text-sm text-[#536078] dark:text-[#8CA0BE]">
+                <span>Primary colour</span>
                 <input
                   type="color"
                   value={draft.primaryColor}
                   onChange={(event) => setDraft({ ...draft, primaryColor: event.target.value })}
-                  className="mt-2 h-11 w-full rounded-2xl border border-slate-800 bg-slate-900"
+                  className="mt-2 h-11 w-full rounded-2xl border border-[#D5E0EC] bg-[#EAF1F8] dark:border-[#20304D] dark:bg-[#101D34]"
                 />
               </label>
-              <label className="block text-sm text-slate-300">
-                <span className="text-slate-400">Accent colour</span>
+              <label className="block text-sm text-[#536078] dark:text-[#8CA0BE]">
+                <span>Accent colour</span>
                 <input
                   type="color"
                   value={draft.accentColor}
                   onChange={(event) => setDraft({ ...draft, accentColor: event.target.value })}
-                  className="mt-2 h-11 w-full rounded-2xl border border-slate-800 bg-slate-900"
+                  className="mt-2 h-11 w-full rounded-2xl border border-[#D5E0EC] bg-[#EAF1F8] dark:border-[#20304D] dark:bg-[#101D34]"
                 />
               </label>
             </div>
 
-            <div className="mt-5 space-y-2 text-sm text-slate-300">
-              <p className="text-xs uppercase tracking-[0.24em] text-slate-500">Visibility</p>
+            <div className="mt-5 space-y-2 text-sm text-[#536078] dark:text-[#8CA0BE]">
+              <p className="text-xs uppercase tracking-[0.24em] text-[#7B879C] dark:text-[#8CA0BE]">Visibility</p>
               {([
                 ["showLogo", "Logo"],
                 ["showCoverPage_content", "Cover page"],
@@ -399,7 +510,7 @@ export default function TemplatesPage() {
               ] as const).map(([key, label]) => {
                 const checked = key === "showLogo" ? draft.showLogo : key === "showCoverPage_content" ? draft.content.showCoverPage : draft.content[key as keyof TemplateContentConfig] as boolean;
                 return (
-                  <label key={key} className="flex items-center justify-between rounded-2xl border border-slate-800 bg-slate-900 px-4 py-2">
+                  <label key={key} className="flex items-center justify-between rounded-2xl border border-[#D5E0EC] bg-[#EAF1F8] px-4 py-2 dark:border-[#20304D] dark:bg-[#101D34]">
                     <span>{label}</span>
                     <input
                       type="checkbox"
@@ -416,10 +527,10 @@ export default function TemplatesPage() {
               })}
             </div>
 
-            <div className="mt-5 space-y-2 text-sm text-slate-300">
-              <p className="text-xs uppercase tracking-[0.24em] text-slate-500">Columns</p>
+            <div className="mt-5 space-y-2 text-sm text-[#536078] dark:text-[#8CA0BE]">
+              <p className="text-xs uppercase tracking-[0.24em] text-[#7B879C] dark:text-[#8CA0BE]">Columns</p>
               {(["specification", "roomOrZone", "drawingReference", "notes", "brandModel"] as const).map((key) => (
-                <label key={key} className="flex items-center justify-between rounded-2xl border border-slate-800 bg-slate-900 px-4 py-2">
+                <label key={key} className="flex items-center justify-between rounded-2xl border border-[#D5E0EC] bg-[#EAF1F8] px-4 py-2 dark:border-[#20304D] dark:bg-[#101D34]">
                   <span className="capitalize">{key.replace(/([A-Z])/g, " $1")}</span>
                   <input
                     type="checkbox"
@@ -435,7 +546,7 @@ export default function TemplatesPage() {
               <button
                 type="button"
                 onClick={() => { setEditingId(null); setDraft(null); }}
-                className="rounded-2xl border border-slate-700 bg-slate-900 px-4 py-2 text-sm font-semibold text-slate-200 hover:bg-slate-800"
+                className="rounded-2xl border border-[#D5E0EC] bg-[#EAF1F8] px-4 py-2 text-sm font-semibold text-[#08152E] hover:bg-white dark:border-[#20304D] dark:bg-[#101D34] dark:text-[#F4F8FF] dark:hover:bg-[#091326]"
               >
                 Cancel
               </button>
@@ -443,7 +554,7 @@ export default function TemplatesPage() {
                 type="button"
                 onClick={() => void saveEdit()}
                 disabled={isSaving}
-                className="rounded-2xl border border-slate-700 bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-500 disabled:opacity-50"
+                className="rounded-2xl bg-[#009FE3] px-4 py-2 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-50 dark:bg-[#21C7F3] dark:text-[#040A16]"
               >
                 {isSaving ? "Saving…" : "Save changes"}
               </button>

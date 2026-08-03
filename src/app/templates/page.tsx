@@ -181,7 +181,7 @@ export default function TemplatesPage() {
       <div className="rounded-[32px] border border-slate-800 bg-slate-950 p-8">
         <p className="text-sm uppercase tracking-[0.28em] text-slate-500">Templates</p>
         <h1 className="mt-2 text-3xl font-semibold text-white">Document templates</h1>
-        <p className="mt-3 text-slate-400">Manage the five document layouts used for BOQ generation.</p>
+        <p className="mt-3 text-slate-400">Manage the document layouts used for BOQ generation. Click Preview to see how each one actually looks.</p>
 
         <div className="mt-6 flex flex-wrap gap-2">
           <button

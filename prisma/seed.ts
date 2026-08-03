@@ -1014,6 +1014,34 @@ const templateSeeds: TemplateSeed[] = [
     style: { direction: "rtl", coverStyle: "dark", primaryColor: "#0B1D3A", accentColor: "#2563EB", fontFamily: "arabic-naskh" },
     content: {},
   },
+  {
+    key: "minimal-client-summary",
+    industryKey: null,
+    name: "Minimal Client Summary",
+    code: "minimal-client-summary",
+    type: DocumentTemplateType.CORPORATE_TECHNICAL,
+    description: "No cover page, fewer columns — a fast, clean quote for a client reading on their phone.",
+    style: { direction: "ltr", coverStyle: "none", primaryColor: "#0B1D3A", accentColor: "#2563EB", fontFamily: "sans" },
+    content: {
+      showCoverPage: false,
+      showExclusionsSection: false,
+      columns: { ...DEFAULT_CONTENT_CONFIG.columns, drawingReference: false, notes: false },
+    },
+  },
+  {
+    key: "internal-cost-review",
+    industryKey: null,
+    name: "Internal Cost Review",
+    code: "internal-cost-review",
+    type: DocumentTemplateType.CORPORATE_TECHNICAL,
+    description: "Dense table with full cost and margin breakdown — for internal review only, never send to a client.",
+    style: { direction: "ltr", coverStyle: "light", primaryColor: "#0F172A", accentColor: "#0EA5E9", fontFamily: "sans" },
+    content: {
+      denseTechnicalTable: true,
+      showInternalCostFieldsToClient: true,
+      columns: { ...DEFAULT_CONTENT_CONFIG.columns, brandModel: true },
+    },
+  },
 ];
 
 async function seedDocumentTemplates(companyId: string, industryIds: Map<string, string>): Promise<void> {

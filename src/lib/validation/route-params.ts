@@ -72,3 +72,15 @@ export const extractionJobIdParamsSchema = z.object({
 export const drawingPageIdParamsSchema = z.object({
   pageId: z.string().uuid("A valid drawing page ID is required."),
 }).strict();
+
+export const entityIdParamsSchema = z.object({
+  entityId: z.string().uuid("A valid entity ID is required."),
+}).strict();
+
+export const findingIdParamsSchema = z.object({
+  findingId: z.string().uuid("A valid finding ID is required."),
+}).strict();
+
+export const inspectionIdParamsSchema = z.object({
+  inspectionId: z.string().uuid("A valid inspection ID is required."),
+}).strict();

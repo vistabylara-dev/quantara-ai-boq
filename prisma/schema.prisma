@@ -373,6 +373,7 @@ model MasterDiscipline {
   fieldDefinitions TechnicalFieldDefinition[]
   packages         IndustryDataPackage[]
   libraryItems     CompanyLibraryItem[]
+  symbolDefinitions SymbolDefinition[]
 
   @@index([isActive])
 }
@@ -780,6 +781,17 @@ model Company {
   drawingPages                   DrawingPage[]
   drawingLayers                  DrawingLayer[]
   drawingScaleCalibrations       DrawingScaleCalibration[]
+  extractedEntities              ExtractedEntity[]
+  detectedRooms                  DetectedRoom[]
+  companySymbolMappings          CompanySymbolMapping[]
+  quantityCalculations           QuantityCalculation[]
+  inspections                    Inspection[]
+  inspectionResponses            InspectionResponse[]
+  inspectionFindings             InspectionFinding[]
+  rootCauseAnalyses              RootCauseAnalysis[]
+  riskAssessments                RiskAssessment[]
+  correctiveActions              CorrectiveAction[]
+  findingBoqLinks                FindingBoqLink[]
 }
 
 model User {
@@ -937,6 +949,10 @@ model Project {
   importJobs            ImportJob[]
   files                 ProjectFile[]
   extractionJobs        ExtractionJob[]
+  extractedEntities     ExtractedEntity[]
+  detectedRooms         DetectedRoom[]
+  quantityCalculations  QuantityCalculation[]
+  inspections           Inspection[]
 
   @@unique([companyId, reference])
   @@unique([companyId, slug])
@@ -1507,6 +1523,7 @@ model ProjectFile {
   extractionJobs                 ExtractionJob[]
   extractedTables                 ExtractedTable[]
   drawingPages                     DrawingPage[]
+  extractedEntities                ExtractedEntity[]
 
   @@index([companyId])
   @@index([projectId])
@@ -1824,4 +1841,515 @@ enum ScaleCalibrationType {
   TWO_POINT
   VECTOR_UNIT
   MANUAL_INPUT
+}
+
+/** Phase 8 section 17 — a detected/manually-entered spatial or schedule item awaiting human verification. Covers rooms, furniture, MEP equipment, and more via entityType; never auto-trusted. */
+model ExtractedEntity {
+  id                         String            @id @default(uuid()) @db.Uuid
+  companyId                  String            @db.Uuid
+  projectId                  String            @db.Uuid
+  projectFileId              String            @db.Uuid
+  drawingPageId              String?           @db.Uuid
+  extractionJobId            String?           @db.Uuid
+  entityType                 ExtractedEntityType
+  categoryKey                String?
+  label                      String
+  normalizedLabel            String?
+  quantity                   Decimal?          @db.Decimal(14, 4)
+  unit                       String?
+  confidence                 Decimal           @db.Decimal(5, 2)
+  extractionMethod           ExtractionMethod  @default(MANUAL)
+  boundingGeometryJson       Json?
+  sourceText                 String?
+  sourceReference            String?
+  technicalDataJson          Json?
+  matchedMasterItemId        String?           @db.Uuid
+  matchedCompanyLibraryItemId String?          @db.Uuid
+  matchedCatalogueItemId     String?           @db.Uuid
+  status                     ExtractedEntityStatus @default(EXTRACTED)
+  confirmedByUserId          String?           @db.Uuid
+  confirmedAt                DateTime?
+  rejectedByUserId           String?           @db.Uuid
+  rejectedAt                 DateTime?
+  correctionJson             Json?
+  createdAt                  DateTime          @default(now())
+  updatedAt                  DateTime          @updatedAt
+  company                    Company           @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  project                    Project           @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  projectFile                ProjectFile       @relation(fields: [projectFileId], references: [id], onDelete: Cascade)
+  quantityCalculations       QuantityCalculation[]
+
+  @@index([companyId])
+  @@index([projectId])
+  @@index([projectFileId])
+  @@index([status])
+  @@index([entityType])
+}
+
+enum ExtractedEntityType {
+  ROOM
+  FURNITURE
+  EQUIPMENT
+  MATERIAL
+  FIXTURE
+  ELECTRICAL_POINT
+  LIGHT_FIXTURE
+  HVAC_EQUIPMENT
+  FAN
+  DUCT
+  DIFFUSER
+  GRILLE
+  DAMPER
+  PIPE
+  VALVE
+  SANITARY_FIXTURE
+  FIRE_FIGHTING_ITEM
+  FIRE_ALARM_ITEM
+  DOOR
+  WINDOW
+  PARTITION
+  WALL_FINISH
+  FLOOR_FINISH
+  CEILING_FINISH
+  STRUCTURAL_ELEMENT
+  SCHEDULE_ROW
+  ANNOTATION
+  CUSTOM
+}
+
+enum ExtractionMethod {
+  TEXT_LAYER
+  OCR
+  TABLE_PARSER
+  VECTOR_BLOCK
+  VISION_MODEL
+  GEOMETRY_ENGINE
+  MANUAL
+  HYBRID
+}
+
+enum ExtractedEntityStatus {
+  EXTRACTED
+  NEEDS_REVIEW
+  CONFIRMED
+  CORRECTED
+  REJECTED
+  IMPORTED
+}
+
+/** Phase 8 section 18 — a room boundary, detected or manually entered. */
+model DetectedRoom {
+  id                    String    @id @default(uuid()) @db.Uuid
+  companyId             String    @db.Uuid
+  projectId             String    @db.Uuid
+  drawingPageId         String?   @db.Uuid
+  roomName              String
+  roomNumber            String?
+  boundaryGeometryJson  Json?
+  area                  Decimal?  @db.Decimal(14, 4)
+  perimeter             Decimal?  @db.Decimal(14, 4)
+  ceilingHeight         Decimal?  @db.Decimal(8, 3)
+  floorLevel            String?
+  scaleCalibrationId    String?   @db.Uuid
+  confidence            Decimal   @db.Decimal(5, 2)
+  status                ExtractedEntityStatus @default(EXTRACTED)
+  correctedDataJson     Json?
+  confirmedByUserId     String?   @db.Uuid
+  confirmedAt           DateTime?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+  company               Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  project               Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([companyId])
+  @@index([projectId])
+  @@index([status])
+}
+
+/** Phase 8 section 20 — configurable MEP symbol recognition. No automatic matching engine exists yet; this is the schema + company-mapping layer only. */
+model SymbolDefinition {
+  id                    String   @id @default(uuid()) @db.Uuid
+  disciplineId          String   @db.Uuid
+  symbolKey             String   @unique
+  name                  String
+  description           String?
+  referenceImagesJson   Json?
+  vectorPatternJson     Json?
+  defaultMasterItemId   String?  @db.Uuid
+  metadataJson          Json?
+  version               Int      @default(1)
+  isActive              Boolean  @default(true)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+  discipline            MasterDiscipline @relation(fields: [disciplineId], references: [id], onDelete: Cascade)
+  companyMappings       CompanySymbolMapping[]
+
+  @@index([disciplineId])
+}
+
+model CompanySymbolMapping {
+  id                          String   @id @default(uuid()) @db.Uuid
+  companyId                   String   @db.Uuid
+  symbolDefinitionId          String   @db.Uuid
+  customLabel                 String?
+  customReferenceImagesJson   Json?
+  mappedCompanyLibraryItemId  String?  @db.Uuid
+  usageCount                  Int      @default(0)
+  createdAt                   DateTime @default(now())
+  updatedAt                   DateTime @updatedAt
+  company                     Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  symbolDefinition            SymbolDefinition @relation(fields: [symbolDefinitionId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, symbolDefinitionId])
+  @@index([companyId])
+}
+
+/** Phase 8 sections 22-24 — deterministic quantity calculation from a confirmed extracted entity. Formulas are always visible; no confidence threshold may auto-lock or auto-issue a BOQ. */
+model QuantityCalculation {
+  id                  String   @id @default(uuid()) @db.Uuid
+  companyId           String   @db.Uuid
+  projectId           String   @db.Uuid
+  extractedEntityId   String?  @db.Uuid
+  calculationType     QuantityCalculationType
+  inputValuesJson     Json
+  deductionsJson      Json?
+  allowancesJson      Json?
+  formula             String
+  resultValue         Decimal  @db.Decimal(18, 6)
+  resultUnit          String
+  confidence          Decimal  @db.Decimal(5, 2)
+  status              ExtractedEntityStatus @default(EXTRACTED)
+  manuallyOverridden  Boolean  @default(false)
+  originalResultValue Decimal? @db.Decimal(18, 6)
+  overrideReason      String?
+  calculatedBy        String   @default("deterministic-formula")
+  calculatedAt        DateTime @default(now())
+  confirmedByUserId   String?  @db.Uuid
+  confirmedAt         DateTime?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+  company             Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  project             Project          @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  extractedEntity     ExtractedEntity? @relation(fields: [extractedEntityId], references: [id], onDelete: SetNull)
+
+  @@index([companyId])
+  @@index([projectId])
+  @@index([extractedEntityId])
+}
+
+enum QuantityCalculationType {
+  COUNT
+  AREA
+  PERIMETER
+  LENGTH
+  VOLUME
+  WALL_AREA
+  FLOOR_AREA
+  CEILING_AREA
+  SKIRTING_LENGTH
+  DUCT_SURFACE_AREA
+  PIPE_LENGTH
+  CABLE_LENGTH
+  CONCRETE_VOLUME
+  REINFORCEMENT_WEIGHT
+  FORMWORK_AREA
+  EXCAVATION_VOLUME
+  PAINT_AREA
+  PARTITION_AREA
+  CUSTOM
+}
+
+/** Phase 8 section 29 — the inspection record itself. */
+model Inspection {
+  id                       String   @id @default(uuid()) @db.Uuid
+  companyId                String   @db.Uuid
+  projectId                String   @db.Uuid
+  disciplineId             String?  @db.Uuid
+  reportType               String
+  reference                String
+  title                    String
+  description              String?
+  clientId                 String?  @db.Uuid
+  consultantName           String?
+  mainContractorName       String?
+  subcontractorName        String?
+  projectLocation          String?
+  buildingType             String?
+  inspectionDate           DateTime?
+  reportDate               DateTime?
+  preparedByUserId         String?  @db.Uuid
+  reviewedByUserId         String?  @db.Uuid
+  approvedByUserId         String?  @db.Uuid
+  revisionNumber           Int      @default(1)
+  status                   InspectionStatus @default(DRAFT)
+  relatedBoqId             String?  @db.Uuid
+  createdAt                DateTime @default(now())
+  updatedAt                DateTime @updatedAt
+  company                  Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  project                  Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  responses                InspectionResponse[]
+  findings                 InspectionFinding[]
+
+  @@unique([companyId, reference])
+  @@index([companyId])
+  @@index([projectId])
+  @@index([status])
+}
+
+enum InspectionStatus {
+  DRAFT
+  IN_PROGRESS
+  NEEDS_REVIEW
+  REVIEWED
+  APPROVED
+  ISSUED
+  SUPERSEDED
+  ARCHIVED
+}
+
+model InspectionTemplate {
+  id                    String   @id @default(uuid()) @db.Uuid
+  companyId             String?  @db.Uuid
+  disciplineId          String?  @db.Uuid
+  reportType            String
+  name                  String
+  description           String?
+  sectionsJson          Json
+  fieldDefinitionsJson  Json
+  scoringConfigJson     Json?
+  riskConfigJson        Json?
+  outputConfigJson      Json?
+  isSystemTemplate      Boolean  @default(false)
+  isActive              Boolean  @default(true)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  @@index([companyId])
+  @@index([reportType])
+}
+
+model InspectionResponse {
+  id                 String   @id @default(uuid()) @db.Uuid
+  companyId          String   @db.Uuid
+  inspectionId       String   @db.Uuid
+  sectionKey         String
+  fieldKey           String
+  valueJson          Json
+  unit               String?
+  status             ExtractedEntityStatus @default(EXTRACTED)
+  sourceType         InspectionResponseSourceType @default(MANUAL)
+  sourceReference    String?
+  enteredByUserId    String?  @db.Uuid
+  confirmedByUserId  String?  @db.Uuid
+  confirmedAt        DateTime?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+  company            Company    @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  inspection         Inspection @relation(fields: [inspectionId], references: [id], onDelete: Cascade)
+
+  @@unique([inspectionId, sectionKey, fieldKey])
+  @@index([companyId])
+  @@index([inspectionId])
+}
+
+enum InspectionResponseSourceType {
+  MANUAL
+  PHOTO
+  DRAWING
+  TEST_RESULT
+  DOCUMENT_IMPORT
+  AI_SUGGESTED
+  EQUIPMENT_DATA
+  PREVIOUS_INSPECTION
+}
+
+model InspectionFinding {
+  id                     String   @id @default(uuid()) @db.Uuid
+  companyId              String   @db.Uuid
+  inspectionId           String   @db.Uuid
+  findingNumber          Int
+  disciplineId           String?  @db.Uuid
+  assetId                String?
+  location               String?
+  title                  String
+  description            String
+  observedCondition      String?
+  expectedCondition      String?
+  severity               String   @default("MEDIUM")
+  confidence             Decimal? @db.Decimal(5, 2)
+  sourceReferencesJson   Json?
+  photoReferencesJson    Json?
+  drawingReferencesJson  Json?
+  status                 InspectionFindingStatus @default(DRAFT)
+  createdByType          String   @default("HUMAN")
+  createdByUserId        String?  @db.Uuid
+  confirmedByUserId      String?  @db.Uuid
+  confirmedAt            DateTime?
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+  company                Company    @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  inspection             Inspection @relation(fields: [inspectionId], references: [id], onDelete: Cascade)
+  rootCauseAnalyses      RootCauseAnalysis[]
+  riskAssessments        RiskAssessment[]
+  correctiveActions      CorrectiveAction[]
+  boqLinks               FindingBoqLink[]
+
+  @@unique([inspectionId, findingNumber])
+  @@index([companyId])
+  @@index([inspectionId])
+  @@index([status])
+}
+
+enum InspectionFindingStatus {
+  DRAFT
+  AI_SUGGESTED
+  NEEDS_REVIEW
+  CONFIRMED
+  CORRECTED
+  REJECTED
+  CLOSED
+}
+
+model RootCauseAnalysis {
+  id                     String   @id @default(uuid()) @db.Uuid
+  companyId              String   @db.Uuid
+  inspectionFindingId    String   @db.Uuid
+  method                 String
+  primaryCauseCategory   RootCauseCategory
+  analysisJson           Json?
+  conclusion             String?
+  confidence             Decimal? @db.Decimal(5, 2)
+  furtherTestingRequired Boolean  @default(false)
+  status                 ExtractedEntityStatus @default(EXTRACTED)
+  createdByUserId        String?  @db.Uuid
+  confirmedByUserId      String?  @db.Uuid
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+  company                Company           @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  inspectionFinding      InspectionFinding @relation(fields: [inspectionFindingId], references: [id], onDelete: Cascade)
+
+  @@index([companyId])
+  @@index([inspectionFindingId])
+}
+
+enum RootCauseCategory {
+  DESIGN_RELATED
+  INSTALLATION_RELATED
+  MATERIAL_RELATED
+  MAINTENANCE_RELATED
+  OPERATION_RELATED
+  AGE_RELATED
+  ENVIRONMENTAL
+  ACCIDENTAL_DAMAGE
+  WORKMANSHIP
+  USER_MISUSE
+  UNKNOWN_REQUIRES_TESTING
+}
+
+model RiskAssessment {
+  id                          String   @id @default(uuid()) @db.Uuid
+  companyId                   String   @db.Uuid
+  inspectionFindingId         String   @db.Uuid
+  likelihood                  Int
+  severity                    Int
+  riskScore                   Int
+  riskLevel                   RiskLevel
+  affectedArea                String?
+  operationalImpact           String?
+  healthSafetyImpact          String?
+  propertyDamageImpact        String?
+  complianceImpact            String?
+  businessContinuityImpact    String?
+  recommendedUrgency          RiskUrgency
+  rationale                   String?
+  status                      ExtractedEntityStatus @default(EXTRACTED)
+  assessedByUserId            String?  @db.Uuid
+  confirmedByUserId           String?  @db.Uuid
+  createdAt                   DateTime @default(now())
+  updatedAt                   DateTime @updatedAt
+  company                     Company           @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  inspectionFinding           InspectionFinding @relation(fields: [inspectionFindingId], references: [id], onDelete: Cascade)
+
+  @@index([companyId])
+  @@index([inspectionFindingId])
+}
+
+enum RiskLevel {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum RiskUrgency {
+  IMMEDIATE_EMERGENCY
+  WITHIN_24_HOURS
+  WITHIN_7_DAYS
+  WITHIN_30_DAYS
+  PLANNED_CORRECTIVE_MAINTENANCE
+  PREVENTIVE_MAINTENANCE
+  CAPITAL_REPLACEMENT
+  FURTHER_INVESTIGATION
+  MONITORING_ONLY
+  NO_ACTION_REQUIRED
+}
+
+model CorrectiveAction {
+  id                        String   @id @default(uuid()) @db.Uuid
+  companyId                 String   @db.Uuid
+  inspectionFindingId       String   @db.Uuid
+  actionType                CorrectiveActionType
+  title                     String
+  description               String?
+  requiredMaterialsJson     Json?
+  requiredManpowerJson      Json?
+  requiredEquipmentJson     Json?
+  accessRequirements        String?
+  safetyControlsJson        Json?
+  testingRequirementsJson   Json?
+  completionCriteriaJson    Json?
+  estimatedDurationHours    Decimal? @db.Decimal(8, 2)
+  priority                  String   @default("MEDIUM")
+  status                    ExtractedEntityStatus @default(EXTRACTED)
+  createdByUserId           String?  @db.Uuid
+  confirmedByUserId         String?  @db.Uuid
+  createdAt                 DateTime @default(now())
+  updatedAt                 DateTime @updatedAt
+  company                   Company           @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  inspectionFinding         InspectionFinding @relation(fields: [inspectionFindingId], references: [id], onDelete: Cascade)
+  boqLinks                  FindingBoqLink[]
+
+  @@index([companyId])
+  @@index([inspectionFindingId])
+}
+
+enum CorrectiveActionType {
+  IMMEDIATE
+  TEMPORARY
+  PERMANENT
+  PREVENTIVE
+  INVESTIGATION
+  MONITORING
+  REPLACEMENT
+  NO_ACTION
+}
+
+/** Phase 8 section 39 — links a confirmed finding + confirmed corrective action to a real BOQItem; never auto-created without both being confirmed. */
+model FindingBoqLink {
+  id                     String   @id @default(uuid()) @db.Uuid
+  companyId              String   @db.Uuid
+  inspectionFindingId    String   @db.Uuid
+  correctiveActionId     String?  @db.Uuid
+  boqId                  String   @db.Uuid
+  boqItemId              String   @db.Uuid
+  quantitySource         String
+  createdByUserId        String   @db.Uuid
+  createdAt              DateTime @default(now())
+  company                Company           @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  inspectionFinding      InspectionFinding @relation(fields: [inspectionFindingId], references: [id], onDelete: Cascade)
+  correctiveAction       CorrectiveAction? @relation(fields: [correctiveActionId], references: [id], onDelete: SetNull)
+
+  @@index([companyId])
+  @@index([inspectionFindingId])
+  @@index([boqId])
 }

@@ -24,4 +24,22 @@
 		// see https://opennext.js.org/cloudflare/howtos/image
 		"binding": "IMAGES"
 	}
+
+	// Hyperdrive binding — NOT yet configured. No Hyperdrive resource has
+	// been created for this project, so no ID exists to put here (a
+	// placeholder/fake ID would make `wrangler deploy` fail against a
+	// non-existent resource). Once a real Hyperdrive config exists
+	// (see docs/cloudflare-hyperdrive-setup.md), add:
+	//
+	// "hyperdrive": [
+	//   {
+	//     "binding": "HYPERDRIVE",
+	//     "id": "<REAL_HYPERDRIVE_ID>"
+	//   }
+	// ]
+	//
+	// The application code in src/lib/db/prisma.ts and
+	// src/lib/cloudflare/env.ts already detects and uses this binding via
+	// `env.HYPERDRIVE` the moment it's added — no further code changes are
+	// needed after this block is uncommented and filled in.
 }

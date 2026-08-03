@@ -17,6 +17,7 @@
     "db:reset": "prisma migrate reset",
     "admin:bootstrap-owner": "tsx scripts/bootstrap-platform-owner.ts",
     "admin:provision-owner": "tsx scripts/provision-platform-owner.ts",
+    "storage:verify-blob": "tsx scripts/verify-vercel-blob-storage.ts",
     "preview": "opennextjs-cloudflare build && opennextjs-cloudflare preview",
     "deploy": "opennextjs-cloudflare build && opennextjs-cloudflare deploy",
     "upload": "opennextjs-cloudflare build && opennextjs-cloudflare upload",

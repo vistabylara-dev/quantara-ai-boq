@@ -31,7 +31,17 @@ describe("storage factory", () => {
     expect(() => createStorageAdapter({ provider: "unsupported" as StorageProvider, purpose: "generated-documents" })).toThrow("Unsupported STORAGE_PROVIDER");
   });
 
-  it("throws when vercel blob client is missing for vercel-blob", () => {
-    expect(() => createStorageAdapter({ provider: "vercel-blob", purpose: "project-files" })).toThrow("Vercel Blob client must be provided");
+  it("throws when no client is injected and BLOB_READ_WRITE_TOKEN is missing", () => {
+    const env = { ...process.env };
+    delete env.BLOB_READ_WRITE_TOKEN;
+    expect(() =>
+      createStorageAdapter({ provider: "vercel-blob", purpose: "project-files", env }),
+    ).toThrow("BLOB_READ_WRITE_TOKEN is required");
+  });
+
+  it("auto-constructs a real client when no client is injected but a token is present (no network call)", () => {
+    const env = { ...process.env, BLOB_READ_WRITE_TOKEN: "vercel_blob_rw_test_token_not_real" };
+    const adapter = createStorageAdapter({ provider: "vercel-blob", purpose: "project-files", env });
+    expect(adapter).toBeInstanceOf(VercelBlobStorageAdapter);
   });
 });

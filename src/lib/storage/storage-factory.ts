@@ -1,4 +1,5 @@
 import { VercelBlobStorageAdapter, type VercelBlobClient } from "./vercel-blob-storage-adapter";
+import { createVercelBlobClient } from "./vercel-blob-client";
 import { localDocumentStorageAdapter } from "./local-document-storage-adapter";
 import { localProjectFileStorageAdapter } from "./local-project-file-storage-adapter";
 import type { DocumentStorageAdapter } from "./document-storage-adapter";
@@ -9,6 +10,7 @@ export type StorageFactoryOptions = {
   provider: StorageProvider;
   vercelBlobClient?: VercelBlobClient;
   purpose: "generated-documents" | "project-files";
+  env?: typeof process.env;
 };
 
 export function resolveStorageProvider(env: typeof process.env = process.env): StorageProvider {
@@ -34,17 +36,16 @@ export function resolveStorageProvider(env: typeof process.env = process.env): S
 }
 
 export function createStorageAdapter(options: StorageFactoryOptions): DocumentStorageAdapter {
-  const { provider, vercelBlobClient, purpose } = options;
+  const { provider, purpose } = options;
+  const env = options.env ?? process.env;
 
   if (provider === "local") {
     return purpose === "generated-documents" ? localDocumentStorageAdapter : localProjectFileStorageAdapter;
   }
 
   if (provider === "vercel-blob") {
-    if (!vercelBlobClient) {
-      throw new Error("Vercel Blob client must be provided for provider 'vercel-blob'.");
-    }
-    return new VercelBlobStorageAdapter(vercelBlobClient);
+    const client = options.vercelBlobClient ?? createVercelBlobClient(env);
+    return new VercelBlobStorageAdapter(client);
   }
 
   throw new Error(`Unsupported STORAGE_PROVIDER: ${provider}`);

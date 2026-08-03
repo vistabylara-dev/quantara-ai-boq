@@ -126,6 +126,25 @@ export async function loginWithPassword(input: LoginInput): Promise<void> {
   await createSession(user.id);
 }
 
+/**
+ * Platform-admin login. Reuses the exact same credential/session mechanics
+ * as loginWithPassword (no separate password store, no separate session
+ * type), then additionally requires a platform role. A company-only account
+ * with correct credentials still gets its session destroyed immediately and
+ * sees the same generic invalid-credentials error as a wrong password would
+ * — this route must never reveal that an email belongs to a valid company
+ * account without platform access.
+ */
+export async function loginPlatformActor(input: LoginInput): Promise<void> {
+  await loginWithPassword(input);
+
+  const user = await findUserByEmail(input.email);
+  if (!user?.platformRole) {
+    await destroyCurrentSession();
+    throw new AppError("INVALID_CREDENTIALS", "The email or password is incorrect.", 401);
+  }
+}
+
 export async function logout(): Promise<void> {
   await destroyCurrentSession();
 }

@@ -13,7 +13,7 @@ export default async function AdminLayout({ children }: { children: ReactNode })
     await requirePlatformActor();
   } catch (error) {
     if (error instanceof UnauthorizedError) {
-      redirect("/login?next=/admin");
+      redirect("/admin/login?next=/admin");
     }
     if (error instanceof PlatformAuthorizationError) {
       redirect("/dashboard");

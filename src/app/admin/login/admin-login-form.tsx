@@ -1,11 +1,11 @@
 "use client";
 
-import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useState, type FormEvent } from "react";
 import { apiClient, getApiErrorMessage } from "@/lib/api/client";
+import { safeAdminNext } from "./safe-next";
 
-function LoginForm() {
+function AdminLoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [email, setEmail] = useState("");
@@ -18,8 +18,8 @@ function LoginForm() {
     setIsSubmitting(true);
     setError(null);
     try {
-      await apiClient.post("/api/auth/login", { email, password });
-      const next = searchParams.get("next") ?? "/dashboard";
+      await apiClient.post("/api/auth/admin-login", { email, password });
+      const next = safeAdminNext(searchParams.get("next"));
       router.push(next);
       router.refresh();
     } catch (submitError) {
@@ -32,9 +32,11 @@ function LoginForm() {
   return (
     <div className="mx-auto max-w-md py-12">
       <div className="rounded-[32px] border border-slate-800 bg-slate-950 p-8">
-        <p className="text-sm uppercase tracking-[0.28em] text-slate-500">Quantara AI</p>
+        <p className="text-sm uppercase tracking-[0.28em] text-slate-500">
+          Quantara Platform Administration
+        </p>
         <h1 className="mt-2 text-2xl font-semibold text-white">Sign in</h1>
-        <p className="mt-2 text-sm text-slate-400">Access your company workspace.</p>
+        <p className="mt-2 text-sm text-slate-400">Authorized platform personnel only.</p>
 
         <form onSubmit={handleSubmit} className="mt-6 space-y-4">
           <div>
@@ -70,23 +72,15 @@ function LoginForm() {
             {isSubmitting ? "Signing in..." : "Sign in"}
           </button>
         </form>
-
-        <div className="mt-6 flex items-center justify-between text-sm text-slate-400">
-          <Link href="/forgot-password" className="hover:text-slate-200">Forgot password?</Link>
-          <Link href="/register" className="hover:text-slate-200">Create a company</Link>
-        </div>
-        <div className="mt-4 text-center text-xs text-slate-600">
-          <Link href="/admin/login" className="hover:text-slate-400">Platform administrator?</Link>
-        </div>
       </div>
     </div>
   );
 }
 
-export default function LoginPage() {
+export default function AdminLoginPageClient() {
   return (
     <Suspense fallback={null}>
-      <LoginForm />
+      <AdminLoginForm />
     </Suspense>
   );
 }

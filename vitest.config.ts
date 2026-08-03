@@ -3,6 +3,13 @@ import { defineConfig } from "vitest/config";
 
 export default defineConfig({
   root: fileURLToPath(new URL("./", import.meta.url)),
+  // Without this, esbuild's default classic JSX transform requires `React`
+  // in scope, which nothing in this codebase provides (everywhere else
+  // relies on the automatic runtime) — surfaced by the first test that
+  // calls a JSX-returning Server Component function directly.
+  esbuild: {
+    jsx: "automatic",
+  },
   resolve: {
     alias: {
       "@": fileURLToPath(new URL("./src", import.meta.url)),

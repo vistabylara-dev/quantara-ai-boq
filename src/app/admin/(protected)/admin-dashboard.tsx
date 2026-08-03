@@ -347,6 +347,10 @@ export default function AdminDashboard() {
               : "Not tracked"}
           />
         </div>
+        <div className="mt-4 grid gap-4 sm:grid-cols-2">
+          <NotImplementedCard label="Storage status" note="Durable object storage has not been implemented yet." />
+          <NotImplementedCard label="Background jobs" note="A durable background job queue has not been implemented yet." />
+        </div>
         <p className="mt-4 text-xs text-slate-500">Generated {formatDateTime(overview.generatedAt)}</p>
       </section>
 
@@ -542,6 +546,16 @@ function MetricCard({ label, value }: { label: string; value: number }) {
 
 function StatusCard({ label, value }: { label: string; value: string }) {
   return <div className="rounded-3xl border border-slate-800 bg-slate-900 p-5"><p className="text-xs uppercase tracking-[0.2em] text-slate-500">{label}</p><p className="mt-2 text-lg font-semibold text-white">{formatLabel(value)}</p></div>;
+}
+
+function NotImplementedCard({ label, note }: { label: string; note: string }) {
+  return (
+    <div className="rounded-3xl border border-dashed border-slate-800 bg-slate-900/50 p-5">
+      <p className="text-xs uppercase tracking-[0.2em] text-slate-500">{label}</p>
+      <p className="mt-2 text-sm font-semibold text-slate-500">Not yet implemented</p>
+      <p className="mt-1 text-xs text-slate-600">{note}</p>
+    </div>
+  );
 }
 
 function SectionTitle({ title, description }: { title: string; description: string }) {

@@ -25,7 +25,7 @@ vi.mock("next/navigation", async (importOriginal) => {
   return { ...actual, redirect: redirectMock };
 });
 
-import AdminLayout from "../src/app/admin/layout";
+import AdminLayout from "../src/app/admin/(protected)/layout";
 import {
   PlatformAuthorizationError,
   type PlatformActor,
@@ -45,10 +45,10 @@ describe("platform administration access surface", () => {
     requirePlatformActorMock.mockRejectedValue(new UnauthorizedError());
 
     await expect(AdminLayout({ children: "protected admin content" })).rejects.toThrow(
-      "NEXT_REDIRECT:/login?next=/admin",
+      "NEXT_REDIRECT:/admin/login?next=/admin",
     );
     expect(requirePlatformActorMock).toHaveBeenCalledOnce();
-    expect(redirectMock).toHaveBeenCalledWith("/login?next=/admin");
+    expect(redirectMock).toHaveBeenCalledWith("/admin/login?next=/admin");
   });
 
   it("redirects a normal company-role user safely away from /admin", async () => {

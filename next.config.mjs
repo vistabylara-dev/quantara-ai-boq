@@ -1,7 +1,18 @@
 import { PHASE_DEVELOPMENT_SERVER } from "next/constants.js";
+import { fileURLToPath } from "node:url";
+import path from "node:path";
+
+const projectRoot = path.dirname(fileURLToPath(import.meta.url));
 
 const nextConfig = {
   reactStrictMode: true,
+  // Without this, Next.js walks up from the project directory looking for a
+  // workspace root and can misdetect an unrelated lockfile elsewhere on the
+  // machine (e.g. C:\Users\<name>\pnpm-lock.yaml) as the root, which breaks
+  // the build's output file tracing step (ENOENT on *.nft.json) even after
+  // compilation and page generation succeed. Pinning it explicitly avoids
+  // that machine-dependent misdetection entirely.
+  outputFileTracingRoot: projectRoot,
   // pdfkit reads its standard-14 font metrics (data/*.afm) from disk via a
   // path relative to its own package directory at runtime. Letting webpack
   // bundle it moves/mangles that relative path and the AFM files are never

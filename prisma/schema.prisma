@@ -779,6 +779,7 @@ model Company {
   extractedTableCells           ExtractedTableCell[]
   drawingPages                   DrawingPage[]
   drawingLayers                  DrawingLayer[]
+  drawingScaleCalibrations       DrawingScaleCalibration[]
 }
 
 model User {
@@ -1768,6 +1769,7 @@ model DrawingPage {
   company              Company     @relation(fields: [companyId], references: [id], onDelete: Cascade)
   projectFile          ProjectFile @relation(fields: [projectFileId], references: [id], onDelete: Cascade)
   layers               DrawingLayer[]
+  scaleCalibrations    DrawingScaleCalibration[]
 
   @@unique([projectFileId, pageNumber])
   @@index([companyId])
@@ -1790,4 +1792,36 @@ model DrawingLayer {
 
   @@index([companyId])
   @@index([drawingPageId])
+}
+
+/** Phase 8 section 15 — spatial quantities are blocked without a verified calibration per page; a detected scale is only ever a suggestion, never auto-trusted. */
+model DrawingScaleCalibration {
+  id                 String                    @id @default(uuid()) @db.Uuid
+  companyId          String                    @db.Uuid
+  drawingPageId      String                    @db.Uuid
+  calibrationType     ScaleCalibrationType
+  scaleRatio         Decimal                   @db.Decimal(14, 6)
+  drawingUnit        String
+  realWorldUnit      String
+  sourceText         String?
+  sourceGeometryJson Json?
+  confidence         Decimal?                  @db.Decimal(5, 2)
+  isVerified         Boolean                   @default(false)
+  verifiedByUserId   String?                   @db.Uuid
+  verifiedAt         DateTime?
+  createdAt          DateTime                  @default(now())
+  updatedAt          DateTime                  @updatedAt
+  company            Company                   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  drawingPage        DrawingPage               @relation(fields: [drawingPageId], references: [id], onDelete: Cascade)
+
+  @@index([companyId])
+  @@index([drawingPageId])
+}
+
+enum ScaleCalibrationType {
+  DETECTED_SCALE_TEXT
+  KNOWN_DIMENSION
+  TWO_POINT
+  VECTOR_UNIT
+  MANUAL_INPUT
 }

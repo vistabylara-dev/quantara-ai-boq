@@ -6,8 +6,9 @@ import { AppError, NotFoundError } from "@/lib/errors/app-error";
 import { createBOQItem, getBOQ, getBOQRecord } from "@/lib/repositories/boq-repository";
 import { getMasterItemRecord } from "@/lib/repositories/master-item-repository";
 import { getLibraryItemRecord, recordItemUsage } from "@/lib/repositories/company-library-repository";
-import { assertMasterItemAccess, companyHasPackageAccessForItem } from "@/lib/entitlements/package-entitlement-service";
+import { companyHasPackageAccessForItem } from "@/lib/entitlements/package-entitlement-service";
 import { recordPremiumItemUnlock } from "@/lib/entitlements/entitlement-service";
+import { assertMasterItemAccessEffective } from "@/lib/entitlements/effective-entitlement-service";
 
 type ResolvedDefaults = {
   itemCode: string;
@@ -43,14 +44,14 @@ export type AddBoqItemFromSourceInput = {
   overrides?: Partial<Pick<ResolvedDefaults, "itemCode" | "category" | "description" | "specification" | "unit" | "unitCost" | "marginMode" | "marginPercentage">>;
 };
 
-async function resolveMasterItemDefaults(companyId: string, masterItemId: string): Promise<ResolvedDefaults> {
-  await assertMasterItemAccess(companyId, masterItemId);
+async function resolveMasterItemDefaults(actor: CurrentActor, masterItemId: string): Promise<ResolvedDefaults> {
+  await assertMasterItemAccessEffective(actor, masterItemId);
   const master = await getMasterItemRecord(masterItemId);
   const discipline = await prisma.masterDiscipline.findUnique({ where: { id: master.disciplineId } });
 
   if (master.isPremium) {
-    const hasPackage = await companyHasPackageAccessForItem(companyId, masterItemId);
-    if (!hasPackage) await recordPremiumItemUnlock(companyId, masterItemId);
+    const hasPackage = await companyHasPackageAccessForItem(actor.companyId, masterItemId);
+    if (!hasPackage) await recordPremiumItemUnlock(actor.companyId, masterItemId);
   }
 
   return {
@@ -127,7 +128,7 @@ export async function addBoqItemFromSource(actor: CurrentActor, boqId: string, i
   switch (input.sourceType) {
     case BoqItemSourceType.MASTER_ITEM:
       if (!input.sourceId) throw new AppError("SOURCE_ID_REQUIRED", "sourceId is required for this source type.", 400);
-      defaults = await resolveMasterItemDefaults(actor.companyId, input.sourceId);
+      defaults = await resolveMasterItemDefaults(actor, input.sourceId);
       break;
     case BoqItemSourceType.COMPANY_LIBRARY:
       if (!input.sourceId) throw new AppError("SOURCE_ID_REQUIRED", "sourceId is required for this source type.", 400);

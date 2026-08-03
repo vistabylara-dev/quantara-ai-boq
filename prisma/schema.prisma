@@ -343,6 +343,76 @@ model TrialPremiumItemUnlock {
   @@index([masterItemId])
 }
 
+enum SimulationMode {
+  TRIAL_ACTIVE
+  TRIAL_EXPIRED
+  FREE
+  PRO
+  SINGLE_BOQ_UNLOCKED
+}
+
+/**
+ * A platform owner's ephemeral "customer simulation" context (ADMIN-CONTROL-1
+ * section 3). One row per user, upserted in place — never versioned history,
+ * never a real subscription. Reading this and reflecting it back in
+ * getEffectiveEntitlements() is the *only* thing that changes owner-visible
+ * entitlement behavior during simulation; no CompanySoftwareSubscription row
+ * is ever touched by starting, changing, or exiting a simulation.
+ */
+model PlatformSimulationSession {
+  id            String         @id @default(uuid()) @db.Uuid
+  userId        String         @unique @db.Uuid
+  mode          SimulationMode
+  targetBoqId   String?        @db.Uuid
+  startedAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+enum MasterCatalogueImportStatus {
+  DRY_RUN
+  EXECUTED
+  ROLLED_BACK
+}
+
+/**
+ * A platform-owner-only bulk import batch into the tenant-less
+ * MasterItem/MasterDiscipline catalogue (ADMIN-CONTROL-1 section 5) —
+ * deliberately separate from ImportJob/ImportRow, which are company-scoped
+ * and belong to a different tenancy model entirely. Row-level detail is
+ * kept as a bounded JSON report rather than a separate row table, since
+ * this is an administrative/audit view, not a reviewable per-row workflow
+ * like the company import feature.
+ */
+model MasterCatalogueImportBatch {
+  id                 String                       @id @default(uuid()) @db.Uuid
+  actorUserId        String                       @db.Uuid
+  disciplineId       String                       @db.Uuid
+  uploadedFileName    String
+  checksum            String
+  status              MasterCatalogueImportStatus @default(DRY_RUN)
+  totalRows            Int                         @default(0)
+  insertedCount        Int                         @default(0)
+  updatedCount         Int                         @default(0)
+  unchangedCount       Int                         @default(0)
+  rejectedCount        Int                         @default(0)
+  validationReportJson Json?
+  executedAt           DateTime?
+  rolledBackAt         DateTime?
+  createdAt            DateTime                    @default(now())
+  updatedAt             DateTime                    @updatedAt
+  actor                User                        @relation(fields: [actorUserId], references: [id], onDelete: Restrict)
+  discipline           MasterDiscipline            @relation(fields: [disciplineId], references: [id], onDelete: Restrict)
+  createdItems          MasterItem[]
+
+  @@index([actorUserId])
+  @@index([disciplineId])
+  @@index([status])
+  @@index([checksum])
+}
+
 model CompanyBranding {
   id                  String            @id @default(uuid()) @db.Uuid
   companyId           String            @unique @db.Uuid
@@ -380,6 +450,7 @@ model MasterDiscipline {
   packages         IndustryDataPackage[]
   libraryItems     CompanyLibraryItem[]
   symbolDefinitions SymbolDefinition[]
+  masterCatalogueImportBatches MasterCatalogueImportBatch[]
 
   @@index([isActive])
 }
@@ -431,10 +502,12 @@ model MasterItem {
   version                    Int                       @default(1)
   status                     MasterItemStatus          @default(ACTIVE)
   isPremium                  Boolean                   @default(true)
+  sourceBatchId              String?                   @db.Uuid
   createdAt                  DateTime                  @default(now())
   updatedAt                  DateTime                  @updatedAt
   discipline                 MasterDiscipline          @relation(fields: [disciplineId], references: [id], onDelete: Cascade)
   category                   MasterCategory            @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  sourceBatch                MasterCatalogueImportBatch? @relation(fields: [sourceBatchId], references: [id], onDelete: SetNull)
   packageItems               IndustryDataPackageItem[]
   trialUnlocks               TrialPremiumItemUnlock[]
   libraryItems               CompanyLibraryItem[]
@@ -446,6 +519,7 @@ model MasterItem {
   @@index([status])
   @@index([isPremium])
   @@index([name])
+  @@index([sourceBatchId])
 }
 
 model TechnicalFieldDefinition {
@@ -744,6 +818,9 @@ model Company {
   defaultExclusions           String?
   defaultValidityDays         Int                           @default(30)
   trialTermsAcceptedAt        DateTime?
+  /// ADMIN-CONTROL-1 section 6 — marks a company as sandbox/demo data, never a paying customer.
+  /// Additive-only: every existing query is unaffected unless it explicitly filters on this.
+  isTestCompany               Boolean                       @default(false)
   createdAt                   DateTime                      @default(now())
   updatedAt                   DateTime                      @updatedAt
   industryEngines             CompanyIndustryEngine[]
@@ -832,6 +909,8 @@ model User {
   classificationConfirmedFiles ProjectFile[]              @relation("ProjectFileClassificationConfirmedByUser")
   createdExtractionJobs        ExtractionJob[]
   platformAuditLogs            PlatformAuditLog[]          @relation("PlatformAuditActor")
+  simulationSession             PlatformSimulationSession?
+  masterCatalogueImportBatches  MasterCatalogueImportBatch[]
 
   @@index([companyId])
   @@index([role])

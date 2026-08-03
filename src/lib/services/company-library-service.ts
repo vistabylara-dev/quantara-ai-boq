@@ -3,8 +3,9 @@ import type { CurrentActor } from "@/lib/auth/current-actor";
 import { requireCapability } from "@/lib/auth/rbac";
 import { prisma } from "@/lib/db/prisma";
 import { NotFoundError } from "@/lib/errors/app-error";
-import { assertMasterItemAccess, companyHasPackageAccessForItem } from "@/lib/entitlements/package-entitlement-service";
+import { companyHasPackageAccessForItem } from "@/lib/entitlements/package-entitlement-service";
 import { recordPremiumItemUnlock } from "@/lib/entitlements/entitlement-service";
+import { assertMasterItemAccessEffective } from "@/lib/entitlements/effective-entitlement-service";
 import { getMasterItemRecord } from "@/lib/repositories/master-item-repository";
 import {
   createLibraryItem,
@@ -84,7 +85,7 @@ export async function recordLibraryItemUsageForCompany(
  */
 export async function createFromMaster(actor: CurrentActor, masterItemId: string, overrides?: { companyItemCode?: string; name?: string }) {
   requireCapability(actor, "library:manage");
-  await assertMasterItemAccess(actor.companyId, masterItemId);
+  await assertMasterItemAccessEffective(actor, masterItemId);
   const master = await getMasterItemRecord(masterItemId);
 
   const created = await createLibraryItem(

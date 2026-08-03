@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/db/prisma";
 import type { CurrentActor } from "@/lib/auth/current-actor";
 import { companyHasPackageAccessForItem } from "@/lib/entitlements/package-entitlement-service";
-import { canUsePremiumItem } from "@/lib/entitlements/entitlement-service";
+import { canUsePremiumItemEffective } from "@/lib/entitlements/effective-entitlement-service";
 import { toLibraryItemDTO } from "@/lib/repositories/company-library-repository";
 import { toMasterItemDTO, toMasterItemPreviewDTO } from "@/lib/repositories/master-item-repository";
 
@@ -113,7 +113,7 @@ export async function searchItems(
         continue;
       }
 
-      const check = await canUsePremiumItem(actor.companyId, row.id);
+      const check = await canUsePremiumItemEffective(actor, row.id);
       if (check.allowed) {
         const dto = toMasterItemDTO(row);
         results.push({

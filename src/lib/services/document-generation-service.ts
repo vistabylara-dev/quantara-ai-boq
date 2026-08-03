@@ -25,7 +25,8 @@ import { generatePdf } from "@/lib/documents/generators/pdf-generator";
 import { generateDocx } from "@/lib/documents/generators/docx-generator";
 import { generateHtml } from "@/lib/documents/generators/html-generator";
 import { calculateBOQTotals } from "@/lib/calculations/boq-calculator";
-import { canGenerateDocument, getCompanyEntitlements, recordDocumentGenerated } from "@/lib/entitlements/entitlement-service";
+import { recordDocumentGenerated } from "@/lib/entitlements/entitlement-service";
+import { canGenerateDocumentEffective } from "@/lib/entitlements/effective-entitlement-service";
 
 export const TRIAL_WATERMARK_TEXT = "Generated with Quantara AI — Trial Version";
 
@@ -151,7 +152,7 @@ export async function generateDocument(actor: CurrentActor, projectIdentifier: s
   const isLocked = boqRecord.isLocked;
   const isDraft = !isLocked;
 
-  const documentCheck = await canGenerateDocument(actor.companyId, isDraft);
+  const documentCheck = await canGenerateDocumentEffective(actor, isDraft, boqRecord.id);
   if (!documentCheck.allowed) {
     throw new AppError("TRIAL_EXPORT_LIMIT_REACHED", documentCheck.reason ?? "Document generation limit reached.", 403);
   }
@@ -202,8 +203,7 @@ export async function generateDocument(actor: CurrentActor, projectIdentifier: s
   }
 
   const company = await prisma.company.findUniqueOrThrow({ where: { id: actor.companyId } });
-  const entitlements = await getCompanyEntitlements(actor.companyId);
-  const applyTrialWatermark = entitlements.isTrial && !isDraft;
+  const applyTrialWatermark = documentCheck.applyTrialWatermark;
 
   const documentData = buildDocumentData({
     company: {

@@ -17,6 +17,7 @@ import {
 import { useCallback, useEffect, useState } from "react";
 import { apiClient, getApiErrorMessage } from "@/lib/api/client";
 import { formatDate } from "@/lib/formatting/dates";
+import AdminTestPanel from "./admin-test-panel";
 
 type PlatformRole = "PLATFORM_OWNER" | "PLATFORM_ADMIN" | "PLATFORM_SUPPORT";
 
@@ -446,6 +447,7 @@ export default function AdminDashboard() {
             <QuickActionLink href="#projects-panel" label="Projects" />
             {isOwner && <QuickActionLink href="#audit-panel" label="Audit" />}
             <QuickActionLink href="#system-health-panel" label="System status" />
+            {isOwner && <QuickActionLink href="#test-panel" label="Test panel" />}
           </nav>
         </div>
         <p className="mt-3 text-xs text-[#7B879C] dark:text-[#7F8DA6]">
@@ -458,6 +460,8 @@ export default function AdminDashboard() {
           {actionError ?? actionMessage}
         </div>
       )}
+
+      {isOwner && <AdminTestPanel />}
 
       {/* KPI cards */}
       <section aria-label="Platform key metrics" className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">

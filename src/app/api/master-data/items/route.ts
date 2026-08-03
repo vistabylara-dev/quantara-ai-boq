@@ -1,7 +1,7 @@
 import { apiSuccess, handleApiError } from "@/lib/http/api-response";
 import { getCurrentActor } from "@/lib/auth/current-actor";
 import { setActorContext } from "@/lib/auth/request-context";
-import { canUsePremiumItem } from "@/lib/entitlements/entitlement-service";
+import { canUsePremiumItemEffective } from "@/lib/entitlements/effective-entitlement-service";
 import { listMasterItems, toMasterItemPreviewDTO } from "@/lib/repositories/master-item-repository";
 import { prisma } from "@/lib/db/prisma";
 
@@ -30,7 +30,7 @@ export async function GET(request: Request) {
     const shaped = await Promise.all(
       items.map(async (item) => {
         if (!item.isPremium) return { ...item, locked: false };
-        const check = await canUsePremiumItem(actor.companyId, item.id);
+        const check = await canUsePremiumItemEffective(actor, item.id);
         if (check.allowed) return { ...item, locked: false };
         const packageLinks = await prisma.industryDataPackageItem.findMany({ where: { masterItemId: item.id }, include: { package: { select: { name: true } } } });
         const row = await prisma.masterItem.findUniqueOrThrow({ where: { id: item.id } });

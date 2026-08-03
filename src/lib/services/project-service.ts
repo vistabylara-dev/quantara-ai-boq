@@ -5,7 +5,8 @@ import { AppError, ConflictError } from "@/lib/errors/app-error";
 import { createProjectBOQ } from "@/lib/repositories/boq-repository";
 import { getClient } from "@/lib/repositories/client-repository";
 import { getEnabledIndustry } from "@/lib/repositories/industry-repository";
-import { canCreateProject, recordProjectCreated } from "@/lib/entitlements/entitlement-service";
+import { recordProjectCreated } from "@/lib/entitlements/entitlement-service";
+import { canCreateProjectEffective } from "@/lib/entitlements/effective-entitlement-service";
 import {
   createProject,
   projectReferenceExists,
@@ -37,7 +38,7 @@ export async function createProjectWithDefaultBoq(actor: CurrentActor, input: Cr
   if (await projectReferenceExists(actor.companyId, input.reference)) {
     throw new ConflictError("PROJECT_REFERENCE_EXISTS", "A project with this reference already exists.");
   }
-  const projectCheck = await canCreateProject(actor.companyId);
+  const projectCheck = await canCreateProjectEffective(actor);
   if (!projectCheck.allowed) {
     throw new AppError("PROJECT_LIMIT_REACHED", projectCheck.reason ?? "Project limit reached.", 403);
   }

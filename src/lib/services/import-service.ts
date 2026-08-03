@@ -165,7 +165,27 @@ export async function createImportJob(actor: CurrentActor, input: CreateImportJo
   if (input.projectId) await getProjectRecord(actor.companyId, input.projectId);
 
   const buffer = Buffer.from(input.fileContentBase64, "base64");
-  const rows = input.sourceType === "CSV" ? parseCsv(buffer.toString("utf-8")) : await parseXlsx(buffer);
+  let rows: string[][];
+  if (input.sourceType === "CSV") {
+    rows = parseCsv(buffer.toString("utf-8"));
+  } else {
+    try {
+      rows = await parseXlsx(buffer);
+    } catch (error) {
+      // exceljs (the underlying XLSX parser) has a known crash on workbooks that contain a
+      // native Excel structured Table (Insert > Table / "Format as Table") — it throws deep
+      // inside its own model-building code, unrelated to anything in this app. That used to
+      // surface as an opaque "unexpected server error" with no way to tell what went wrong.
+      // Surfacing it as a specific, actionable error here instead of letting it fall through to
+      // the generic 500 handler.
+      console.error("[imports] XLSX parse failed", error);
+      throw new AppError(
+        "XLSX_PARSE_FAILED",
+        "This XLSX file couldn't be read. If it contains a formatted Excel Table (select it, then Table Design → Convert to Range in Excel, or Insert → Table was used to build it), that's the likely cause — convert it to a plain range and re-save, or export/save the file as CSV and upload that instead.",
+        400,
+      );
+    }
+  }
   if (rows.length === 0) throw new AppError("EMPTY_FILE", "No rows were found in the uploaded file.", 400);
   if (rows.length - 1 > MAX_ROWS) throw new AppError("TOO_MANY_ROWS", `This import exceeds the ${MAX_ROWS}-row limit.`, 400);
 

@@ -433,8 +433,8 @@ describe("Phase 7: commercial entitlements + industry data platform (integration
       const validated = await validateImportJob(actor(companyId), job.id);
       const rowsByNumber = new Map(validated.rows.map((r) => [r.rowNumber, r]));
       expect(rowsByNumber.get(1)?.status).toBe("VALID");
-      expect(rowsByNumber.get(2)?.status).toBe("WARNING"); // duplicate itemCode within the batch
-      expect(rowsByNumber.get(3)?.status).toBe("ERROR"); // missing required itemCode
+      expect(rowsByNumber.get(2)?.status).toBe("REJECTED"); // duplicate itemCode within the batch — auto-skipped, not a reviewable warning
+      expect(rowsByNumber.get(3)?.status).toBe("WARNING"); // missing required itemCode — reviewable/approvable, not a hard block
 
       await actOnImportRows(actor(companyId), job.id, { rowIds: [rowsByNumber.get(1)!.id], action: "CREATE_NEW" });
       const executed = await executeImportJob(actor(companyId), job.id);
@@ -449,7 +449,7 @@ describe("Phase 7: commercial entitlements + industry data platform (integration
 
       // The duplicate/error rows were never approved, so nothing else was created.
       const stillPending = executed.rows.find((r) => r.rowNumber === 2);
-      expect(stillPending?.status).toBe("WARNING");
+      expect(stillPending?.status).toBe("REJECTED");
     });
 
     it("enforces tenant isolation on import jobs", async () => {

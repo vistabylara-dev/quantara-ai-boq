@@ -277,8 +277,18 @@ export default function DashboardPage() {
         <SectionHeader title="Quick actions" description="Jump straight into common workspace tasks." />
         <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <QuickActionButton href="/clients/new" label="Create Client" icon={Users} />
-          <QuickActionButton href="/catalogue" label="Open Catalogue" icon={Layers} />
-          <QuickActionButton href="/suppliers" label="Manage Suppliers" icon={Truck} />
+          <QuickActionButton
+            href="/catalogue"
+            label="Open Catalogue"
+            icon={Layers}
+            image={`/images/dashboard/${encodeURIComponent("Gemini_Generated_Image_br6nzvbr6nzvbr6n.png")}`}
+          />
+          <QuickActionButton
+            href="/suppliers"
+            label="Manage Suppliers"
+            icon={Truck}
+            image={`/images/dashboard/${encodeURIComponent("Gemini_Generated_Image_rghpplrghpplrghp (1).png")}`}
+          />
           <QuickActionButton href="/templates" label="Browse Templates" icon={BookOpen} />
         </div>
       </section>

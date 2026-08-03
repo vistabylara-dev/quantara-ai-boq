@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type DragEvent } from "react";
 import { apiClient, getApiErrorMessage } from "@/lib/api/client";
 import { formatDate } from "@/lib/formatting/dates";
 
@@ -19,18 +19,6 @@ type ImportJob = {
   createdAt: string;
 };
 
-function readFileAsBase64(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      const result = reader.result as string;
-      resolve(result.split(",")[1] ?? "");
-    };
-    reader.onerror = () => reject(reader.error);
-    reader.readAsDataURL(file);
-  });
-}
-
 type UploadProgress = { fileName: string; status: "pending" | "done" | "error"; error?: string };
 
 export default function ImportsPage() {
@@ -42,7 +30,11 @@ export default function ImportsPage() {
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [uploadProgress, setUploadProgress] = useState<UploadProgress[]>([]);
   const [deletingJobId, setDeletingJobId] = useState<string | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  // Counts nested dragenter/dragleave pairs as the pointer crosses child elements inside the drop
+  // zone — a plain boolean flickers off every time the pointer passes over a child node.
+  const dragDepthRef = useRef(0);
 
   const load = useCallback(async (signal?: AbortSignal) => {
     setIsLoading(true);
@@ -81,14 +73,13 @@ export default function ImportsPage() {
     for (let index = 0; index < fileArray.length; index += 1) {
       const file = fileArray[index];
       try {
-        const base64 = await readFileAsBase64(file);
         const sourceType = file.name.toLowerCase().endsWith(".csv") ? "CSV" : "XLSX";
-        await apiClient.post<ImportJob>("/api/imports", {
-          uploadedFileName: file.name,
-          fileContentBase64: base64,
-          sourceType,
-          destinationType,
-        });
+        const form = new FormData();
+        form.append("file", file);
+        form.append("uploadedFileName", file.name);
+        form.append("sourceType", sourceType);
+        form.append("destinationType", destinationType);
+        await apiClient.postForm<ImportJob>("/api/imports", form);
         setUploadProgress((current) => current.map((p, i) => (i === index ? { ...p, status: "done" } : p)));
       } catch (error) {
         setUploadProgress((current) => current.map((p, i) => (i === index ? { ...p, status: "error", error: getApiErrorMessage(error) } : p)));
@@ -99,6 +90,44 @@ export default function ImportsPage() {
     if (fileInputRef.current) fileInputRef.current.value = "";
     await load();
   }, [destinationType, load]);
+
+  const acceptFileList = useCallback((files: FileList) => {
+    const accepted = Array.from(files).filter((f) => /\.(csv|xlsx)$/i.test(f.name));
+    const rejected = Array.from(files).filter((f) => !/\.(csv|xlsx)$/i.test(f.name));
+    if (rejected.length > 0) {
+      setUploadError(`Skipped ${rejected.length} file(s) that aren't .csv or .xlsx: ${rejected.map((f) => f.name).join(", ")}`);
+    } else {
+      setUploadError(null);
+    }
+    if (accepted.length === 0) return;
+    const dt = new DataTransfer();
+    accepted.forEach((f) => dt.items.add(f));
+    void uploadFiles(dt.files);
+  }, [uploadFiles]);
+
+  const onDragEnter = useCallback((e: DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    dragDepthRef.current += 1;
+    setIsDragging(true);
+  }, []);
+
+  const onDragOver = useCallback((e: DragEvent<HTMLDivElement>) => {
+    // Required for onDrop to fire at all — browsers reject drops by default.
+    e.preventDefault();
+  }, []);
+
+  const onDragLeave = useCallback((e: DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    dragDepthRef.current = Math.max(0, dragDepthRef.current - 1);
+    if (dragDepthRef.current === 0) setIsDragging(false);
+  }, []);
+
+  const onDrop = useCallback((e: DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    dragDepthRef.current = 0;
+    setIsDragging(false);
+    if (e.dataTransfer.files.length > 0) acceptFileList(e.dataTransfer.files);
+  }, [acceptFileList]);
 
   // Deletes the import job and its staged rows only — never touches CompanyLibraryItem /
   // RateCatalogueItem records a prior execute already created. Meant for clearing out a bad
@@ -136,15 +165,32 @@ export default function ImportsPage() {
             <option value="DRAFT_BOQ">Destination: Draft BOQ</option>
             <option value="STAGING_REVIEW">Destination: Staging review only</option>
           </select>
+          {isUploading && <span className="text-xs text-slate-500">Uploading…</span>}
+        </div>
+
+        <div
+          onDragEnter={onDragEnter}
+          onDragOver={onDragOver}
+          onDragLeave={onDragLeave}
+          onDrop={onDrop}
+          onClick={() => fileInputRef.current?.click()}
+          className={`mt-4 flex cursor-pointer flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed px-6 py-10 text-center transition-colors ${
+            isDragging ? "border-blue-500 bg-blue-500/10" : "border-slate-700 bg-slate-900/40 hover:border-slate-600"
+          }`}
+        >
+          <p className="text-sm text-slate-300">
+            {isDragging ? "Drop to queue these files" : "Drag CSV/XLSX files here, or click to browse"}
+          </p>
+          <p className="text-xs text-slate-500">You can drop or select multiple files at once — each becomes its own import job.</p>
           <input
             ref={fileInputRef}
             type="file"
             accept=".csv,.xlsx"
             multiple
+            onClick={(e) => e.stopPropagation()}
             onChange={(e) => e.target.files && e.target.files.length > 0 && void uploadFiles(e.target.files)}
-            className="text-sm text-slate-300"
+            className="hidden"
           />
-          {isUploading && <span className="text-xs text-slate-500">Uploading…</span>}
         </div>
         {uploadError && <p className="mt-3 text-xs text-rose-300">{uploadError}</p>}
         {uploadProgress.length > 0 && (

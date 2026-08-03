@@ -10,7 +10,12 @@ import { createLibraryItem } from "@/lib/repositories/company-library-repository
 import { createBOQItem, getBOQ, listProjectBOQs } from "@/lib/repositories/boq-repository";
 import { getProjectRecord } from "@/lib/repositories/project-repository";
 
-const MAX_ROWS = 2_000;
+// Raised from 2,000: real category files are running ~4,000+ rows each, and the old cap rejected
+// the whole upload outright with no way around it. 10,000 leaves headroom above that while still
+// bounding the per-row loops in validateImportJob/executeImportJob (each row is its own awaited
+// Prisma call, not batched) — if uploads start regularly approaching this new ceiling, those loops
+// should be batched before raising it further, since that's what would actually time out first.
+const MAX_ROWS = 10_000;
 
 /**
  * Maps a keyword that might appear in an uploaded file's name to the taxonomy key it should
@@ -152,7 +157,7 @@ function toRowDTO(row: {
 export type CreateImportJobInput = {
   projectId?: string;
   uploadedFileName: string;
-  fileContentBase64: string;
+  buffer: Buffer;
   sourceType: "CSV" | "XLSX";
   destinationType: "COMPANY_LIBRARY" | "RATE_CATALOGUE" | "DRAFT_BOQ" | "STAGING_REVIEW";
   mappingTemplateId?: string;
@@ -164,7 +169,7 @@ export async function createImportJob(actor: CurrentActor, input: CreateImportJo
 
   if (input.projectId) await getProjectRecord(actor.companyId, input.projectId);
 
-  const buffer = Buffer.from(input.fileContentBase64, "base64");
+  const buffer = input.buffer;
   let rows: string[][];
   if (input.sourceType === "CSV") {
     rows = parseCsv(buffer.toString("utf-8"));

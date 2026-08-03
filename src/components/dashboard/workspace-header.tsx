@@ -1,7 +1,8 @@
 import { ArrowRight, FileCheck2, Plus, Upload } from "lucide-react";
 import Link from "next/link";
-import ProjectIntelligenceVisual from "@/components/visuals/project-intelligence-visual";
 import StatusBadge, { type StatusTone } from "./status-badge";
+
+const HERO_IMAGE = `/images/dashboard/${encodeURIComponent("Gemini_Generated_Image_jo3u1mjo3u1mjo3u.png")}`;
 
 export type CurrentProject = {
   id: string;
@@ -114,9 +115,9 @@ export default function WorkspaceHeader({
           </p>
         </div>
 
-        <div className="relative hidden aspect-square items-center justify-center lg:flex" aria-hidden="true">
-          <div className="absolute inset-0 rounded-[28px] bg-[#EAF1F8] dark:bg-[#040A16]" />
-          <ProjectIntelligenceVisual className="relative h-full w-full text-[#20304D] dark:text-[#20304D]" />
+        <div className="relative hidden aspect-square items-center justify-center overflow-hidden rounded-[28px] lg:flex" aria-hidden="true">
+          <div className="absolute inset-0 bg-[#EAF1F8] dark:bg-[#040A16]" />
+          <img src={HERO_IMAGE} alt="" width={1600} height={872} loading="lazy" className="relative h-full w-full object-cover" />
         </div>
       </div>
     </header>

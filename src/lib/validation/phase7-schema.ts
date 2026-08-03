@@ -116,11 +116,15 @@ export const brandingUpdateSchema = z
 export const activateDevelopmentPlanSchema = z.object({ planKey: z.string().trim().min(1).max(100) }).strict();
 export const activateDevelopmentPackageSchema = z.object({ packageKeyOrId: z.string().trim().min(1).max(200) }).strict();
 
-export const importJobCreateSchema = z
+// The uploaded file itself travels as multipart FormData, not JSON — a base64 string embedded in
+// a JSON body inflates the payload ~33% and made moderately large CSVs trip the platform's request
+// body size cap (HTTP 413) well before this app's own row-count limit ever got a chance to reject
+// them with a clear message. This schema only validates the metadata fields that ride alongside
+// the file in the same form submission.
+export const importJobMetadataSchema = z
   .object({
     projectId: z.string().uuid().optional(),
     uploadedFileName: z.string().trim().min(1).max(255),
-    fileContentBase64: z.string().min(1, "File content is required."),
     sourceType: z.enum(["CSV", "XLSX"]),
     destinationType: z.enum(["COMPANY_LIBRARY", "RATE_CATALOGUE", "DRAFT_BOQ", "STAGING_REVIEW"]),
     mappingTemplateId: z.string().uuid().optional(),

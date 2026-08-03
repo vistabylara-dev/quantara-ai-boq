@@ -21,6 +21,11 @@ export type CreateProjectFileInput = {
   extension: string;
   fileSize: number;
   checksum: string;
+  drawingNumber?: string | null;
+  drawingTitle?: string | null;
+  revisionNumber?: string | null;
+  scaleText?: string | null;
+  metadataJson?: Prisma.InputJsonValue;
 };
 
 export function toProjectFileDTO(row: ProjectFileRecord) {
@@ -74,6 +79,11 @@ export async function createProjectFile(companyId: string, input: CreateProjectF
       checksum: input.checksum,
       status: ProjectFileStatus.UPLOADED,
       classification: ProjectFileClassification.UNKNOWN,
+      drawingNumber: input.drawingNumber,
+      drawingTitle: input.drawingTitle,
+      revisionNumber: input.revisionNumber,
+      scaleText: input.scaleText,
+      metadataJson: input.metadataJson,
     },
     include: projectFileInclude,
   });
@@ -113,6 +123,31 @@ export async function deleteProjectFileRow(companyId: string, fileId: string, db
 export async function updateProjectFileStatus(companyId: string, fileId: string, status: ProjectFileStatus, db: DbClient = prisma): Promise<void> {
   const result = await db.projectFile.updateMany({ where: { id: fileId, companyId }, data: { status } });
   if (result.count === 0) throw new NotFoundError("File not found.");
+}
+
+export type ProjectFileMetadataPatch = {
+  drawingNumber?: string | null;
+  drawingTitle?: string | null;
+  revisionNumber?: string | null;
+  scaleText?: string | null;
+  metadataJson?: Prisma.InputJsonValue;
+};
+
+/** Column-level patch for the fields a drawing's classification form can edit, plus a full metadataJson replacement for everything that has no dedicated column. */
+export async function updateProjectFileMetadata(
+  companyId: string,
+  fileId: string,
+  patch: ProjectFileMetadataPatch,
+  db: DbClient = prisma,
+): Promise<ProjectFileRecord> {
+  const row = await db.projectFile.findFirst({ where: { id: fileId, companyId } });
+  if (!row) throw new NotFoundError("File not found.");
+
+  return db.projectFile.update({
+    where: { id: fileId },
+    data: patch,
+    include: projectFileInclude,
+  });
 }
 
 /**

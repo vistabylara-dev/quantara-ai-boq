@@ -14,7 +14,8 @@ import {
 } from "@/lib/repositories/project-file-repository";
 import { toExtractionJobDTO } from "@/lib/repositories/extraction-job-repository";
 import { buildStorageKey, computeChecksum, validateUpload } from "@/lib/files/file-security";
-import { localProjectFileStorageAdapter } from "@/lib/storage/local-project-file-storage-adapter";
+import { createStorageAdapter, resolveStorageProvider } from "@/lib/storage/storage-factory";
+import type { DocumentStorageAdapter } from "@/lib/storage/document-storage-adapter";
 import { createAuditLog } from "@/lib/repositories/audit-repository";
 import "@/lib/jobs/register-handlers";
 import { extractionJobQueue } from "@/lib/jobs/extraction-worker";
@@ -24,6 +25,22 @@ export type UploadProjectFileInput = {
   mimeType: string;
   buffer: Buffer;
 };
+
+/**
+ * Resolved once per process, not once per call — `resolveStorageProvider()`
+ * throws in production if STORAGE_PROVIDER is unset, and creating a fresh
+ * Vercel Blob client on every request would be wasteful. Local dev/test
+ * behavior is unchanged (still the local filesystem adapter); production
+ * now actually uses private Vercel Blob instead of the function's ephemeral
+ * local disk, which never survived a redeploy or cold start.
+ */
+let cachedStorageAdapter: DocumentStorageAdapter | null = null;
+function getProjectFileStorageAdapter(): DocumentStorageAdapter {
+  if (!cachedStorageAdapter) {
+    cachedStorageAdapter = createStorageAdapter({ provider: resolveStorageProvider(), purpose: "project-files" });
+  }
+  return cachedStorageAdapter;
+}
 
 /**
  * Validates, stores, and records an uploaded source file. The original is
@@ -41,19 +58,29 @@ export async function uploadProjectFile(actor: CurrentActor, projectId: string, 
   const duplicate = await findDuplicateByChecksum(actor.companyId, projectId, checksum);
 
   const storageKey = buildStorageKey(actor.companyId, projectId, "originals", safeFileName);
-  await localProjectFileStorageAdapter.putObject({ key: storageKey, body: input.buffer, contentType: input.mimeType });
+  const storage = getProjectFileStorageAdapter();
+  await storage.putObject({ key: storageKey, body: input.buffer, contentType: input.mimeType });
 
-  const row = await createProjectFile(actor.companyId, {
-    projectId,
-    uploadedByUserId: actor.userId,
-    originalName: input.originalName,
-    safeFileName,
-    storageKey,
-    mimeType: input.mimeType,
-    extension,
-    fileSize: input.buffer.byteLength,
-    checksum,
-  });
+  let row;
+  try {
+    row = await createProjectFile(actor.companyId, {
+      projectId,
+      uploadedByUserId: actor.userId,
+      originalName: input.originalName,
+      safeFileName,
+      storageKey,
+      mimeType: input.mimeType,
+      extension,
+      fileSize: input.buffer.byteLength,
+      checksum,
+    });
+  } catch (error) {
+    // The Blob object was already written above — if the metadata write
+    // fails, roll it back rather than leaving an orphaned, unreferenced
+    // object with no database row pointing at it.
+    await storage.deleteObject(storageKey).catch(() => undefined);
+    throw error;
+  }
 
   await createAuditLog(actor.companyId, {
     entityType: "ProjectFile",
@@ -76,10 +103,18 @@ export async function getProjectFile(actor: CurrentActor, fileId: string) {
   return toProjectFileDTO(row);
 }
 
-/** The only path that ever reads project-file bytes off disk — tenant-scoped lookup happens before the storage adapter is touched. */
+/** The only path that ever reads project-file bytes off storage — tenant-scoped lookup happens before the storage adapter is touched. */
 export async function getProjectFileForDownload(actor: CurrentActor, fileId: string) {
   const row = await getProjectFileRecord(actor.companyId, fileId);
-  const buffer = await localProjectFileStorageAdapter.getObject(row.storageKey);
+  const buffer = await getProjectFileStorageAdapter().getObject(row.storageKey);
+
+  await createAuditLog(actor.companyId, {
+    entityType: "ProjectFile",
+    entityId: fileId,
+    action: "FILE_DOWNLOADED",
+    payload: { projectId: row.projectId, originalName: row.originalName },
+  });
+
   return { buffer, fileName: row.originalName, mimeType: row.mimeType };
 }
 
@@ -95,7 +130,7 @@ export async function deleteProjectFile(actor: CurrentActor, fileId: string) {
   requireCapability(actor, "files:manage");
   const row = await getProjectFileRecord(actor.companyId, fileId);
   await deleteProjectFileRow(actor.companyId, fileId);
-  await localProjectFileStorageAdapter.deleteObject(row.storageKey);
+  await getProjectFileStorageAdapter().deleteObject(row.storageKey);
 
   await createAuditLog(actor.companyId, {
     entityType: "ProjectFile",

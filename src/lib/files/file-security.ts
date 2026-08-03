@@ -22,6 +22,10 @@ const MIME_BY_EXTENSION: Record<string, readonly string[] | null> = {
   dxf: null,
   dwg: null,
   ifc: null,
+  // RVT (Revit) and ZIP archives are just as MIME-unreliable across browsers
+  // as DXF/DWG/IFC above — trusted on extension alone, same reasoning.
+  rvt: null,
+  zip: ["application/zip", "application/x-zip-compressed", "application/octet-stream"],
 };
 
 export const SUPPORTED_EXTENSIONS = Object.keys(MIME_BY_EXTENSION);
@@ -103,4 +107,19 @@ export function buildStorageKey(
   fileName: string,
 ): string {
   return `companies/${companyId}/projects/${projectId}/${category}/${fileName}`;
+}
+
+/**
+ * Drawing uploads get their own per-drawing segment (unlike the flat
+ * `originals` category above) so every drawing's key is unique even if two
+ * drawings share a sanitized file name — the drawingId is generated
+ * server-side before this is called, never taken from client input.
+ */
+export function buildDrawingStorageKey(
+  companyId: string,
+  projectId: string,
+  drawingId: string,
+  fileName: string,
+): string {
+  return `companies/${companyId}/projects/${projectId}/drawings/${drawingId}/${fileName}`;
 }

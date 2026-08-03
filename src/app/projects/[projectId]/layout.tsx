@@ -63,6 +63,12 @@ export default function ProjectLayout({ children, params }: ProjectLayoutProps) 
             >
               Proposals
             </Link>
+            <Link
+              href={`${basePath}/files`}
+              className="rounded-full border border-slate-800 bg-slate-900 px-4 py-2 text-sm text-slate-200 transition hover:bg-slate-800"
+            >
+              Files &amp; Drawings
+            </Link>
           </div>
         </div>
       </div>

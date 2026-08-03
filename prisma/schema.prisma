@@ -777,6 +777,8 @@ model Company {
   extractedTables               ExtractedTable[]
   extractedTableRows            ExtractedTableRow[]
   extractedTableCells           ExtractedTableCell[]
+  drawingPages                   DrawingPage[]
+  drawingLayers                  DrawingLayer[]
 }
 
 model User {
@@ -1503,6 +1505,7 @@ model ProjectFile {
   classificationConfirmedByUser User?                      @relation("ProjectFileClassificationConfirmedByUser", fields: [classificationConfirmedByUserId], references: [id], onDelete: SetNull)
   extractionJobs                 ExtractionJob[]
   extractedTables                 ExtractedTable[]
+  drawingPages                     DrawingPage[]
 
   @@index([companyId])
   @@index([projectId])
@@ -1737,4 +1740,54 @@ enum ExtractedTableStatus {
   CONFIRMED
   CORRECTED
   REJECTED
+}
+
+/** Phase 8 section 7/16 — one viewable/rasterized page of a drawing file (a PDF page, or the single implicit page of a standalone image). */
+model DrawingPage {
+  id                   String   @id @default(uuid()) @db.Uuid
+  companyId            String   @db.Uuid
+  projectFileId        String   @db.Uuid
+  pageNumber           Int
+  sheetName            String?
+  width                Int?
+  height               Int?
+  dpi                  Int?
+  imageStorageKey      String?
+  thumbnailStorageKey  String?
+  vectorDataStorageKey String?
+  textLayerJson        Json?
+  titleBlockJson       Json?
+  detectedScale        String?
+  scaleUnit            String?
+  scaleConfidence      Decimal? @db.Decimal(5, 2)
+  orientation          String?
+  cropBoxJson          Json?
+  processingStatus     String   @default("PENDING")
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+  company              Company     @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  projectFile          ProjectFile @relation(fields: [projectFileId], references: [id], onDelete: Cascade)
+  layers               DrawingLayer[]
+
+  @@unique([projectFileId, pageNumber])
+  @@index([companyId])
+  @@index([projectFileId])
+}
+
+model DrawingLayer {
+  id              String   @id @default(uuid()) @db.Uuid
+  companyId       String   @db.Uuid
+  drawingPageId   String   @db.Uuid
+  name            String
+  layerType       String?
+  sourceLayerName String?
+  isVisible       Boolean  @default(true)
+  metadataJson    Json?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  company         Company     @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  drawingPage     DrawingPage @relation(fields: [drawingPageId], references: [id], onDelete: Cascade)
+
+  @@index([companyId])
+  @@index([drawingPageId])
 }

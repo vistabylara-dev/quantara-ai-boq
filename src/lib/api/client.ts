@@ -35,7 +35,7 @@ export class ApiClientError extends Error {
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const headers = new Headers(init.headers);
   headers.set("Accept", "application/json");
-  if (init.body && !headers.has("Content-Type")) {
+  if (init.body && !(init.body instanceof FormData) && !headers.has("Content-Type")) {
     headers.set("Content-Type", "application/json");
   }
 
@@ -90,6 +90,10 @@ export const apiClient = {
       body: body === undefined ? undefined : JSON.stringify(body),
       signal,
     });
+  },
+  /** For multipart file uploads — passes FormData through untouched so the browser sets the correct boundary Content-Type. */
+  postForm<T>(path: string, formData: FormData, signal?: AbortSignal) {
+    return request<T>(path, { method: "POST", body: formData, signal });
   },
   put<T>(path: string, body: unknown, signal?: AbortSignal) {
     return request<T>(path, {

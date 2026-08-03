@@ -68,3 +68,7 @@ export const projectFileIdParamsSchema = z.object({
 export const extractionJobIdParamsSchema = z.object({
   jobId: z.string().uuid("A valid job ID is required."),
 }).strict();
+
+export const drawingPageIdParamsSchema = z.object({
+  pageId: z.string().uuid("A valid drawing page ID is required."),
+}).strict();

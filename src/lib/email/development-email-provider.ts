@@ -19,7 +19,7 @@ export const developmentEmailProvider: EmailProvider = {
     console.log(
       `\n[DEV EMAIL - NOT SENT] ${input.subject}\n  To: ${input.to}\n` +
         (input.cc?.length ? `  Cc: ${input.cc.join(", ")}\n` : "") +
-        `  (development provider — no real delivery attempted)\n`,
+        `  (development provider — no real delivery attempted)\n\n${input.text}\n`,
     );
     return {
       status: "DEVELOPMENT_CAPTURED",

@@ -1,14 +1,31 @@
 import { UserRole } from "@prisma/client";
 import { prisma } from "@/lib/db/prisma";
 import { AppError } from "@/lib/errors/app-error";
-import { appBaseUrl, logDevEmailLink } from "@/lib/auth/dev-mailer";
+import { appBaseUrl } from "@/lib/auth/dev-mailer";
 import { hashPassword, verifyPassword } from "@/lib/auth/password";
 import { createSession, destroyCurrentSession } from "@/lib/auth/session";
 import { generateRawToken, hashToken } from "@/lib/auth/tokens";
+import { buildPasswordResetEmail, buildVerificationEmail } from "@/lib/email/auth-email-templates";
+import { getEmailProvider } from "@/lib/email/get-email-provider";
 import { createCompany } from "@/lib/repositories/company-repository";
 import { findUserByEmail, findUserById } from "@/lib/repositories/user-repository";
 import type { registerSchema, loginSchema } from "@/lib/validation/auth-schemas";
 import type { z } from "zod";
+
+/**
+ * Never throws — a delivery failure must never block registration or leak
+ * through the generic forgot-password response. Never logs `input` (which
+ * carries the raw token inside the URL), only the safe provider result.
+ */
+async function sendAuthEmail(input: { to: string; subject: string; html: string; text: string }): Promise<void> {
+  const result = await getEmailProvider().sendEmail(input);
+  if (result.status === "FAILED") {
+    console.error("[auth-email] delivery failed", {
+      errorCode: result.errorCode,
+      errorMessage: result.errorMessage,
+    });
+  }
+}
 
 const EMAIL_VERIFICATION_TTL_MS = 24 * 60 * 60 * 1000;
 const PASSWORD_RESET_TTL_MS = 60 * 60 * 1000;
@@ -77,7 +94,8 @@ export async function issueEmailVerificationToken(userId: string, email: string)
     },
   });
   const url = `${appBaseUrl()}/verify-email?token=${rawToken}`;
-  logDevEmailLink("Email verification", email, url);
+  const { subject, html, text } = buildVerificationEmail(url);
+  await sendAuthEmail({ to: email, subject, html, text });
 }
 
 export async function verifyEmail(rawToken: string): Promise<void> {
@@ -165,7 +183,8 @@ export async function requestPasswordReset(email: string): Promise<void> {
     },
   });
   const url = `${appBaseUrl()}/reset-password?token=${rawToken}`;
-  logDevEmailLink("Password reset", user.email, url);
+  const { subject, html, text } = buildPasswordResetEmail(url);
+  await sendAuthEmail({ to: user.email, subject, html, text });
 }
 
 export async function resetPassword(rawToken: string, newPassword: string): Promise<void> {

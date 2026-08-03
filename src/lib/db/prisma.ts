@@ -36,8 +36,20 @@ const logLevels = (process.env.NODE_ENV === "development" ? ["warn", "error"] : 
   "warn" | "error"
 >;
 
+/**
+ * With `engineType = "client"` in schema.prisma, the generated client uses
+ * Prisma's WASM query compiler instead of a native/binary query engine —
+ * required because the native engine cannot load inside the Cloudflare
+ * Workers V8 isolate. Confirmed empirically: in this mode `new
+ * PrismaClient()` throws immediately without an adapter ("Missing
+ * configured driver adapter. Engine type `client` requires an active
+ * driver adapter."), so the Node/local path needs one too, not just the
+ * Cloudflare path — there is no more engine-only fallback anywhere.
+ */
 function createDirectClient(): PrismaClient {
-  return new PrismaClient({ log: logLevels });
+  const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+  const adapter = new PrismaPg(pool);
+  return new PrismaClient({ adapter, log: logLevels });
 }
 
 /**

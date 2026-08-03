@@ -222,6 +222,11 @@ export default function TemplatesPage() {
         </div>
       )}
 
+      <div>
+        <h2 className="mb-1 text-lg font-semibold text-white">BOQ templates</h2>
+        <p className="mb-4 text-sm text-slate-500">Used when generating a Bill of Quantities document for a project.</p>
+      </div>
+
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
         {filteredTemplates.map((template) => (
           <div key={template.id} className="rounded-[32px] border border-slate-800 bg-slate-900 p-6 text-slate-300">
@@ -322,6 +327,18 @@ export default function TemplatesPage() {
             </div>
           </div>
         ))}
+      </div>
+
+      <div>
+        <h2 className="mb-1 text-lg font-semibold text-white">Technical report templates</h2>
+        <p className="mb-4 text-sm text-slate-500">Used when generating an inspection technical report. Not available yet.</p>
+      </div>
+
+      <div className="rounded-[32px] border border-dashed border-slate-800 bg-slate-950 p-8 text-center">
+        <p className="text-sm font-semibold text-slate-300">Coming soon</p>
+        <p className="mt-2 text-sm text-slate-500">
+          Technical report generation hasn&apos;t been built yet. Once it is, its templates will appear in this section automatically.
+        </p>
       </div>
 
       {editingId && draft && (

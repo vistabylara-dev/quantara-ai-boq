@@ -25,7 +25,7 @@ function statusProgress(status: string): { fraction: number; barClass: string } 
   }
   const index = STATUS_PROGRESS_ORDER.indexOf(status);
   const fraction = index === -1 ? 0 : index / (STATUS_PROGRESS_ORDER.length - 1);
-  const barClass = status === "ARCHIVED" ? "bg-[#159A6A] dark:bg-emerald-400" : "bg-[#0EA5E9] dark:bg-[#22D3EE]";
+  const barClass = status === "ARCHIVED" ? "bg-[#159A6A] dark:bg-emerald-400" : "bg-[#009FE3] dark:bg-[#21C7F3]";
   return { fraction, barClass };
 }
 
@@ -44,10 +44,10 @@ export type RecentProject = {
 export default function ProjectCard({ project }: { project: RecentProject }) {
   const progress = statusProgress(project.status);
   return (
-    <div className="rounded-2xl border border-[#D9E2EC] dark:border-[#1E2A42] bg-[#EEF3F8] dark:bg-[#111D33] p-5 transition-all duration-200 hover:-translate-y-0.5 hover:border-[#B9C7D6] hover:shadow-md dark:hover:border-[#31405F] motion-reduce:transition-none motion-reduce:hover:translate-y-0">
+    <div className="rounded-2xl border border-[#D5E0EC] dark:border-[#20304D] bg-[#EAF1F8] dark:bg-[#101D34] p-5 transition-all duration-200 hover:-translate-y-0.5 hover:border-[#B9C7D6] hover:shadow-md dark:hover:border-[#31405F] motion-reduce:transition-none motion-reduce:hover:translate-y-0">
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div>
-          <p className="font-semibold text-[#0B1630] dark:text-white">{project.name}</p>
+          <p className="font-semibold text-[#08152E] dark:text-white">{project.name}</p>
           <p className="text-xs text-[#7B879C] dark:text-[#7F8DA6]">
             {project.client?.companyName || project.client?.name || "No client assigned"}
           </p>
@@ -56,7 +56,7 @@ export default function ProjectCard({ project }: { project: RecentProject }) {
       </div>
 
       <div
-        className="mt-4 h-1.5 w-full overflow-hidden rounded-full bg-[#D9E2EC] dark:bg-[#1E2A42]"
+        className="mt-4 h-1.5 w-full overflow-hidden rounded-full bg-[#D5E0EC] dark:bg-[#20304D]"
         role="img"
         aria-label={`Project lifecycle progress: ${Math.round(progress.fraction * 100)}%`}
       >
@@ -72,7 +72,7 @@ export default function ProjectCard({ project }: { project: RecentProject }) {
         <p className="text-xs text-[#7B879C] dark:text-[#7F8DA6]">Updated {formatDate(project.updatedAt)}</p>
         <Link
           href={`/projects/${project.id}`}
-          className="rounded-xl border border-[#D9E2EC] dark:border-[#1E2A42] bg-white dark:bg-[#0B1426] px-3 py-1.5 text-xs font-semibold text-[#0B1630] dark:text-[#F7FAFC] hover:bg-[#EEF3F8] dark:hover:bg-[#111D33]"
+          className="rounded-xl border border-[#D5E0EC] dark:border-[#20304D] bg-white dark:bg-[#091326] px-3 py-1.5 text-xs font-semibold text-[#08152E] dark:text-[#F4F8FF] hover:bg-[#EAF1F8] dark:hover:bg-[#101D34]"
         >
           Open
         </Link>

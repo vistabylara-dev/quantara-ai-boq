@@ -13,9 +13,9 @@ export default function QuickActionButton({
   return (
     <Link
       href={href}
-      className="flex min-h-[44px] items-center gap-3 rounded-2xl border border-[#D9E2EC] dark:border-[#1E2A42] bg-[#EEF3F8] dark:bg-[#111D33] px-4 py-3 text-sm font-medium text-[#0B1630] dark:text-[#F7FAFC] transition-all duration-200 hover:-translate-y-0.5 hover:border-[#0EA5E9]/50 hover:bg-white hover:shadow-md dark:hover:border-[#22D3EE]/50 dark:hover:bg-[#0B1426] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#38BDF8] dark:focus-visible:outline-[#22D3EE] motion-reduce:transition-none motion-reduce:hover:translate-y-0"
+      className="flex min-h-[44px] items-center gap-3 rounded-2xl border border-[#D5E0EC] dark:border-[#20304D] bg-[#EAF1F8] dark:bg-[#101D34] px-4 py-3 text-sm font-medium text-[#08152E] dark:text-[#F4F8FF] transition-all duration-200 hover:-translate-y-0.5 hover:border-[#009FE3]/50 hover:bg-white hover:shadow-md dark:hover:border-[#21C7F3]/50 dark:hover:bg-[#091326] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#38BDF8] dark:focus-visible:outline-[#21C7F3] motion-reduce:transition-none motion-reduce:hover:translate-y-0"
     >
-      <Icon className="h-4 w-4 text-[#0284C7] dark:text-[#22D3EE]" aria-hidden="true" />
+      <Icon className="h-4 w-4 text-[#0077B6] dark:text-[#21C7F3]" aria-hidden="true" />
       {label}
     </Link>
   );

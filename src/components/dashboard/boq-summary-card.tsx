@@ -29,10 +29,10 @@ export type RecentBoq = {
 export default function BOQSummaryCard({ boq }: { boq: RecentBoq }) {
   const currency = boq.project?.currency ?? "AED";
   return (
-    <div className="rounded-2xl border border-[#D9E2EC] dark:border-[#1E2A42] bg-[#EEF3F8] dark:bg-[#111D33] p-5 transition-all duration-200 hover:-translate-y-0.5 hover:border-[#B9C7D6] hover:shadow-md dark:hover:border-[#31405F] motion-reduce:transition-none motion-reduce:hover:translate-y-0">
+    <div className="rounded-2xl border border-[#D5E0EC] dark:border-[#20304D] bg-[#EAF1F8] dark:bg-[#101D34] p-5 transition-all duration-200 hover:-translate-y-0.5 hover:border-[#B9C7D6] hover:shadow-md dark:hover:border-[#31405F] motion-reduce:transition-none motion-reduce:hover:translate-y-0">
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div>
-          <p className="font-semibold text-[#0B1630] dark:text-white">{boq.title}</p>
+          <p className="font-semibold text-[#08152E] dark:text-white">{boq.title}</p>
           <p className="text-xs text-[#7B879C] dark:text-[#7F8DA6]">{boq.project?.name ?? "Unassigned project"}</p>
         </div>
         <div className="flex items-center gap-2">
@@ -43,19 +43,19 @@ export default function BOQSummaryCard({ boq }: { boq: RecentBoq }) {
       <div className="mt-4 grid grid-cols-2 gap-3 text-xs sm:grid-cols-4">
         <div>
           <p className="text-[#7B879C] dark:text-[#7F8DA6]">Items</p>
-          <p className="mt-1 font-semibold text-[#0B1630] dark:text-white">{boq.itemCount}</p>
+          <p className="mt-1 font-semibold text-[#08152E] dark:text-white">{boq.itemCount}</p>
         </div>
         <div>
           <p className="text-[#7B879C] dark:text-[#7F8DA6]">Subtotal</p>
-          <p className="mt-1 font-semibold text-[#0B1630] dark:text-white">{formatCurrency(boq.subtotal, currency)}</p>
+          <p className="mt-1 font-semibold text-[#08152E] dark:text-white">{formatCurrency(boq.subtotal, currency)}</p>
         </div>
         <div>
           <p className="text-[#7B879C] dark:text-[#7F8DA6]">VAT</p>
-          <p className="mt-1 font-semibold text-[#0B1630] dark:text-white">{formatCurrency(boq.vatAmount, currency)}</p>
+          <p className="mt-1 font-semibold text-[#08152E] dark:text-white">{formatCurrency(boq.vatAmount, currency)}</p>
         </div>
         <div>
           <p className="text-[#7B879C] dark:text-[#7F8DA6]">Grand total</p>
-          <p className="mt-1 font-semibold text-[#0B1630] dark:text-white">{formatCurrency(boq.grandTotal, currency)}</p>
+          <p className="mt-1 font-semibold text-[#08152E] dark:text-white">{formatCurrency(boq.grandTotal, currency)}</p>
         </div>
       </div>
       <div className="mt-4 flex items-center justify-between">
@@ -63,7 +63,7 @@ export default function BOQSummaryCard({ boq }: { boq: RecentBoq }) {
         {boq.project && (
           <Link
             href={`/projects/${boq.project.id}/boq`}
-            className="rounded-xl border border-[#D9E2EC] dark:border-[#1E2A42] bg-white dark:bg-[#0B1426] px-3 py-1.5 text-xs font-semibold text-[#0B1630] dark:text-[#F7FAFC] hover:bg-[#EEF3F8] dark:hover:bg-[#111D33]"
+            className="rounded-xl border border-[#D5E0EC] dark:border-[#20304D] bg-white dark:bg-[#091326] px-3 py-1.5 text-xs font-semibold text-[#08152E] dark:text-[#F4F8FF] hover:bg-[#EAF1F8] dark:hover:bg-[#101D34]"
           >
             Open
           </Link>

@@ -30,14 +30,14 @@ export default function TrialBanner() {
   if (!trialUsage) return null;
 
   return (
-    <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-blue-900 bg-blue-950/30 px-5 py-3 text-sm text-blue-200">
+    <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[#009FE3]/30 bg-[#009FE3]/5 px-5 py-3 text-sm dark:border-[#21C7F3]/30 dark:bg-[#21C7F3]/5">
       <div className="flex flex-wrap items-center gap-4">
-        <span className="font-semibold text-white">Pro Trial — {trialUsage.trialDaysRemaining ?? 0} day{trialUsage.trialDaysRemaining === 1 ? "" : "s"} remaining</span>
-        <span className="text-xs text-blue-300">Premium items used: {trialUsage.uniquePremiumItemsUnlocked}/{trialUsage.maxUniquePremiumItems}</span>
-        <span className="text-xs text-blue-300">BOQs used: {trialUsage.boqsCompleted}/{trialUsage.maxCompletedBoqs}</span>
-        <span className="text-xs text-blue-300">Documents used: {trialUsage.documentsGenerated}/{trialUsage.maxFinalExports}</span>
+        <span className="font-semibold text-[#08152E] dark:text-white">Pro Trial — {trialUsage.trialDaysRemaining ?? 0} day{trialUsage.trialDaysRemaining === 1 ? "" : "s"} remaining</span>
+        <span className="text-xs text-[#536078] dark:text-[#8CA0BE]">Premium items used: {trialUsage.uniquePremiumItemsUnlocked}/{trialUsage.maxUniquePremiumItems}</span>
+        <span className="text-xs text-[#536078] dark:text-[#8CA0BE]">BOQs used: {trialUsage.boqsCompleted}/{trialUsage.maxCompletedBoqs}</span>
+        <span className="text-xs text-[#536078] dark:text-[#8CA0BE]">Documents used: {trialUsage.documentsGenerated}/{trialUsage.maxFinalExports}</span>
       </div>
-      <Link href="/settings/subscription" className="rounded-full border border-blue-700 bg-blue-900/50 px-4 py-1.5 text-xs font-semibold text-white hover:bg-blue-900">
+      <Link href="/settings/subscription" className="rounded-full border border-[#009FE3]/40 bg-[#009FE3]/10 px-4 py-1.5 text-xs font-semibold text-[#0077B6] hover:bg-[#009FE3]/20 dark:border-[#21C7F3]/40 dark:bg-[#21C7F3]/10 dark:text-[#21C7F3] dark:hover:bg-[#21C7F3]/20">
         Upgrade
       </Link>
     </div>

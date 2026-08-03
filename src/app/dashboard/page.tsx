@@ -20,7 +20,7 @@ import { formatDate } from "@/lib/formatting/dates";
 import TrialBanner from "@/components/dashboard/trial-banner";
 import WorkspaceHeader from "@/components/dashboard/workspace-header";
 import QuickStartWorkspace from "@/components/dashboard/quick-start-workspace";
-import ConstructionTimeline from "@/components/dashboard/construction-timeline";
+import ProjectIntelligencePanel from "@/components/dashboard/project-intelligence-panel";
 import AIAssistantPanel from "@/components/dashboard/ai-assistant-panel";
 import MetricCard from "@/components/dashboard/metric-card";
 import SectionHeader from "@/components/dashboard/section-header";
@@ -72,7 +72,9 @@ type SubscriptionSummary = {
 };
 
 const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
-const panel = "rounded-[28px] border border-[#D9E2EC] dark:border-[#1E2A42] bg-white dark:bg-[#0B1426] p-6 sm:p-8";
+const panel = "rounded-[28px] border border-[#D5E0EC] dark:border-[#20304D] bg-white dark:bg-[#091326] p-6 sm:p-8";
+const panelAction =
+  "rounded-2xl border border-[#D5E0EC] dark:border-[#20304D] bg-[#EAF1F8] dark:bg-[#101D34] px-4 py-2 text-sm font-semibold text-[#08152E] dark:text-[#F4F8FF] hover:bg-white dark:hover:bg-[#091326]";
 
 const SUBSCRIPTION_STATUS_TONE: Record<string, StatusTone> = {
   TRIAL: "warning",
@@ -168,11 +170,11 @@ export default function DashboardPage() {
     return (
       <div className={panel}>
         <div className="animate-pulse space-y-4 motion-reduce:animate-none" aria-live="polite" aria-busy="true">
-          <div className="h-4 w-40 rounded bg-[#EEF3F8] dark:bg-[#111D33]" />
-          <div className="h-8 w-72 rounded bg-[#EEF3F8] dark:bg-[#111D33]" />
+          <div className="h-4 w-40 rounded bg-[#EAF1F8] dark:bg-[#101D34]" />
+          <div className="h-8 w-72 rounded bg-[#EAF1F8] dark:bg-[#101D34]" />
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             {Array.from({ length: 8 }).map((_, index) => (
-              <div key={index} className="h-24 rounded-3xl bg-[#EEF3F8] dark:bg-[#111D33]" />
+              <div key={index} className="h-24 rounded-3xl bg-[#EAF1F8] dark:bg-[#101D34]" />
             ))}
           </div>
         </div>
@@ -184,12 +186,12 @@ export default function DashboardPage() {
   if (loadError || !metrics || !session?.user || !subscription) {
     return (
       <div className={panel}>
-        <p className="text-lg font-semibold text-[#0B1630] dark:text-white">Dashboard unavailable</p>
+        <p className="text-lg font-semibold text-[#08152E] dark:text-white">Dashboard unavailable</p>
         <p className="mt-2 text-sm text-[#D84A4A] dark:text-rose-300">{loadError ?? "Your workspace data could not be loaded."}</p>
         <button
           type="button"
           onClick={() => void load()}
-          className="mt-6 rounded-2xl border border-[#0EA5E9] dark:border-[#22D3EE] bg-[#0EA5E9] dark:bg-[#22D3EE] px-4 py-2 text-sm font-semibold text-white dark:text-[#050B18] hover:opacity-90"
+          className="mt-6 rounded-2xl border border-[#009FE3] dark:border-[#21C7F3] bg-[#009FE3] dark:bg-[#21C7F3] px-4 py-2 text-sm font-semibold text-white dark:text-[#040A16] hover:opacity-90"
         >
           Try again
         </button>
@@ -206,12 +208,19 @@ export default function DashboardPage() {
     (project) => Date.now() - new Date(project.updatedAt).getTime() < SEVEN_DAYS_MS,
   ).length;
 
+  const lockedBoqCount = (boqs ?? []).filter((boq) => boq.isLocked).length;
+  const boqsSupport = boqs && boqs.length > 0 ? `${lockedBoqCount} of ${boqs.length} recent locked` : undefined;
+  const completedFilesCount = (files ?? []).filter((file) => file.status === "COMPLETED").length;
+  const filesSupport = files && files.length > 0 ? `${completedFilesCount} of ${files.length} recent completed` : undefined;
+  const completedDocsCount = (documents ?? []).filter((document) => document.status === "COMPLETED").length;
+  const documentsSupport = documents && documents.length > 0 ? `${completedDocsCount} of ${documents.length} recent completed` : undefined;
+
   const clientColumns: ResponsiveTableColumn<RecentClient>[] = [
     {
       key: "name",
       header: "Client",
       render: (client) => (
-        <Link href={`/clients/${client.id}`} className="font-semibold text-[#0B1630] hover:underline dark:text-white">
+        <Link href={`/clients/${client.id}`} className="font-semibold text-[#08152E] hover:underline dark:text-white">
           {client.name}
         </Link>
       ),
@@ -241,17 +250,24 @@ export default function DashboardPage() {
         recentUpdatesCount={recentUpdatesCount}
       />
 
-      {/* KPI cards */}
-      <section aria-label="Workspace key metrics" className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <MetricCard icon={FolderKanban} label="Active projects" value={metrics.activeProjects} />
-        <MetricCard icon={Users} label="Clients" value={metrics.totalClients} />
-        <MetricCard icon={FileCheck2} label="BOQs" value={metrics.totalBoqs} />
-        <MetricCard icon={UploadCloud} label="Uploaded files" value={metrics.totalUploadedFiles} />
-        <MetricCard icon={FileCheck2} label="Generated documents" value={metrics.totalGeneratedDocuments} />
-        <MetricCard icon={Layers} label="Catalogue items" value={metrics.catalogueItems} />
-        <MetricCard icon={Clock} label="Pending approvals" value={metrics.pendingApprovals} tone={metrics.pendingApprovals > 0 ? "warning" : "default"} />
-        <MetricCard icon={AlertTriangle} label="Failed operations" value={metrics.failedOperations} tone={metrics.failedOperations > 0 ? "error" : "default"} />
+      {/* KPI cards — primary pair + compact row */}
+      <section aria-label="Workspace key metrics" className="space-y-4">
+        <div className="grid gap-4 lg:grid-cols-2">
+          <MetricCard variant="primary" icon={FolderKanban} label="Active projects" value={metrics.activeProjects} />
+          <MetricCard variant="primary" icon={FileCheck2} label="BOQs" value={metrics.totalBoqs} support={boqsSupport} />
+        </div>
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+          <MetricCard icon={Users} label="Clients" value={metrics.totalClients} />
+          <MetricCard icon={UploadCloud} label="Uploaded files" value={metrics.totalUploadedFiles} support={filesSupport} />
+          <MetricCard icon={FileCheck2} label="Generated documents" value={metrics.totalGeneratedDocuments} support={documentsSupport} />
+          <MetricCard icon={Layers} label="Catalogue items" value={metrics.catalogueItems} />
+          <MetricCard icon={Clock} label="Pending approvals" value={metrics.pendingApprovals} tone={metrics.pendingApprovals > 0 ? "warning" : "default"} />
+          <MetricCard icon={AlertTriangle} label="Failed operations" value={metrics.failedOperations} tone={metrics.failedOperations > 0 ? "error" : "default"} />
+        </div>
       </section>
+
+      {/* Project intelligence */}
+      <ProjectIntelligencePanel project={currentProject} />
 
       {/* 2. Quick start workspace */}
       <QuickStartWorkspace currentProjectId={currentProject?.id ?? null} />
@@ -272,7 +288,7 @@ export default function DashboardPage() {
         <SectionHeader
           title="My active projects"
           description="Your most recently updated project workspaces."
-          action={<Link href="/projects" className="rounded-2xl border border-[#D9E2EC] dark:border-[#1E2A42] bg-[#EEF3F8] dark:bg-[#111D33] px-4 py-2 text-sm font-semibold text-[#0B1630] dark:text-[#F7FAFC] hover:bg-white dark:hover:bg-[#0B1426]">All projects</Link>}
+          action={<Link href="/projects" className={panelAction}>All projects</Link>}
         />
         {panelErrors.projects ? (
           <PanelError message={panelErrors.projects} />
@@ -283,7 +299,7 @@ export default function DashboardPage() {
             icon={FolderKanban}
             title="No projects yet"
             message="Create a project to begin building a BOQ workspace."
-            action={<Link href="/projects/new" className="text-sm font-semibold text-[#0284C7] hover:underline dark:text-[#22D3EE]">Create your first project</Link>}
+            action={<Link href="/projects/new" className="text-sm font-semibold text-[#0077B6] hover:underline dark:text-[#21C7F3]">Create your first project</Link>}
           />
         ) : (
           <div className="mt-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
@@ -297,7 +313,7 @@ export default function DashboardPage() {
         <SectionHeader
           title="Recent BOQs"
           description="Recent bills of quantities and their calculated totals."
-          action={<Link href="/projects" className="rounded-2xl border border-[#D9E2EC] dark:border-[#1E2A42] bg-[#EEF3F8] dark:bg-[#111D33] px-4 py-2 text-sm font-semibold text-[#0B1630] dark:text-[#F7FAFC] hover:bg-white dark:hover:bg-[#0B1426]">All projects</Link>}
+          action={<Link href="/projects" className={panelAction}>All projects</Link>}
         />
         {panelErrors.boqs ? (
           <PanelError message={panelErrors.boqs} />
@@ -333,16 +349,16 @@ export default function DashboardPage() {
         <SectionHeader title="Upload center" description="Drawings and source files, ready for extraction." />
         <Link
           href="/imports"
-          className="mt-4 flex flex-col items-center gap-3 rounded-2xl border-2 border-dashed border-[#D9E2EC] dark:border-[#1E2A42] px-6 py-10 text-center transition-all duration-200 hover:-translate-y-0.5 hover:border-[#0EA5E9]/50 hover:bg-[#EEF3F8] hover:shadow-md dark:hover:border-[#22D3EE]/50 dark:hover:bg-[#111D33] motion-reduce:transition-none motion-reduce:hover:translate-y-0"
+          className="mt-4 flex flex-col items-center gap-3 rounded-2xl border-2 border-dashed border-[#D5E0EC] dark:border-[#20304D] px-6 py-10 text-center transition-all duration-200 hover:-translate-y-0.5 hover:border-[#009FE3]/50 hover:bg-[#EAF1F8] hover:shadow-md dark:hover:border-[#21C7F3]/50 dark:hover:bg-[#101D34] motion-reduce:transition-none motion-reduce:hover:translate-y-0"
         >
-          <span className="flex h-11 w-11 items-center justify-center rounded-2xl border border-[#0EA5E9]/40 bg-[#0EA5E9]/10 dark:border-[#22D3EE]/40 dark:bg-[#22D3EE]/10">
-            <Upload className="h-5 w-5 text-[#0284C7] dark:text-[#22D3EE]" aria-hidden="true" />
+          <span className="flex h-11 w-11 items-center justify-center rounded-2xl border border-[#009FE3]/40 bg-[#009FE3]/10 dark:border-[#21C7F3]/40 dark:bg-[#21C7F3]/10">
+            <Upload className="h-5 w-5 text-[#0077B6] dark:text-[#21C7F3]" aria-hidden="true" />
           </span>
-          <p className="text-sm font-semibold text-[#0B1630] dark:text-white">Drag and drop files, or click to upload</p>
-          <p className="text-xs text-[#7B879C] dark:text-[#7F8DA6]">Drawings, spreadsheets, and specification documents</p>
+          <p className="text-sm font-semibold text-[#08152E] dark:text-white">Drag and drop files, or click to upload</p>
+          <p className="text-xs text-[#7B879C] dark:text-[#8CA0BE]">Drawings, spreadsheets, and specification documents</p>
         </Link>
 
-        <p className="mt-6 text-xs uppercase tracking-[0.2em] text-[#7B879C] dark:text-[#7F8DA6]">Recent uploads</p>
+        <p className="mt-6 text-xs uppercase tracking-[0.2em] text-[#7B879C] dark:text-[#8CA0BE]">Recent uploads</p>
         {panelErrors.files ? (
           <PanelError message={panelErrors.files} />
         ) : !files ? (
@@ -356,22 +372,7 @@ export default function DashboardPage() {
         )}
       </section>
 
-      {/* 7. Construction timeline */}
-      <ConstructionTimeline
-        project={
-          currentProject
-            ? {
-                name: currentProject.name,
-                status: currentProject.status,
-                fileCount: currentProject.fileCount,
-                boqCount: currentProject.boqCount,
-                documentCount: currentProject.documentCount,
-              }
-            : null
-        }
-      />
-
-      {/* 8. AI workspace (reserved) */}
+      {/* 7. AI workspace (reserved) */}
       <AIAssistantPanel />
 
       {/* Clients */}
@@ -379,7 +380,7 @@ export default function DashboardPage() {
         <SectionHeader
           title="Clients"
           description="Recently active clients across your projects."
-          action={<Link href="/clients" className="rounded-2xl border border-[#D9E2EC] dark:border-[#1E2A42] bg-[#EEF3F8] dark:bg-[#111D33] px-4 py-2 text-sm font-semibold text-[#0B1630] dark:text-[#F7FAFC] hover:bg-white dark:hover:bg-[#0B1426]">All clients</Link>}
+          action={<Link href="/clients" className={panelAction}>All clients</Link>}
         />
         {panelErrors.clients ? (
           <PanelError message={panelErrors.clients} />
@@ -390,7 +391,7 @@ export default function DashboardPage() {
             icon={Users}
             title="No clients yet"
             message="Add a client to start a new project."
-            action={<Link href="/clients/new" className="text-sm font-semibold text-[#0284C7] hover:underline dark:text-[#22D3EE]">Add your first client</Link>}
+            action={<Link href="/clients/new" className="text-sm font-semibold text-[#0077B6] hover:underline dark:text-[#21C7F3]">Add your first client</Link>}
           />
         ) : (
           <ResponsiveDataTable columns={clientColumns} rows={clients} />
@@ -415,30 +416,27 @@ export default function DashboardPage() {
           <SectionHeader title="Account" description="Your subscription and plan." />
           <dl className="mt-4 space-y-3 text-sm">
             <div className="flex items-center justify-between gap-4">
-              <dt className="text-[#536078] dark:text-[#B8C4D8]">Plan</dt>
-              <dd className="text-right font-medium text-[#0B1630] dark:text-white">{subscription.planName ?? "None"}</dd>
+              <dt className="text-[#536078] dark:text-[#8CA0BE]">Plan</dt>
+              <dd className="text-right font-medium text-[#08152E] dark:text-white">{subscription.planName ?? "None"}</dd>
             </div>
             <div className="flex items-center justify-between gap-4">
-              <dt className="text-[#536078] dark:text-[#B8C4D8]">Status</dt>
-              <dd className="text-right font-medium text-[#0B1630] dark:text-white">{formatLabel(subscription.status)}</dd>
+              <dt className="text-[#536078] dark:text-[#8CA0BE]">Status</dt>
+              <dd className="text-right font-medium text-[#08152E] dark:text-white">{formatLabel(subscription.status)}</dd>
             </div>
             {subscription.trialExpiresAt && (
               <div className="flex items-center justify-between gap-4">
-                <dt className="text-[#536078] dark:text-[#B8C4D8]">Trial ends</dt>
-                <dd className="text-right font-medium text-[#0B1630] dark:text-white">{formatDate(subscription.trialExpiresAt)}</dd>
+                <dt className="text-[#536078] dark:text-[#8CA0BE]">Trial ends</dt>
+                <dd className="text-right font-medium text-[#08152E] dark:text-white">{formatDate(subscription.trialExpiresAt)}</dd>
               </div>
             )}
             {subscription.expiresAt && (
               <div className="flex items-center justify-between gap-4">
-                <dt className="text-[#536078] dark:text-[#B8C4D8]">Renews / expires</dt>
-                <dd className="text-right font-medium text-[#0B1630] dark:text-white">{formatDate(subscription.expiresAt)}</dd>
+                <dt className="text-[#536078] dark:text-[#8CA0BE]">Renews / expires</dt>
+                <dd className="text-right font-medium text-[#08152E] dark:text-white">{formatDate(subscription.expiresAt)}</dd>
               </div>
             )}
           </dl>
-          <Link
-            href="/settings/subscription"
-            className="mt-5 inline-flex rounded-2xl border border-[#D9E2EC] dark:border-[#1E2A42] bg-[#EEF3F8] dark:bg-[#111D33] px-4 py-2 text-sm font-semibold text-[#0B1630] dark:text-[#F7FAFC] hover:bg-white dark:hover:bg-[#0B1426]"
-          >
+          <Link href="/settings/subscription" className={`mt-5 inline-flex ${panelAction}`}>
             Manage subscription
           </Link>
         </div>

@@ -35,10 +35,10 @@ function formatFileSize(bytes: number): string {
 
 export default function FileStatusCard({ file }: { file: RecentFile }) {
   return (
-    <div className="rounded-2xl border border-[#D9E2EC] dark:border-[#1E2A42] bg-[#EEF3F8] dark:bg-[#111D33] p-5 transition-all duration-200 hover:-translate-y-0.5 hover:border-[#B9C7D6] hover:shadow-md dark:hover:border-[#31405F] motion-reduce:transition-none motion-reduce:hover:translate-y-0">
+    <div className="rounded-2xl border border-[#D5E0EC] dark:border-[#20304D] bg-[#EAF1F8] dark:bg-[#101D34] p-5 transition-all duration-200 hover:-translate-y-0.5 hover:border-[#B9C7D6] hover:shadow-md dark:hover:border-[#31405F] motion-reduce:transition-none motion-reduce:hover:translate-y-0">
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div>
-          <p className="font-semibold text-[#0B1630] dark:text-white">{file.name}</p>
+          <p className="font-semibold text-[#08152E] dark:text-white">{file.name}</p>
           <p className="text-xs text-[#7B879C] dark:text-[#7F8DA6]">
             {file.project?.name ?? "Unassigned project"} · {file.extension.toUpperCase()} · {formatFileSize(file.sizeBytes)}
           </p>
@@ -49,7 +49,7 @@ export default function FileStatusCard({ file }: { file: RecentFile }) {
         <p className="text-xs text-[#7B879C] dark:text-[#7F8DA6]">Uploaded {formatDate(file.createdAt)}</p>
         <a
           href={`/api/files/${file.id}/download`}
-          className="inline-flex items-center gap-1.5 rounded-xl border border-[#D9E2EC] dark:border-[#1E2A42] bg-white dark:bg-[#0B1426] px-3 py-1.5 text-xs font-semibold text-[#0B1630] dark:text-[#F7FAFC] hover:bg-[#EEF3F8] dark:hover:bg-[#111D33]"
+          className="inline-flex items-center gap-1.5 rounded-xl border border-[#D5E0EC] dark:border-[#20304D] bg-white dark:bg-[#091326] px-3 py-1.5 text-xs font-semibold text-[#08152E] dark:text-[#F4F8FF] hover:bg-[#EAF1F8] dark:hover:bg-[#101D34]"
         >
           <Download className="h-3.5 w-3.5" aria-hidden="true" />
           Download

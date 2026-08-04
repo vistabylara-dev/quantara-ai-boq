@@ -201,13 +201,22 @@ enum MasterItemStatus {
 /// -> System -> Category -> Subcategory -> Item Family). A single
 /// self-referential node model is used instead of one table per level so the
 /// hierarchy can grow (new industries/disciplines) without further migrations.
+/// MASTER-SCALE-1A — extended with SUBSYSTEM (between System and Category)
+/// and ITEM_TYPE (between Item Family and Variant) so the deep example in
+/// the addendum (Mechanical -> HVAC -> Fans -> Axial Fans -> Smoke Extract
+/// Fan -> High-Temperature Rated -> ...) is representable without another
+/// migration. Existing rows (all currently INDUSTRY/DISCIPLINE/SYSTEM/
+/// CATEGORY from the HVAC backfill) are unaffected — enum values are
+/// additive.
 enum MasterHierarchyNodeType {
   INDUSTRY
   DISCIPLINE
   SYSTEM
+  SUBSYSTEM
   CATEGORY
   SUBCATEGORY
   ITEM_FAMILY
+  ITEM_TYPE
 }
 
 /// Workflow state of one MasterItemVersion — separate from MasterItem.status
@@ -220,17 +229,28 @@ enum MasterItemVersionStatus {
   RETIRED
 }
 
+/// MASTER-SCALE-1A — added SMM7/CESMM/NRM/UNIFORMAT_II (Uniformat II is
+/// tracked separately from the original UniFormat entry rather than
+/// replacing it, since they are distinct systems) and OTHER as an escape
+/// hatch for a national/regional classification system that doesn't yet
+/// warrant its own enum value — the free-text `code`/`label` columns on
+/// MasterItemClassification carry the actual system-specific value.
 enum MasterClassificationSystem {
   MASTERFORMAT_2020
   CSI
   OMNICLASS
   UNIFORMAT
+  UNIFORMAT_II
   IFC
+  NRM
+  SMM7
+  CESMM
   INTERNAL_QUANTARA
   REVIT_CATEGORY
   CAD_LAYER
   REGIONAL_CODE
   COST_CODE
+  OTHER
 }
 
 enum MasterRegionScope {
@@ -609,6 +629,8 @@ model MasterItem {
   attributeValues            MasterItemAttributeValue[]
   relationsFrom              MasterItemRelation[]              @relation("MasterItemRelationFrom")
   relationsTo                MasterItemRelation[]              @relation("MasterItemRelationTo")
+  certifications             ProductCertification[]
+  standardApplicabilities    MasterItemStandardApplicability[]
 
   @@unique([disciplineId, itemCode])
   @@index([disciplineId])
@@ -680,6 +702,7 @@ model MasterHierarchyNode {
   children         MasterHierarchyNode[]      @relation("MasterHierarchyParent")
   items            MasterItem[]
   fieldDefinitions TechnicalFieldDefinition[]
+  productSeries    ProductSeries[]
 
   @@index([parentId])
   @@index([nodeType])
@@ -722,6 +745,7 @@ model MasterItemVersion {
   approvedByUser        User?                      @relation("MasterItemVersionApprovedBy", fields: [approvedByUserId], references: [id], onDelete: SetNull)
   attributeValues       MasterItemAttributeValue[]
   boqItems              BOQItem[]
+  productModels         ProductModel[]
 
   @@unique([masterItemId, versionNumber])
   @@index([masterItemId])
@@ -855,6 +879,155 @@ model MasterItemRelation {
   @@unique([fromItemId, toItemId, relationType])
   @@index([fromItemId])
   @@index([toItemId])
+}
+
+/// MASTER-SCALE-1A — the four-tier separation the addendum requires:
+/// generic master family/variant (MasterItem/MasterItemVersion, already
+/// built) is kept fully independent of Manufacturer -> ProductSeries ->
+/// ProductModel -> ProductCertification. The Master BOQ stays usable with
+/// zero manufacturer data (every FK below is nullable/optional from the
+/// MasterItem side); manufacturer data is additive enrichment, never a
+/// prerequisite. No commercial/manufacturer records are seeded — these
+/// tables are empty until a real, permitted dataset is imported.
+enum ManufacturerStatus {
+  ACTIVE
+  INACTIVE
+}
+
+model Manufacturer {
+  id                String             @id @default(uuid()) @db.Uuid
+  legalName         String
+  brandNamesJson    Json?
+  country           String?
+  website           String?
+  status            ManufacturerStatus @default(ACTIVE)
+  isVerified        Boolean            @default(false)
+  regionsServedJson Json?
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  productSeries     ProductSeries[]
+
+  @@index([status])
+  @@index([legalName])
+}
+
+model ProductSeries {
+  id              String               @id @default(uuid()) @db.Uuid
+  manufacturerId  String               @db.Uuid
+  seriesName      String
+  /// The generic item family (MasterHierarchyNode, typically ITEM_FAMILY or
+  /// ITEM_TYPE) this series belongs to — nullable so a series can exist
+  /// before it has been mapped to the generic taxonomy.
+  hierarchyNodeId String?              @db.Uuid
+  effectiveFrom   DateTime?
+  effectiveTo     DateTime?
+  isActive        Boolean              @default(true)
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
+  manufacturer    Manufacturer         @relation(fields: [manufacturerId], references: [id], onDelete: Cascade)
+  hierarchyNode   MasterHierarchyNode? @relation(fields: [hierarchyNodeId], references: [id], onDelete: SetNull)
+  productModels   ProductModel[]
+
+  @@index([manufacturerId])
+  @@index([hierarchyNodeId])
+}
+
+model ProductModel {
+  id                        String                           @id @default(uuid()) @db.Uuid
+  modelCode                 String
+  productSeriesId           String                           @db.Uuid
+  /// The generic technical variant (a specific MasterItemVersion) this
+  /// manufacturer model corresponds to — nullable, since a model can be
+  /// catalogued before it has been matched to a generic variant.
+  masterItemVersionId       String?                          @db.Uuid
+  region                    MasterRegionScope?
+  isActive                  Boolean                          @default(true)
+  replacementProductModelId String?                          @db.Uuid
+  source                    String                           @default("")
+  verificationState         MasterAttributeVerificationState @default(UNVERIFIED)
+  createdAt                 DateTime                         @default(now())
+  updatedAt                 DateTime                         @updatedAt
+  productSeries             ProductSeries                    @relation(fields: [productSeriesId], references: [id], onDelete: Cascade)
+  masterItemVersion         MasterItemVersion?               @relation(fields: [masterItemVersionId], references: [id], onDelete: SetNull)
+  replacementProductModel   ProductModel?                    @relation("ProductModelReplacement", fields: [replacementProductModelId], references: [id], onDelete: SetNull)
+  replacedByProductModels   ProductModel[]                   @relation("ProductModelReplacement")
+  certifications            ProductCertification[]
+
+  @@unique([productSeriesId, modelCode])
+  @@index([masterItemVersionId])
+  @@index([verificationState])
+}
+
+model ProductCertification {
+  id                      String                           @id @default(uuid()) @db.Uuid
+  productModelId          String?                          @db.Uuid
+  masterItemId            String?                          @db.Uuid
+  certificationType       String
+  authority               String
+  certificateNumber       String                           @default("")
+  region                  MasterRegionScope?
+  issueDate               DateTime?
+  expiryDate              DateTime?
+  verificationState       MasterAttributeVerificationState @default(UNVERIFIED)
+  sourceDocumentReference String                           @default("")
+  createdAt               DateTime                         @default(now())
+  updatedAt               DateTime                         @updatedAt
+  productModel            ProductModel?                    @relation(fields: [productModelId], references: [id], onDelete: Cascade)
+  masterItem              MasterItem?                      @relation(fields: [masterItemId], references: [id], onDelete: Cascade)
+
+  @@index([productModelId])
+  @@index([masterItemId])
+  @@index([verificationState])
+}
+
+enum StandardApplicabilityType {
+  MANDATORY
+  ADVISORY
+}
+
+/// A code/testing/regulatory body (BS, IEC, NFPA, UAE Civil Defense, DEWA,
+/// ...) — a lean lookup table rather than a hardcoded enum, since the list
+/// is genuinely open-ended per country/region and must be extensible
+/// without a migration (spec: "Other country-specific authorities must be
+/// extensible").
+model StandardAuthority {
+  id              String                            @id @default(uuid()) @db.Uuid
+  name            String                            @unique
+  country         String?
+  website         String?
+  createdAt       DateTime                          @default(now())
+  updatedAt       DateTime                          @updatedAt
+  applicabilities MasterItemStandardApplicability[]
+}
+
+/// Links a master item to a standard/authority it must (or should) comply
+/// with. Never asserts approval without a source (spec: "Do not state that
+/// a product is approved unless supporting data exists") — sourceDocumentReference
+/// and verificationState are required fields precisely so an unverified
+/// claim is visibly distinguishable from a sourced, verified one.
+model MasterItemStandardApplicability {
+  id                      String                           @id @default(uuid()) @db.Uuid
+  masterItemId            String                           @db.Uuid
+  standardAuthorityId     String                           @db.Uuid
+  clauseReference         String                           @default("")
+  region                  MasterRegionScope?
+  applicabilityType       StandardApplicabilityType        @default(ADVISORY)
+  effectiveFrom           DateTime?
+  supersededDate          DateTime?
+  sourceDocumentReference String                           @default("")
+  verificationState       MasterAttributeVerificationState @default(UNVERIFIED)
+  createdAt               DateTime                         @default(now())
+  updatedAt               DateTime                         @updatedAt
+  masterItem              MasterItem                       @relation(fields: [masterItemId], references: [id], onDelete: Cascade)
+  standardAuthority       StandardAuthority                @relation(fields: [standardAuthorityId], references: [id], onDelete: Cascade)
+
+  // region is deliberately not part of this key: Prisma's generated
+  // compound-unique lookup type does not accept null for a nullable field
+  // (same issue hit and fixed in MASTER-BOQ-1A's MasterItemRegionalApplicability)
+  // — (item, authority, clause) is a sufficiently unique key in practice.
+  @@unique([masterItemId, standardAuthorityId, clauseReference])
+  @@index([masterItemId])
+  @@index([standardAuthorityId])
 }
 
 model IndustryDataPackage {

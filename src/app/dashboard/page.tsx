@@ -2,38 +2,17 @@
 
 import {
   AlertTriangle,
-  BookOpen,
-  Clock,
-  FileCheck2,
-  FolderKanban,
-  Layers,
-  ListChecks,
-  Truck,
   Upload,
-  UploadCloud,
-  Users,
 } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { apiClient, getApiErrorMessage } from "@/lib/api/client";
 import { formatDate } from "@/lib/formatting/dates";
-import TrialBanner from "@/components/dashboard/trial-banner";
-import WorkspaceHeader from "@/components/dashboard/workspace-header";
-import QuickStartWorkspace from "@/components/dashboard/quick-start-workspace";
-import ProjectIntelligencePanel from "@/components/dashboard/project-intelligence-panel";
-import AIAssistantPanel from "@/components/dashboard/ai-assistant-panel";
-import MetricCard from "@/components/dashboard/metric-card";
-import SectionHeader from "@/components/dashboard/section-header";
-import QuickActionButton from "@/components/dashboard/quick-action-button";
-import EmptyState from "@/components/dashboard/empty-state";
-import LoadingSkeleton from "@/components/dashboard/loading-skeleton";
-import ProjectCard, { type RecentProject } from "@/components/dashboard/project-card";
-import BOQSummaryCard, { type RecentBoq } from "@/components/dashboard/boq-summary-card";
-import FileStatusCard, { type RecentFile } from "@/components/dashboard/file-status-card";
-import DocumentCard, { type RecentDocument } from "@/components/dashboard/document-card";
-import ActivityTimeline, { type ActivityEvent } from "@/components/dashboard/activity-timeline";
-import ResponsiveDataTable, { type ResponsiveTableColumn } from "@/components/dashboard/responsive-data-table";
-import type { StatusTone } from "@/components/dashboard/status-badge";
+import type { ActivityEvent } from "@/components/dashboard/activity-timeline";
+import type { RecentProject } from "@/components/dashboard/project-card";
+import type { RecentBoq } from "@/components/dashboard/boq-summary-card";
+import type { RecentFile } from "@/components/dashboard/file-status-card";
+import type { RecentDocument } from "@/components/dashboard/document-card";
 
 type SessionData = {
   authenticated: boolean;
@@ -71,25 +50,6 @@ type SubscriptionSummary = {
   expiresAt: string | null;
 };
 
-const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
-const panel = "cyber-panel cyber-border p-6 sm:p-8 rounded-sm relative overflow-hidden group";
-const panelAction =
-  "terminal-text text-[10px] uppercase tracking-widest text-[#00F0FF] border border-[#00F0FF]/30 px-4 py-2 hover:bg-[#00F0FF]/10 transition-colors bg-[#00F0FF]/5 hover:shadow-[0_0_15px_rgba(0,240,255,0.2)]";
-
-const SUBSCRIPTION_STATUS_TONE: Record<string, StatusTone> = {
-  TRIAL: "warning",
-  ACTIVE: "success",
-  PAST_DUE: "warning",
-  CANCELLED: "error",
-  EXPIRED: "error",
-  SUSPENDED: "error",
-  NONE: "default",
-};
-
-function formatLabel(value: string): string {
-  return value.replace(/_/g, " ").toLowerCase().replace(/\b\w/g, (letter) => letter.toUpperCase());
-}
-
 export default function DashboardPage() {
   const [session, setSession] = useState<SessionData | null>(null);
   const [metrics, setMetrics] = useState<DashboardMetrics | null>(null);
@@ -100,7 +60,6 @@ export default function DashboardPage() {
   const [documents, setDocuments] = useState<RecentDocument[] | null>(null);
   const [clients, setClients] = useState<RecentClient[] | null>(null);
   const [activity, setActivity] = useState<ActivityEvent[] | null>(null);
-  const [panelErrors, setPanelErrors] = useState<Record<string, string>>({});
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
 
@@ -122,7 +81,6 @@ export default function DashboardPage() {
       setMetrics(metricsData);
       setSubscription(subscriptionData);
 
-      const nextPanelErrors: Record<string, string> = {};
       const [projectsResult, boqsResult, filesResult, documentsResult, clientsResult, activityResult] =
         await Promise.allSettled([
           apiClient.get<RecentProject[]>("/api/dashboard/recent-projects", signal),
@@ -134,24 +92,12 @@ export default function DashboardPage() {
         ]);
 
       if (projectsResult.status === "fulfilled") setProjects(projectsResult.value);
-      else nextPanelErrors.projects = getApiErrorMessage(projectsResult.reason);
-
       if (boqsResult.status === "fulfilled") setBoqs(boqsResult.value);
-      else nextPanelErrors.boqs = getApiErrorMessage(boqsResult.reason);
-
       if (filesResult.status === "fulfilled") setFiles(filesResult.value);
-      else nextPanelErrors.files = getApiErrorMessage(filesResult.reason);
-
       if (documentsResult.status === "fulfilled") setDocuments(documentsResult.value);
-      else nextPanelErrors.documents = getApiErrorMessage(documentsResult.reason);
-
       if (clientsResult.status === "fulfilled") setClients(clientsResult.value);
-      else nextPanelErrors.clients = getApiErrorMessage(clientsResult.reason);
-
       if (activityResult.status === "fulfilled") setActivity(activityResult.value);
-      else nextPanelErrors.activity = getApiErrorMessage(activityResult.reason);
 
-      setPanelErrors(nextPanelErrors);
     } catch (error) {
       if (error instanceof DOMException && error.name === "AbortError") return;
       setLoadError(getApiErrorMessage(error));
@@ -168,24 +114,18 @@ export default function DashboardPage() {
 
   if (isLoading && !metrics) {
     return (
-      <div className={panel}>
-        <div className="animate-pulse space-y-4 motion-reduce:animate-none" aria-live="polite" aria-busy="true">
-          <div className="h-4 w-40 rounded bg-[#EAF1F8] dark:bg-[#101D34]" />
-          <div className="h-8 w-72 rounded bg-[#EAF1F8] dark:bg-[#101D34]" />
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            {Array.from({ length: 8 }).map((_, index) => (
-              <div key={index} className="h-24 rounded-3xl bg-[#EAF1F8] dark:bg-[#101D34]" />
-            ))}
-          </div>
+      <div className="flex items-center justify-center h-full min-h-[600px]">
+        <div className="text-center space-y-4">
+          <div className="w-16 h-16 border-4 border-[#00F0FF]/30 border-t-[#00F0FF] rounded-full animate-spin mx-auto"></div>
+          <p className="terminal-text text-sm uppercase tracking-[0.4em] text-[#00F0FF] animate-pulse">Initializing HUD...</p>
         </div>
-        <p className="sr-only">Loading your workspace dashboard.</p>
       </div>
     );
   }
 
-  if (loadError || !metrics || !session?.user || !subscription) {
+  if (loadError || !metrics || !session?.user) {
     return (
-      <div className={panel}>
+      <div className="cyber-panel cyber-border p-8">
         <p className="terminal-text text-sm font-bold text-[#FF0055] uppercase tracking-widest">System Failure</p>
         <p className="mt-2 text-xs terminal-text text-slate-400">{loadError ?? "Neural grid linkage could not be established."}</p>
         <button
@@ -199,277 +139,199 @@ export default function DashboardPage() {
     );
   }
 
-  const planLabel = subscription.planName
-    ? `${subscription.planName} · ${formatLabel(subscription.status)}`
-    : "No active plan";
-
-  const currentProject = projects?.find((project) => project.status !== "ARCHIVED") ?? projects?.[0] ?? null;
-  const recentUpdatesCount = (projects ?? []).filter(
-    (project) => Date.now() - new Date(project.updatedAt).getTime() < SEVEN_DAYS_MS,
-  ).length;
-
-  const lockedBoqCount = (boqs ?? []).filter((boq) => boq.isLocked).length;
-  const boqsSupport = boqs && boqs.length > 0 ? `${lockedBoqCount} of ${boqs.length} recent locked` : undefined;
-  const completedFilesCount = (files ?? []).filter((file) => file.status === "COMPLETED").length;
-  const filesSupport = files && files.length > 0 ? `${completedFilesCount} of ${files.length} recent completed` : undefined;
-  const completedDocsCount = (documents ?? []).filter((document) => document.status === "COMPLETED").length;
-  const documentsSupport = documents && documents.length > 0 ? `${completedDocsCount} of ${documents.length} recent completed` : undefined;
-
-  const clientColumns: ResponsiveTableColumn<RecentClient>[] = [
-    {
-      key: "name",
-      header: "Client",
-      render: (client) => (
-        <Link href={`/clients/${client.id}`} className="font-semibold text-[#08152E] hover:underline dark:text-white">
-          {client.name}
-        </Link>
-      ),
-    },
-    { key: "contact", header: "Contact", render: (client) => client.contactName },
-    { key: "projects", header: "Projects", render: (client) => client.projectCount },
-    {
-      key: "lastActivity",
-      header: "Last activity",
-      render: (client) => (client.lastActivityAt ? formatDate(client.lastActivityAt) : "No activity yet"),
-    },
-  ];
-
   return (
-    <div className="space-y-6">
-      <TrialBanner />
+    <div className="bg-[#030508] text-[#00F0FF] font-mono flex flex-col relative w-full h-full pb-8">
+      {/* Background overlay */}
+      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-[#00F0FF]/5 via-transparent to-transparent pointer-events-none z-0"></div>
 
-      {/* 1. AI Workspace hero */}
-      <WorkspaceHeader
-        companyName={subscription.companyName ?? "Your workspace"}
-        userName={session.user.fullName}
-        userEmail={session.user.email}
-        userRole={formatLabel(session.user.role)}
-        planLabel={planLabel}
-        planTone={SUBSCRIPTION_STATUS_TONE[subscription.status] ?? "default"}
-        currentProject={currentProject}
-        recentUpdatesCount={recentUpdatesCount}
-      />
-
-      {/* KPI cards — primary pair + compact row */}
-      <section aria-label="Workspace key metrics" className="space-y-4">
-        <div className="grid gap-4 lg:grid-cols-2">
-          <MetricCard variant="primary" icon={FolderKanban} label="Active projects" value={metrics.activeProjects} />
-          <MetricCard variant="primary" icon={FileCheck2} label="BOQs" value={metrics.totalBoqs} support={boqsSupport} />
-        </div>
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
-          <MetricCard icon={Users} label="Clients" value={metrics.totalClients} />
-          <MetricCard icon={UploadCloud} label="Uploaded files" value={metrics.totalUploadedFiles} support={filesSupport} />
-          <MetricCard icon={FileCheck2} label="Generated documents" value={metrics.totalGeneratedDocuments} support={documentsSupport} />
-          <MetricCard icon={Layers} label="Catalogue items" value={metrics.catalogueItems} />
-          <MetricCard icon={Clock} label="Pending approvals" value={metrics.pendingApprovals} tone={metrics.pendingApprovals > 0 ? "warning" : "default"} />
-          <MetricCard icon={AlertTriangle} label="Failed operations" value={metrics.failedOperations} tone={metrics.failedOperations > 0 ? "error" : "default"} />
-        </div>
-      </section>
-
-      {/* Project intelligence */}
-      <ProjectIntelligencePanel project={currentProject} />
-
-      {/* 2. Quick start workspace */}
-      <QuickStartWorkspace currentProjectId={currentProject?.id ?? null} />
-
-      {/* Quick actions */}
-      <section aria-label="Quick actions" className={panel}>
-        <SectionHeader title="Quick actions" description="Jump straight into common workspace tasks." />
-        <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <QuickActionButton href="/clients/new" label="Create Client" icon={Users} />
-          <QuickActionButton
-            href="/catalogue"
-            label="Open Catalogue"
-            icon={Layers}
-            image={`/images/dashboard/${encodeURIComponent("Gemini_Generated_Image_br6nzvbr6nzvbr6n.png")}`}
-          />
-          <QuickActionButton
-            href="/suppliers"
-            label="Manage Suppliers"
-            icon={Truck}
-            image={`/images/dashboard/${encodeURIComponent("Gemini_Generated_Image_rghpplrghpplrghp (1).png")}`}
-          />
-          <QuickActionButton href="/templates" label="Browse Templates" icon={BookOpen} />
-        </div>
-      </section>
-
-      {/* 3. Active projects */}
-      <section className={panel}>
-        <SectionHeader
-          title="My active projects"
-          description="Your most recently updated project workspaces."
-          action={<Link href="/projects" className={panelAction}>All projects</Link>}
-        />
-        {panelErrors.projects ? (
-          <PanelError message={panelErrors.projects} />
-        ) : !projects ? (
-          <LoadingSkeleton rows={3} />
-        ) : projects.length === 0 ? (
-          <EmptyState
-            icon={FolderKanban}
-            title="No projects yet"
-            message="Create a project to begin building a BOQ workspace."
-            action={<Link href="/projects/new" className="text-sm font-semibold text-[#0077B6] hover:underline dark:text-[#21C7F3]">Create your first project</Link>}
-          />
-        ) : (
-          <div className="mt-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-            {projects.map((project) => <ProjectCard key={project.id} project={project} />)}
-          </div>
-        )}
-      </section>
-
-      {/* 4. Recent BOQs */}
-      <section className={panel}>
-        <SectionHeader
-          title="Recent BOQs"
-          description="Recent bills of quantities and their calculated totals."
-          action={<Link href="/projects" className={panelAction}>All projects</Link>}
-        />
-        {panelErrors.boqs ? (
-          <PanelError message={panelErrors.boqs} />
-        ) : !boqs ? (
-          <LoadingSkeleton rows={3} />
-        ) : boqs.length === 0 ? (
-          <EmptyState icon={FileCheck2} title="No BOQs yet" message="Open a project to start building a bill of quantities." />
-        ) : (
-          <div className="mt-4 grid gap-4 lg:grid-cols-2">
-            {boqs.map((boq) => <BOQSummaryCard key={boq.id} boq={boq} />)}
-          </div>
-        )}
-      </section>
-
-      {/* 5. Document workspace */}
-      <section className={panel}>
-        <SectionHeader title="Document workspace" description="Recent exports across every project." />
-        {panelErrors.documents ? (
-          <PanelError message={panelErrors.documents} />
-        ) : !documents ? (
-          <LoadingSkeleton rows={3} />
-        ) : documents.length === 0 ? (
-          <EmptyState icon={FileCheck2} title="No documents generated yet" message="Generate a document from a project's BOQ to see it here." />
-        ) : (
-          <div className="mt-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-            {documents.map((document) => <DocumentCard key={document.id} document={document} />)}
-          </div>
-        )}
-      </section>
-
-      {/* 6. Upload center */}
-      <section className={panel}>
-        <SectionHeader title="Upload center" description="Drawings and source files, ready for extraction." />
-        <Link
-          href="/imports"
-          className="mt-6 relative flex flex-col items-center justify-center gap-4 border border-[#00F0FF]/30 px-6 py-12 text-center transition-all duration-300 hover:border-[#FF0055]/50 hover:shadow-[0_0_30px_rgba(255,0,85,0.15)] bg-black/40 overflow-hidden group/upload"
-        >
-          <div className="absolute inset-0 bg-gradient-to-br from-[#00F0FF]/5 to-[#FF0055]/5 opacity-0 group-hover/upload:opacity-100 transition-opacity duration-500 pointer-events-none"></div>
-          <div className="absolute top-0 left-0 w-full h-[1px] bg-gradient-to-r from-transparent via-[#00F0FF] to-transparent translate-x-[-100%] group-hover/upload:translate-x-[100%] transition-transform duration-1000 ease-in-out"></div>
-          
-          <div className="relative z-10 flex h-16 w-16 items-center justify-center rounded-sm border border-[#00F0FF]/50 bg-[#00F0FF]/10 group-hover/upload:scale-110 group-hover/upload:border-[#FF0055]/50 transition-all duration-300 shadow-[0_0_15px_rgba(0,240,255,0.2)] group-hover/upload:shadow-[0_0_20px_rgba(255,0,85,0.3)]">
-            <Upload className="h-6 w-6 text-[#00F0FF] group-hover/upload:text-[#FF0055] group-hover/upload:-translate-y-1 transition-all duration-300" aria-hidden="true" />
-            <div className="absolute bottom-[-4px] w-8 h-[2px] bg-[#00F0FF] group-hover/upload:bg-[#FF0055] rounded-full blur-[1px]"></div>
+      {/* Main HUD Grid */}
+      <div className="grid grid-cols-1 xl:grid-cols-[1fr_1.5fr_1fr] gap-6 relative z-10 flex-1">
+        
+        {/* Left Column: AI Core & Overview */}
+        <div className="space-y-6 flex flex-col h-full">
+          {/* AI CORE PANEL */}
+          <div className="cyber-border cyber-panel p-5 flex flex-col relative overflow-hidden group h-[280px]">
+            <h2 className="text-[#00F0FF] text-[10px] uppercase tracking-[0.4em] mb-4 border-b border-[#00F0FF]/30 pb-2">AI Core: Active</h2>
+            <div className="flex-1 relative flex items-center justify-center bg-black/40 border border-white/5 cyber-border">
+               {/* Abstract Neural Net Visualization */}
+               <svg viewBox="0 0 100 100" className="w-full h-full opacity-70 group-hover:opacity-100 transition-opacity absolute inset-0">
+                 {/* Connecting lines */}
+                 <path d="M20,50 L50,20 L80,50 L50,80 Z" fill="none" stroke="rgba(0,240,255,0.3)" strokeWidth="0.5" />
+                 <path d="M30,30 L70,70" fill="none" stroke="rgba(255,0,85,0.3)" strokeWidth="0.5" />
+                 <path d="M30,70 L70,30" fill="none" stroke="rgba(255,0,85,0.3)" strokeWidth="0.5" />
+                 <path d="M50,10 L50,90" fill="none" stroke="rgba(0,240,255,0.3)" strokeWidth="0.5" />
+                 {/* Nodes */}
+                 <circle cx="50" cy="50" r="4" fill="#FF0055" className="animate-pulse" />
+                 <circle cx="20" cy="50" r="2" fill="#00F0FF" />
+                 <circle cx="80" cy="50" r="2" fill="#00F0FF" />
+                 <circle cx="50" cy="20" r="3" fill="#00F0FF" />
+                 <circle cx="50" cy="80" r="3" fill="#00F0FF" />
+                 <circle cx="30" cy="30" r="2" fill="#00F0FF" />
+                 <circle cx="70" cy="70" r="2" fill="#00F0FF" />
+                 <circle cx="30" cy="70" r="2" fill="#00F0FF" />
+                 <circle cx="70" cy="30" r="2" fill="#00F0FF" />
+               </svg>
+            </div>
           </div>
           
-          <div className="relative z-10 space-y-1">
-            <p className="terminal-text text-[11px] font-bold text-[#00F0FF] uppercase tracking-widest group-hover/upload:text-[#FF0055] transition-colors">Establish Data Uplink</p>
-            <p className="terminal-text text-[9px] text-slate-500 uppercase tracking-widest">Drawings // Spreadsheets // Specs</p>
+          {/* CORE OVERVIEW NAVIGATION */}
+          <div className="cyber-border cyber-panel p-5">
+            <h2 className="text-white text-lg uppercase tracking-widest font-bold mb-4">Core Overview</h2>
+            <nav className="space-y-1">
+              <Link href="#" className="block px-4 py-2 bg-[#00F0FF]/10 text-[#00F0FF] uppercase tracking-widest text-[10px] border-l-2 border-[#00F0FF]">Overview</Link>
+              <Link href="#" className="block px-4 py-2 hover:bg-[#00F0FF]/10 text-slate-400 hover:text-[#00F0FF] uppercase tracking-widest text-[10px] transition-colors">Neural Nets</Link>
+              <Link href="#" className="block px-4 py-2 hover:bg-[#00F0FF]/10 text-slate-400 hover:text-[#00F0FF] uppercase tracking-widest text-[10px] transition-colors">Analytics</Link>
+              <Link href="#" className="block px-4 py-2 hover:bg-[#00F0FF]/10 text-slate-400 hover:text-[#00F0FF] uppercase tracking-widest text-[10px] transition-colors">Settings</Link>
+            </nav>
           </div>
-        </Link>
 
-        <p className="mt-6 text-xs uppercase tracking-[0.2em] text-[#7B879C] dark:text-[#8CA0BE]">Recent uploads</p>
-        {panelErrors.files ? (
-          <PanelError message={panelErrors.files} />
-        ) : !files ? (
-          <LoadingSkeleton rows={3} />
-        ) : files.length === 0 ? (
-          <EmptyState icon={UploadCloud} title="No files uploaded yet" message="Upload a drawing or source file to see its processing status here." />
-        ) : (
-          <div className="mt-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-            {files.map((file) => <FileStatusCard key={file.id} file={file} />)}
+          {/* NETWORK HEALTH & DATA STREAMS */}
+          <div className="cyber-border cyber-panel p-5 space-y-5">
+            <div>
+              <div className="flex justify-between text-[10px] uppercase tracking-widest mb-2 font-bold">
+                <span className="text-white">Network Health</span>
+                <span className="text-[#00F0FF]">98.7%</span>
+              </div>
+              <div className="h-1 bg-[#00F0FF]/20 w-full overflow-hidden shadow-[0_0_10px_rgba(0,240,255,0.2)]">
+                <div className="h-full bg-[#00F0FF] w-[98.7%]"></div>
+              </div>
+            </div>
+            <div>
+               <h3 className="text-[10px] uppercase tracking-widest text-white font-bold mb-3">Data Streams</h3>
+               <div className="flex gap-3">
+                 <div className="flex-1 h-16 border border-[#FF0055]/30 flex flex-col justify-between p-1 bg-black/40 cyber-border">
+                   <span className="text-[7px] text-[#FF0055] uppercase">Graph</span>
+                   <svg viewBox="0 0 100 30" className="w-full h-8">
+                     <path d="M0,25 Q10,5 20,20 T40,15 T60,25 T80,10 T100,20" fill="none" stroke="#FF0055" strokeWidth="1.5" />
+                     <path d="M0,25 Q10,5 20,20 T40,15 T60,25 T80,10 T100,20 L100,30 L0,30 Z" fill="rgba(255,0,85,0.1)" />
+                   </svg>
+                 </div>
+                 <div className="flex-1 h-16 border border-[#00F0FF]/30 flex flex-col justify-between p-1 bg-black/40 cyber-border">
+                   <span className="text-[7px] text-[#00F0FF] uppercase">Network Act</span>
+                   <svg viewBox="0 0 100 30" className="w-full h-8">
+                     <path d="M0,20 Q15,30 30,10 T60,15 T80,5 T100,20" fill="none" stroke="#00F0FF" strokeWidth="1.5" />
+                     <path d="M0,20 Q15,30 30,10 T60,15 T80,5 T100,20 L100,30 L0,30 Z" fill="rgba(0,240,255,0.1)" />
+                   </svg>
+                 </div>
+               </div>
+            </div>
           </div>
-        )}
-      </section>
-
-      {/* 7. AI workspace (reserved) */}
-      <AIAssistantPanel />
-
-      {/* Clients */}
-      <section className={panel}>
-        <SectionHeader
-          title="Clients"
-          description="Recently active clients across your projects."
-          action={<Link href="/clients" className={panelAction}>All clients</Link>}
-        />
-        {panelErrors.clients ? (
-          <PanelError message={panelErrors.clients} />
-        ) : !clients ? (
-          <LoadingSkeleton rows={3} />
-        ) : clients.length === 0 ? (
-          <EmptyState
-            icon={Users}
-            title="No clients yet"
-            message="Add a client to start a new project."
-            action={<Link href="/clients/new" className="text-sm font-semibold text-[#0077B6] hover:underline dark:text-[#21C7F3]">Add your first client</Link>}
-          />
-        ) : (
-          <ResponsiveDataTable columns={clientColumns} rows={clients} />
-        )}
-      </section>
-
-      {/* Recent activity + account/subscription */}
-      <section className="grid gap-6 lg:grid-cols-3">
-        <div className={`${panel} lg:col-span-2`}>
-          <SectionHeader title="Recent activity" description="Real audit events for your workspace, newest first." />
-          {panelErrors.activity ? (
-            <PanelError message={panelErrors.activity} />
-          ) : !activity ? (
-            <LoadingSkeleton rows={4} />
-          ) : activity.length === 0 ? (
-            <EmptyState icon={ListChecks} title="No recent activity" message="Actions across your workspace will appear here as they happen." />
-          ) : (
-            <ActivityTimeline events={activity} />
-          )}
         </div>
-        <div className={panel}>
-          <SectionHeader title="Account" description="Your subscription and plan." />
-          <dl className="mt-4 space-y-3 text-sm">
-            <div className="flex items-center justify-between gap-4">
-              <dt className="text-[#536078] dark:text-[#8CA0BE]">Plan</dt>
-              <dd className="text-right font-medium text-[#08152E] dark:text-white">{subscription.planName ?? "None"}</dd>
+
+        {/* Center Column: The Upload Ring */}
+        <div className="flex flex-col items-center justify-center relative py-12 xl:py-0">
+          <div className="absolute top-0 text-center w-full z-20">
+             <div className="inline-flex items-center gap-4 cyber-border border border-[#00F0FF]/30 bg-[#00F0FF]/5 px-8 py-2">
+                <span className="w-2 h-2 bg-[#00F0FF] animate-pulse"></span>
+                <h1 className="text-sm text-white tracking-[0.4em] font-bold uppercase">Premium Futurice Dashboard</h1>
+                <span className="w-2 h-2 bg-[#00F0FF] animate-pulse"></span>
+             </div>
+          </div>
+          
+          {/* Giant glowing ring */}
+          <Link href="/imports" className="relative group w-72 h-72 sm:w-80 sm:h-80 xl:w-[400px] xl:h-[400px] flex items-center justify-center cursor-pointer mt-12 xl:mt-0">
+            {/* Outer spinning ring */}
+            <div className="absolute inset-0 rounded-full border-[6px] border-[#00F0FF]/10 border-t-[#00F0FF] border-b-[#00F0FF] animate-[spin_8s_linear_infinite] group-hover:border-t-[#FF0055] group-hover:border-b-[#FF0055] transition-colors shadow-[0_0_40px_rgba(0,240,255,0.2)] group-hover:shadow-[0_0_60px_rgba(255,0,85,0.4)] z-10"></div>
+            
+            {/* Inner dashed ring */}
+            <div className="absolute inset-6 rounded-full border-[3px] border-dashed border-[#00F0FF]/30 animate-[spin_15s_linear_infinite_reverse] group-hover:border-[#FF0055]/30 z-10"></div>
+            
+            {/* Static background glow */}
+            <div className="absolute inset-10 rounded-full bg-gradient-to-b from-[#00F0FF]/10 to-transparent blur-xl group-hover:from-[#FF0055]/10 z-0 transition-colors"></div>
+            
+            <div className="text-center z-20 relative flex flex-col items-center justify-center bg-black/60 w-56 h-56 rounded-full border border-white/5 cyber-border backdrop-blur-sm">
+               <Upload className="w-12 h-12 text-[#00F0FF] mb-3 group-hover:text-[#FF0055] transition-colors group-hover:-translate-y-1 duration-300" />
+               <p className="text-white text-base font-bold uppercase tracking-widest group-hover:text-[#FF0055] transition-colors">Drag & Drop Files</p>
+               <p className="text-[#00F0FF] text-[10px] uppercase tracking-[0.2em] group-hover:text-white transition-colors mt-1">Click to Upload</p>
             </div>
-            <div className="flex items-center justify-between gap-4">
-              <dt className="text-[#536078] dark:text-[#8CA0BE]">Status</dt>
-              <dd className="text-right font-medium text-[#08152E] dark:text-white">{formatLabel(subscription.status)}</dd>
-            </div>
-            {subscription.trialExpiresAt && (
-              <div className="flex items-center justify-between gap-4">
-                <dt className="text-[#536078] dark:text-[#8CA0BE]">Trial ends</dt>
-                <dd className="text-right font-medium text-[#08152E] dark:text-white">{formatDate(subscription.trialExpiresAt)}</dd>
-              </div>
-            )}
-            {subscription.expiresAt && (
-              <div className="flex items-center justify-between gap-4">
-                <dt className="text-[#536078] dark:text-[#8CA0BE]">Renews / expires</dt>
-                <dd className="text-right font-medium text-[#08152E] dark:text-white">{formatDate(subscription.expiresAt)}</dd>
-              </div>
-            )}
-          </dl>
-          <Link href="/settings/subscription" className={`mt-5 inline-flex ${panelAction}`}>
-            Manage subscription
           </Link>
+          
+          {/* Upload Progress Bar Placeholder */}
+          <div className="absolute bottom-4 xl:bottom-12 w-64 text-center z-20">
+             <p className="text-[10px] uppercase tracking-widest text-white font-bold mb-2">System Ready...</p>
+             <div className="h-1 bg-[#00F0FF]/20 w-full overflow-hidden shadow-[0_0_10px_rgba(0,240,255,0.3)]">
+               <div className="h-full bg-[#00F0FF] w-full relative">
+                 <div className="absolute inset-0 bg-white/50 w-8 blur-[2px] animate-[pulse_2s_linear_infinite]"></div>
+               </div>
+             </div>
+             <p className="text-[8px] uppercase tracking-widest text-slate-500 mt-2">File: Awaiting Input | Size: N/A</p>
+          </div>
         </div>
-      </section>
-    </div>
-  );
-}
 
-function PanelError({ message }: { message: string }) {
-  return (
-    <div className="mt-4 border border-[#FF0055]/30 bg-[#FF0055]/5 p-4 relative overflow-hidden">
-      <div className="absolute left-0 top-0 bottom-0 w-1 bg-[#FF0055]"></div>
-      <p className="terminal-text text-[10px] text-[#FF0055] uppercase tracking-widest flex items-center gap-2">
-        <AlertTriangle className="w-4 h-4" />
-        System Failure // {message}
-      </p>
+        {/* Right Column: Terminal & System Status */}
+        <div className="space-y-6 flex flex-col h-full">
+          {/* SYSTEM STATUS (Metrics) */}
+          <div className="cyber-border cyber-panel p-5">
+             <h2 className="text-[#00F0FF] text-[10px] uppercase tracking-[0.4em] mb-4 border-b border-[#00F0FF]/30 pb-2">System Status</h2>
+             <div className="flex gap-3">
+               <div className="flex-1 text-center border border-[#FF0055]/30 p-3 bg-black/40 cyber-border">
+                 <p className="text-[8px] uppercase tracking-widest text-slate-400 mb-1">CPU Load</p>
+                 <p className="text-lg font-bold text-[#FF0055]">74%</p>
+               </div>
+               <div className="flex-1 text-center border border-[#00F0FF]/30 p-3 bg-black/40 cyber-border">
+                 <p className="text-[8px] uppercase tracking-widest text-slate-400 mb-1">Mem Usage</p>
+                 <p className="text-lg font-bold text-[#00F0FF]">61%</p>
+               </div>
+               <div className="flex-1 text-center border border-[#00F0FF]/30 p-3 bg-black/40 cyber-border">
+                 <p className="text-[8px] uppercase tracking-widest text-slate-400 mb-1">Latency</p>
+                 <p className="text-lg font-bold text-[#00F0FF]">20ms</p>
+               </div>
+             </div>
+          </div>
+
+          {/* TERMINAL LOGS (Activity) */}
+          <div className="cyber-border cyber-panel p-5 flex-1 flex flex-col min-h-[250px]">
+            <div className="flex justify-between items-center border-b border-[#00F0FF]/30 pb-2 mb-4">
+               <h2 className="text-[#00F0FF] text-[10px] uppercase tracking-[0.4em]">Terminal Logs</h2>
+               <div className="flex gap-1.5">
+                 <span className="w-1.5 h-1.5 border border-[#00F0FF]"></span>
+                 <span className="w-1.5 h-1.5 border border-[#00F0FF]"></span>
+                 <span className="w-1.5 h-1.5 bg-[#00F0FF]"></span>
+               </div>
+            </div>
+            <div className="flex-1 overflow-y-auto space-y-1.5 font-mono text-[9px] text-slate-400 terminal-text pr-2">
+              {activity && activity.length > 0 ? activity.map((event, i) => (
+                <div key={event.id || i} className="flex gap-3 hover:bg-[#00F0FF]/10 p-1 rounded-sm border-l border-transparent hover:border-[#00F0FF] transition-colors">
+                  <span className="text-[#00F0FF] shrink-0">{formatDate(event.createdAt)}</span>
+                  <span className="text-[#FF0055] shrink-0">[SYS]</span>
+                  <span className="text-white truncate" title={event.action}>{event.action}</span>
+                </div>
+              )) : (
+                <div className="space-y-1">
+                  <p className="text-[#00F0FF]">Initialize log stream...</p>
+                  <p className="text-white">AWAITING SYSTEM DATA...</p>
+                  <p className="animate-pulse">_</p>
+                </div>
+              )}
+            </div>
+          </div>
+          
+          {/* NETWORK LOG */}
+          <div className="cyber-border cyber-panel p-5 h-48 flex flex-col">
+            <h2 className="text-[#00F0FF] text-[10px] uppercase tracking-[0.4em] mb-4 border-b border-[#00F0FF]/30 pb-2">Network Log</h2>
+            <div className="flex-1 overflow-y-auto space-y-1.5 font-mono text-[9px] text-[#00F0FF]/70 terminal-text">
+              <p>network.log: tx_0x123A connection established</p>
+              <p>network.log: rx_0x442B routing incoming streams</p>
+              <p>network.log: sys_0x992C <span className="text-[#FF0055]">WARNING: latency spike detected</span></p>
+              <p>network.log: tx_0x123B optimizing route</p>
+              <p>network.log: tx_0x123C optimal route established</p>
+              <p>network.log: sys_0x992D <span className="text-white">All systems nominal</span></p>
+              <p className="animate-pulse">_</p>
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      {/* Footer Status Bar */}
+      <div className="mt-8 flex justify-between items-center text-[9px] uppercase tracking-[0.3em] text-[#00F0FF] cyber-border p-3 px-6 bg-black/40 w-full z-20 relative">
+         <div className="flex items-center gap-3">
+           <AlertTriangle className="w-3.5 h-3.5 text-[#FF0055]" />
+           <span className="text-[#FF0055] font-bold">Secure Connection: Stable</span>
+         </div>
+         <div className="font-bold text-white flex items-center gap-2">
+           USER: {session?.user?.fullName ?? "COMMANDER NOVA"} <span className="text-slate-500 mx-2">|</span> {new Date().toLocaleTimeString('en-US', { timeZone: 'UTC' })} UTC
+         </div>
+      </div>
     </div>
   );
 }

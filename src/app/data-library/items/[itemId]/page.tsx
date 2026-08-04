@@ -16,6 +16,10 @@ type ItemDetail = {
   isPremium: boolean;
   locked: boolean;
   packageNames?: string[];
+  hierarchyNode?: { id: string; code: string; name: string; nodeType: string } | null;
+  classifications?: { system: string; code: string; label: string; isPrimary: boolean }[];
+  regionalApplicability?: { scope: string; countryCode: string }[];
+  publishedVersion?: { versionNumber: number; specificationTemplate: string; inclusionTemplate: string; exclusionTemplate: string } | null;
 };
 
 type PageProps = { params: Promise<{ itemId: string }> };
@@ -111,19 +115,66 @@ export default function DataLibraryItemPage(props: PageProps) {
           </Link>
         </div>
       ) : (
-        <div className="rounded-[32px] border border-slate-800 bg-slate-950 p-8">
-          <h2 className="text-xl font-semibold text-white">Technical specification</h2>
-          <p className="mt-2 whitespace-pre-line text-sm text-slate-400">{item.fullDescription || "No additional description."}</p>
-          <p className="mt-3 text-xs text-slate-500">Default unit: {item.defaultUnit}</p>
+        <div className="space-y-6">
+          <div className="rounded-[32px] border border-slate-800 bg-slate-950 p-8">
+            <h2 className="text-xl font-semibold text-white">Technical specification</h2>
+            <p className="mt-2 whitespace-pre-line text-sm text-slate-400">{item.fullDescription || "No additional description."}</p>
+            <p className="mt-3 text-xs text-slate-500">Default unit: {item.defaultUnit}</p>
 
-          {technicalFields && Object.keys(technicalFields).length > 0 && (
-            <div className="mt-6 grid gap-2 sm:grid-cols-2">
-              {Object.entries(technicalFields).map(([key, value]) => (
-                <div key={key} className="rounded-xl border border-slate-800 bg-slate-900 px-4 py-2 text-sm">
-                  <p className="text-xs uppercase tracking-wide text-slate-500">{key}</p>
-                  <p className="text-slate-200">{String(value)}</p>
+            {item.hierarchyNode && (
+              <p className="mt-3 text-xs text-slate-500">
+                Hierarchy: <span className="text-slate-300">{item.hierarchyNode.name}</span> ({item.hierarchyNode.nodeType})
+              </p>
+            )}
+
+            {technicalFields && Object.keys(technicalFields).length > 0 && (
+              <div className="mt-6 grid gap-2 sm:grid-cols-2">
+                {Object.entries(technicalFields).map(([key, value]) => (
+                  <div key={key} className="rounded-xl border border-slate-800 bg-slate-900 px-4 py-2 text-sm">
+                    <p className="text-xs uppercase tracking-wide text-slate-500">{key}</p>
+                    <p className="text-slate-200">{String(value)}</p>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {item.publishedVersion && (item.publishedVersion.specificationTemplate || item.publishedVersion.inclusionTemplate || item.publishedVersion.exclusionTemplate) && (
+            <div className="rounded-[32px] border border-slate-800 bg-slate-950 p-8">
+              <h2 className="text-xl font-semibold text-white">Specification (v{item.publishedVersion.versionNumber})</h2>
+              {item.publishedVersion.specificationTemplate && (
+                <p className="mt-3 whitespace-pre-line text-sm text-slate-400">{item.publishedVersion.specificationTemplate}</p>
+              )}
+              {item.publishedVersion.inclusionTemplate && (
+                <p className="mt-3 text-xs text-emerald-300"><span className="uppercase tracking-wide text-slate-500">Includes: </span>{item.publishedVersion.inclusionTemplate}</p>
+              )}
+              {item.publishedVersion.exclusionTemplate && (
+                <p className="mt-2 text-xs text-amber-300"><span className="uppercase tracking-wide text-slate-500">Excludes: </span>{item.publishedVersion.exclusionTemplate}</p>
+              )}
+            </div>
+          )}
+
+          {((item.classifications && item.classifications.length > 0) || (item.regionalApplicability && item.regionalApplicability.length > 0)) && (
+            <div className="rounded-[32px] border border-slate-800 bg-slate-950 p-8">
+              <h2 className="text-xl font-semibold text-white">Classification & region</h2>
+              {item.classifications && item.classifications.length > 0 && (
+                <div className="mt-4 flex flex-wrap gap-2">
+                  {item.classifications.map((c) => (
+                    <span key={`${c.system}-${c.code}`} className="rounded-full border border-slate-700 bg-slate-900 px-3 py-1 text-xs text-slate-300">
+                      {c.system.replace(/_/g, " ")}: {c.code}{c.isPrimary ? " (primary)" : ""}
+                    </span>
+                  ))}
                 </div>
-              ))}
+              )}
+              {item.regionalApplicability && item.regionalApplicability.length > 0 && (
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {item.regionalApplicability.map((r) => (
+                    <span key={`${r.scope}-${r.countryCode}`} className="rounded-full border border-sky-800 bg-sky-950/40 px-3 py-1 text-xs text-sky-300">
+                      {r.scope}{r.countryCode ? ` (${r.countryCode})` : ""}
+                    </span>
+                  ))}
+                </div>
+              )}
             </div>
           )}
         </div>

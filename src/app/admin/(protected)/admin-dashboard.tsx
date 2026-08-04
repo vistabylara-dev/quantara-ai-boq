@@ -448,6 +448,7 @@ export default function AdminDashboard() {
             {isOwner && <QuickActionLink href="#audit-panel" label="Audit" />}
             <QuickActionLink href="#system-health-panel" label="System status" />
             {isOwner && <QuickActionLink href="#test-panel" label="Test panel" />}
+            {isOwner && <QuickActionLink href="/admin/master-boq" label="Master BOQ" />}
           </nav>
         </div>
         <p className="mt-3 text-xs text-[#7B879C] dark:text-[#7F8DA6]">

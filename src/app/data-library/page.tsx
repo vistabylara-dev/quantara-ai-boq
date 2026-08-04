@@ -7,6 +7,17 @@ import { apiClient, getApiErrorMessage } from "@/lib/api/client";
 type Discipline = { id: string; key: string; name: string; description: string };
 type CategoryNode = { id: string; key: string; name: string; depth: number; children: CategoryNode[] };
 type ItemRow = { id: string; itemCode: string; name: string; shortDescription: string; defaultUnit: string; isPremium: boolean; locked?: boolean; packageNames?: string[] };
+type HierarchyNode = { id: string; code: string; name: string; nodeType: string; children: HierarchyNode[] };
+
+/** Flattens the tree and keeps only SYSTEM-type nodes (Industry -> Discipline -> System), for the optional deep-hierarchy filter. */
+function collectSystemNodes(nodes: HierarchyNode[]): HierarchyNode[] {
+  const result: HierarchyNode[] = [];
+  for (const node of nodes) {
+    if (node.nodeType === "SYSTEM") result.push(node);
+    if (node.children.length > 0) result.push(...collectSystemNodes(node.children));
+  }
+  return result;
+}
 
 function CategoryTree({ nodes, selectedId, onSelect }: { nodes: CategoryNode[]; selectedId: string | null; onSelect: (id: string) => void }) {
   return (
@@ -33,6 +44,8 @@ export default function DataLibraryPage() {
   const [selectedDisciplineId, setSelectedDisciplineId] = useState<string | null>(null);
   const [categoryTree, setCategoryTree] = useState<CategoryNode[]>([]);
   const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null);
+  const [systemNodes, setSystemNodes] = useState<HierarchyNode[]>([]);
+  const [selectedSystemId, setSelectedSystemId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [items, setItems] = useState<ItemRow[]>([]);
   const [total, setTotal] = useState(0);
@@ -50,6 +63,10 @@ export default function DataLibraryPage() {
         setSelectedDisciplineId((current) => current || data[0]?.id || null);
       })
       .catch((error) => setLoadError(getApiErrorMessage(error)));
+    apiClient
+      .get<HierarchyNode[]>("/api/master-data/hierarchy", controller.signal)
+      .then((tree) => setSystemNodes(collectSystemNodes(tree)))
+      .catch(() => setSystemNodes([]));
     return () => controller.abort();
   }, []);
 
@@ -71,6 +88,7 @@ export default function DataLibraryPage() {
     try {
       const params = new URLSearchParams({ disciplineId: selectedDisciplineId, pageSize: "30" });
       if (selectedCategoryId) params.set("categoryId", selectedCategoryId);
+      if (selectedSystemId) params.set("hierarchyNodeId", selectedSystemId);
       if (search.trim()) params.set("search", search.trim());
       const data = await apiClient.get<{ items: ItemRow[]; total: number }>(`/api/master-data/items?${params.toString()}`, signal);
       setItems(data.items);
@@ -81,7 +99,7 @@ export default function DataLibraryPage() {
     } finally {
       if (!signal?.aborted) setIsLoading(false);
     }
-  }, [selectedDisciplineId, selectedCategoryId, search]);
+  }, [selectedDisciplineId, selectedCategoryId, selectedSystemId, search]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -127,6 +145,22 @@ export default function DataLibraryPage() {
               </button>
             ))}
           </div>
+
+          {systemNodes.length > 0 && (
+            <>
+              <p className="mt-6 text-xs uppercase tracking-[0.24em] text-slate-500">System</p>
+              <select
+                value={selectedSystemId ?? ""}
+                onChange={(event) => setSelectedSystemId(event.target.value || null)}
+                className="mt-3 w-full rounded-xl border border-slate-800 bg-slate-900 px-3 py-2 text-sm text-slate-200 outline-none focus:border-blue-500"
+              >
+                <option value="">All systems</option>
+                {systemNodes.map((node) => (
+                  <option key={node.id} value={node.id}>{node.name}</option>
+                ))}
+              </select>
+            </>
+          )}
 
           {categoryTree.length > 0 && (
             <>

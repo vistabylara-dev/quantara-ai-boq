@@ -1,4 +1,4 @@
-import { MasterCatalogueImportStatus } from "@prisma/client";
+import { MasterCatalogueImportJobStatus, MasterCatalogueImportStatus } from "@prisma/client";
 import { prisma } from "@/lib/db/prisma";
 import { AppError, NotFoundError, PermissionDeniedError } from "@/lib/errors/app-error";
 import type { PlatformActor } from "@/lib/auth/platform-authorization";

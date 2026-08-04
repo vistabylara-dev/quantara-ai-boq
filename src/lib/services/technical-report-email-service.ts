@@ -2,14 +2,14 @@ import { EmailDispatchStatus } from "@prisma/client";
 import { prisma } from "@/lib/db/prisma";
 import type { CurrentActor } from "@/lib/auth/current-actor";
 import { requireCapability } from "@/lib/auth/rbac";
-import { AppError, NotFoundError } from "@/lib/errors/app-error";
+import { AppError } from "@/lib/errors/app-error";
 import { createAuditLog } from "@/lib/repositories/audit-repository";
-import { getEmailTemplate } from "@/lib/repositories/email-template-repository";
 import {
   createReportShareLink,
   getGeneratedTechnicalReportRecord,
   revokeReportShareLink,
 } from "@/lib/repositories/generated-technical-report-repository";
+import { resolveEmailTemplate } from "@/lib/services/template-resolution-service";
 import { reportTemplateSectionsSchema } from "@/lib/documents/report-template-sections";
 import { buildTechnicalReportShareUrl, hashReportShareToken } from "@/lib/documents/technical-report-share";
 import {
@@ -19,15 +19,6 @@ import {
 import { developmentEmailProvider } from "@/lib/email/development-email-provider";
 import { getEmailProvider } from "@/lib/email/get-email-provider";
 import { formatDate } from "@/lib/formatting/dates";
-
-/** A template picked to send a technical report must actually be a TECHNICAL_REPORT-category
- *  template — the send picker UI already only offers those; this closes the gap for a direct API
- *  call, matching the equivalent BOQ-side guard in email-service.ts. */
-function assertTechnicalReportTemplate(template: { id: string; category: string }): void {
-  if (template.category !== "TECHNICAL_REPORT") {
-    throw new AppError("WRONG_TEMPLATE_CATEGORY", "This email template is not a technical report template.", 400);
-  }
-}
 
 export async function createTechnicalReportShareLink(actor: CurrentActor, reportId: string, expiresInDays?: number) {
   requireCapability(actor, "technical-reports:send");
@@ -103,19 +94,18 @@ export type PreviewTechnicalReportEmailInput = {
 
 export async function previewTechnicalReportEmail(actor: CurrentActor, input: PreviewTechnicalReportEmailInput) {
   requireCapability(actor, "technical-reports:send");
-  const template = await getEmailTemplate(actor.companyId, input.emailTemplateId);
-  assertTechnicalReportTemplate(template);
+  const resolved = await resolveEmailTemplate({ companyId: actor.companyId, category: "TECHNICAL_REPORT", templateId: input.emailTemplateId });
   const variables = await buildVariables(actor.companyId, input.reportId, input.rawShareToken, actor.fullName, actor.email, "[Client Name]", input.revision);
-  const rendered = renderTechnicalReportEmailTemplate({ subject: template.subject, bodyHtml: template.bodyHtml, bodyText: template.bodyText, variables });
+  const rendered = renderTechnicalReportEmailTemplate({ subject: resolved.subject, bodyHtml: resolved.bodyHtml, bodyText: resolved.bodyText, variables });
 
   await createAuditLog(actor.companyId, {
     entityType: "GeneratedTechnicalReport",
     entityId: input.reportId,
     action: "TECHNICAL_REPORT_EMAIL_PREVIEWED",
-    payload: { templateId: template.id },
+    payload: { templateId: resolved.templateId },
   });
 
-  return { template, ...rendered };
+  return { template: { id: resolved.templateId, code: resolved.templateCode, name: resolved.templateName }, ...rendered };
 }
 
 export type TestSendTechnicalReportEmailInput = PreviewTechnicalReportEmailInput & { testRecipient: string };
@@ -124,13 +114,12 @@ export type TestSendTechnicalReportEmailInput = PreviewTechnicalReportEmailInput
  *  persisted as an EmailDispatch — mirrors testSendProposalEmail's isolation guarantee. */
 export async function testSendTechnicalReportEmail(actor: CurrentActor, input: TestSendTechnicalReportEmailInput) {
   requireCapability(actor, "technical-reports:send");
-  const template = await getEmailTemplate(actor.companyId, input.emailTemplateId);
-  assertTechnicalReportTemplate(template);
+  const resolved = await resolveEmailTemplate({ companyId: actor.companyId, category: "TECHNICAL_REPORT", templateId: input.emailTemplateId });
   const variables = await buildVariables(actor.companyId, input.reportId, input.rawShareToken, actor.fullName, actor.email, "[Client Name]", input.revision);
   const rendered = renderTechnicalReportEmailTemplate({
-    subject: `[TEST] ${template.subject}`,
-    bodyHtml: template.bodyHtml,
-    bodyText: template.bodyText,
+    subject: `[TEST] ${resolved.subject}`,
+    bodyHtml: resolved.bodyHtml,
+    bodyText: resolved.bodyText,
     variables,
   });
   const result = await developmentEmailProvider.sendEmail({
@@ -138,6 +127,12 @@ export async function testSendTechnicalReportEmail(actor: CurrentActor, input: T
     subject: rendered.subject,
     html: rendered.bodyHtml,
     text: rendered.bodyText,
+  });
+  await createAuditLog(actor.companyId, {
+    entityType: "GeneratedTechnicalReport",
+    entityId: input.reportId,
+    action: "TECHNICAL_REPORT_EMAIL_TEST_SENT",
+    payload: { templateId: resolved.templateId, templateVersionId: resolved.versionId, providerResultStatus: result.status },
   });
   return { ...rendered, providerResult: result };
 }
@@ -160,19 +155,18 @@ export async function sendTechnicalReportEmail(actor: CurrentActor, input: SendT
   if (record.status !== "COMPLETED" || !record.storageKey) {
     throw new AppError("TECHNICAL_REPORT_NOT_READY", "Generate the report document before emailing it.", 409);
   }
-  const template = await getEmailTemplate(actor.companyId, input.emailTemplateId);
-  if (!template.isActive) throw new NotFoundError("This email template is inactive.");
-  assertTechnicalReportTemplate(template);
+  const resolved = await resolveEmailTemplate({ companyId: actor.companyId, category: "TECHNICAL_REPORT", templateId: input.emailTemplateId });
 
   const variables = await buildVariables(actor.companyId, input.reportId, input.rawShareToken, actor.fullName, actor.email, input.recipientName, input.revision);
-  const rendered = renderTechnicalReportEmailTemplate({ subject: template.subject, bodyHtml: template.bodyHtml, bodyText: template.bodyText, variables });
+  const rendered = renderTechnicalReportEmailTemplate({ subject: resolved.subject, bodyHtml: resolved.bodyHtml, bodyText: resolved.bodyText, variables });
 
   const dispatch = await prisma.emailDispatch.create({
     data: {
       companyId: actor.companyId,
       projectId: record.projectId,
       generatedTechnicalReportId: record.id,
-      emailTemplateId: template.id,
+      emailTemplateId: resolved.templateId,
+      emailTemplateVersionId: resolved.versionId,
       createdByUserId: actor.userId,
       createdByName: actor.fullName,
       recipient: input.recipientEmail,

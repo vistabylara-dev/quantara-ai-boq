@@ -79,13 +79,22 @@ export async function createEmailTemplate(companyId: string, input: EmailTemplat
         companyId,
         name: input.name,
         code: input.code,
-        category: input.category ?? "GENERAL",
+        // Matches the schema's own @default(BOQ) and this codebase's actual history — every
+        // template created before the category column existed was a BOQ proposal template, and
+        // that remains the sensible default for a caller that doesn't specify one explicitly.
+        category: input.category ?? "BOQ",
         subject: input.subject,
         bodyHtml: input.bodyHtml,
         bodyText: input.bodyText,
         language: input.language ?? "English",
         isActive: input.isActive ?? true,
       },
+    });
+    // TEMPLATE-LINK-1 — this is the company's own immediate self-service creation flow, not the
+    // platform owner's DRAFT->REVIEW->APPROVED governance workflow, so the template must be usable
+    // right away: version 1 is created already PUBLISHED with the exact content just submitted.
+    await tx.emailTemplateVersion.create({
+      data: { emailTemplateId: row.id, versionNumber: 1, status: "PUBLISHED", subject: row.subject, bodyHtml: row.bodyHtml, bodyText: row.bodyText, effectiveDate: new Date(), changeSummary: "Initial version." },
     });
     await createAuditLog(companyId, { entityType: "EmailTemplate", entityId: row.id, action: "EMAIL_TEMPLATE_CREATED", payload: { name: row.name, code: row.code, category: row.category } }, tx);
     return row;
@@ -113,6 +122,18 @@ export async function updateEmailTemplate(companyId: string, templateId: string,
         ...(input.isActive !== undefined ? { isActive: input.isActive } : {}),
       },
     });
+    // TEMPLATE-LINK-1 — a content change (subject/body) must never rewrite the version an
+    // already-sent email points to; instead it retires the currently published version (if any)
+    // and immediately publishes a new one, the same self-service-fast-path reasoning as creation.
+    const contentChanged = input.subject !== undefined || input.bodyHtml !== undefined || input.bodyText !== undefined;
+    if (contentChanged) {
+      const currentPublished = await tx.emailTemplateVersion.findFirst({ where: { emailTemplateId: row.id, status: "PUBLISHED" } });
+      if (currentPublished) await tx.emailTemplateVersion.update({ where: { id: currentPublished.id }, data: { status: "RETIRED", retiredDate: new Date() } });
+      const latest = await tx.emailTemplateVersion.findFirst({ where: { emailTemplateId: row.id }, orderBy: { versionNumber: "desc" } });
+      await tx.emailTemplateVersion.create({
+        data: { emailTemplateId: row.id, versionNumber: (latest?.versionNumber ?? 0) + 1, status: "PUBLISHED", subject: row.subject, bodyHtml: row.bodyHtml, bodyText: row.bodyText, effectiveDate: new Date(), changeSummary: "Updated via company self-service edit." },
+      });
+    }
     await createAuditLog(companyId, { entityType: "EmailTemplate", entityId: row.id, action: "EMAIL_TEMPLATE_UPDATED", payload: { name: row.name, code: row.code } }, tx);
     return row;
   });

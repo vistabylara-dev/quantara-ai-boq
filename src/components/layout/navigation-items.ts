@@ -11,6 +11,7 @@ export const NAVIGATION_ITEMS: NavigationItem[] = [
   { label: "Projects", href: "/projects" },
   { label: "Clients", href: "/clients" },
   { label: "Industries", href: "/industries" },
+  { label: "Integrations", href: "/integrations" },
   { label: "Data Library", href: "/data-library" },
   { label: "Company Library", href: "/company-library" },
   { label: "Marketplace", href: "/marketplace" },

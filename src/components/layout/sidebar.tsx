@@ -10,6 +10,7 @@ import {
   Layers,
   LayoutDashboard,
   Library,
+  Plug,
   Settings as SettingsIcon,
   Store,
   Truck,
@@ -27,6 +28,7 @@ const ICONS: Record<string, LucideIcon> = {
   "/projects": FolderKanban,
   "/clients": Users,
   "/industries": Factory,
+  "/integrations": Plug,
   "/data-library": Database,
   "/company-library": Library,
   "/marketplace": Store,
@@ -40,7 +42,7 @@ const ICONS: Record<string, LucideIcon> = {
 const GROUPS: Array<{ label: string; hrefs: string[] }> = [
   { label: "Workspace", hrefs: ["/dashboard"] },
   { label: "Projects", hrefs: ["/projects", "/clients", "/industries"] },
-  { label: "Data & Catalogue", hrefs: ["/data-library", "/company-library", "/marketplace", "/imports", "/catalogue", "/suppliers"] },
+  { label: "Data & Catalogue", hrefs: ["/integrations", "/data-library", "/company-library", "/marketplace", "/imports", "/catalogue", "/suppliers"] },
   { label: "Documents", hrefs: ["/templates"] },
   { label: "Account", hrefs: ["/settings"] },
 ];

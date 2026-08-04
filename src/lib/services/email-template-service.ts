@@ -1,3 +1,4 @@
+import type { EmailTemplateCategory } from "@prisma/client";
 import type { CurrentActor } from "@/lib/auth/current-actor";
 import { requireCapability } from "@/lib/auth/rbac";
 import {
@@ -5,6 +6,7 @@ import {
   duplicateEmailTemplate,
   getEmailTemplate,
   listEmailTemplates,
+  listEmailTemplatesByCategory,
   setEmailTemplateActive,
   setEmailTemplateDefault,
   updateEmailTemplate,
@@ -15,6 +17,12 @@ import { TECHNICAL_REPORT_STARTER_EMAIL_TEMPLATES } from "@/lib/email/starter-te
 
 export async function listEmailTemplatesForCompany(actor: CurrentActor, includeInactive = false) {
   return listEmailTemplates(actor.companyId, includeInactive);
+}
+
+/** Category-scoped list for a send picker (proposals -> BOQ, technical reports -> TECHNICAL_REPORT)
+ *  — the server-side half of "you can't accidentally pick the wrong template". */
+export async function listEmailTemplatesForCompanyByCategory(actor: CurrentActor, category: EmailTemplateCategory) {
+  return listEmailTemplatesByCategory(actor.companyId, category);
 }
 
 export async function getEmailTemplateForCompany(actor: CurrentActor, templateId: string) {
@@ -68,6 +76,7 @@ export async function installTechnicalReportStarterTemplatesForCompany(actor: Cu
     created.push(await createEmailTemplate(actor.companyId, {
       name: template.name,
       code: template.code,
+      category: "TECHNICAL_REPORT",
       subject: template.subject,
       bodyHtml: template.bodyHtml,
       bodyText: template.bodyText,

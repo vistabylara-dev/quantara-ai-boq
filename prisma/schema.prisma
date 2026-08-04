@@ -2021,18 +2021,30 @@ model GeneratedTechnicalReport {
   @@index([createdAt])
 }
 
+/// Email service 1B follow-up — which send flow a template is meant for. Existing rows (all
+/// created before this column existed, i.e. the BOQ proposal templates) backfill to BOQ, matching
+/// what they actually are; new templates must pick one explicitly at creation. Send pickers filter
+/// by this so a company can never accidentally pick a BOQ template for a technical report or vice
+/// versa — the actual "safe user journey" this was added for.
+enum EmailTemplateCategory {
+  BOQ
+  TECHNICAL_REPORT
+  GENERAL
+}
+
 model EmailTemplate {
-  id              String          @id @default(uuid()) @db.Uuid
-  companyId       String          @db.Uuid
+  id              String                @id @default(uuid()) @db.Uuid
+  companyId       String                @db.Uuid
   name            String
   code            String
+  category        EmailTemplateCategory @default(BOQ)
   subject         String
   bodyHtml        String
   bodyText        String
-  language        String          @default("English")
-  isDefault       Boolean         @default(false)
-  isActive        Boolean         @default(true)
-  createdAt       DateTime        @default(now())
+  language        String                @default("English")
+  isDefault       Boolean               @default(false)
+  isActive        Boolean               @default(true)
+  createdAt       DateTime              @default(now())
   updatedAt       DateTime        @updatedAt
   company         Company         @relation(fields: [companyId], references: [id], onDelete: Cascade)
   emailDispatches EmailDispatch[]

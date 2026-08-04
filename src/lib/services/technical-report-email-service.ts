@@ -20,6 +20,15 @@ import { developmentEmailProvider } from "@/lib/email/development-email-provider
 import { getEmailProvider } from "@/lib/email/get-email-provider";
 import { formatDate } from "@/lib/formatting/dates";
 
+/** A template picked to send a technical report must actually be a TECHNICAL_REPORT-category
+ *  template — the send picker UI already only offers those; this closes the gap for a direct API
+ *  call, matching the equivalent BOQ-side guard in email-service.ts. */
+function assertTechnicalReportTemplate(template: { id: string; category: string }): void {
+  if (template.category !== "TECHNICAL_REPORT") {
+    throw new AppError("WRONG_TEMPLATE_CATEGORY", "This email template is not a technical report template.", 400);
+  }
+}
+
 export async function createTechnicalReportShareLink(actor: CurrentActor, reportId: string, expiresInDays?: number) {
   requireCapability(actor, "technical-reports:send");
   const record = await getGeneratedTechnicalReportRecord(actor.companyId, reportId);
@@ -95,6 +104,7 @@ export type PreviewTechnicalReportEmailInput = {
 export async function previewTechnicalReportEmail(actor: CurrentActor, input: PreviewTechnicalReportEmailInput) {
   requireCapability(actor, "technical-reports:send");
   const template = await getEmailTemplate(actor.companyId, input.emailTemplateId);
+  assertTechnicalReportTemplate(template);
   const variables = await buildVariables(actor.companyId, input.reportId, input.rawShareToken, actor.fullName, actor.email, "[Client Name]", input.revision);
   const rendered = renderTechnicalReportEmailTemplate({ subject: template.subject, bodyHtml: template.bodyHtml, bodyText: template.bodyText, variables });
 
@@ -115,6 +125,7 @@ export type TestSendTechnicalReportEmailInput = PreviewTechnicalReportEmailInput
 export async function testSendTechnicalReportEmail(actor: CurrentActor, input: TestSendTechnicalReportEmailInput) {
   requireCapability(actor, "technical-reports:send");
   const template = await getEmailTemplate(actor.companyId, input.emailTemplateId);
+  assertTechnicalReportTemplate(template);
   const variables = await buildVariables(actor.companyId, input.reportId, input.rawShareToken, actor.fullName, actor.email, "[Client Name]", input.revision);
   const rendered = renderTechnicalReportEmailTemplate({
     subject: `[TEST] ${template.subject}`,
@@ -151,6 +162,7 @@ export async function sendTechnicalReportEmail(actor: CurrentActor, input: SendT
   }
   const template = await getEmailTemplate(actor.companyId, input.emailTemplateId);
   if (!template.isActive) throw new NotFoundError("This email template is inactive.");
+  assertTechnicalReportTemplate(template);
 
   const variables = await buildVariables(actor.companyId, input.reportId, input.rawShareToken, actor.fullName, actor.email, input.recipientName, input.revision);
   const rendered = renderTechnicalReportEmailTemplate({ subject: template.subject, bodyHtml: template.bodyHtml, bodyText: template.bodyText, variables });

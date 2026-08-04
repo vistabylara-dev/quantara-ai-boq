@@ -1,4 +1,4 @@
-import type { EmailTemplate } from "@prisma/client";
+import type { EmailTemplate, EmailTemplateCategory } from "@prisma/client";
 import { prisma } from "@/lib/db/prisma";
 import { ConflictError, NotFoundError } from "@/lib/errors/app-error";
 import { createAuditLog } from "@/lib/repositories/audit-repository";
@@ -6,6 +6,7 @@ import { createAuditLog } from "@/lib/repositories/audit-repository";
 export type EmailTemplateWriteInput = {
   name: string;
   code: string;
+  category?: EmailTemplateCategory;
   subject: string;
   bodyHtml: string;
   bodyText: string;
@@ -19,6 +20,7 @@ function toEmailTemplateDTO(row: EmailTemplate) {
     companyId: row.companyId,
     name: row.name,
     code: row.code,
+    category: row.category,
     subject: row.subject,
     bodyHtml: row.bodyHtml,
     bodyText: row.bodyText,
@@ -50,6 +52,18 @@ export async function listEmailTemplates(companyId: string, includeInactive = fa
   return rows.map(toEmailTemplateDTO);
 }
 
+/** Used by the proposal and technical-report send pickers so each flow only ever offers its own
+ *  category — the actual mechanism behind "you can't accidentally send a BOQ template for a
+ *  technical report". Always active-only; there's no legitimate reason to offer an inactive
+ *  template in a send picker. */
+export async function listEmailTemplatesByCategory(companyId: string, category: EmailTemplateCategory) {
+  const rows = await prisma.emailTemplate.findMany({
+    where: { companyId, category, isActive: true },
+    orderBy: [{ isDefault: "desc" }, { name: "asc" }],
+  });
+  return rows.map(toEmailTemplateDTO);
+}
+
 export async function getDefaultEmailTemplate(companyId: string) {
   const row = await prisma.emailTemplate.findFirst({ where: { companyId, isDefault: true, isActive: true } });
   return row ? toEmailTemplateDTO(row) : null;
@@ -65,6 +79,7 @@ export async function createEmailTemplate(companyId: string, input: EmailTemplat
         companyId,
         name: input.name,
         code: input.code,
+        category: input.category ?? "GENERAL",
         subject: input.subject,
         bodyHtml: input.bodyHtml,
         bodyText: input.bodyText,
@@ -72,7 +87,7 @@ export async function createEmailTemplate(companyId: string, input: EmailTemplat
         isActive: input.isActive ?? true,
       },
     });
-    await createAuditLog(companyId, { entityType: "EmailTemplate", entityId: row.id, action: "EMAIL_TEMPLATE_CREATED", payload: { name: row.name, code: row.code } }, tx);
+    await createAuditLog(companyId, { entityType: "EmailTemplate", entityId: row.id, action: "EMAIL_TEMPLATE_CREATED", payload: { name: row.name, code: row.code, category: row.category } }, tx);
     return row;
   });
   return toEmailTemplateDTO(created);
@@ -90,6 +105,7 @@ export async function updateEmailTemplate(companyId: string, templateId: string,
       data: {
         ...(input.name !== undefined ? { name: input.name } : {}),
         ...(input.code !== undefined ? { code: input.code } : {}),
+        ...(input.category !== undefined ? { category: input.category } : {}),
         ...(input.subject !== undefined ? { subject: input.subject } : {}),
         ...(input.bodyHtml !== undefined ? { bodyHtml: input.bodyHtml } : {}),
         ...(input.bodyText !== undefined ? { bodyText: input.bodyText } : {}),
@@ -143,6 +159,7 @@ export async function duplicateEmailTemplate(companyId: string, templateId: stri
         companyId,
         name: `${current.name} (Copy)`,
         code,
+        category: current.category,
         subject: current.subject,
         bodyHtml: current.bodyHtml,
         bodyText: current.bodyText,

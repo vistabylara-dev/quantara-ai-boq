@@ -60,10 +60,13 @@ export const sendEmailSchema = z
   })
   .strict();
 
+const emailTemplateCategorySchema = z.enum(["BOQ", "TECHNICAL_REPORT", "GENERAL"]);
+
 export const emailTemplateCreateSchema = z
   .object({
     name: z.string().trim().min(1, "Name is required.").max(255),
     code: z.string().trim().min(1, "Code is required.").max(100).regex(/^[a-z0-9-]+$/, "Code may only contain lowercase letters, numbers, and dashes."),
+    category: emailTemplateCategorySchema.optional(),
     subject: z.string().trim().min(1, "Subject is required.").max(500),
     bodyHtml: z.string().trim().min(1, "HTML body is required.").max(50_000),
     bodyText: z.string().trim().min(1, "Text body is required.").max(50_000),
@@ -76,6 +79,7 @@ export const emailTemplateUpdateSchema = z
   .object({
     name: z.string().trim().min(1).max(255).optional(),
     code: z.string().trim().min(1).max(100).regex(/^[a-z0-9-]+$/).optional(),
+    category: emailTemplateCategorySchema.optional(),
     subject: z.string().trim().min(1).max(500).optional(),
     bodyHtml: z.string().trim().min(1).max(50_000).optional(),
     bodyText: z.string().trim().min(1).max(50_000).optional(),

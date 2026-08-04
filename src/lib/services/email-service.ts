@@ -55,6 +55,16 @@ async function assertTokenMatchesProposal(companyId: string, proposalId: string,
   }
 }
 
+/** A template explicitly picked for a BOQ proposal must actually be a BOQ-category template —
+ *  the server-side half of the category safeguard (the picker UI already only offers BOQ ones;
+ *  this closes the gap for a direct API call). The company-wide default fallback is trusted as-is
+ *  since it predates categories and has always been BOQ in practice. */
+function assertBoqTemplate(template: { id: string; category: string }): void {
+  if (template.category !== "BOQ") {
+    throw new AppError("WRONG_TEMPLATE_CATEGORY", "This email template is not a BOQ/proposal template.", 400);
+  }
+}
+
 export async function previewProposalEmail(actor: CurrentActor, input: PreviewEmailInput) {
   requireCapability(actor, "proposals:manage");
   await assertTokenMatchesProposal(actor.companyId, input.proposalId, input.rawToken);
@@ -62,6 +72,7 @@ export async function previewProposalEmail(actor: CurrentActor, input: PreviewEm
     ? await getEmailTemplate(actor.companyId, input.emailTemplateId)
     : await getDefaultEmailTemplate(actor.companyId);
   if (!template) throw new NotFoundError("No email template is available. Create or set a default template first.");
+  if (input.emailTemplateId) assertBoqTemplate(template);
 
   const variables = await buildVariables(actor.companyId, input.proposalId, input.rawToken, actor.fullName);
   const rendered = renderEmailTemplate({ subject: template.subject, bodyHtml: template.bodyHtml, bodyText: template.bodyText, variables });
@@ -90,6 +101,7 @@ export async function testSendProposalEmail(actor: CurrentActor, input: PreviewE
     ? await getEmailTemplate(actor.companyId, input.emailTemplateId)
     : await getDefaultEmailTemplate(actor.companyId);
   if (!template) throw new NotFoundError("No email template is available. Create or set a default template first.");
+  if (input.emailTemplateId) assertBoqTemplate(template);
 
   const variables = await buildVariables(actor.companyId, input.proposalId, input.rawToken, actor.fullName);
   const rendered = renderEmailTemplate({ subject: `[TEST] ${template.subject}`, bodyHtml: template.bodyHtml, bodyText: template.bodyText, variables });
@@ -122,6 +134,7 @@ export async function sendProposalEmail(actor: CurrentActor, input: SendProposal
     ? await getEmailTemplate(actor.companyId, input.emailTemplateId)
     : await getDefaultEmailTemplate(actor.companyId);
   if (!template) throw new NotFoundError("No email template is available. Create or set a default template first.");
+  if (input.emailTemplateId) assertBoqTemplate(template);
 
   const variables = await buildVariables(actor.companyId, input.proposalId, input.rawToken, actor.fullName);
   const rendered = renderEmailTemplate({ subject: template.subject, bodyHtml: template.bodyHtml, bodyText: template.bodyText, variables });

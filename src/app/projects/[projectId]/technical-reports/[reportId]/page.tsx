@@ -75,10 +75,10 @@ export default function TechnicalReportDetailPage(props: PageProps) {
   useEffect(() => {
     const controller = new AbortController();
     apiClient
-      .get<EmailTemplateOption[]>("/api/email-templates", controller.signal)
+      .get<EmailTemplateOption[]>("/api/email-templates?category=TECHNICAL_REPORT", controller.signal)
       .then((data) => {
         setEmailTemplates(data);
-        setSelectedTemplateId((current) => current || data.find((t) => t.code.startsWith("technical-report"))?.id || data[0]?.id || "");
+        setSelectedTemplateId((current) => current || data[0]?.id || "");
       })
       .catch((error) => {
         if (error instanceof DOMException && error.name === "AbortError") return;

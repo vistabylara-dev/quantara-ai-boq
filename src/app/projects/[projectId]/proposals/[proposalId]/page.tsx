@@ -107,7 +107,7 @@ export default function ProposalDetailPage(props: PageProps) {
         apiClient.get<Proposal>(`/api/proposals/${encodeURIComponent(params.proposalId)}`, signal),
         apiClient.get<ProposalEvent[]>(`/api/proposals/${encodeURIComponent(params.proposalId)}/events`, signal),
         apiClient.get<EmailDispatch[]>(`/api/proposals/${encodeURIComponent(params.proposalId)}/emails`, signal),
-        apiClient.get<EmailTemplate[]>(`/api/email-templates`, signal),
+        apiClient.get<EmailTemplate[]>(`/api/email-templates?category=BOQ`, signal),
       ]);
       setProposal(proposalData);
       setEvents(eventData);

@@ -108,7 +108,23 @@ type ReportTemplateView = {
   isActive: boolean;
 };
 
-type EmailTemplateSummaryRow = { category: "BOQ" | "TECHNICAL_REPORT" | "GENERAL"; isActive: boolean };
+type EmailTemplateCategory = "BOQ" | "TECHNICAL_REPORT" | "GENERAL";
+
+type EmailTemplateSummaryRow = {
+  id: string;
+  name: string;
+  code: string;
+  category: EmailTemplateCategory;
+  subject: string;
+  isDefault: boolean;
+  isActive: boolean;
+};
+
+const EMAIL_CATEGORY_SECTIONS: { key: EmailTemplateCategory; label: string; hint: string }[] = [
+  { key: "BOQ", label: "BOQ / Proposal emails", hint: "Sent alongside a client BOQ proposal." },
+  { key: "TECHNICAL_REPORT", label: "Technical report emails", hint: "Sent when delivering a generated technical report." },
+  { key: "GENERAL", label: "General emails", hint: "Not tied to a specific send flow." },
+];
 
 function keySections(content: TemplateContentConfig): string[] {
   const sections: string[] = [];
@@ -136,7 +152,10 @@ export default function TemplatesPage() {
   const [busyId, setBusyId] = useState<string | null>(null);
   const [previewTemplate, setPreviewTemplate] = useState<TemplateView | null>(null);
 
-  const [emailTemplateCounts, setEmailTemplateCounts] = useState<{ boq: number; technicalReport: number; general: number } | null>(null);
+  const [emailTemplates, setEmailTemplates] = useState<EmailTemplateSummaryRow[] | null>(null);
+  const [emailTemplatesError, setEmailTemplatesError] = useState<string | null>(null);
+  const [emailBusyId, setEmailBusyId] = useState<string | null>(null);
+  const [emailInstallBusy, setEmailInstallBusy] = useState<"boq" | "technical-report" | null>(null);
 
   const [reportTemplates, setReportTemplates] = useState<ReportTemplateView[]>([]);
   const [reportTemplatesLoading, setReportTemplatesLoading] = useState(true);
@@ -166,22 +185,48 @@ export default function TemplatesPage() {
     return () => controller.abort();
   }, [loadReportTemplates]);
 
+  const loadEmailTemplates = useCallback(async (signal?: AbortSignal) => {
+    setEmailTemplatesError(null);
+    try {
+      const rows = await apiClient.get<EmailTemplateSummaryRow[]>("/api/email-templates?includeInactive=true", signal);
+      setEmailTemplates(rows);
+    } catch (error) {
+      if (error instanceof DOMException && error.name === "AbortError") return;
+      setEmailTemplatesError(getApiErrorMessage(error));
+    }
+  }, []);
+
   useEffect(() => {
     const controller = new AbortController();
-    apiClient
-      .get<EmailTemplateSummaryRow[]>("/api/email-templates?includeInactive=true", controller.signal)
-      .then((rows) => {
-        setEmailTemplateCounts({
-          boq: rows.filter((r) => r.category === "BOQ" && r.isActive).length,
-          technicalReport: rows.filter((r) => r.category === "TECHNICAL_REPORT" && r.isActive).length,
-          general: rows.filter((r) => r.category === "GENERAL" && r.isActive).length,
-        });
-      })
-      .catch((error) => {
-        if (error instanceof DOMException && error.name === "AbortError") return;
-      });
+    void loadEmailTemplates(controller.signal);
     return () => controller.abort();
-  }, []);
+  }, [loadEmailTemplates]);
+
+  const toggleEmailTemplateActive = useCallback(async (id: string, isActive: boolean) => {
+    setEmailBusyId(id);
+    setEmailTemplatesError(null);
+    try {
+      await apiClient.put(`/api/email-templates/${encodeURIComponent(id)}/active`, { isActive: !isActive });
+      await loadEmailTemplates();
+    } catch (error) {
+      setEmailTemplatesError(getApiErrorMessage(error));
+    } finally {
+      setEmailBusyId(null);
+    }
+  }, [loadEmailTemplates]);
+
+  const installEmailStarters = useCallback(async (kind: "boq" | "technical-report") => {
+    setEmailInstallBusy(kind);
+    setEmailTemplatesError(null);
+    try {
+      await apiClient.post(`/api/email-templates/starter/${kind}`);
+      await loadEmailTemplates();
+    } catch (error) {
+      setEmailTemplatesError(getApiErrorMessage(error));
+    } finally {
+      setEmailInstallBusy(null);
+    }
+  }, [loadEmailTemplates]);
 
   // Accepts the same structured JSON shape the conversion tooling produces (templateName/
   // templateCode/disciplinesCovered/note/frontMatter/sections) — the whole parsed file doubles as
@@ -415,29 +460,93 @@ export default function TemplatesPage() {
             <h2 className="text-lg font-semibold text-[#08152E] dark:text-white">Email templates</h2>
             <p className="mt-1 max-w-xl text-sm text-[#7B879C] dark:text-[#8CA0BE]">
               The wording sent alongside a BOQ proposal or technical report — grouped by category so
-              the right one always shows up in the right send flow. Managed in Settings.
+              the right one always shows up in the right send flow.
             </p>
           </div>
           <Link
             href="/settings/email-templates"
-            className="rounded-2xl bg-[#009FE3] px-4 py-2 text-sm font-semibold text-white hover:opacity-90 dark:bg-[#21C7F3] dark:text-[#040A16]"
+            className="rounded-2xl border border-[#D5E0EC] bg-[#EAF1F8] px-4 py-2 text-sm font-semibold text-[#08152E] hover:bg-white dark:border-[#20304D] dark:bg-[#101D34] dark:text-[#F4F8FF] dark:hover:bg-[#091326]"
           >
-            Manage email templates
+            Edit in Settings
           </Link>
         </div>
-        <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-3">
-          {[
-            { label: "BOQ / Proposal", count: emailTemplateCounts?.boq },
-            { label: "Technical Report", count: emailTemplateCounts?.technicalReport },
-            { label: "General", count: emailTemplateCounts?.general },
-          ].map((row) => (
-            <div key={row.label} className="rounded-2xl border border-[#D5E0EC] bg-[#EAF1F8] px-4 py-3 dark:border-[#20304D] dark:bg-[#101D34]">
-              <p className="text-xs uppercase tracking-[0.2em] text-[#7B879C] dark:text-[#8CA0BE]">{row.label}</p>
-              <p className="mt-1 text-2xl font-semibold text-[#08152E] dark:text-white">{row.count ?? "–"}</p>
-              <p className="text-xs text-[#7B879C] dark:text-[#8CA0BE]">active template{row.count === 1 ? "" : "s"}</p>
-            </div>
-          ))}
-        </div>
+
+        {emailTemplatesError && (
+          <p className="mt-4 text-sm text-[#D84A4A] dark:text-rose-300">{emailTemplatesError}</p>
+        )}
+
+        {emailTemplates === null ? (
+          <p className="mt-4 text-sm text-[#7B879C] dark:text-[#8CA0BE]">Loading email templates…</p>
+        ) : (
+          <div className="mt-5 space-y-5">
+            {EMAIL_CATEGORY_SECTIONS.map((section) => {
+              const rows = emailTemplates.filter((t) => t.category === section.key);
+              return (
+                <div key={section.key}>
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div>
+                      <h3 className="text-sm font-semibold text-[#08152E] dark:text-white">{section.label}</h3>
+                      <p className="text-xs text-[#7B879C] dark:text-[#8CA0BE]">{section.hint}</p>
+                    </div>
+                    {rows.length === 0 && section.key !== "GENERAL" && (
+                      <button
+                        type="button"
+                        onClick={() => void installEmailStarters(section.key === "BOQ" ? "boq" : "technical-report")}
+                        disabled={emailInstallBusy !== null}
+                        className="rounded-xl bg-[#009FE3] px-3 py-1.5 text-xs font-semibold text-white hover:opacity-90 disabled:opacity-50 dark:bg-[#21C7F3] dark:text-[#040A16]"
+                      >
+                        {emailInstallBusy === (section.key === "BOQ" ? "boq" : "technical-report") ? "Adding…" : "Add starter templates"}
+                      </button>
+                    )}
+                  </div>
+                  {rows.length === 0 ? (
+                    <p className="mt-2 rounded-2xl border border-dashed border-[#D5E0EC] p-3 text-xs text-[#7B879C] dark:border-[#20304D] dark:text-[#8CA0BE]">
+                      No templates in this category yet.
+                    </p>
+                  ) : (
+                    <div className="mt-2 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                      {rows.map((template) => (
+                        <div key={template.id} className="rounded-2xl border border-[#D5E0EC] bg-[#EAF1F8] p-4 dark:border-[#20304D] dark:bg-[#101D34]">
+                          <div className="flex items-start justify-between gap-2">
+                            <p className="text-sm font-semibold text-[#08152E] dark:text-white">{template.name}</p>
+                            <div className="flex flex-col items-end gap-1">
+                              {template.isDefault && (
+                                <span className="rounded-full bg-[#009FE3]/10 px-2 py-0.5 text-[0.6rem] uppercase tracking-[0.2em] text-[#0077B6] dark:bg-[#21C7F3]/10 dark:text-[#21C7F3]">
+                                  Default
+                                </span>
+                              )}
+                              <span className={`rounded-full px-2 py-0.5 text-[0.6rem] uppercase tracking-[0.2em] ${template.isActive ? "bg-[#159A6A]/10 text-[#159A6A] dark:bg-emerald-400/10 dark:text-emerald-300" : "bg-white text-[#7B879C] dark:bg-[#091326] dark:text-[#8CA0BE]"}`}>
+                                {template.isActive ? "Active" : "Inactive"}
+                              </span>
+                            </div>
+                          </div>
+                          <p className="mt-2 text-xs text-[#536078] dark:text-[#8CA0BE]">{template.subject}</p>
+                          <p className="mt-1 text-[10px] uppercase tracking-[0.18em] text-[#7B879C] dark:text-[#8CA0BE]">{template.code}</p>
+                          <div className="mt-3 flex flex-wrap gap-2">
+                            <Link
+                              href="/settings/email-templates"
+                              className="rounded-xl border border-[#D5E0EC] bg-white px-3 py-1.5 text-xs font-semibold text-[#08152E] hover:bg-[#EAF1F8] dark:border-[#20304D] dark:bg-[#091326] dark:text-[#F4F8FF] dark:hover:bg-[#101D34]"
+                            >
+                              Edit
+                            </Link>
+                            <button
+                              type="button"
+                              onClick={() => void toggleEmailTemplateActive(template.id, template.isActive)}
+                              disabled={emailBusyId === template.id}
+                              className="rounded-xl border border-rose-300 bg-rose-50 px-3 py-1.5 text-xs font-semibold text-rose-700 hover:bg-rose-100 disabled:opacity-50 dark:border-rose-900 dark:bg-rose-950/30 dark:text-rose-300 dark:hover:bg-rose-900/40"
+                            >
+                              {template.isActive ? "Deactivate" : "Activate"}
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       <div>

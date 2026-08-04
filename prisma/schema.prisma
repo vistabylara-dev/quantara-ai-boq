@@ -1446,47 +1446,50 @@ model Company {
 }
 
 model User {
-  id                           String                       @id @default(uuid()) @db.Uuid
-  companyId                    String                       @db.Uuid
-  email                        String                       @unique
-  passwordHash                 String
-  fullName                     String
-  role                         UserRole                     @default(ESTIMATOR)
-  platformRole                 PlatformRole?
-  emailVerifiedAt              DateTime?
-  isActive                     Boolean                      @default(true)
-  createdAt                    DateTime                     @default(now())
-  updatedAt                    DateTime                     @updatedAt
-  company                      Company                      @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  sessions                     Session[]
-  emailVerificationTokens      EmailVerificationToken[]
-  passwordResetTokens          PasswordResetToken[]
-  auditLogs                    AuditLog[]
-  rateCataloguePriceHistories  RateCataloguePriceHistory[]
-  generatedDocuments           GeneratedDocument[]
-  generatedTechnicalReports    GeneratedTechnicalReport[]
-  clientProposals              ClientProposal[]
-  clientProposalEvents         ClientProposalEvent[]
-  emailDispatches              EmailDispatch[]
-  companyLibraryItems          CompanyLibraryItem[]
-  companyLibraryItemVersions   CompanyLibraryItemVersion[]
-  companyItemUsages            CompanyItemUsage[]
-  importMappingTemplates       ImportMappingTemplate[]
-  importJobs                   ImportJob[]
-  copiedBoqItems               BOQItem[]                    @relation("BoqItemCopiedByUser")
-  uploadedProjectFiles         ProjectFile[]                @relation("ProjectFileUploadedByUser")
-  classificationConfirmedFiles ProjectFile[]                @relation("ProjectFileClassificationConfirmedByUser")
-  createdExtractionJobs        ExtractionJob[]
-  platformAuditLogs            PlatformAuditLog[]           @relation("PlatformAuditActor")
-  simulationSession            PlatformSimulationSession?
-  masterCatalogueImportBatches MasterCatalogueImportBatch[]
-  masterCatalogueImportJobs    MasterCatalogueImportJob[]
-  masterItemVersionsCreated    MasterItemVersion[]          @relation("MasterItemVersionCreatedBy")
-  masterItemVersionsReviewed   MasterItemVersion[]          @relation("MasterItemVersionReviewedBy")
-  masterItemVersionsApproved   MasterItemVersion[]          @relation("MasterItemVersionApprovedBy")
-  externalConnectionsMade      ExternalConnection[]
-  synchronizationRunsActed     SynchronizationRun[]         @relation("SynchronizationRunActor")
-  integrationEventsActed       IntegrationEvent[]           @relation("IntegrationEventActor")
+  id                                     String                           @id @default(uuid()) @db.Uuid
+  companyId                              String                           @db.Uuid
+  email                                  String                           @unique
+  passwordHash                           String
+  fullName                               String
+  role                                   UserRole                         @default(ESTIMATOR)
+  platformRole                           PlatformRole?
+  emailVerifiedAt                        DateTime?
+  isActive                               Boolean                          @default(true)
+  createdAt                              DateTime                         @default(now())
+  updatedAt                              DateTime                         @updatedAt
+  company                                Company                          @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  sessions                               Session[]
+  emailVerificationTokens                EmailVerificationToken[]
+  passwordResetTokens                    PasswordResetToken[]
+  auditLogs                              AuditLog[]
+  rateCataloguePriceHistories            RateCataloguePriceHistory[]
+  generatedDocuments                     GeneratedDocument[]
+  generatedTechnicalReports              GeneratedTechnicalReport[]
+  clientProposals                        ClientProposal[]
+  clientProposalEvents                   ClientProposalEvent[]
+  emailDispatches                        EmailDispatch[]
+  companyLibraryItems                    CompanyLibraryItem[]
+  companyLibraryItemVersions             CompanyLibraryItemVersion[]
+  companyItemUsages                      CompanyItemUsage[]
+  importMappingTemplates                 ImportMappingTemplate[]
+  importJobs                             ImportJob[]
+  copiedBoqItems                         BOQItem[]                        @relation("BoqItemCopiedByUser")
+  uploadedProjectFiles                   ProjectFile[]                    @relation("ProjectFileUploadedByUser")
+  classificationConfirmedFiles           ProjectFile[]                    @relation("ProjectFileClassificationConfirmedByUser")
+  createdExtractionJobs                  ExtractionJob[]
+  platformAuditLogs                      PlatformAuditLog[]               @relation("PlatformAuditActor")
+  simulationSession                      PlatformSimulationSession?
+  masterCatalogueImportBatches           MasterCatalogueImportBatch[]
+  masterCatalogueImportJobs              MasterCatalogueImportJob[]
+  masterItemVersionsCreated              MasterItemVersion[]              @relation("MasterItemVersionCreatedBy")
+  masterItemVersionsReviewed             MasterItemVersion[]              @relation("MasterItemVersionReviewedBy")
+  masterItemVersionsApproved             MasterItemVersion[]              @relation("MasterItemVersionApprovedBy")
+  documentTemplateVersionsCreated        DocumentTemplateVersion[]        @relation("DocumentTemplateVersionCreatedBy")
+  technicalReportTemplateVersionsCreated TechnicalReportTemplateVersion[] @relation("TechnicalReportTemplateVersionCreatedBy")
+  emailTemplateVersionsCreated           EmailTemplateVersion[]           @relation("EmailTemplateVersionCreatedBy")
+  externalConnectionsMade                ExternalConnection[]
+  synchronizationRunsActed               SynchronizationRun[]             @relation("SynchronizationRunActor")
+  integrationEventsActed                 IntegrationEvent[]               @relation("IntegrationEventActor")
 
   @@index([companyId])
   @@index([role])
@@ -1963,24 +1966,40 @@ model PlatformAuditLog {
   @@index([createdAt])
 }
 
+/// TEMPLATE-LINK-1 — the DRAFT->REVIEW->APPROVED->PUBLISHED->RETIRED lifecycle
+/// shared by all three template-version tables below (mirrors
+/// MasterItemVersionStatus, which established this exact pattern for the
+/// master catalogue). A template row's PUBLISHED version is never
+/// destructively overwritten by a later edit — publishing a new version
+/// retires the previous one instead, and every already-generated document /
+/// sent email / locked BOQ keeps pointing at the exact version it used.
+enum TemplateVersionStatus {
+  DRAFT
+  REVIEW
+  APPROVED
+  PUBLISHED
+  RETIRED
+}
+
 model DocumentTemplate {
-  id                 String               @id @default(uuid()) @db.Uuid
-  companyId          String               @db.Uuid
-  industryEngineId   String?              @db.Uuid
+  id                 String                    @id @default(uuid()) @db.Uuid
+  companyId          String                    @db.Uuid
+  industryEngineId   String?                   @db.Uuid
   name               String
   code               String
   type               DocumentTemplateType
-  description        String               @default("")
+  description        String                    @default("")
   styleConfigJson    Json
   contentConfigJson  Json
-  isDefault          Boolean              @default(false)
-  isActive           Boolean              @default(true)
-  createdAt          DateTime             @default(now())
-  updatedAt          DateTime             @updatedAt
-  company            Company              @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  industryEngine     IndustryEngine?      @relation(fields: [industryEngineId], references: [id], onDelete: SetNull)
+  isDefault          Boolean                   @default(false)
+  isActive           Boolean                   @default(true)
+  createdAt          DateTime                  @default(now())
+  updatedAt          DateTime                  @updatedAt
+  company            Company                   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  industryEngine     IndustryEngine?           @relation(fields: [industryEngineId], references: [id], onDelete: SetNull)
   generatedDocuments GeneratedDocument[]
   companyBrandings   CompanyBranding[]
+  versions           DocumentTemplateVersion[]
 
   @@unique([companyId, code])
   @@index([companyId])
@@ -1989,12 +2008,43 @@ model DocumentTemplate {
   @@index([isActive])
 }
 
+/// A pinned, immutable snapshot of one DocumentTemplate's style/content
+/// config at a point in time. GeneratedDocument.templateVersionId locks each
+/// rendered output to the exact version that produced it — editing/publishing
+/// a new version afterward never changes an already-generated document.
+model DocumentTemplateVersion {
+  id                 String                @id @default(uuid()) @db.Uuid
+  documentTemplateId String                @db.Uuid
+  versionNumber      Int
+  status             TemplateVersionStatus @default(DRAFT)
+  styleConfigJson    Json
+  contentConfigJson  Json
+  changeSummary      String                @default("")
+  effectiveDate      DateTime?
+  retiredDate        DateTime?
+  createdByUserId    String?               @db.Uuid
+  createdAt          DateTime              @default(now())
+  updatedAt          DateTime              @updatedAt
+  documentTemplate   DocumentTemplate      @relation(fields: [documentTemplateId], references: [id], onDelete: Cascade)
+  createdByUser      User?                 @relation("DocumentTemplateVersionCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  generatedDocuments GeneratedDocument[]
+
+  @@unique([documentTemplateId, versionNumber])
+  @@index([documentTemplateId])
+  @@index([status])
+}
+
 model GeneratedDocument {
   id                     String                   @id @default(uuid()) @db.Uuid
   companyId              String                   @db.Uuid
   projectId              String                   @db.Uuid
   boqId                  String                   @db.Uuid
   templateId             String                   @db.Uuid
+  /// TEMPLATE-LINK-1 — nullable so pre-existing rows (generated before
+  /// versioning existed) remain valid; backfilled to each row's template's
+  /// version 1. Every new generation sets this to the exact PUBLISHED
+  /// version resolved at generation time.
+  templateVersionId      String?                  @db.Uuid
   revisionNumber         Int
   type                   GeneratedDocumentType
   audience               DocumentAudience
@@ -2016,6 +2066,7 @@ model GeneratedDocument {
   project                Project                  @relation(fields: [projectId], references: [id], onDelete: Cascade)
   boq                    BOQ                      @relation(fields: [boqId], references: [id], onDelete: Cascade)
   template               DocumentTemplate         @relation(fields: [templateId], references: [id], onDelete: Restrict)
+  templateVersion        DocumentTemplateVersion? @relation(fields: [templateVersionId], references: [id], onDelete: SetNull)
   generatedByUser        User?                    @relation(fields: [generatedByUserId], references: [id], onDelete: SetNull)
   proposalDocuments      ClientProposalDocument[]
 
@@ -2023,6 +2074,7 @@ model GeneratedDocument {
   @@index([projectId])
   @@index([boqId])
   @@index([templateId])
+  @@index([templateVersionId])
   @@index([type])
   @@index([status])
   @@index([createdAt])
@@ -2035,23 +2087,50 @@ model GeneratedDocument {
 /// the template-import tooling) — the same shape `GeneratedTechnicalReport.sectionsSnapshotJson`
 /// copies at creation time so a later template edit never silently changes an in-flight report.
 model TechnicalReportTemplate {
-  id               String                     @id @default(uuid()) @db.Uuid
-  companyId        String                     @db.Uuid
+  id               String                           @id @default(uuid()) @db.Uuid
+  companyId        String                           @db.Uuid
   name             String
   code             String
-  disciplineTag    String                     @default("")
-  description      String                     @default("")
+  disciplineTag    String                           @default("")
+  description      String                           @default("")
   sectionsJson     Json
-  isDefault        Boolean                    @default(false)
-  isActive         Boolean                    @default(true)
-  createdAt        DateTime                   @default(now())
-  updatedAt        DateTime                   @updatedAt
-  company          Company                    @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  isDefault        Boolean                          @default(false)
+  isActive         Boolean                          @default(true)
+  createdAt        DateTime                         @default(now())
+  updatedAt        DateTime                         @updatedAt
+  company          Company                          @relation(fields: [companyId], references: [id], onDelete: Cascade)
   generatedReports GeneratedTechnicalReport[]
+  versions         TechnicalReportTemplateVersion[]
 
   @@unique([companyId, code])
   @@index([companyId])
   @@index([isActive])
+}
+
+/// A pinned, immutable snapshot of one TechnicalReportTemplate's sectionsJson
+/// at a point in time — GeneratedTechnicalReport already snapshots sections
+/// at creation (sectionsSnapshotJson) independent of this, but templateVersionId
+/// additionally records which governed version that snapshot came from, so
+/// the admin Template Centre can show real usage/version history.
+model TechnicalReportTemplateVersion {
+  id                        String                     @id @default(uuid()) @db.Uuid
+  technicalReportTemplateId String                     @db.Uuid
+  versionNumber             Int
+  status                    TemplateVersionStatus      @default(DRAFT)
+  sectionsJson              Json
+  changeSummary             String                     @default("")
+  effectiveDate             DateTime?
+  retiredDate               DateTime?
+  createdByUserId           String?                    @db.Uuid
+  createdAt                 DateTime                   @default(now())
+  updatedAt                 DateTime                   @updatedAt
+  technicalReportTemplate   TechnicalReportTemplate    @relation(fields: [technicalReportTemplateId], references: [id], onDelete: Cascade)
+  createdByUser             User?                      @relation("TechnicalReportTemplateVersionCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  generatedReports          GeneratedTechnicalReport[]
+
+  @@unique([technicalReportTemplateId, versionNumber])
+  @@index([technicalReportTemplateId])
+  @@index([status])
 }
 
 /// One filled-in (or in-progress) instance of a TechnicalReportTemplate for a specific project.
@@ -2061,12 +2140,15 @@ model TechnicalReportTemplate {
 /// literal substitution pass over the section snapshot using that map — no inference, no invented
 /// values, matching the rest of this codebase's no-fake-AI discipline.
 model GeneratedTechnicalReport {
-  id                   String                  @id @default(uuid()) @db.Uuid
-  companyId            String                  @db.Uuid
-  projectId            String                  @db.Uuid
-  templateId           String                  @db.Uuid
+  id                   String                          @id @default(uuid()) @db.Uuid
+  companyId            String                          @db.Uuid
+  projectId            String                          @db.Uuid
+  templateId           String                          @db.Uuid
+  /// TEMPLATE-LINK-1 — nullable for the same pre-versioning-backfill reason as
+  /// GeneratedDocument.templateVersionId.
+  templateVersionId    String?                         @db.Uuid
   name                 String
-  status               TechnicalReportStatus   @default(DRAFT)
+  status               TechnicalReportStatus           @default(DRAFT)
   sectionsSnapshotJson Json
   placeholdersJson     Json
   fieldValuesJson      Json
@@ -2076,28 +2158,30 @@ model GeneratedTechnicalReport {
   mimeType             String?
   fileSize             Int?
   checksum             String?
-  generatedByUserId    String?                 @db.Uuid
+  generatedByUserId    String?                         @db.Uuid
   generatedByName      String
   errorMessage         String?
   /// Client-facing secure link (email service 1B) — same generate-raw/store-hash-only pattern as
   /// ClientProposal.tokenHash (see auth/tokens.ts + proposals/proposal-token.ts). Nullable: most
   /// reports are never shared via link (attachment-only email is equally valid). Rotating the link
   /// (creating a new one) simply overwrites this hash; the previous raw token stops resolving.
-  shareTokenHash       String?                 @unique
+  shareTokenHash       String?                         @unique
   shareExpiresAt       DateTime?
   shareRevokedAt       DateTime?
-  createdAt            DateTime                @default(now())
-  updatedAt            DateTime                @updatedAt
+  createdAt            DateTime                        @default(now())
+  updatedAt            DateTime                        @updatedAt
   completedAt          DateTime?
-  company              Company                 @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  project              Project                 @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  template             TechnicalReportTemplate @relation(fields: [templateId], references: [id], onDelete: Restrict)
-  generatedByUser      User?                   @relation(fields: [generatedByUserId], references: [id], onDelete: SetNull)
+  company              Company                         @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  project              Project                         @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  template             TechnicalReportTemplate         @relation(fields: [templateId], references: [id], onDelete: Restrict)
+  templateVersion      TechnicalReportTemplateVersion? @relation(fields: [templateVersionId], references: [id], onDelete: SetNull)
+  generatedByUser      User?                           @relation(fields: [generatedByUserId], references: [id], onDelete: SetNull)
   emailDispatches      EmailDispatch[]
 
   @@index([companyId])
   @@index([projectId])
   @@index([templateId])
+  @@index([templateVersionId])
   @@index([status])
   @@index([createdAt])
 }
@@ -2114,25 +2198,53 @@ enum EmailTemplateCategory {
 }
 
 model EmailTemplate {
-  id              String                @id @default(uuid()) @db.Uuid
-  companyId       String                @db.Uuid
+  id              String                 @id @default(uuid()) @db.Uuid
+  companyId       String                 @db.Uuid
   name            String
   code            String
-  category        EmailTemplateCategory @default(BOQ)
+  category        EmailTemplateCategory  @default(BOQ)
   subject         String
   bodyHtml        String
   bodyText        String
-  language        String                @default("English")
-  isDefault       Boolean               @default(false)
-  isActive        Boolean               @default(true)
-  createdAt       DateTime              @default(now())
-  updatedAt       DateTime              @updatedAt
-  company         Company               @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  language        String                 @default("English")
+  isDefault       Boolean                @default(false)
+  isActive        Boolean                @default(true)
+  createdAt       DateTime               @default(now())
+  updatedAt       DateTime               @updatedAt
+  company         Company                @relation(fields: [companyId], references: [id], onDelete: Cascade)
   emailDispatches EmailDispatch[]
+  versions        EmailTemplateVersion[]
 
   @@unique([companyId, code])
   @@index([companyId])
   @@index([isActive])
+}
+
+/// A pinned, immutable snapshot of one EmailTemplate's subject/body at a
+/// point in time. EmailDispatch.emailTemplateVersionId locks every sent (or
+/// test-sent) email's audit record to the exact version that generated it —
+/// editing the template afterward never rewrites delivery history.
+model EmailTemplateVersion {
+  id              String                @id @default(uuid()) @db.Uuid
+  emailTemplateId String                @db.Uuid
+  versionNumber   Int
+  status          TemplateVersionStatus @default(DRAFT)
+  subject         String
+  bodyHtml        String
+  bodyText        String
+  changeSummary   String                @default("")
+  effectiveDate   DateTime?
+  retiredDate     DateTime?
+  createdByUserId String?               @db.Uuid
+  createdAt       DateTime              @default(now())
+  updatedAt       DateTime              @updatedAt
+  emailTemplate   EmailTemplate         @relation(fields: [emailTemplateId], references: [id], onDelete: Cascade)
+  createdByUser   User?                 @relation("EmailTemplateVersionCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  emailDispatches EmailDispatch[]
+
+  @@unique([emailTemplateId, versionNumber])
+  @@index([emailTemplateId])
+  @@index([status])
 }
 
 model ClientProposal {
@@ -2227,6 +2339,10 @@ model EmailDispatch {
   /// the exact same dispatch table as proposal emails, without touching any existing BOQ/proposal row.
   generatedTechnicalReportId String?                   @db.Uuid
   emailTemplateId            String?                   @db.Uuid
+  /// TEMPLATE-LINK-1 — nullable for the same pre-versioning-backfill reason
+  /// as GeneratedDocument.templateVersionId; every new send sets this to the
+  /// exact PUBLISHED version resolveTemplate() returned.
+  emailTemplateVersionId     String?                   @db.Uuid
   createdByUserId            String?                   @db.Uuid
   createdByName              String
   recipient                  String
@@ -2253,12 +2369,14 @@ model EmailDispatch {
   clientProposal             ClientProposal?           @relation(fields: [clientProposalId], references: [id], onDelete: SetNull)
   generatedTechnicalReport   GeneratedTechnicalReport? @relation(fields: [generatedTechnicalReportId], references: [id], onDelete: SetNull)
   emailTemplate              EmailTemplate?            @relation(fields: [emailTemplateId], references: [id], onDelete: SetNull)
+  emailTemplateVersion       EmailTemplateVersion?     @relation(fields: [emailTemplateVersionId], references: [id], onDelete: SetNull)
   createdByUser              User?                     @relation(fields: [createdByUserId], references: [id], onDelete: SetNull)
 
   @@index([companyId])
   @@index([projectId])
   @@index([clientProposalId])
   @@index([generatedTechnicalReportId])
+  @@index([emailTemplateVersionId])
   @@index([status])
 }
 

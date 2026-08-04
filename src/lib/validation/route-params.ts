@@ -101,3 +101,7 @@ export const technicalReportIdParamsSchema = z.object({
 export const technicalReportTokenParamsSchema = z.object({
   token: z.string().trim().min(20, "A valid share token is required.").max(200),
 }).strict();
+
+export const templateVersionIdParamsSchema = z.object({
+  versionId: z.string().uuid("A valid template version ID is required."),
+}).strict();

@@ -1,5 +1,11 @@
 import type { ExternalConnection, ProjectIntegration } from "@prisma/client";
 import { prisma } from "@/lib/db/prisma";
+import { NotFoundError } from "@/lib/errors/app-error";
+import {
+  encryptOAuthCredentials,
+  decryptOAuthCredentials,
+  type StoredOAuthCredentials,
+} from "@/lib/integrations/credential-encryption";
 
 /**
  * INTEGRATIONS-1A — thin repository over the four new tables. Every read
@@ -66,6 +72,100 @@ export async function listProjectIntegrations(companyId: string, projectId: stri
     orderBy: { createdAt: "desc" },
   });
   return rows.map(toProjectIntegrationDTO);
+}
+
+/**
+ * Creates a new CONNECTED ExternalConnection row, or re-activates/replaces an
+ * existing one for the same (companyId, providerId) if the company already
+ * had a prior (possibly disconnected/expired) connection to this provider —
+ * one live connection per company per provider, matching how the marketplace
+ * UI reads connection status (getConnectionForProvider already assumes this).
+ * Credentials are encrypted before ever touching the database.
+ */
+export async function upsertConnectedExternalConnection(input: {
+  companyId: string;
+  connectedByUserId: string;
+  providerId: string;
+  credentials: StoredOAuthCredentials;
+  providerAccountId: string | null;
+  grantedScopesJson: unknown;
+}): Promise<ReturnType<typeof toExternalConnectionDTO>> {
+  const encryptedCredentialsRef = encryptOAuthCredentials(input.credentials);
+  const existing = await prisma.externalConnection.findFirst({
+    where: { companyId: input.companyId, providerId: input.providerId },
+    orderBy: { connectedAt: "desc" },
+  });
+
+  const data = {
+    encryptedCredentialsRef,
+    providerAccountId: input.providerAccountId,
+    grantedScopesJson: input.grantedScopesJson as never,
+    status: "CONNECTED" as const,
+    connectedAt: new Date(),
+    tokenExpiresAt: input.credentials.expiresAt ? new Date(input.credentials.expiresAt) : null,
+    disconnectedAt: null,
+    lastErrorCode: null,
+    lastErrorMessage: null,
+  };
+
+  const row = existing
+    ? await prisma.externalConnection.update({ where: { id: existing.id }, data })
+    : await prisma.externalConnection.create({
+        data: {
+          companyId: input.companyId,
+          connectedByUserId: input.connectedByUserId,
+          providerId: input.providerId,
+          ...data,
+        },
+      });
+
+  return toExternalConnectionDTO(row);
+}
+
+/** Internal use only (token refresh / calling the provider's API) — never expose this to a DTO or API response. */
+export async function getDecryptedCredentialsForConnection(
+  companyId: string,
+  externalConnectionId: string,
+): Promise<StoredOAuthCredentials> {
+  const row = await prisma.externalConnection.findFirst({ where: { id: externalConnectionId, companyId } });
+  if (!row || !row.encryptedCredentialsRef) throw new NotFoundError("Connection not found.");
+  return decryptOAuthCredentials(row.encryptedCredentialsRef);
+}
+
+/** Refreshes stored credentials in place after a token refresh call — same encryption path as the initial connect. */
+export async function updateStoredCredentials(
+  companyId: string,
+  externalConnectionId: string,
+  credentials: StoredOAuthCredentials,
+): Promise<void> {
+  const row = await prisma.externalConnection.findFirst({ where: { id: externalConnectionId, companyId } });
+  if (!row) throw new NotFoundError("Connection not found.");
+  await prisma.externalConnection.update({
+    where: { id: row.id },
+    data: {
+      encryptedCredentialsRef: encryptOAuthCredentials(credentials),
+      tokenExpiresAt: credentials.expiresAt ? new Date(credentials.expiresAt) : null,
+      status: "CONNECTED",
+      lastErrorCode: null,
+      lastErrorMessage: null,
+    },
+  });
+}
+
+export async function markConnectionDisconnected(companyId: string, externalConnectionId: string): Promise<void> {
+  const row = await prisma.externalConnection.findFirst({ where: { id: externalConnectionId, companyId } });
+  if (!row) throw new NotFoundError("Connection not found.");
+  await prisma.externalConnection.update({
+    where: { id: row.id },
+    data: { status: "DISCONNECTED", disconnectedAt: new Date(), encryptedCredentialsRef: null },
+  });
+}
+
+export async function recordConnectionError(externalConnectionId: string, code: string, message: string): Promise<void> {
+  await prisma.externalConnection.update({
+    where: { id: externalConnectionId },
+    data: { status: "ERROR", lastErrorCode: code, lastErrorMessage: message },
+  });
 }
 
 /** Idempotent on id — seeds/refreshes the IntegrationProvider table from the code-side registry. */

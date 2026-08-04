@@ -14,6 +14,7 @@ import {
 } from "@/lib/repositories/email-template-repository";
 import { prisma } from "@/lib/db/prisma";
 import { TECHNICAL_REPORT_STARTER_EMAIL_TEMPLATES } from "@/lib/email/starter-technical-report-email-templates";
+import { BOQ_STARTER_EMAIL_TEMPLATES, type StarterEmailTemplateDefinition } from "@/lib/email/starter-boq-email-templates";
 
 export async function listEmailTemplatesForCompany(actor: CurrentActor, includeInactive = false) {
   return listEmailTemplates(actor.companyId, includeInactive);
@@ -55,32 +56,42 @@ export async function duplicateEmailTemplateForCompany(actor: CurrentActor, temp
 }
 
 /**
- * Installs the built-in technical-report starter templates (attach-and-send + automated-secure-
- * link) into this company's own EmailTemplate table. Idempotent by `code`: a template already
- * installed (or since renamed/edited by the company, but keeping its original code) is left
- * untouched and simply skipped rather than duplicated or overwritten — re-clicking "Install" is
- * always safe.
+ * Shared by both starter-pack installers below. Idempotent by `code`: a template already installed
+ * (or since renamed/edited by the company, but keeping its original code) is left untouched and
+ * simply skipped rather than duplicated or overwritten — re-clicking "Install" is always safe.
  */
-export async function installTechnicalReportStarterTemplatesForCompany(actor: CurrentActor) {
+async function installStarterTemplates(actor: CurrentActor, definitions: StarterEmailTemplateDefinition[], category: EmailTemplateCategory) {
   requireCapability(actor, "email-templates:manage");
   const existingCodes = new Set(
     (await prisma.emailTemplate.findMany({
-      where: { companyId: actor.companyId, code: { in: TECHNICAL_REPORT_STARTER_EMAIL_TEMPLATES.map((t) => t.code) } },
+      where: { companyId: actor.companyId, code: { in: definitions.map((t) => t.code) } },
       select: { code: true },
     })).map((row) => row.code),
   );
 
   const created = [];
-  for (const template of TECHNICAL_REPORT_STARTER_EMAIL_TEMPLATES) {
+  for (const template of definitions) {
     if (existingCodes.has(template.code)) continue;
     created.push(await createEmailTemplate(actor.companyId, {
       name: template.name,
       code: template.code,
-      category: "TECHNICAL_REPORT",
+      category,
       subject: template.subject,
       bodyHtml: template.bodyHtml,
       bodyText: template.bodyText,
     }));
   }
-  return { created, skipped: TECHNICAL_REPORT_STARTER_EMAIL_TEMPLATES.length - created.length };
+  return { created, skipped: definitions.length - created.length };
+}
+
+/** Installs the built-in technical-report starter templates (attach-and-send + automated-secure-
+ *  link) into this company's own EmailTemplate table. */
+export async function installTechnicalReportStarterTemplatesForCompany(actor: CurrentActor) {
+  return installStarterTemplates(actor, TECHNICAL_REPORT_STARTER_EMAIL_TEMPLATES, "TECHNICAL_REPORT");
+}
+
+/** Installs the built-in BOQ proposal starter templates (attach-and-send + automated-secure-link)
+ *  into this company's own EmailTemplate table. */
+export async function installBoqStarterTemplatesForCompany(actor: CurrentActor) {
+  return installStarterTemplates(actor, BOQ_STARTER_EMAIL_TEMPLATES, "BOQ");
 }

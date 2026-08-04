@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import { X } from "lucide-react";
 import { apiClient, getApiErrorMessage } from "@/lib/api/client";
 import ExecutiveTemplateThumbnail from "@/components/visuals/executive-template-thumbnail";
@@ -107,6 +108,8 @@ type ReportTemplateView = {
   isActive: boolean;
 };
 
+type EmailTemplateSummaryRow = { category: "BOQ" | "TECHNICAL_REPORT" | "GENERAL"; isActive: boolean };
+
 function keySections(content: TemplateContentConfig): string[] {
   const sections: string[] = [];
   if (content.showCoverPage) sections.push("Cover page");
@@ -132,6 +135,8 @@ export default function TemplatesPage() {
   const [isSaving, setIsSaving] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [previewTemplate, setPreviewTemplate] = useState<TemplateView | null>(null);
+
+  const [emailTemplateCounts, setEmailTemplateCounts] = useState<{ boq: number; technicalReport: number; general: number } | null>(null);
 
   const [reportTemplates, setReportTemplates] = useState<ReportTemplateView[]>([]);
   const [reportTemplatesLoading, setReportTemplatesLoading] = useState(true);
@@ -160,6 +165,23 @@ export default function TemplatesPage() {
     void loadReportTemplates(controller.signal);
     return () => controller.abort();
   }, [loadReportTemplates]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    apiClient
+      .get<EmailTemplateSummaryRow[]>("/api/email-templates?includeInactive=true", controller.signal)
+      .then((rows) => {
+        setEmailTemplateCounts({
+          boq: rows.filter((r) => r.category === "BOQ" && r.isActive).length,
+          technicalReport: rows.filter((r) => r.category === "TECHNICAL_REPORT" && r.isActive).length,
+          general: rows.filter((r) => r.category === "GENERAL" && r.isActive).length,
+        });
+      })
+      .catch((error) => {
+        if (error instanceof DOMException && error.name === "AbortError") return;
+      });
+    return () => controller.abort();
+  }, []);
 
   // Accepts the same structured JSON shape the conversion tooling produces (templateName/
   // templateCode/disciplinesCovered/note/frontMatter/sections) — the whole parsed file doubles as
@@ -386,6 +408,37 @@ export default function TemplatesPage() {
           </div>
         </div>
       )}
+
+      <div className={panel}>
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <h2 className="text-lg font-semibold text-[#08152E] dark:text-white">Email templates</h2>
+            <p className="mt-1 max-w-xl text-sm text-[#7B879C] dark:text-[#8CA0BE]">
+              The wording sent alongside a BOQ proposal or technical report — grouped by category so
+              the right one always shows up in the right send flow. Managed in Settings.
+            </p>
+          </div>
+          <Link
+            href="/settings/email-templates"
+            className="rounded-2xl bg-[#009FE3] px-4 py-2 text-sm font-semibold text-white hover:opacity-90 dark:bg-[#21C7F3] dark:text-[#040A16]"
+          >
+            Manage email templates
+          </Link>
+        </div>
+        <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-3">
+          {[
+            { label: "BOQ / Proposal", count: emailTemplateCounts?.boq },
+            { label: "Technical Report", count: emailTemplateCounts?.technicalReport },
+            { label: "General", count: emailTemplateCounts?.general },
+          ].map((row) => (
+            <div key={row.label} className="rounded-2xl border border-[#D5E0EC] bg-[#EAF1F8] px-4 py-3 dark:border-[#20304D] dark:bg-[#101D34]">
+              <p className="text-xs uppercase tracking-[0.2em] text-[#7B879C] dark:text-[#8CA0BE]">{row.label}</p>
+              <p className="mt-1 text-2xl font-semibold text-[#08152E] dark:text-white">{row.count ?? "–"}</p>
+              <p className="text-xs text-[#7B879C] dark:text-[#8CA0BE]">active template{row.count === 1 ? "" : "s"}</p>
+            </div>
+          ))}
+        </div>
+      </div>
 
       <div>
         <h2 className="mb-1 text-lg font-semibold text-[#08152E] dark:text-white">BOQ templates</h2>

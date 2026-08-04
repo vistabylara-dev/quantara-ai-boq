@@ -7,8 +7,11 @@ export type EmailTemplateVariables = {
   revision: string;
   proposalValidityDate: string;
   companyName: string;
+  companyPhone?: string;
+  companyWebsite?: string;
   senderName: string;
   senderEmail: string;
+  senderTitle?: string;
   secureReviewUrl: string;
   documentList?: string;
   grandTotal: string;
@@ -39,8 +42,11 @@ const ALLOWED_VARIABLE_KEYS: ReadonlySet<string> = new Set<keyof EmailTemplateVa
   "revision",
   "proposalValidityDate",
   "companyName",
+  "companyPhone",
+  "companyWebsite",
   "senderName",
   "senderEmail",
+  "senderTitle",
   "secureReviewUrl",
   "documentList",
   "grandTotal",

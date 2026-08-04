@@ -50,8 +50,11 @@ const SAMPLE_VARIABLES: EmailTemplateVariables = {
   revision: "R02",
   proposalValidityDate: "15 Sep 2026",
   companyName: "Quantara Interiors LLC",
+  companyPhone: "+971 4 000 0000",
+  companyWebsite: "https://quantara-interiors.example",
   senderName: "Sara Al Mansoori",
   senderEmail: "sara@quantara-interiors.example",
+  senderTitle: "Commercial Director",
   secureReviewUrl: "https://app.quantara.example/proposal/sample-token",
   documentList: "PROPOSAL — PRJ-1042-R02-proposal.pdf\nSCHEDULE — PRJ-1042-R02-schedule.pdf",
   grandTotal: "482,650.00",
@@ -174,17 +177,17 @@ export default function EmailTemplatesPage() {
     }
   }, [load]);
 
-  const installTechnicalReportStarters = useCallback(async () => {
+  const installStarters = useCallback(async (kind: "boq" | "technical-report", label: string) => {
     setIsInstallingStarters(true);
     setActionError(null);
     setStarterNotice(null);
     try {
-      const result = await apiClient.post<{ created: EmailTemplateView[]; skipped: number }>("/api/email-templates/starter/technical-report");
+      const result = await apiClient.post<{ created: EmailTemplateView[]; skipped: number }>(`/api/email-templates/starter/${kind}`);
       await load();
       if (result.created.length > 0) {
-        setStarterNotice(`Added ${result.created.length} technical report template(s)${result.skipped > 0 ? ` (${result.skipped} already installed)` : ""}.`);
+        setStarterNotice(`Added ${result.created.length} ${label} template(s)${result.skipped > 0 ? ` (${result.skipped} already installed)` : ""}.`);
       } else {
-        setStarterNotice("Technical report templates are already installed.");
+        setStarterNotice(`${label} templates are already installed.`);
       }
     } catch (error) {
       setActionError(getApiErrorMessage(error));
@@ -254,7 +257,15 @@ export default function EmailTemplatesPage() {
           <div className="flex flex-wrap gap-2">
             <button
               type="button"
-              onClick={() => void installTechnicalReportStarters()}
+              onClick={() => void installStarters("boq", "BOQ")}
+              disabled={isInstallingStarters}
+              className="rounded-2xl border border-slate-700 bg-slate-900 px-5 py-3 text-sm font-semibold text-slate-200 hover:bg-slate-800 disabled:opacity-50"
+            >
+              {isInstallingStarters ? "Adding…" : "Add BOQ templates"}
+            </button>
+            <button
+              type="button"
+              onClick={() => void installStarters("technical-report", "technical report")}
               disabled={isInstallingStarters}
               className="rounded-2xl border border-slate-700 bg-slate-900 px-5 py-3 text-sm font-semibold text-slate-200 hover:bg-slate-800 disabled:opacity-50"
             >
@@ -298,7 +309,11 @@ export default function EmailTemplatesPage() {
               <p className="text-xs text-slate-500">{section.hint}</p>
             </div>
             {sectionTemplates.length === 0 ? (
-              <p className="rounded-2xl border border-dashed border-slate-800 p-4 text-sm text-slate-500">No templates in this category yet.</p>
+              <p className="rounded-2xl border border-dashed border-slate-800 p-4 text-sm text-slate-500">
+                No templates in this category yet
+                {section.key === "BOQ" || section.key === "TECHNICAL_REPORT" ? " — use the button above to add the built-in starter templates, or " : " — "}
+                click &quot;New template&quot; to write your own.
+              </p>
             ) : (
               <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
                 {sectionTemplates.map((template) => (

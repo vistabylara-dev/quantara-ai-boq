@@ -6,30 +6,30 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: {
-    template: "%s | Quantara AI BOQ",
-    default: "Quantara AI BOQ - Advanced Quantity Intelligence & GEO AI",
+    template: "%s | Quantara",
+    default: "Quantara: Plain-English Financial Insights for Small Businesses",
   },
-  description: "Enterprise-grade AI-powered Bill of Quantities (BOQ) management platform by Vista By Lara. Seamlessly manage projects with advanced Geo AI and structural intelligence.",
-  keywords: ["AI BOQ", "Quantity Surveying", "Construction AI", "Geo AI", "Dubai Construction Tech", "Vista By Lara"],
-  authors: [{ name: "Vista By Lara", url: "https://www.vistabylara.com" }],
+  description: "Connect QuickBooks or Xero and turn business financial reports into clear explanations, cash-flow warnings and practical next steps with Quantara.",
+  keywords: ["Financial Insights", "Small Business Finance", "QuickBooks integration", "Xero integration", "Cash flow analysis", "Financial Co-pilot"],
+  authors: [{ name: "Vista By Lara", url: "https://quantara.vistabylara.com" }],
   creator: "Vista By Lara",
   publisher: "Vista By Lara",
   openGraph: {
-    title: "Quantara AI BOQ - Advanced Quantity Intelligence",
-    description: "Enterprise-grade AI-powered Bill of Quantities (BOQ) management platform by Vista By Lara.",
-    url: "https://www.vistabylara.com",
-    siteName: "Quantara AI",
-    locale: "en_AE",
+    title: "Quantara: Plain-English Financial Insights for Small Businesses",
+    description: "Connect QuickBooks or Xero and turn business financial reports into clear explanations, cash-flow warnings and practical next steps with Quantara.",
+    url: "https://quantara.vistabylara.com",
+    siteName: "Quantara",
+    locale: "en_US",
     type: "website",
   },
   twitter: {
     card: "summary_large_image",
-    title: "Quantara AI BOQ",
-    description: "Enterprise-grade AI-powered Bill of Quantities (BOQ) management platform.",
+    title: "Quantara: Plain-English Financial Insights for Small Businesses",
+    description: "Connect QuickBooks or Xero and turn business financial reports into clear explanations.",
     creator: "@vistabylara",
   },
   alternates: {
-    canonical: "https://www.vistabylara.com",
+    canonical: "https://quantara.vistabylara.com",
   },
 };
 

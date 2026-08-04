@@ -6,6 +6,7 @@ import type { CurrentActor } from "@/lib/auth/current-actor";
 import { requireCapability } from "@/lib/auth/rbac";
 import { getProjectRecord } from "@/lib/repositories/project-repository";
 import { getReportTemplateRecord } from "@/lib/repositories/report-template-repository";
+import { resolveTechnicalReportTemplateVersion } from "@/lib/services/template-resolution-service";
 import { reportTemplateSectionsSchema, extractPlaceholders, applyFieldValues } from "@/lib/documents/report-template-sections";
 import {
   createDraftReport,
@@ -40,12 +41,18 @@ export async function createReportFromTemplate(actor: CurrentActor, projectIdent
   if (!templateRecord.isActive) {
     throw new AppError("REPORT_TEMPLATE_INACTIVE", "This report template has been deactivated and cannot be used.", 409);
   }
-  const sections = reportTemplateSectionsSchema.parse(templateRecord.sectionsJson);
+  // TEMPLATE-LINK-1 — snapshot from the PUBLISHED version when one exists,
+  // falling back to the template's own live sectionsJson otherwise (never
+  // blocks report creation), and record which version this snapshot came
+  // from so the admin Template Centre can show real usage.
+  const resolvedVersion = await resolveTechnicalReportTemplateVersion({ companyId: actor.companyId, templateId: templateRecord.id });
+  const sections = reportTemplateSectionsSchema.parse(resolvedVersion.sectionsJson);
   const placeholders = extractPlaceholders(sections);
 
   return createDraftReport(actor.companyId, {
     projectId: project.id,
     templateId: templateRecord.id,
+    templateVersionId: resolvedVersion.versionId,
     name: input.name,
     sectionsSnapshotJson: sections,
     placeholdersJson: placeholders,

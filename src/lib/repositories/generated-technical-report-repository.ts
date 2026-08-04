@@ -7,6 +7,7 @@ import { generateReportShareToken, hashReportShareToken } from "@/lib/documents/
 
 const reportInclude = {
   template: { select: { id: true, name: true, code: true } },
+  templateVersion: { select: { versionNumber: true } },
 } satisfies Prisma.GeneratedTechnicalReportInclude;
 
 type ReportRecord = Prisma.GeneratedTechnicalReportGetPayload<{ include: typeof reportInclude }>;
@@ -17,6 +18,8 @@ export function toGeneratedTechnicalReportDTO(row: ReportRecord) {
     companyId: row.companyId,
     projectId: row.projectId,
     templateId: row.templateId,
+    templateVersionId: row.templateVersionId,
+    templateVersionNumber: row.templateVersion?.versionNumber ?? null,
     templateName: row.template.name,
     templateCode: row.template.code,
     name: row.name,
@@ -45,6 +48,8 @@ export function toGeneratedTechnicalReportDTO(row: ReportRecord) {
 export type CreateDraftReportInput = {
   projectId: string;
   templateId: string;
+  /** TEMPLATE-LINK-1 — the exact PUBLISHED TechnicalReportTemplateVersion this snapshot came from; null if the template has no published version yet. */
+  templateVersionId?: string | null;
   name: string;
   sectionsSnapshotJson: ReportTemplateSections;
   placeholdersJson: string[];
@@ -59,6 +64,7 @@ export async function createDraftReport(companyId: string, input: CreateDraftRep
         companyId,
         projectId: input.projectId,
         templateId: input.templateId,
+        templateVersionId: input.templateVersionId ?? null,
         name: input.name,
         status: TechnicalReportStatus.DRAFT,
         sectionsSnapshotJson: input.sectionsSnapshotJson as unknown as Prisma.InputJsonValue,

@@ -18,6 +18,7 @@ type GeneratedTechnicalReportView = {
   id: string;
   templateId: string;
   templateName: string;
+  templateVersionNumber: number | null;
   name: string;
   status: "DRAFT" | "COMPLETED";
   fileName: string | null;
@@ -177,7 +178,12 @@ export default function ProjectTechnicalReportsPage(props: PageProps) {
                         {report.name}
                       </Link>
                     </td>
-                    <td className="px-4 py-3">{report.templateName}</td>
+                    <td className="px-4 py-3">
+                      {report.templateName}
+                      {report.templateVersionNumber !== null && (
+                        <span className="ml-1.5 text-xs text-slate-500">v{report.templateVersionNumber}</span>
+                      )}
+                    </td>
                     <td className="px-4 py-3">
                       <span className={report.status === "COMPLETED" ? "text-emerald-300" : "text-slate-400"}>{report.status}</span>
                       {report.errorMessage && <p className="mt-1 max-w-[200px] text-xs text-rose-400">{report.errorMessage}</p>}

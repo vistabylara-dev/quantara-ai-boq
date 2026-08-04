@@ -90,6 +90,19 @@ export async function createReportTemplate(companyId: string, input: ReportTempl
         isActive: input.isActive ?? true,
       },
     });
+    // TEMPLATE-LINK-1 — mirrors document-template-repository.ts's createTemplate: usable
+    // immediately via a PUBLISHED version 1, though report creation itself never requires one
+    // (resolveTechnicalReportTemplateVersion falls back to the template's own live sectionsJson).
+    await tx.technicalReportTemplateVersion.create({
+      data: {
+        technicalReportTemplateId: created.id,
+        versionNumber: 1,
+        status: "PUBLISHED",
+        sectionsJson: created.sectionsJson as Prisma.InputJsonValue,
+        effectiveDate: new Date(),
+        changeSummary: "Initial version.",
+      },
+    });
     await createAuditLog(companyId, {
       entityType: "TechnicalReportTemplate",
       entityId: created.id,

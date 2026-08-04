@@ -3,6 +3,7 @@ import { prisma } from "@/lib/db/prisma";
 import { NotFoundError } from "@/lib/errors/app-error";
 import { createAuditLog } from "@/lib/repositories/audit-repository";
 import type { ReportTemplateSections } from "@/lib/documents/report-template-sections";
+import { generateReportShareToken, hashReportShareToken } from "@/lib/documents/technical-report-share";
 
 const reportInclude = {
   template: { select: { id: true, name: true, code: true } },
@@ -31,6 +32,10 @@ export function toGeneratedTechnicalReportDTO(row: ReportRecord) {
     generatedByUserId: row.generatedByUserId,
     generatedByName: row.generatedByName,
     errorMessage: row.errorMessage,
+    // The token hash itself is never exposed to any API response — only whether a link currently
+    // resolves (active, not revoked, not expired) and when it expires.
+    hasActiveShareLink: Boolean(row.shareTokenHash) && !row.shareRevokedAt && (!row.shareExpiresAt || row.shareExpiresAt.getTime() > Date.now()),
+    shareExpiresAt: row.shareExpiresAt?.toISOString() ?? null,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
     completedAt: row.completedAt?.toISOString() ?? null,
@@ -157,6 +162,57 @@ export async function markReportFailed(companyId: string, reportId: string, erro
       entityId: row.id,
       action: "TECHNICAL_REPORT_GENERATION_FAILED",
       payload: { errorMessage },
+    }, tx);
+    return row;
+  });
+  return toGeneratedTechnicalReportDTO(updated);
+}
+
+const DEFAULT_SHARE_LINK_TTL_DAYS = 30;
+
+/**
+ * Creates (or rotates) the report's client-facing secure link. Rotating overwrites the previous
+ * hash, so any previously issued raw token immediately stops resolving — matches
+ * regenerateProposalLink's behavior for the same reason (an old link that already reached an
+ * inbox should be revocable by generating a new one, without a separate explicit revoke step).
+ * Caller (service layer) is responsible for checking the report is COMPLETED first.
+ */
+export async function createReportShareLink(companyId: string, reportId: string, expiresInDays: number = DEFAULT_SHARE_LINK_TTL_DAYS) {
+  const current = await getReportRecord(companyId, reportId);
+  const rawToken = generateReportShareToken();
+  const shareTokenHash = hashReportShareToken(rawToken);
+  const shareExpiresAt = new Date(Date.now() + expiresInDays * 24 * 60 * 60 * 1000);
+
+  const updated = await prisma.$transaction(async (tx) => {
+    const row = await tx.generatedTechnicalReport.update({
+      where: { id: current.id, companyId },
+      data: { shareTokenHash, shareExpiresAt, shareRevokedAt: null },
+      include: reportInclude,
+    });
+    await createAuditLog(companyId, {
+      entityType: "GeneratedTechnicalReport",
+      entityId: row.id,
+      action: "TECHNICAL_REPORT_SHARE_LINK_CREATED",
+      payload: { shareExpiresAt: shareExpiresAt.toISOString() },
+    }, tx);
+    return row;
+  });
+  return { report: toGeneratedTechnicalReportDTO(updated), rawToken };
+}
+
+export async function revokeReportShareLink(companyId: string, reportId: string) {
+  const current = await getReportRecord(companyId, reportId);
+  const updated = await prisma.$transaction(async (tx) => {
+    const row = await tx.generatedTechnicalReport.update({
+      where: { id: current.id, companyId },
+      data: { shareRevokedAt: new Date() },
+      include: reportInclude,
+    });
+    await createAuditLog(companyId, {
+      entityType: "GeneratedTechnicalReport",
+      entityId: row.id,
+      action: "TECHNICAL_REPORT_SHARE_LINK_REVOKED",
+      payload: {},
     }, tx);
     return row;
   });

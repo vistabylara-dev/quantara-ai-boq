@@ -97,3 +97,7 @@ export const reportTemplateIdParamsSchema = z.object({
 export const technicalReportIdParamsSchema = z.object({
   reportId: z.string().uuid("A valid report ID is required."),
 }).strict();
+
+export const technicalReportTokenParamsSchema = z.object({
+  token: z.string().trim().min(20, "A valid share token is required.").max(200),
+}).strict();

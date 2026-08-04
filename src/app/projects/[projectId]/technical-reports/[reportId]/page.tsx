@@ -20,7 +20,11 @@ type ReportDetailView = {
   fieldValues: Record<string, string>;
   fileName: string | null;
   errorMessage: string | null;
+  hasActiveShareLink: boolean;
+  shareExpiresAt: string | null;
 };
+
+type EmailTemplateOption = { id: string; name: string; code: string; isActive: boolean };
 
 type PageProps = { params: Promise<{ projectId: string; reportId: string }> };
 
@@ -34,6 +38,18 @@ export default function TechnicalReportDetailPage(props: PageProps) {
   const [actionError, setActionError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
+
+  const [emailTemplates, setEmailTemplates] = useState<EmailTemplateOption[]>([]);
+  const [selectedTemplateId, setSelectedTemplateId] = useState("");
+  const [recipientName, setRecipientName] = useState("");
+  const [recipientEmail, setRecipientEmail] = useState("");
+  const [attachShareLink, setAttachShareLink] = useState(true);
+  const [shareUrl, setShareUrl] = useState<string | null>(null);
+  const [shareRawToken, setShareRawToken] = useState<string | null>(null);
+  const [isCreatingShareLink, setIsCreatingShareLink] = useState(false);
+  const [isSendingEmail, setIsSendingEmail] = useState(false);
+  const [emailNotice, setEmailNotice] = useState<string | null>(null);
+  const [emailError, setEmailError] = useState<string | null>(null);
 
   const load = useCallback(async (signal?: AbortSignal) => {
     setIsLoading(true);
@@ -55,6 +71,77 @@ export default function TechnicalReportDetailPage(props: PageProps) {
     void load(controller.signal);
     return () => controller.abort();
   }, [load]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    apiClient
+      .get<EmailTemplateOption[]>("/api/email-templates", controller.signal)
+      .then((data) => {
+        setEmailTemplates(data);
+        setSelectedTemplateId((current) => current || data.find((t) => t.code.startsWith("technical-report"))?.id || data[0]?.id || "");
+      })
+      .catch((error) => {
+        if (error instanceof DOMException && error.name === "AbortError") return;
+      });
+    return () => controller.abort();
+  }, []);
+
+  const createShareLink = useCallback(async () => {
+    setEmailError(null);
+    setIsCreatingShareLink(true);
+    try {
+      const data = await apiClient.post<{ rawToken: string; secureUrl: string }>(`/api/technical-reports/${encodeURIComponent(params.reportId)}/share`);
+      setShareUrl(data.secureUrl);
+      setShareRawToken(data.rawToken);
+      setReport((current) => (current ? { ...current, hasActiveShareLink: true } : current));
+    } catch (error) {
+      setEmailError(getApiErrorMessage(error));
+    } finally {
+      setIsCreatingShareLink(false);
+    }
+  }, [params.reportId]);
+
+  const revokeShareLink = useCallback(async () => {
+    setEmailError(null);
+    setIsCreatingShareLink(true);
+    try {
+      await apiClient.post(`/api/technical-reports/${encodeURIComponent(params.reportId)}/share/revoke`);
+      setShareUrl(null);
+      setShareRawToken(null);
+      setReport((current) => (current ? { ...current, hasActiveShareLink: false } : current));
+    } catch (error) {
+      setEmailError(getApiErrorMessage(error));
+    } finally {
+      setIsCreatingShareLink(false);
+    }
+  }, [params.reportId]);
+
+  const sendReportEmail = useCallback(async () => {
+    setEmailError(null);
+    setEmailNotice(null);
+    if (!selectedTemplateId) {
+      setEmailError("Choose an email template first.");
+      return;
+    }
+    if (!recipientEmail.trim() || !recipientName.trim()) {
+      setEmailError("Recipient name and email are required.");
+      return;
+    }
+    setIsSendingEmail(true);
+    try {
+      const data = await apiClient.post<{ status: string }>(`/api/technical-reports/${encodeURIComponent(params.reportId)}/email/send`, {
+        recipientEmail: recipientEmail.trim(),
+        recipientName: recipientName.trim(),
+        emailTemplateId: selectedTemplateId,
+        ...(attachShareLink && shareRawToken ? { rawShareToken: shareRawToken } : {}),
+      });
+      setEmailNotice(data.status === "FAILED" ? "The email could not be delivered — check the email provider configuration." : "Report email sent.");
+    } catch (error) {
+      setEmailError(getApiErrorMessage(error));
+    } finally {
+      setIsSendingEmail(false);
+    }
+  }, [params.reportId, selectedTemplateId, recipientEmail, recipientName, attachShareLink, shareRawToken]);
 
   const saveValues = useCallback(async () => {
     setActionError(null);
@@ -189,6 +276,107 @@ export default function TechnicalReportDetailPage(props: PageProps) {
               </a>
             )}
           </section>
+
+          {report.status === "COMPLETED" && (
+            <section className="rounded-[32px] border border-slate-800 bg-slate-950 p-6">
+              <p className="text-sm uppercase tracking-[0.28em] text-slate-500">Secure client link</p>
+              <p className="mt-3 text-sm text-slate-400">
+                {report.hasActiveShareLink ? "An active link exists for this report." : "No active link yet."} Creating a new link invalidates any previous one.
+              </p>
+              {shareUrl && (
+                <div className="mt-3 rounded-2xl border border-slate-800 bg-slate-900 p-3">
+                  <p className="break-all text-xs text-emerald-300">{shareUrl}</p>
+                  <button
+                    type="button"
+                    onClick={() => void navigator.clipboard.writeText(shareUrl)}
+                    className="mt-2 rounded-xl border border-slate-700 bg-slate-950 px-3 py-1.5 text-xs font-semibold text-slate-200 hover:bg-slate-800"
+                  >
+                    Copy link
+                  </button>
+                </div>
+              )}
+              <div className="mt-4 flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => void createShareLink()}
+                  disabled={isCreatingShareLink}
+                  className="rounded-2xl border border-slate-700 bg-slate-900 px-4 py-2 text-xs font-semibold text-slate-200 hover:bg-slate-800 disabled:opacity-50"
+                >
+                  {isCreatingShareLink ? "Working…" : report.hasActiveShareLink ? "Rotate link" : "Create link"}
+                </button>
+                {report.hasActiveShareLink && (
+                  <button
+                    type="button"
+                    onClick={() => void revokeShareLink()}
+                    disabled={isCreatingShareLink}
+                    className="rounded-2xl border border-rose-900 bg-rose-950/30 px-4 py-2 text-xs font-semibold text-rose-300 hover:bg-rose-900/40 disabled:opacity-50"
+                  >
+                    Revoke
+                  </button>
+                )}
+              </div>
+            </section>
+          )}
+
+          {report.status === "COMPLETED" && (
+            <section className="rounded-[32px] border border-slate-800 bg-slate-950 p-6">
+              <p className="text-sm uppercase tracking-[0.28em] text-slate-500">Send by email</p>
+
+              {emailError && <p className="mt-3 text-sm text-rose-300">{emailError}</p>}
+              {emailNotice && <p className="mt-3 text-sm text-emerald-300">{emailNotice}</p>}
+
+              <label className="mt-4 block text-sm text-slate-300">
+                <span className="text-slate-400">Email template</span>
+                <select
+                  value={selectedTemplateId}
+                  onChange={(e) => setSelectedTemplateId(e.target.value)}
+                  className="mt-2 w-full rounded-2xl border border-slate-800 bg-slate-900 px-4 py-3 text-white outline-none focus:border-blue-500"
+                >
+                  <option value="">Select a template…</option>
+                  {emailTemplates.filter((t) => t.isActive).map((t) => (
+                    <option key={t.id} value={t.id}>{t.name}</option>
+                  ))}
+                </select>
+              </label>
+              {emailTemplates.length === 0 && (
+                <p className="mt-2 text-xs text-slate-500">
+                  No email templates yet — add the built-in technical report templates from Settings → Email templates.
+                </p>
+              )}
+
+              <label className="mt-4 block text-sm text-slate-300">
+                <span className="text-slate-400">Recipient name</span>
+                <input
+                  value={recipientName}
+                  onChange={(e) => setRecipientName(e.target.value)}
+                  className="mt-2 w-full rounded-2xl border border-slate-800 bg-slate-900 px-4 py-3 text-white outline-none focus:border-blue-500"
+                />
+              </label>
+              <label className="mt-4 block text-sm text-slate-300">
+                <span className="text-slate-400">Recipient email</span>
+                <input
+                  type="email"
+                  value={recipientEmail}
+                  onChange={(e) => setRecipientEmail(e.target.value)}
+                  className="mt-2 w-full rounded-2xl border border-slate-800 bg-slate-900 px-4 py-3 text-white outline-none focus:border-blue-500"
+                />
+              </label>
+
+              <label className="mt-4 flex items-center gap-2 text-sm text-slate-300">
+                <input type="checkbox" checked={attachShareLink} onChange={(e) => setAttachShareLink(e.target.checked)} className="h-4 w-4 rounded border-slate-700 bg-slate-900" />
+                Include the secure link (create one above first if the template uses it)
+              </label>
+
+              <button
+                type="button"
+                onClick={() => void sendReportEmail()}
+                disabled={isSendingEmail}
+                className="mt-5 w-full rounded-2xl border border-slate-700 bg-blue-600 px-4 py-3 text-sm font-semibold text-white hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {isSendingEmail ? "Sending…" : "Send report email"}
+              </button>
+            </section>
+          )}
         </aside>
       </div>
     </div>

@@ -38,6 +38,7 @@ export type Capability =
   | "report-templates:manage"
   | "technical-reports:generate"
   | "technical-reports:delete"
+  | "technical-reports:send"
   | "integrations:connect"
   | "integrations:disconnect"
   | "integrations:sync";
@@ -70,6 +71,7 @@ const ALL_CAPABILITIES: Capability[] = [
   "report-templates:manage",
   "technical-reports:generate",
   "technical-reports:delete",
+  "technical-reports:send",
   "integrations:connect",
   "integrations:disconnect",
   "integrations:sync",
@@ -103,6 +105,7 @@ const ROLE_CAPABILITIES: Record<UserRole, Capability[]> = {
     "report-templates:manage",
     "technical-reports:generate",
     "technical-reports:delete",
+    "technical-reports:send",
     "integrations:connect",
     "integrations:disconnect",
     "integrations:sync",
@@ -123,6 +126,7 @@ const ROLE_CAPABILITIES: Record<UserRole, Capability[]> = {
     "library:manage",
     "imports:manage",
     "technical-reports:generate",
+    "technical-reports:send",
     "integrations:connect",
     "integrations:disconnect",
     "integrations:sync",
@@ -143,6 +147,7 @@ const ROLE_CAPABILITIES: Record<UserRole, Capability[]> = {
     "library:manage",
     "imports:manage",
     "technical-reports:generate",
+    "technical-reports:send",
     "integrations:connect",
     "integrations:disconnect",
     "integrations:sync",

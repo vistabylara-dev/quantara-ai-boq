@@ -55,6 +55,8 @@ export default function EmailTemplatesPage() {
   const [draft, setDraft] = useState<Draft | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [previewId, setPreviewId] = useState<string | null>(null);
+  const [isInstallingStarters, setIsInstallingStarters] = useState(false);
+  const [starterNotice, setStarterNotice] = useState<string | null>(null);
 
   const load = useCallback(async (signal?: AbortSignal) => {
     setIsLoading(true);
@@ -139,6 +141,25 @@ export default function EmailTemplatesPage() {
     }
   }, [load]);
 
+  const installTechnicalReportStarters = useCallback(async () => {
+    setIsInstallingStarters(true);
+    setActionError(null);
+    setStarterNotice(null);
+    try {
+      const result = await apiClient.post<{ created: EmailTemplateView[]; skipped: number }>("/api/email-templates/starter/technical-report");
+      await load();
+      if (result.created.length > 0) {
+        setStarterNotice(`Added ${result.created.length} technical report template(s)${result.skipped > 0 ? ` (${result.skipped} already installed)` : ""}.`);
+      } else {
+        setStarterNotice("Technical report templates are already installed.");
+      }
+    } catch (error) {
+      setActionError(getApiErrorMessage(error));
+    } finally {
+      setIsInstallingStarters(false);
+    }
+  }, [load]);
+
   const toggleActive = useCallback(async (id: string, isActive: boolean) => {
     setBusyId(id);
     setActionError(null);
@@ -189,11 +210,32 @@ export default function EmailTemplatesPage() {
             <h1 className="mt-2 text-3xl font-semibold text-white">Email templates</h1>
             <p className="mt-3 text-slate-400">Manage the client-facing email templates used when sending proposals.</p>
           </div>
-          <button type="button" onClick={startCreate} className="rounded-2xl border border-slate-700 bg-blue-600 px-5 py-3 text-sm font-semibold text-white hover:bg-blue-500">
-            New template
-          </button>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => void installTechnicalReportStarters()}
+              disabled={isInstallingStarters}
+              className="rounded-2xl border border-slate-700 bg-slate-900 px-5 py-3 text-sm font-semibold text-slate-200 hover:bg-slate-800 disabled:opacity-50"
+            >
+              {isInstallingStarters ? "Adding…" : "Add technical report templates"}
+            </button>
+            <button type="button" onClick={startCreate} className="rounded-2xl border border-slate-700 bg-blue-600 px-5 py-3 text-sm font-semibold text-white hover:bg-blue-500">
+              New template
+            </button>
+          </div>
         </div>
       </div>
+
+      {starterNotice && (
+        <div className="rounded-[28px] border border-emerald-900 bg-emerald-950/30 p-5 text-sm text-emerald-200" role="status">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <p>{starterNotice}</p>
+            <button type="button" onClick={() => setStarterNotice(null)} className="rounded-2xl border border-emerald-800 px-3 py-2 font-semibold hover:bg-emerald-900/40">
+              Dismiss
+            </button>
+          </div>
+        </div>
+      )}
 
       {actionError && (
         <div className="rounded-[28px] border border-rose-900 bg-rose-950/40 p-5 text-sm text-rose-200" role="alert">

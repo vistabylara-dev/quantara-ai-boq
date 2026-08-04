@@ -11,6 +11,7 @@ const PUBLIC_PAGE_PREFIXES = [
   "/forgot-password",
   "/reset-password",
   "/proposal",
+  "/technical-report",
   ADMIN_LOGIN_PAGE,
 ];
 

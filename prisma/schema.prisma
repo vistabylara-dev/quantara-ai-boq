@@ -1998,6 +1998,13 @@ model GeneratedTechnicalReport {
   generatedByUserId    String?                 @db.Uuid
   generatedByName      String
   errorMessage         String?
+  /// Client-facing secure link (email service 1B) — same generate-raw/store-hash-only pattern as
+  /// ClientProposal.tokenHash (see auth/tokens.ts + proposals/proposal-token.ts). Nullable: most
+  /// reports are never shared via link (attachment-only email is equally valid). Rotating the link
+  /// (creating a new one) simply overwrites this hash; the previous raw token stops resolving.
+  shareTokenHash       String?                 @unique
+  shareExpiresAt       DateTime?
+  shareRevokedAt       DateTime?
   createdAt            DateTime                @default(now())
   updatedAt            DateTime                @updatedAt
   completedAt          DateTime?
@@ -2005,6 +2012,7 @@ model GeneratedTechnicalReport {
   project              Project                 @relation(fields: [projectId], references: [id], onDelete: Cascade)
   template             TechnicalReportTemplate @relation(fields: [templateId], references: [id], onDelete: Restrict)
   generatedByUser      User?                   @relation(fields: [generatedByUserId], references: [id], onDelete: SetNull)
+  emailDispatches      EmailDispatch[]
 
   @@index([companyId])
   @@index([projectId])
@@ -2117,42 +2125,47 @@ model ClientProposalEvent {
 }
 
 model EmailDispatch {
-  id                String              @id @default(uuid()) @db.Uuid
-  companyId         String              @db.Uuid
-  projectId         String              @db.Uuid
-  boqId             String?             @db.Uuid
-  clientProposalId  String?             @db.Uuid
-  emailTemplateId   String?             @db.Uuid
-  createdByUserId   String?             @db.Uuid
-  createdByName     String
-  recipient         String
-  ccJson            Json?
-  bccJson           Json?
-  replyTo           String?
-  subject           String
-  bodyHtml          String
-  bodyText          String
-  provider          String
-  providerMessageId String?
-  status            EmailDispatchStatus @default(DRAFT)
-  attempts          Int                 @default(0)
-  sentAt            DateTime?
-  deliveredAt       DateTime?
-  failedAt          DateTime?
-  errorCode         String?
-  errorMessage      String?
-  createdAt         DateTime            @default(now())
-  updatedAt         DateTime            @updatedAt
-  company           Company             @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  project           Project             @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  boq               BOQ?                @relation(fields: [boqId], references: [id], onDelete: SetNull)
-  clientProposal    ClientProposal?     @relation(fields: [clientProposalId], references: [id], onDelete: SetNull)
-  emailTemplate     EmailTemplate?      @relation(fields: [emailTemplateId], references: [id], onDelete: SetNull)
-  createdByUser     User?               @relation(fields: [createdByUserId], references: [id], onDelete: SetNull)
+  id                         String                    @id @default(uuid()) @db.Uuid
+  companyId                  String                    @db.Uuid
+  projectId                  String                    @db.Uuid
+  boqId                      String?                   @db.Uuid
+  clientProposalId           String?                   @db.Uuid
+  /// Email service 1B — additive nullable link so a technical-report send is logged/audited through
+  /// the exact same dispatch table as proposal emails, without touching any existing BOQ/proposal row.
+  generatedTechnicalReportId String?                   @db.Uuid
+  emailTemplateId            String?                   @db.Uuid
+  createdByUserId            String?                   @db.Uuid
+  createdByName              String
+  recipient                  String
+  ccJson                     Json?
+  bccJson                    Json?
+  replyTo                    String?
+  subject                    String
+  bodyHtml                   String
+  bodyText                   String
+  provider                   String
+  providerMessageId          String?
+  status                     EmailDispatchStatus       @default(DRAFT)
+  attempts                   Int                       @default(0)
+  sentAt                     DateTime?
+  deliveredAt                DateTime?
+  failedAt                   DateTime?
+  errorCode                  String?
+  errorMessage                String?
+  createdAt                  DateTime                  @default(now())
+  updatedAt                  DateTime                  @updatedAt
+  company                    Company                   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  project                    Project                   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  boq                        BOQ?                      @relation(fields: [boqId], references: [id], onDelete: SetNull)
+  clientProposal              ClientProposal?           @relation(fields: [clientProposalId], references: [id], onDelete: SetNull)
+  generatedTechnicalReport   GeneratedTechnicalReport? @relation(fields: [generatedTechnicalReportId], references: [id], onDelete: SetNull)
+  emailTemplate              EmailTemplate?            @relation(fields: [emailTemplateId], references: [id], onDelete: SetNull)
+  createdByUser              User?                     @relation(fields: [createdByUserId], references: [id], onDelete: SetNull)
 
   @@index([companyId])
   @@index([projectId])
   @@index([clientProposalId])
+  @@index([generatedTechnicalReportId])
   @@index([status])
 }
 

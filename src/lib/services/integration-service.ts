@@ -23,10 +23,40 @@ async function safeListConnections(companyId: string) {
   }
 }
 
+/**
+ * The marketplace must always render its provider catalog even if the
+ * entitlements subsystem is unavailable or mid-change elsewhere in the app —
+ * same defensive rationale as safeListConnections above. Falls back to the
+ * most conservative (FREE-plan-equivalent) entitlements so a failure here
+ * never accidentally over-grants access; it only ever degrades the "Plan:"
+ * display, never the provider list itself.
+ */
+async function safeGetIntegrationEntitlements(
+  actor: Pick<CurrentActor, "userId" | "companyId">,
+): Promise<Awaited<ReturnType<typeof getIntegrationEntitlements>>> {
+  try {
+    return await getIntegrationEntitlements(actor);
+  } catch {
+    return {
+      source: "real",
+      planType: "FREE",
+      maxActiveConnections: 0,
+      allowedProviderFamilies: [],
+      manualSync: false,
+      scheduledSync: false,
+      bulkExtraction: false,
+      advancedModelData: false,
+      desktopPlugin: false,
+      teamConnections: false,
+      apiWebhookAccess: false,
+    };
+  }
+}
+
 export async function listProvidersForCompany(actor: Pick<CurrentActor, "userId" | "companyId">) {
   const [connections, entitlements] = await Promise.all([
     safeListConnections(actor.companyId),
-    getIntegrationEntitlements(actor),
+    safeGetIntegrationEntitlements(actor),
   ]);
   const connectionByProviderId = new Map(connections.filter((c) => c.status !== "DISCONNECTED").map((c) => [c.providerId, c]));
 
@@ -54,7 +84,7 @@ export async function getProviderDetailForCompany(actor: Pick<CurrentActor, "use
 
   const [connections, entitlements] = await Promise.all([
     safeListConnections(actor.companyId),
-    getIntegrationEntitlements(actor),
+    safeGetIntegrationEntitlements(actor),
   ]);
   const connection = connections.find((c) => c.providerId === providerId && c.status !== "DISCONNECTED") ?? null;
   const isFamilyAllowed = entitlements.allowedProviderFamilies === "all" || entitlements.allowedProviderFamilies.includes(provider.providerFamily);

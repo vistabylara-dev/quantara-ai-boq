@@ -2,7 +2,7 @@ import { apiSuccess, handleApiError } from "@/lib/http/api-response";
 import { getCurrentActor } from "@/lib/auth/current-actor";
 import { setActorContext } from "@/lib/auth/request-context";
 import { canUsePremiumItem } from "@/lib/entitlements/entitlement-service";
-import { getMasterItemRecord, toMasterItemDTO, toMasterItemPreviewDTO } from "@/lib/repositories/master-item-repository";
+import { getMasterItemRecord, getMasterItemCustomerDetail, toMasterItemPreviewDTO } from "@/lib/repositories/master-item-repository";
 import { masterItemIdParamsSchema } from "@/lib/validation/route-params";
 import { prisma } from "@/lib/db/prisma";
 
@@ -25,12 +25,12 @@ export async function GET(_request: Request, context: RouteContext) {
     const row = await getMasterItemRecord(itemId);
 
     if (!row.isPremium) {
-      return apiSuccess({ ...toMasterItemDTO(row), locked: false });
+      return apiSuccess({ ...(await getMasterItemCustomerDetail(itemId)), locked: false });
     }
 
     const check = await canUsePremiumItem(actor.companyId, itemId);
     if (check.allowed) {
-      return apiSuccess({ ...toMasterItemDTO(row), locked: false });
+      return apiSuccess({ ...(await getMasterItemCustomerDetail(itemId)), locked: false });
     }
 
     const packageLinks = await prisma.industryDataPackageItem.findMany({ where: { masterItemId: itemId }, include: { package: { select: { name: true } } } });

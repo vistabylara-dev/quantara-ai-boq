@@ -12,6 +12,7 @@ export async function GET(request: Request) {
     const result = await searchMasterCatalogueAdmin(actor, {
       disciplineId: url.searchParams.get("disciplineId") ?? undefined,
       categoryId: url.searchParams.get("categoryId") ?? undefined,
+      hierarchyNodeId: url.searchParams.get("hierarchyNodeId") ?? undefined,
       search: url.searchParams.get("search") ?? undefined,
       page: url.searchParams.get("page") ? Number(url.searchParams.get("page")) : undefined,
       pageSize: url.searchParams.get("pageSize") ? Number(url.searchParams.get("pageSize")) : undefined,

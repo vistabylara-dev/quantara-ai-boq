@@ -23,6 +23,13 @@ export async function GET() {
       SELECT migration_name, finished_at, applied_steps_count FROM "_prisma_migrations" ORDER BY started_at ASC
     `;
 
+    // Safe identity facts only (database/schema name) — never the host, port, user, or password —
+    // so the owner can match this against the correct project/database in their Postgres
+    // provider's console without ever seeing a connection string.
+    const [identity] = await prisma.$queryRaw<{ current_database: string; current_schema: string }[]>`
+      SELECT current_database(), current_schema()
+    `;
+
     const [companyCount, userCount, projectCount, boqCount, masterItemCount, documentTemplateCount, generatedDocumentCount] = await Promise.all([
       prisma.company.count(),
       prisma.user.count(),
@@ -34,6 +41,8 @@ export async function GET() {
     ]);
 
     return apiSuccess({
+      databaseName: identity.current_database,
+      schemaName: identity.current_schema,
       migrationsApplied: migrations.length,
       migrationNames: migrations.map((m) => m.migration_name),
       unfinishedMigrations: migrations.filter((m) => !m.finished_at).map((m) => m.migration_name),

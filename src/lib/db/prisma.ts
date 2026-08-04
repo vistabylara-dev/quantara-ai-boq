@@ -37,6 +37,39 @@ const logLevels = (process.env.NODE_ENV === "development" ? ["warn", "error"] : 
 >;
 
 /**
+ * TEMPORARY, remove once the MASTER-BOQ-1A migration
+ * (`20260804000801_master_boq_1a_hierarchy_foundation`) is confirmed applied
+ * to production. That migration ships in the same deploy as this file but,
+ * unlike `prisma generate` (which Vercel's build runs automatically), it is
+ * NOT applied automatically — it requires a human to run `prisma migrate
+ * deploy` with the production `DATABASE_URL`, on its own timeline. Until
+ * then, the generated Prisma Client's default field selection includes
+ * columns (MasterItem.hierarchyNodeId/replacementItemId,
+ * TechnicalFieldDefinition.unitFamily/allowedUnitsJson/isActive/
+ * applicableHierarchyNodeId, BOQItem.sourceMasterItemVersionId/
+ * masterItemSnapshotJson) that don't exist yet in the production database,
+ * so *every* unscoped query against these very hot, pre-existing tables
+ * (BOQ item lists, master-item search, item detail, document generation)
+ * fails with "column ... does not exist" — not just the new MASTER-BOQ-1A
+ * code paths. `VERCEL_ENV` is only ever "production" in the actual
+ * production runtime (never local dev, never `vitest`), so this never
+ * masks the columns in the environment where the migration has already run.
+ */
+const PENDING_MASTER_BOQ_1A_OMIT =
+  process.env.VERCEL_ENV === "production"
+    ? {
+        masterItem: { hierarchyNodeId: true, replacementItemId: true } as const,
+        technicalFieldDefinition: {
+          unitFamily: true,
+          allowedUnitsJson: true,
+          isActive: true,
+          applicableHierarchyNodeId: true,
+        } as const,
+        bOQItem: { sourceMasterItemVersionId: true, masterItemSnapshotJson: true } as const,
+      }
+    : undefined;
+
+/**
  * With `engineType = "client"` in schema.prisma, the generated client uses
  * Prisma's WASM query compiler instead of a native/binary query engine —
  * required because the native engine cannot load inside the Cloudflare
@@ -49,7 +82,10 @@ const logLevels = (process.env.NODE_ENV === "development" ? ["warn", "error"] : 
 function createDirectClient(): PrismaClient {
   const pool = new Pool({ connectionString: process.env.DATABASE_URL });
   const adapter = new PrismaPg(pool);
-  return new PrismaClient({ adapter, log: logLevels });
+  // Prisma rejects an explicit `omit: undefined` key outright ("omit"
+  // option is expected to be an object) — the key must be absent entirely
+  // outside production, not just falsy.
+  return new PrismaClient({ adapter, log: logLevels, ...(PENDING_MASTER_BOQ_1A_OMIT ? { omit: PENDING_MASTER_BOQ_1A_OMIT } : {}) });
 }
 
 /**
@@ -67,7 +103,7 @@ function createHyperdriveClient(connectionString: string): PrismaClient {
     connectionTimeoutMillis: 5_000,
   });
   const adapter = new PrismaPg(pool);
-  return new PrismaClient({ adapter, log: logLevels });
+  return new PrismaClient({ adapter, log: logLevels, ...(PENDING_MASTER_BOQ_1A_OMIT ? { omit: PENDING_MASTER_BOQ_1A_OMIT } : {}) });
 }
 
 let cachedClient: PrismaClient | undefined;

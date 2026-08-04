@@ -1,6 +1,7 @@
 import type { MasterItem, Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db/prisma";
 import { NotFoundError } from "@/lib/errors/app-error";
+import { getDescendantNodeIds } from "@/lib/repositories/master-hierarchy-repository";
 
 export function toMasterItemDTO(row: MasterItem) {
   return {
@@ -54,6 +55,8 @@ export async function getMasterItemRecord(itemId: string): Promise<MasterItem> {
 export type MasterItemListFilters = {
   disciplineId?: string;
   categoryId?: string;
+  /** MASTER-BOQ-1A — filters by any node in the new deep hierarchy (industry/discipline/system/category/subcategory/item family). */
+  hierarchyNodeId?: string;
   isPremium?: boolean;
   search?: string;
   page?: number;
@@ -64,10 +67,16 @@ export async function listMasterItems(filters: MasterItemListFilters) {
   const page = Math.max(1, filters.page ?? 1);
   const pageSize = Math.min(50, Math.max(1, filters.pageSize ?? 20));
 
+  // A hierarchy filter matches the node itself *and* every descendant, so
+  // filtering by a SYSTEM node (e.g. "HVAC") also returns items linked at a
+  // deeper CATEGORY/SUBCATEGORY/ITEM_FAMILY node underneath it.
+  const hierarchyNodeIds = filters.hierarchyNodeId ? await getDescendantNodeIds(filters.hierarchyNodeId) : null;
+
   const where: Prisma.MasterItemWhereInput = {
     status: "ACTIVE",
     ...(filters.disciplineId ? { disciplineId: filters.disciplineId } : {}),
     ...(filters.categoryId ? { categoryId: filters.categoryId } : {}),
+    ...(hierarchyNodeIds ? { hierarchyNodeId: { in: hierarchyNodeIds } } : {}),
     ...(filters.isPremium !== undefined ? { isPremium: filters.isPremium } : {}),
     ...(filters.search
       ? {
@@ -91,6 +100,41 @@ export async function listMasterItems(filters: MasterItemListFilters) {
   ]);
 
   return { items: rows.map(toMasterItemDTO), total, page, pageSize };
+}
+
+/**
+ * MASTER-BOQ-1A customer-facing detail: hierarchy breadcrumb, classification
+ * summary, region summary, and the current PUBLISHED version's specification
+ * templates — never draft/unpublished versions, never source batch/import
+ * metadata, never internal-only notes.
+ */
+export async function getMasterItemCustomerDetail(itemId: string) {
+  const row = await getMasterItemRecord(itemId);
+  const [classifications, regionalApplicability, publishedVersion, hierarchyBreadcrumb] = await Promise.all([
+    prisma.masterItemClassification.findMany({
+      where: { masterItemId: itemId },
+      select: { system: true, code: true, label: true, isPrimary: true },
+    }),
+    prisma.masterItemRegionalApplicability.findMany({
+      where: { masterItemId: itemId },
+      select: { scope: true, countryCode: true },
+    }),
+    prisma.masterItemVersion.findFirst({
+      where: { masterItemId: itemId, status: "PUBLISHED" },
+      select: { versionNumber: true, specificationTemplate: true, inclusionTemplate: true, exclusionTemplate: true, effectiveDate: true },
+    }),
+    row.hierarchyNodeId
+      ? prisma.masterHierarchyNode.findUnique({ where: { id: row.hierarchyNodeId }, select: { id: true, code: true, name: true, nodeType: true } })
+      : Promise.resolve(null),
+  ]);
+
+  return {
+    ...toMasterItemDTO(row),
+    hierarchyNode: hierarchyBreadcrumb,
+    classifications,
+    regionalApplicability,
+    publishedVersion,
+  };
 }
 
 /** Seed-time only. Idempotent on (disciplineId, itemCode). */

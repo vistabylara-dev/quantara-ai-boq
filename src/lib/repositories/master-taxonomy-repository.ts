@@ -140,13 +140,23 @@ function toFieldDefinitionDTO(row: TechnicalFieldDefinition) {
     description: row.description,
     fieldType: row.fieldType,
     unit: row.unit,
+    unitFamily: row.unitFamily,
+    allowedUnitsJson: row.allowedUnitsJson,
     optionsJson: row.optionsJson,
     validationJson: row.validationJson,
     isRequired: row.isRequired,
     isSearchable: row.isSearchable,
     isFilterable: row.isFilterable,
+    isActive: row.isActive,
+    applicableHierarchyNodeId: row.applicableHierarchyNodeId,
     sortOrder: row.sortOrder,
   };
+}
+
+export async function getFieldDefinition(id: string) {
+  const row = await prisma.technicalFieldDefinition.findUnique({ where: { id } });
+  if (!row) throw new NotFoundError("Attribute definition not found.");
+  return row;
 }
 
 /** Discipline-wide fields (categoryId null) plus fields specific to this category. */
@@ -166,11 +176,14 @@ export async function createTechnicalFieldDefinition(input: {
   description?: string;
   fieldType: TechnicalFieldDefinition["fieldType"];
   unit?: string;
+  unitFamily?: string;
+  allowedUnitsJson?: unknown;
   optionsJson?: unknown;
   validationJson?: unknown;
   isRequired?: boolean;
   isSearchable?: boolean;
   isFilterable?: boolean;
+  applicableHierarchyNodeId?: string | null;
   sortOrder?: number;
 }) {
   const existing = await prisma.technicalFieldDefinition.findFirst({
@@ -187,11 +200,14 @@ export async function createTechnicalFieldDefinition(input: {
       description: input.description ?? "",
       fieldType: input.fieldType,
       unit: input.unit,
+      unitFamily: input.unitFamily,
+      allowedUnitsJson: input.allowedUnitsJson as never,
       optionsJson: input.optionsJson as never,
       validationJson: input.validationJson as never,
       isRequired: input.isRequired ?? false,
       isSearchable: input.isSearchable ?? false,
       isFilterable: input.isFilterable ?? false,
+      applicableHierarchyNodeId: input.applicableHierarchyNodeId ?? null,
       sortOrder: input.sortOrder ?? 0,
     },
   });

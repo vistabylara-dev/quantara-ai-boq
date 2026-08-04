@@ -304,7 +304,7 @@ export async function rollbackMasterCatalogueImportBatch(owner: PlatformActor, b
   return { ...toBatchDTO(rolledBack), deletedInsertedItems: deleted.count };
 }
 
-export async function searchMasterCatalogueAdmin(owner: PlatformActor, filters: { disciplineId?: string; categoryId?: string; search?: string; page?: number; pageSize?: number }) {
+export async function searchMasterCatalogueAdmin(owner: PlatformActor, filters: { disciplineId?: string; categoryId?: string; hierarchyNodeId?: string; search?: string; page?: number; pageSize?: number }) {
   requireOwner(owner);
   return listMasterItems(filters);
 }

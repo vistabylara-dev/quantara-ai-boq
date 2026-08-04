@@ -19,6 +19,9 @@ type ResolvedDefaults = {
   unitCost: number;
   marginMode: MarginMode;
   marginPercentage: number;
+  /** MASTER-BOQ-1A BOQ snapshot behavior — only ever populated for MASTER_ITEM sources. */
+  masterItemVersionId?: string | null;
+  masterItemSnapshotJson?: unknown;
 };
 
 const EMPTY_DEFAULTS: ResolvedDefaults = {
@@ -54,15 +57,34 @@ async function resolveMasterItemDefaults(actor: CurrentActor, masterItemId: stri
     if (!hasPackage) await recordPremiumItemUnlock(actor.companyId, masterItemId);
   }
 
+  // MASTER-BOQ-1A BOQ snapshot behavior: capture the current published
+  // version + classification/region at the moment this item is added, so
+  // editing this BOQ line never touches the master item, and a later master
+  // item edit never retroactively changes this already-created line.
+  const [publishedVersion, classifications, regionalApplicability] = await Promise.all([
+    prisma.masterItemVersion.findFirst({ where: { masterItemId, status: "PUBLISHED" } }),
+    prisma.masterItemClassification.findMany({ where: { masterItemId }, select: { system: true, code: true, label: true, isPrimary: true } }),
+    prisma.masterItemRegionalApplicability.findMany({ where: { masterItemId }, select: { scope: true, countryCode: true } }),
+  ]);
+
   return {
     itemCode: master.itemCode,
     category: discipline?.name ?? "Uncategorized",
-    description: master.name,
-    specification: master.shortDescription,
-    unit: master.defaultUnit,
+    description: publishedVersion?.name ?? master.name,
+    specification: publishedVersion?.specificationTemplate || master.shortDescription,
+    unit: publishedVersion?.primaryUnit ?? master.defaultUnit,
     unitCost: 0,
     marginMode: MarginMode.MARKUP,
     marginPercentage: 0,
+    masterItemVersionId: publishedVersion?.id ?? null,
+    masterItemSnapshotJson: {
+      masterItemId,
+      masterItemVersionId: publishedVersion?.id ?? null,
+      versionNumber: publishedVersion?.versionNumber ?? null,
+      itemCode: master.itemCode,
+      classifications,
+      regionalApplicability,
+    },
   };
 }
 
@@ -171,6 +193,8 @@ export async function addBoqItemFromSource(actor: CurrentActor, boqId: string, i
     data: {
       sourceType: input.sourceType,
       sourceMasterItemId: input.sourceType === BoqItemSourceType.MASTER_ITEM ? input.sourceId : null,
+      sourceMasterItemVersionId: input.sourceType === BoqItemSourceType.MASTER_ITEM ? merged.masterItemVersionId ?? null : null,
+      masterItemSnapshotJson: input.sourceType === BoqItemSourceType.MASTER_ITEM ? (merged.masterItemSnapshotJson as never) : undefined,
       sourceCompanyLibraryItemId: input.sourceType === BoqItemSourceType.COMPANY_LIBRARY ? input.sourceId : null,
       sourceCatalogueItemId: input.sourceType === BoqItemSourceType.RATE_CATALOGUE ? input.sourceId : null,
       sourcePreviousBoqItemId: input.sourceType === BoqItemSourceType.PREVIOUS_BOQ ? input.sourceId : null,

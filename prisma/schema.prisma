@@ -506,11 +506,90 @@ model MasterCatalogueImportBatch {
   actor                User                        @relation(fields: [actorUserId], references: [id], onDelete: Restrict)
   discipline           MasterDiscipline            @relation(fields: [disciplineId], references: [id], onDelete: Restrict)
   createdItems         MasterItem[]
+  importJobs           MasterCatalogueImportJob[]
 
   @@index([actorUserId])
   @@index([disciplineId])
   @@index([status])
   @@index([checksum])
+}
+
+/// CATALOGUE-PROD-ACTIVATE — workflow state of one registered-dataset
+/// production activation. Mirrors the task's required state machine exactly
+/// so a stalled/interrupted job's state is always self-explanatory from the
+/// row alone, without needing to read application code to know what a given
+/// status means.
+enum MasterCatalogueImportJobStatus {
+  REGISTERED
+  VALIDATING
+  DRY_RUN_RUNNING
+  DRY_RUN_COMPLETE
+  AWAITING_CONFIRMATION
+  IMPORT_RUNNING
+  PAUSED
+  COMPLETED
+  COMPLETED_WITH_WARNINGS
+  FAILED
+  CANCELLED
+  ROLLED_BACK
+}
+
+/// CATALOGUE-PROD-ACTIVATE — a resumable, checkpointed activation of one
+/// registered dataset (see catalogue-dataset-registry.ts), replacing the
+/// fragile "hold one browser request open for the whole file" execution
+/// model MasterCatalogueImportBatch was built for. One row per dataset
+/// activation attempt (not per file) — currentRowCursor is a single
+/// logical offset into the dataset's ordered file list, so resuming after
+/// an interruption never needs to know which physical file it was mid-way
+/// through; the engine re-derives that from the cursor and the registry's
+/// own file manifest.
+model MasterCatalogueImportJob {
+  id                     String                         @id @default(uuid()) @db.Uuid
+  datasetId              String
+  datasetVersion         String
+  actorUserId            String                         @db.Uuid
+  disciplineId           String                         @db.Uuid
+  /// Companion MasterCatalogueImportBatch row created when execution starts,
+  /// purely so MasterItem.sourceBatchId (and the existing admin batch-history
+  /// view) stays meaningful for items imported through this resumable path —
+  /// without adding a second, parallel provenance FK on MasterItem itself.
+  legacyBatchId          String?                        @db.Uuid
+  status                 MasterCatalogueImportJobStatus @default(REGISTERED)
+  /// Combined sha256 of every registered source file's own checksum, joined
+  /// in manifest order — changes if the registry's file list, order, or any
+  /// single file's content changes, which is exactly the signal used to
+  /// reject an execution whose dry run no longer matches its source.
+  sourceChecksum         String
+  manifestJson           Json
+  dryRunReportJson       Json?
+  batchSize              Int                            @default(200)
+  currentRowCursor       Int                            @default(0)
+  totalRows              Int                            @default(0)
+  processedRows          Int                            @default(0)
+  insertedCount          Int                            @default(0)
+  updatedCount           Int                            @default(0)
+  unchangedCount         Int                            @default(0)
+  rejectedCount          Int                            @default(0)
+  warningCount           Int                            @default(0)
+  itemsCreated           Int                            @default(0)
+  versionsCreated        Int                            @default(0)
+  classificationsCreated Int                            @default(0)
+  hierarchyNodesCreated  Int                            @default(0)
+  categoriesCreated      Int                            @default(0)
+  currentFileName        String?
+  lastErrorMessage       String?
+  startedAt              DateTime?
+  completedAt            DateTime?
+  createdAt              DateTime                       @default(now())
+  updatedAt              DateTime                       @updatedAt
+  actor                  User                           @relation(fields: [actorUserId], references: [id], onDelete: Restrict)
+  discipline             MasterDiscipline               @relation(fields: [disciplineId], references: [id], onDelete: Restrict)
+  legacyBatch            MasterCatalogueImportBatch?    @relation(fields: [legacyBatchId], references: [id], onDelete: SetNull)
+
+  @@index([datasetId])
+  @@index([status])
+  @@index([actorUserId])
+  @@index([datasetId, status])
 }
 
 model CompanyBranding {
@@ -551,6 +630,7 @@ model MasterDiscipline {
   libraryItems                 CompanyLibraryItem[]
   symbolDefinitions            SymbolDefinition[]
   masterCatalogueImportBatches MasterCatalogueImportBatch[]
+  masterCatalogueImportJobs    MasterCatalogueImportJob[]
 
   @@index([isActive])
 }
@@ -1400,6 +1480,7 @@ model User {
   platformAuditLogs            PlatformAuditLog[]           @relation("PlatformAuditActor")
   simulationSession            PlatformSimulationSession?
   masterCatalogueImportBatches MasterCatalogueImportBatch[]
+  masterCatalogueImportJobs    MasterCatalogueImportJob[]
   masterItemVersionsCreated    MasterItemVersion[]          @relation("MasterItemVersionCreatedBy")
   masterItemVersionsReviewed   MasterItemVersion[]          @relation("MasterItemVersionReviewedBy")
   masterItemVersionsApproved   MasterItemVersion[]          @relation("MasterItemVersionApprovedBy")
@@ -2045,8 +2126,8 @@ model EmailTemplate {
   isDefault       Boolean               @default(false)
   isActive        Boolean               @default(true)
   createdAt       DateTime              @default(now())
-  updatedAt       DateTime        @updatedAt
-  company         Company         @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  updatedAt       DateTime              @updatedAt
+  company         Company               @relation(fields: [companyId], references: [id], onDelete: Cascade)
   emailDispatches EmailDispatch[]
 
   @@unique([companyId, code])
@@ -2163,13 +2244,13 @@ model EmailDispatch {
   deliveredAt                DateTime?
   failedAt                   DateTime?
   errorCode                  String?
-  errorMessage                String?
+  errorMessage               String?
   createdAt                  DateTime                  @default(now())
   updatedAt                  DateTime                  @updatedAt
   company                    Company                   @relation(fields: [companyId], references: [id], onDelete: Cascade)
   project                    Project                   @relation(fields: [projectId], references: [id], onDelete: Cascade)
   boq                        BOQ?                      @relation(fields: [boqId], references: [id], onDelete: SetNull)
-  clientProposal              ClientProposal?           @relation(fields: [clientProposalId], references: [id], onDelete: SetNull)
+  clientProposal             ClientProposal?           @relation(fields: [clientProposalId], references: [id], onDelete: SetNull)
   generatedTechnicalReport   GeneratedTechnicalReport? @relation(fields: [generatedTechnicalReportId], references: [id], onDelete: SetNull)
   emailTemplate              EmailTemplate?            @relation(fields: [emailTemplateId], references: [id], onDelete: SetNull)
   createdByUser              User?                     @relation(fields: [createdByUserId], references: [id], onDelete: SetNull)

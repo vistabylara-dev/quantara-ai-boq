@@ -1,4 +1,4 @@
-import { MasterCatalogueImportStatus, MasterClassificationSystem, MasterItemVersionStatus, Prisma } from "@prisma/client";
+import { MasterCatalogueImportStatus, MasterClassificationSystem, MasterHierarchyNodeType, MasterItemVersionStatus, Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db/prisma";
 import { AppError, NotFoundError, PermissionDeniedError } from "@/lib/errors/app-error";
 import type { PlatformActor } from "@/lib/auth/platform-authorization";
@@ -34,11 +34,15 @@ export type ParsedSpecification = {
 export type BulkImportProfile = {
   /** Must already exist in MasterDiscipline (one of the 9 seeded disciplines) — never created here. */
   disciplineKey: string;
-  /** Hierarchy node this discipline's CATEGORY nodes attach under, e.g. "construction.plumbing". Created idempotently under hierarchyIndustryCode if missing. */
-  hierarchyDisciplineCode: string;
-  hierarchyDisciplineName: string;
-  hierarchyIndustryCode: string;
-  hierarchyIndustryName: string;
+  /**
+   * Ordered top-to-bottom hierarchy chain, created idempotently node-by-node
+   * (by code) if missing — CATEGORY nodes attach under the LAST element.
+   * A 2-element chain (Industry -> Discipline) works for most disciplines;
+   * HVAC needs a 3rd SYSTEM-level element ("...mechanical.hvac") to match
+   * the exact hierarchy the original HVAC import already created, so this
+   * is a chain rather than a fixed industry+discipline pair.
+   */
+  hierarchyParentChain: { code: string; name: string; nodeType: MasterHierarchyNodeType }[];
   parseSpecification: (raw: string) => ParsedSpecification;
 };
 
@@ -52,11 +56,11 @@ function slugify(value: string): string {
   return value.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "").slice(0, 80) || "item";
 }
 
-type ParsedRow = { rowNumber: number; itemCode: string; category: string; description: string; unit: string; specification: string };
-type RowOutcome = "insert" | "update" | "unchanged" | "rejected";
-type RowResult = { rowNumber: number; itemCode: string; outcome: RowOutcome; reason?: string; warnings?: string[] };
+export type ParsedRow = { rowNumber: number; itemCode: string; category: string; description: string; unit: string; specification: string };
+export type RowOutcome = "insert" | "update" | "unchanged" | "rejected";
+export type RowResult = { rowNumber: number; itemCode: string; outcome: RowOutcome; reason?: string; warnings?: string[] };
 
-function parseRows(csvText: string): { rows: ParsedRow[]; malformed: RowResult[] } {
+export function parseRows(csvText: string): { rows: ParsedRow[]; malformed: RowResult[] } {
   const parsed = parseCsv(csvText);
   if (parsed.length === 0) throw new AppError("EMPTY_FILE", "The uploaded file has no rows.", 400);
   const [headers, ...dataRows] = parsed;
@@ -95,24 +99,25 @@ function parseRows(csvText: string): { rows: ParsedRow[]; malformed: RowResult[]
   return { rows, malformed };
 }
 
-type HierarchyContext = { disciplineId: string; disciplineNodeId: string };
+export type HierarchyContext = { disciplineId: string; parentNodeId: string; parentNodeCode: string };
 
-async function requireHierarchyChain(profile: BulkImportProfile): Promise<HierarchyContext> {
+export async function requireHierarchyChain(profile: BulkImportProfile): Promise<HierarchyContext> {
   const discipline = await prisma.masterDiscipline.findUnique({ where: { key: profile.disciplineKey } });
   if (!discipline) throw new AppError("DISCIPLINE_NOT_READY", `MasterDiscipline "${profile.disciplineKey}" does not exist.`, 409);
 
-  const existingDisciplineNode = await getHierarchyNodeByCode(profile.hierarchyDisciplineCode);
-  let disciplineNodeId = existingDisciplineNode?.id;
-  if (!disciplineNodeId) {
-    const existingIndustryNode = await getHierarchyNodeByCode(profile.hierarchyIndustryCode);
-    const industryNodeId = existingIndustryNode?.id ?? (await createHierarchyNode({ code: profile.hierarchyIndustryCode, name: profile.hierarchyIndustryName, nodeType: "INDUSTRY", sortOrder: 0 })).id;
-    disciplineNodeId = (await createHierarchyNode({ code: profile.hierarchyDisciplineCode, name: profile.hierarchyDisciplineName, nodeType: "DISCIPLINE", parentId: industryNodeId, sortOrder: 0 })).id;
+  let parentNodeId: string | undefined;
+  for (const link of profile.hierarchyParentChain) {
+    const existing = await getHierarchyNodeByCode(link.code);
+    parentNodeId = existing?.id ?? (await createHierarchyNode({ code: link.code, name: link.name, nodeType: link.nodeType, parentId: parentNodeId ?? null, sortOrder: 0 })).id;
   }
+  if (!parentNodeId) throw new AppError("INVALID_PROFILE", "hierarchyParentChain must have at least one element.", 500);
 
-  return { disciplineId: discipline.id, disciplineNodeId };
+  const lastLink = profile.hierarchyParentChain[profile.hierarchyParentChain.length - 1];
+  return { disciplineId: discipline.id, parentNodeId, parentNodeCode: lastLink.code };
 }
 
 async function resolveCategoryAndHierarchy(ctx: HierarchyContext, profile: BulkImportProfile, categoryName: string, subcategory: string | null, write: boolean): Promise<{ categoryId: string; hierarchyNodeId: string } | null> {
+  void profile;
   const categoryKey = slugify(categoryName);
   let category = await prisma.masterCategory.findFirst({ where: { disciplineId: ctx.disciplineId, key: categoryKey } });
   if (!category) {
@@ -120,12 +125,12 @@ async function resolveCategoryAndHierarchy(ctx: HierarchyContext, profile: BulkI
     category = await prisma.masterCategory.create({ data: { disciplineId: ctx.disciplineId, key: categoryKey, name: categoryName, path: categoryKey, depth: 0 } });
   }
 
-  const categoryNodeCode = `${profile.hierarchyDisciplineCode}.${categoryKey}`;
+  const categoryNodeCode = `${ctx.parentNodeCode}.${categoryKey}`;
   const existingCategoryNode = await getHierarchyNodeByCode(categoryNodeCode);
   let categoryNodeId = existingCategoryNode?.id;
   if (!categoryNodeId) {
     if (!write) return { categoryId: category.id, hierarchyNodeId: "" };
-    const created = await createHierarchyNode({ code: categoryNodeCode, name: categoryName, nodeType: "CATEGORY", parentId: ctx.disciplineNodeId, sortOrder: 0 });
+    const created = await createHierarchyNode({ code: categoryNodeCode, name: categoryName, nodeType: "CATEGORY", parentId: ctx.parentNodeId, sortOrder: 0 });
     categoryNodeId = created.id;
   }
 
@@ -144,7 +149,7 @@ async function resolveCategoryAndHierarchy(ctx: HierarchyContext, profile: BulkI
   return { categoryId: category.id, hierarchyNodeId: subcategoryNodeId };
 }
 
-type EvaluateResult = {
+export type EvaluateResult = {
   results: RowResult[];
   inserted: number;
   updated: number;
@@ -156,7 +161,7 @@ type EvaluateResult = {
   warningRowCount: number;
 };
 
-async function evaluate(owner: PlatformActor, ctx: HierarchyContext, profile: BulkImportProfile, rows: ParsedRow[], write: boolean, sourceBatchId?: string): Promise<EvaluateResult> {
+export async function evaluate(owner: PlatformActor, ctx: HierarchyContext, profile: BulkImportProfile, rows: ParsedRow[], write: boolean, sourceBatchId?: string): Promise<EvaluateResult> {
   const results: RowResult[] = [];
   let inserted = 0;
   let updated = 0;

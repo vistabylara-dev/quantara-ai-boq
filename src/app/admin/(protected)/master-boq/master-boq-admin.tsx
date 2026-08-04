@@ -1,7 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
-import { Boxes, ClipboardList, Layers, Search, UploadCloud } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
+import { Boxes, ClipboardList, Layers, Search } from "lucide-react";
+import DatasetActivationPanel from "./dataset-activation-panel";
 import { apiClient, getApiErrorMessage } from "@/lib/api/client";
 
 type HierarchyNode = {
@@ -99,168 +100,6 @@ function SummaryStat({ label, value }: { label: string; value: number }) {
     <div className="rounded-2xl border border-[#D9E2EC] bg-[#EEF3F8] px-4 py-3 dark:border-[#1E2A42] dark:bg-[#111D33]">
       <p className="text-xs text-[#7B879C] dark:text-[#7F8DA6]">{label}</p>
       <p className="mt-1 text-xl font-semibold text-[#0B1630] dark:text-white">{value}</p>
-    </div>
-  );
-}
-
-type CatalogueDataset = { key: string; label: string; disciplineKey: string; expectedFiles: string[] };
-
-type ImportLogEntry = {
-  fileName: string;
-  mode: "dry-run" | "execute";
-  status: "running" | "done" | "error";
-  message: string;
-};
-
-type BulkImportResult = {
-  totalRows: number;
-  validRows: number;
-  rejectedRows: number;
-  warningRows: number;
-  inserted?: number;
-  updated?: number;
-  unchanged?: number;
-  insertedCount?: number;
-  updatedCount?: number;
-  unchangedCount?: number;
-  rejectedCount?: number;
-};
-
-function readFileAsText(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result ?? ""));
-    reader.onerror = () => reject(reader.error ?? new Error("Failed to read file."));
-    reader.readAsText(file);
-  });
-}
-
-/**
- * CATALOGUE-CLOSE — the production-safe way real catalogue data gets
- * activated: the platform owner uploads validated CSVs here, while
- * authenticated in whichever environment (local or production) they're
- * looking at. No production database credential is ever handed to an agent.
- */
-function BulkImportPanel() {
-  const [datasets, setDatasets] = useState<CatalogueDataset[] | null>(null);
-  const [datasetsError, setDatasetsError] = useState<string | null>(null);
-  const [selectedDatasetKey, setSelectedDatasetKey] = useState<string>("");
-  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
-  const [log, setLog] = useState<ImportLogEntry[]>([]);
-  const [isRunning, setIsRunning] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
-
-  useEffect(() => {
-    const controller = new AbortController();
-    apiClient
-      .get<CatalogueDataset[]>("/api/admin/master-catalogue/bulk-import", controller.signal)
-      .then((data) => {
-        setDatasets(data);
-        if (data.length > 0) setSelectedDatasetKey(data[0].key);
-      })
-      .catch((error) => setDatasetsError(getApiErrorMessage(error)));
-    return () => controller.abort();
-  }, []);
-
-  const selectedDataset = datasets?.find((d) => d.key === selectedDatasetKey) ?? null;
-
-  const runImport = useCallback(async (mode: "dry-run" | "execute") => {
-    if (!selectedDatasetKey || selectedFiles.length === 0) return;
-    if (mode === "execute" && !window.confirm(`Execute import for ${selectedFiles.length} file(s) against this environment's database? This writes real records.`)) return;
-
-    setIsRunning(true);
-    setLog(selectedFiles.map((f) => ({ fileName: f.name, mode, status: "running", message: "Running…" })));
-
-    const nextLog: ImportLogEntry[] = [];
-    for (const file of selectedFiles) {
-      try {
-        const csvText = await readFileAsText(file);
-        const result = await apiClient.post<BulkImportResult>(`/api/admin/master-catalogue/bulk-import/${selectedDatasetKey}/${mode}`, { uploadedFileName: file.name, csvText });
-        const inserted = result.inserted ?? result.insertedCount ?? 0;
-        const updated = result.updated ?? result.updatedCount ?? 0;
-        const unchanged = result.unchanged ?? result.unchangedCount ?? 0;
-        const rejected = result.rejectedRows ?? result.rejectedCount ?? 0;
-        nextLog.push({ fileName: file.name, mode, status: "done", message: `${result.totalRows} rows — insert ${inserted}, update ${updated}, unchanged ${unchanged}, rejected ${rejected}, warnings ${result.warningRows}` });
-      } catch (error) {
-        nextLog.push({ fileName: file.name, mode, status: "error", message: getApiErrorMessage(error) });
-      }
-      setLog([...nextLog]);
-    }
-    setIsRunning(false);
-  }, [selectedDatasetKey, selectedFiles]);
-
-  return (
-    <div className={panel}>
-      <p className="flex items-center gap-2 text-sm font-semibold text-[#0B1630] dark:text-white">
-        <UploadCloud className="h-4 w-4" aria-hidden="true" /> Bulk dataset import (production-safe)
-      </p>
-      <p className="mt-2 text-xs text-[#7B879C] dark:text-[#7F8DA6]">
-        Upload validated CSVs to activate them in whichever environment you are logged into. Dry run makes no changes; execute writes real records and is idempotent on rerun.
-      </p>
-
-      {datasetsError && <p className="mt-3 text-sm text-[#D84A4A] dark:text-rose-300">{datasetsError}</p>}
-
-      {datasets && (
-        <div className="mt-4 flex flex-wrap items-end gap-3">
-          <div>
-            <label className="block text-xs text-[#7B879C] dark:text-[#7F8DA6]" htmlFor="dataset-select">Dataset</label>
-            <select
-              id="dataset-select"
-              value={selectedDatasetKey}
-              onChange={(event) => setSelectedDatasetKey(event.target.value)}
-              className="mt-1 rounded-xl border border-[#D9E2EC] bg-white px-3 py-2 text-sm text-[#0B1630] dark:border-[#1E2A42] dark:bg-[#0B1426] dark:text-[#F7FAFC]"
-            >
-              {datasets.map((d) => (
-                <option key={d.key} value={d.key}>{d.label} ({d.expectedFiles.length} file{d.expectedFiles.length === 1 ? "" : "s"})</option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="block text-xs text-[#7B879C] dark:text-[#7F8DA6]" htmlFor="dataset-files">CSV file(s)</label>
-            <input
-              id="dataset-files"
-              ref={fileInputRef}
-              type="file"
-              accept=".csv,text/csv"
-              multiple
-              onChange={(event) => setSelectedFiles(Array.from(event.target.files ?? []))}
-              className="mt-1 block text-xs text-[#0B1630] dark:text-[#F7FAFC]"
-            />
-          </div>
-          <button
-            type="button"
-            disabled={isRunning || selectedFiles.length === 0}
-            onClick={() => void runImport("dry-run")}
-            className="rounded-xl border border-[#D9E2EC] bg-white px-4 py-2 text-xs font-semibold text-[#0B1630] hover:bg-[#EEF3F8] disabled:opacity-50 dark:border-[#1E2A42] dark:bg-[#0B1426] dark:text-[#F7FAFC] dark:hover:bg-[#111D33]"
-          >
-            Dry run selected files
-          </button>
-          <button
-            type="button"
-            disabled={isRunning || selectedFiles.length === 0}
-            onClick={() => void runImport("execute")}
-            className="rounded-xl border border-[#0EA5E9] bg-[#0EA5E9] px-4 py-2 text-xs font-semibold text-white hover:opacity-90 disabled:opacity-50 dark:border-[#22D3EE] dark:bg-[#22D3EE] dark:text-[#050B18]"
-          >
-            Execute selected files
-          </button>
-        </div>
-      )}
-
-      {selectedDataset && selectedFiles.length > 0 && selectedFiles.length !== selectedDataset.expectedFiles.length && (
-        <p className="mt-2 text-xs text-amber-600 dark:text-amber-400">
-          {selectedDataset.label} normally has {selectedDataset.expectedFiles.length} source file(s); {selectedFiles.length} selected. That&apos;s fine for a partial run — just confirm this is intentional.
-        </p>
-      )}
-
-      {log.length > 0 && (
-        <ul className="mt-4 space-y-1">
-          {log.map((entry, index) => (
-            <li key={`${entry.fileName}-${index}`} className={`rounded-xl border px-3 py-2 text-xs ${entry.status === "error" ? "border-rose-300 bg-rose-50 text-rose-700 dark:border-rose-800 dark:bg-rose-950 dark:text-rose-300" : "border-[#D9E2EC] bg-[#EEF3F8] text-[#0B1630] dark:border-[#1E2A42] dark:bg-[#111D33] dark:text-[#F7FAFC]"}`}>
-              <span className="font-semibold">{entry.fileName}</span> [{entry.mode}] — {entry.message}
-            </li>
-          ))}
-        </ul>
-      )}
     </div>
   );
 }
@@ -373,7 +212,7 @@ export default function MasterBoqAdmin() {
         <div className="rounded-2xl border border-[#D9E2EC] bg-white p-4 text-sm text-[#0B1630] dark:border-[#1E2A42] dark:bg-[#0B1426] dark:text-white">{actionMessage}</div>
       )}
 
-      <BulkImportPanel />
+      <DatasetActivationPanel />
 
       <div className={panel}>
         <p className="flex items-center gap-2 text-sm font-semibold text-[#0B1630] dark:text-white">

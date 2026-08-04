@@ -100,6 +100,11 @@ enum DocumentAudience {
   CLIENT
 }
 
+enum TechnicalReportStatus {
+  DRAFT
+  COMPLETED
+}
+
 enum ClientProposalStatus {
   DRAFT
   READY
@@ -190,6 +195,81 @@ enum MasterItemStatus {
   ACTIVE
   DEPRECATED
   ARCHIVED
+}
+
+/// MASTER-BOQ-1A — arbitrary-depth classification tree (Industry -> Discipline
+/// -> System -> Category -> Subcategory -> Item Family). A single
+/// self-referential node model is used instead of one table per level so the
+/// hierarchy can grow (new industries/disciplines) without further migrations.
+enum MasterHierarchyNodeType {
+  INDUSTRY
+  DISCIPLINE
+  SYSTEM
+  CATEGORY
+  SUBCATEGORY
+  ITEM_FAMILY
+}
+
+/// Workflow state of one MasterItemVersion — separate from MasterItem.status
+/// (which is the item's overall lifecycle: DRAFT/ACTIVE/DEPRECATED/ARCHIVED).
+enum MasterItemVersionStatus {
+  DRAFT
+  REVIEW
+  APPROVED
+  PUBLISHED
+  RETIRED
+}
+
+enum MasterClassificationSystem {
+  MASTERFORMAT_2020
+  CSI
+  OMNICLASS
+  UNIFORMAT
+  IFC
+  INTERNAL_QUANTARA
+  REVIT_CATEGORY
+  CAD_LAYER
+  REGIONAL_CODE
+  COST_CODE
+}
+
+enum MasterRegionScope {
+  UAE
+  GCC
+  INTERNATIONAL
+  COUNTRY_SPECIFIC
+}
+
+enum MasterQuantityMethod {
+  COUNT
+  LENGTH
+  AREA
+  VOLUME
+  WEIGHT
+}
+
+enum MasterAttributeVerificationState {
+  UNVERIFIED
+  VERIFIED
+  NEEDS_REVIEW
+}
+
+/// Deliberately small and not yet populated for any item — the contract for
+/// future assemblies/methodology (accessories, materials, labor, testing,
+/// commissioning, substitution) without building those engines yet.
+enum MasterItemRelationType {
+  REQUIRED_ACCESSORY
+  OPTIONAL_ACCESSORY
+  MATERIAL
+  LABOR
+  EQUIPMENT
+  CONSUMABLE
+  TESTED_WITH
+  COMMISSIONED_WITH
+  INSTALLED_WITH
+  ALTERNATIVE_TO
+  REPLACEMENT
+  PART_OF_ASSEMBLY
 }
 
 enum IndustryPackageType {
@@ -360,13 +440,13 @@ enum SimulationMode {
  * is ever touched by starting, changing, or exiting a simulation.
  */
 model PlatformSimulationSession {
-  id            String         @id @default(uuid()) @db.Uuid
-  userId        String         @unique @db.Uuid
-  mode          SimulationMode
-  targetBoqId   String?        @db.Uuid
-  startedAt     DateTime       @default(now())
-  updatedAt     DateTime       @updatedAt
-  user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id          String         @id @default(uuid()) @db.Uuid
+  userId      String         @unique @db.Uuid
+  mode        SimulationMode
+  targetBoqId String?        @db.Uuid
+  startedAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+  user        User           @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
 }
@@ -387,12 +467,12 @@ enum MasterCatalogueImportStatus {
  * like the company import feature.
  */
 model MasterCatalogueImportBatch {
-  id                 String                       @id @default(uuid()) @db.Uuid
-  actorUserId        String                       @db.Uuid
-  disciplineId       String                       @db.Uuid
-  uploadedFileName    String
-  checksum            String
-  status              MasterCatalogueImportStatus @default(DRY_RUN)
+  id                   String                      @id @default(uuid()) @db.Uuid
+  actorUserId          String                      @db.Uuid
+  disciplineId         String                      @db.Uuid
+  uploadedFileName     String
+  checksum             String
+  status               MasterCatalogueImportStatus @default(DRY_RUN)
   totalRows            Int                         @default(0)
   insertedCount        Int                         @default(0)
   updatedCount         Int                         @default(0)
@@ -402,10 +482,10 @@ model MasterCatalogueImportBatch {
   executedAt           DateTime?
   rolledBackAt         DateTime?
   createdAt            DateTime                    @default(now())
-  updatedAt             DateTime                    @updatedAt
+  updatedAt            DateTime                    @updatedAt
   actor                User                        @relation(fields: [actorUserId], references: [id], onDelete: Restrict)
   discipline           MasterDiscipline            @relation(fields: [disciplineId], references: [id], onDelete: Restrict)
-  createdItems          MasterItem[]
+  createdItems         MasterItem[]
 
   @@index([actorUserId])
   @@index([disciplineId])
@@ -435,21 +515,21 @@ model CompanyBranding {
 }
 
 model MasterDiscipline {
-  id               String                     @id @default(uuid()) @db.Uuid
-  key              String                     @unique
-  name             String
-  description      String                     @default("")
-  icon             String?
-  sortOrder        Int                        @default(0)
-  isActive         Boolean                    @default(true)
-  createdAt        DateTime                   @default(now())
-  updatedAt        DateTime                   @updatedAt
-  categories       MasterCategory[]
-  items            MasterItem[]
-  fieldDefinitions TechnicalFieldDefinition[]
-  packages         IndustryDataPackage[]
-  libraryItems     CompanyLibraryItem[]
-  symbolDefinitions SymbolDefinition[]
+  id                           String                       @id @default(uuid()) @db.Uuid
+  key                          String                       @unique
+  name                         String
+  description                  String                       @default("")
+  icon                         String?
+  sortOrder                    Int                          @default(0)
+  isActive                     Boolean                      @default(true)
+  createdAt                    DateTime                     @default(now())
+  updatedAt                    DateTime                     @updatedAt
+  categories                   MasterCategory[]
+  items                        MasterItem[]
+  fieldDefinitions             TechnicalFieldDefinition[]
+  packages                     IndustryDataPackage[]
+  libraryItems                 CompanyLibraryItem[]
+  symbolDefinitions            SymbolDefinition[]
   masterCatalogueImportBatches MasterCatalogueImportBatch[]
 
   @@index([isActive])
@@ -481,13 +561,13 @@ model MasterCategory {
 }
 
 model MasterItem {
-  id                         String                    @id @default(uuid()) @db.Uuid
-  disciplineId               String                    @db.Uuid
-  categoryId                 String                    @db.Uuid
+  id                         String                            @id @default(uuid()) @db.Uuid
+  disciplineId               String                            @db.Uuid
+  categoryId                 String                            @db.Uuid
   itemCode                   String
   name                       String
-  shortDescription           String                    @default("")
-  fullDescription            String                    @default("")
+  shortDescription           String                            @default("")
+  fullDescription            String                            @default("")
   defaultUnit                String
   defaultSpecificationJson   Json?
   technicalFieldsJson        Json?
@@ -499,19 +579,36 @@ model MasterItem {
   defaultTestingRequirement  String?
   defaultWarrantyRequirement String?
   defaultDocumentLabelsJson  Json?
-  version                    Int                       @default(1)
-  status                     MasterItemStatus          @default(ACTIVE)
-  isPremium                  Boolean                   @default(true)
-  sourceBatchId              String?                   @db.Uuid
-  createdAt                  DateTime                  @default(now())
-  updatedAt                  DateTime                  @updatedAt
-  discipline                 MasterDiscipline          @relation(fields: [disciplineId], references: [id], onDelete: Cascade)
-  category                   MasterCategory            @relation(fields: [categoryId], references: [id], onDelete: Cascade)
-  sourceBatch                MasterCatalogueImportBatch? @relation(fields: [sourceBatchId], references: [id], onDelete: SetNull)
+  version                    Int                               @default(1)
+  status                     MasterItemStatus                  @default(ACTIVE)
+  isPremium                  Boolean                           @default(true)
+  sourceBatchId              String?                           @db.Uuid
+  /// MASTER-BOQ-1A — deepest known node in the new deep hierarchy (usually
+  /// Item Family, but Subcategory or Category if a family hasn't been
+  /// defined yet, e.g. for the existing HVAC data). Nullable and additive:
+  /// existing rows keep working through disciplineId/categoryId unchanged.
+  hierarchyNodeId            String?                           @db.Uuid
+  replacementItemId          String?                           @db.Uuid
+  createdAt                  DateTime                          @default(now())
+  updatedAt                  DateTime                          @updatedAt
+  discipline                 MasterDiscipline                  @relation(fields: [disciplineId], references: [id], onDelete: Cascade)
+  category                   MasterCategory                    @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  sourceBatch                MasterCatalogueImportBatch?       @relation(fields: [sourceBatchId], references: [id], onDelete: SetNull)
+  hierarchyNode              MasterHierarchyNode?              @relation(fields: [hierarchyNodeId], references: [id], onDelete: SetNull)
+  replacementItem            MasterItem?                       @relation("MasterItemReplacement", fields: [replacementItemId], references: [id], onDelete: SetNull)
+  replacedByItems            MasterItem[]                      @relation("MasterItemReplacement")
   packageItems               IndustryDataPackageItem[]
   trialUnlocks               TrialPremiumItemUnlock[]
   libraryItems               CompanyLibraryItem[]
   boqItems                   BOQItem[]
+  versions                   MasterItemVersion[]
+  variants                   MasterItemVariant[]
+  classifications            MasterItemClassification[]
+  regionalApplicability      MasterItemRegionalApplicability[]
+  drawingProfile             MasterItemDrawingProfile?
+  attributeValues            MasterItemAttributeValue[]
+  relationsFrom              MasterItemRelation[]              @relation("MasterItemRelationFrom")
+  relationsTo                MasterItemRelation[]              @relation("MasterItemRelationTo")
 
   @@unique([disciplineId, itemCode])
   @@index([disciplineId])
@@ -520,30 +617,241 @@ model MasterItem {
   @@index([isPremium])
   @@index([name])
   @@index([sourceBatchId])
+  @@index([hierarchyNodeId])
+  @@index([replacementItemId])
 }
 
+/// MASTER-BOQ-1A reuses this existing model as the "Attribute Definition"
+/// half of the definition+value pattern (it already had code/label/type/
+/// unit/options/validation/required/searchable/filterable/order) rather than
+/// building a duplicate table. isActive, unitFamily, allowedUnitsJson, and
+/// applicableHierarchyNodeId are additive columns for the new requirements;
+/// MasterItemAttributeValue below is the new "Attribute Value" half.
 model TechnicalFieldDefinition {
-  id             String             @id @default(uuid()) @db.Uuid
-  disciplineId   String             @db.Uuid
-  categoryId     String?            @db.Uuid
-  key            String
-  label          String
-  description    String             @default("")
-  fieldType      TechnicalFieldType
-  unit           String?
-  optionsJson    Json?
-  validationJson Json?
-  isRequired     Boolean            @default(false)
-  isSearchable   Boolean            @default(false)
-  isFilterable   Boolean            @default(false)
-  sortOrder      Int                @default(0)
-  createdAt      DateTime           @default(now())
-  updatedAt      DateTime           @updatedAt
-  discipline     MasterDiscipline   @relation(fields: [disciplineId], references: [id], onDelete: Cascade)
-  category       MasterCategory?    @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  id                        String                     @id @default(uuid()) @db.Uuid
+  disciplineId              String                     @db.Uuid
+  categoryId                String?                    @db.Uuid
+  key                       String
+  label                     String
+  description               String                     @default("")
+  fieldType                 TechnicalFieldType
+  unit                      String?
+  unitFamily                String?
+  allowedUnitsJson          Json?
+  optionsJson               Json?
+  validationJson            Json?
+  isRequired                Boolean                    @default(false)
+  isSearchable              Boolean                    @default(false)
+  isFilterable              Boolean                    @default(false)
+  isActive                  Boolean                    @default(true)
+  applicableHierarchyNodeId String?                    @db.Uuid
+  sortOrder                 Int                        @default(0)
+  createdAt                 DateTime                   @default(now())
+  updatedAt                 DateTime                   @updatedAt
+  discipline                MasterDiscipline           @relation(fields: [disciplineId], references: [id], onDelete: Cascade)
+  category                  MasterCategory?            @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  applicableHierarchyNode   MasterHierarchyNode?       @relation(fields: [applicableHierarchyNodeId], references: [id], onDelete: SetNull)
+  attributeValues           MasterItemAttributeValue[]
 
   @@index([disciplineId])
+  @@index([applicableHierarchyNodeId])
   @@index([categoryId])
+}
+
+/// MASTER-BOQ-1A — generic self-referential classification tree node.
+/// Industry -> Discipline -> System -> Category -> Subcategory -> Item Family
+/// all live here as MasterHierarchyNodeType-tagged rows instead of one table
+/// per level, so a new industry/discipline never needs a migration. Cycle
+/// prevention is enforced in master-hierarchy-service.ts (not expressible as
+/// a Postgres constraint on a self-referential adjacency list).
+model MasterHierarchyNode {
+  id               String                     @id @default(uuid()) @db.Uuid
+  code             String                     @unique
+  name             String
+  description      String                     @default("")
+  nodeType         MasterHierarchyNodeType
+  parentId         String?                    @db.Uuid
+  regionScope      MasterRegionScope?
+  isActive         Boolean                    @default(true)
+  sortOrder        Int                        @default(0)
+  createdAt        DateTime                   @default(now())
+  updatedAt        DateTime                   @updatedAt
+  parent           MasterHierarchyNode?       @relation("MasterHierarchyParent", fields: [parentId], references: [id], onDelete: Restrict)
+  children         MasterHierarchyNode[]      @relation("MasterHierarchyParent")
+  items            MasterItem[]
+  fieldDefinitions TechnicalFieldDefinition[]
+
+  @@index([parentId])
+  @@index([nodeType])
+  @@index([isActive])
+}
+
+/// Published master items are never destructively overwritten — a BOQ line
+/// snapshots the exact version it used (see BOQItem.sourceMasterItemVersionId
+/// below), and later edits to the master item never retroactively change a
+/// locked historical BOQ.
+model MasterItemVersion {
+  id                    String                     @id @default(uuid()) @db.Uuid
+  masterItemId          String                     @db.Uuid
+  versionNumber         Int
+  status                MasterItemVersionStatus    @default(DRAFT)
+  effectiveDate         DateTime?
+  supersededDate        DateTime?
+  changeSummary         String                     @default("")
+  name                  String
+  shortDescription      String                     @default("")
+  fullDescription       String                     @default("")
+  specificationTemplate String                     @default("")
+  inclusionTemplate     String                     @default("")
+  exclusionTemplate     String                     @default("")
+  notesTemplate         String                     @default("")
+  primaryUnit           String
+  measurementMethod     String                     @default("")
+  quantityBasis         String                     @default("")
+  roundingRule          String                     @default("")
+  wasteFactorPercentage Decimal?                   @db.Decimal(7, 4)
+  packageMultiple       Decimal?                   @db.Decimal(12, 4)
+  createdByUserId       String?                    @db.Uuid
+  reviewedByUserId      String?                    @db.Uuid
+  approvedByUserId      String?                    @db.Uuid
+  createdAt             DateTime                   @default(now())
+  updatedAt             DateTime                   @updatedAt
+  masterItem            MasterItem                 @relation(fields: [masterItemId], references: [id], onDelete: Cascade)
+  createdByUser         User?                      @relation("MasterItemVersionCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  reviewedByUser        User?                      @relation("MasterItemVersionReviewedBy", fields: [reviewedByUserId], references: [id], onDelete: SetNull)
+  approvedByUser        User?                      @relation("MasterItemVersionApprovedBy", fields: [approvedByUserId], references: [id], onDelete: SetNull)
+  attributeValues       MasterItemAttributeValue[]
+  boqItems              BOQItem[]
+
+  @@unique([masterItemId, versionNumber])
+  @@index([masterItemId])
+  @@index([status])
+}
+
+/// The leaf level below Master Item in the hierarchy example ("10,000 CFM
+/// Chilled-Water Double-Skin Variant"). Kept minimal — identity + status
+/// only — since assemblies/full variant configuration are out of scope for
+/// this phase.
+model MasterItemVariant {
+  id              String                     @id @default(uuid()) @db.Uuid
+  masterItemId    String                     @db.Uuid
+  code            String
+  name            String
+  description     String                     @default("")
+  isActive        Boolean                    @default(true)
+  sortOrder       Int                        @default(0)
+  createdAt       DateTime                   @default(now())
+  updatedAt       DateTime                   @updatedAt
+  masterItem      MasterItem                 @relation(fields: [masterItemId], references: [id], onDelete: Cascade)
+  attributeValues MasterItemAttributeValue[]
+
+  @@unique([masterItemId, code])
+  @@index([masterItemId])
+}
+
+/// The "Attribute Value" half of the definition+value pattern (definitions
+/// live on the existing TechnicalFieldDefinition model above). Typed columns
+/// rather than a single JSON blob so searchable/filterable values stay
+/// queryable. Exactly one of masterItemId/variantId is expected to be set —
+/// enforced in master-attribute-service.ts, not at the DB level.
+model MasterItemAttributeValue {
+  id                  String                           @id @default(uuid()) @db.Uuid
+  masterItemId        String?                          @db.Uuid
+  variantId           String?                          @db.Uuid
+  fieldDefinitionId   String                           @db.Uuid
+  valueText           String?
+  valueNumber         Decimal?                         @db.Decimal(20, 6)
+  valueBoolean        Boolean?
+  valueDate           DateTime?
+  unit                String?
+  source              String                           @default("")
+  verificationState   MasterAttributeVerificationState @default(UNVERIFIED)
+  masterItemVersionId String?                          @db.Uuid
+  createdAt           DateTime                         @default(now())
+  updatedAt           DateTime                         @updatedAt
+  masterItem          MasterItem?                      @relation(fields: [masterItemId], references: [id], onDelete: Cascade)
+  variant             MasterItemVariant?               @relation(fields: [variantId], references: [id], onDelete: Cascade)
+  fieldDefinition     TechnicalFieldDefinition         @relation(fields: [fieldDefinitionId], references: [id], onDelete: Cascade)
+  masterItemVersion   MasterItemVersion?               @relation(fields: [masterItemVersionId], references: [id], onDelete: SetNull)
+
+  @@index([masterItemId])
+  @@index([variantId])
+  @@index([fieldDefinitionId])
+}
+
+/// A mapping model (rather than fixed MasterFormat/OmniClass/... columns on
+/// MasterItem) since not every item has every classification, and new
+/// classification systems can be added without a migration.
+model MasterItemClassification {
+  id           String                     @id @default(uuid()) @db.Uuid
+  masterItemId String                     @db.Uuid
+  system       MasterClassificationSystem
+  code         String
+  label        String                     @default("")
+  version      String                     @default("")
+  isPrimary    Boolean                    @default(false)
+  source       String                     @default("")
+  isVerified   Boolean                    @default(false)
+  createdAt    DateTime                   @default(now())
+  updatedAt    DateTime                   @updatedAt
+  masterItem   MasterItem                 @relation(fields: [masterItemId], references: [id], onDelete: Cascade)
+
+  @@unique([masterItemId, system, code])
+  @@index([masterItemId])
+  @@index([system])
+}
+
+model MasterItemRegionalApplicability {
+  id                       String            @id @default(uuid()) @db.Uuid
+  masterItemId             String            @db.Uuid
+  scope                    MasterRegionScope
+  countryCode              String?
+  effectiveFrom            DateTime?
+  effectiveTo              DateTime?
+  languageAvailabilityJson Json?
+  createdAt                DateTime          @default(now())
+  updatedAt                DateTime          @updatedAt
+  masterItem               MasterItem        @relation(fields: [masterItemId], references: [id], onDelete: Cascade)
+
+  @@unique([masterItemId, scope, countryCode])
+  @@index([masterItemId])
+}
+
+/// The clean data contract for future drawing/BIM matching — not the
+/// matching logic itself. One profile per item.
+model MasterItemDrawingProfile {
+  id                 String                @id @default(uuid()) @db.Uuid
+  masterItemId       String                @unique @db.Uuid
+  drawingTypesJson   Json?
+  scheduleTypesJson  Json?
+  symbolReference    String?
+  cadLayerReference  String?
+  ifcClass           String?
+  revitCategory      String?
+  roomSpaceTypesJson Json?
+  quantityMethod     MasterQuantityMethod?
+  createdAt          DateTime              @default(now())
+  updatedAt          DateTime              @updatedAt
+  masterItem         MasterItem            @relation(fields: [masterItemId], references: [id], onDelete: Cascade)
+}
+
+/// Deliberately empty of data for now — the smallest expandable contract for
+/// future assemblies/methodology (required/optional accessories, materials,
+/// labor, testing, commissioning, substitution).
+model MasterItemRelation {
+  id           String                 @id @default(uuid()) @db.Uuid
+  fromItemId   String                 @db.Uuid
+  toItemId     String                 @db.Uuid
+  relationType MasterItemRelationType
+  notes        String                 @default("")
+  createdAt    DateTime               @default(now())
+  updatedAt    DateTime               @updatedAt
+  fromItem     MasterItem             @relation("MasterItemRelationFrom", fields: [fromItemId], references: [id], onDelete: Cascade)
+  toItem       MasterItem             @relation("MasterItemRelationTo", fields: [toItemId], references: [id], onDelete: Cascade)
+
+  @@unique([fromItemId, toItemId, relationType])
+  @@index([fromItemId])
+  @@index([toItemId])
 }
 
 model IndustryDataPackage {
@@ -839,6 +1147,8 @@ model Company {
   users                       User[]
   documentTemplates           DocumentTemplate[]
   generatedDocuments          GeneratedDocument[]
+  technicalReportTemplates    TechnicalReportTemplate[]
+  generatedTechnicalReports   GeneratedTechnicalReport[]
   emailTemplates              EmailTemplate[]
   clientProposals             ClientProposal[]
   clientProposalDocuments     ClientProposalDocument[]
@@ -857,60 +1167,64 @@ model Company {
   importJobs                  ImportJob[]
   importRows                  ImportRow[]
   projectFiles                ProjectFile[]
-  extractionJobs               ExtractionJob[]
-  extractedTables               ExtractedTable[]
-  extractedTableRows            ExtractedTableRow[]
-  extractedTableCells           ExtractedTableCell[]
-  drawingPages                   DrawingPage[]
-  drawingLayers                  DrawingLayer[]
-  drawingScaleCalibrations       DrawingScaleCalibration[]
-  extractedEntities              ExtractedEntity[]
-  detectedRooms                  DetectedRoom[]
-  companySymbolMappings          CompanySymbolMapping[]
-  quantityCalculations           QuantityCalculation[]
-  inspections                    Inspection[]
-  inspectionResponses            InspectionResponse[]
-  inspectionFindings             InspectionFinding[]
-  rootCauseAnalyses              RootCauseAnalysis[]
-  riskAssessments                RiskAssessment[]
-  correctiveActions              CorrectiveAction[]
-  findingBoqLinks                FindingBoqLink[]
+  extractionJobs              ExtractionJob[]
+  extractedTables             ExtractedTable[]
+  extractedTableRows          ExtractedTableRow[]
+  extractedTableCells         ExtractedTableCell[]
+  drawingPages                DrawingPage[]
+  drawingLayers               DrawingLayer[]
+  drawingScaleCalibrations    DrawingScaleCalibration[]
+  extractedEntities           ExtractedEntity[]
+  detectedRooms               DetectedRoom[]
+  companySymbolMappings       CompanySymbolMapping[]
+  quantityCalculations        QuantityCalculation[]
+  inspections                 Inspection[]
+  inspectionResponses         InspectionResponse[]
+  inspectionFindings          InspectionFinding[]
+  rootCauseAnalyses           RootCauseAnalysis[]
+  riskAssessments             RiskAssessment[]
+  correctiveActions           CorrectiveAction[]
+  findingBoqLinks             FindingBoqLink[]
 }
 
 model User {
-  id                          String                      @id @default(uuid()) @db.Uuid
-  companyId                   String                      @db.Uuid
-  email                       String                      @unique
-  passwordHash                String
-  fullName                    String
-  role                        UserRole                    @default(ESTIMATOR)
-  platformRole                PlatformRole?
-  emailVerifiedAt             DateTime?
-  isActive                    Boolean                     @default(true)
-  createdAt                   DateTime                    @default(now())
-  updatedAt                   DateTime                    @updatedAt
-  company                     Company                     @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  sessions                    Session[]
-  emailVerificationTokens     EmailVerificationToken[]
-  passwordResetTokens         PasswordResetToken[]
-  auditLogs                   AuditLog[]
-  rateCataloguePriceHistories RateCataloguePriceHistory[]
-  generatedDocuments          GeneratedDocument[]
-  clientProposals             ClientProposal[]
-  clientProposalEvents        ClientProposalEvent[]
-  emailDispatches             EmailDispatch[]
-  companyLibraryItems         CompanyLibraryItem[]
-  companyLibraryItemVersions  CompanyLibraryItemVersion[]
-  companyItemUsages           CompanyItemUsage[]
-  importMappingTemplates      ImportMappingTemplate[]
-  importJobs                  ImportJob[]
-  copiedBoqItems              BOQItem[]                   @relation("BoqItemCopiedByUser")
-  uploadedProjectFiles        ProjectFile[]               @relation("ProjectFileUploadedByUser")
-  classificationConfirmedFiles ProjectFile[]              @relation("ProjectFileClassificationConfirmedByUser")
+  id                           String                       @id @default(uuid()) @db.Uuid
+  companyId                    String                       @db.Uuid
+  email                        String                       @unique
+  passwordHash                 String
+  fullName                     String
+  role                         UserRole                     @default(ESTIMATOR)
+  platformRole                 PlatformRole?
+  emailVerifiedAt              DateTime?
+  isActive                     Boolean                      @default(true)
+  createdAt                    DateTime                     @default(now())
+  updatedAt                    DateTime                     @updatedAt
+  company                      Company                      @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  sessions                     Session[]
+  emailVerificationTokens      EmailVerificationToken[]
+  passwordResetTokens          PasswordResetToken[]
+  auditLogs                    AuditLog[]
+  rateCataloguePriceHistories  RateCataloguePriceHistory[]
+  generatedDocuments           GeneratedDocument[]
+  generatedTechnicalReports    GeneratedTechnicalReport[]
+  clientProposals              ClientProposal[]
+  clientProposalEvents         ClientProposalEvent[]
+  emailDispatches              EmailDispatch[]
+  companyLibraryItems          CompanyLibraryItem[]
+  companyLibraryItemVersions   CompanyLibraryItemVersion[]
+  companyItemUsages            CompanyItemUsage[]
+  importMappingTemplates       ImportMappingTemplate[]
+  importJobs                   ImportJob[]
+  copiedBoqItems               BOQItem[]                    @relation("BoqItemCopiedByUser")
+  uploadedProjectFiles         ProjectFile[]                @relation("ProjectFileUploadedByUser")
+  classificationConfirmedFiles ProjectFile[]                @relation("ProjectFileClassificationConfirmedByUser")
   createdExtractionJobs        ExtractionJob[]
-  platformAuditLogs            PlatformAuditLog[]          @relation("PlatformAuditActor")
-  simulationSession             PlatformSimulationSession?
-  masterCatalogueImportBatches  MasterCatalogueImportBatch[]
+  platformAuditLogs            PlatformAuditLog[]           @relation("PlatformAuditActor")
+  simulationSession            PlatformSimulationSession?
+  masterCatalogueImportBatches MasterCatalogueImportBatch[]
+  masterItemVersionsCreated    MasterItemVersion[]          @relation("MasterItemVersionCreatedBy")
+  masterItemVersionsReviewed   MasterItemVersion[]          @relation("MasterItemVersionReviewedBy")
+  masterItemVersionsApproved   MasterItemVersion[]          @relation("MasterItemVersionApprovedBy")
 
   @@index([companyId])
   @@index([role])
@@ -1009,38 +1323,39 @@ model Client {
 }
 
 model Project {
-  id                    String                @id @default(uuid()) @db.Uuid
-  companyId             String                @db.Uuid
-  clientId              String                @db.Uuid
-  industryEngineId      String                @db.Uuid
-  slug                  String
-  reference             String
-  name                  String
-  description           String?
-  location              String?
-  currency              String                @default("AED")
-  taxRate               Decimal               @default(5) @db.Decimal(7, 4)
-  language              String                @default("English")
-  status                ProjectStatus         @default(DRAFT)
-  currentRevisionNumber Int                   @default(1)
-  createdAt             DateTime              @default(now())
-  updatedAt             DateTime              @updatedAt
-  company               Company               @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  client                Client                @relation(fields: [clientId], references: [id], onDelete: Restrict)
-  industryEngine        IndustryEngine        @relation(fields: [industryEngineId], references: [id], onDelete: Restrict)
-  boqs                  BOQ[]
-  revisionSnapshots     BOQRevisionSnapshot[]
-  generatedDocuments    GeneratedDocument[]
-  clientProposals       ClientProposal[]
-  emailDispatches       EmailDispatch[]
-  itemUsages            CompanyItemUsage[]
-  importJobs            ImportJob[]
-  files                 ProjectFile[]
-  extractionJobs        ExtractionJob[]
-  extractedEntities     ExtractedEntity[]
-  detectedRooms         DetectedRoom[]
-  quantityCalculations  QuantityCalculation[]
-  inspections           Inspection[]
+  id                        String                     @id @default(uuid()) @db.Uuid
+  companyId                 String                     @db.Uuid
+  clientId                  String                     @db.Uuid
+  industryEngineId          String                     @db.Uuid
+  slug                      String
+  reference                 String
+  name                      String
+  description               String?
+  location                  String?
+  currency                  String                     @default("AED")
+  taxRate                   Decimal                    @default(5) @db.Decimal(7, 4)
+  language                  String                     @default("English")
+  status                    ProjectStatus              @default(DRAFT)
+  currentRevisionNumber     Int                        @default(1)
+  createdAt                 DateTime                   @default(now())
+  updatedAt                 DateTime                   @updatedAt
+  company                   Company                    @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  client                    Client                     @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  industryEngine            IndustryEngine             @relation(fields: [industryEngineId], references: [id], onDelete: Restrict)
+  boqs                      BOQ[]
+  revisionSnapshots         BOQRevisionSnapshot[]
+  generatedDocuments        GeneratedDocument[]
+  generatedTechnicalReports GeneratedTechnicalReport[]
+  clientProposals           ClientProposal[]
+  emailDispatches           EmailDispatch[]
+  itemUsages                CompanyItemUsage[]
+  importJobs                ImportJob[]
+  files                     ProjectFile[]
+  extractionJobs            ExtractionJob[]
+  extractedEntities         ExtractedEntity[]
+  detectedRooms             DetectedRoom[]
+  quantityCalculations      QuantityCalculation[]
+  inspections               Inspection[]
 
   @@unique([companyId, reference])
   @@unique([companyId, slug])
@@ -1140,6 +1455,13 @@ model BOQItem {
   sourcePreviousBoqItemId    String?                 @db.Uuid
   copiedAt                   DateTime?
   copiedByUserId             String?                 @db.Uuid
+  /// MASTER-BOQ-1A BOQ snapshot behavior: the exact master item version used
+  /// when this line was added/last resolved from the master catalogue, plus
+  /// a point-in-time snapshot of classification/attributes/region that don't
+  /// otherwise have a dedicated column here. Editing this line never mutates
+  /// the master item; a later master-item edit never mutates this line.
+  sourceMasterItemVersionId  String?                 @db.Uuid
+  masterItemSnapshotJson     Json?
   createdAt                  DateTime                @default(now())
   updatedAt                  DateTime                @updatedAt
   company                    Company                 @relation(fields: [companyId], references: [id], onDelete: Cascade)
@@ -1147,6 +1469,7 @@ model BOQItem {
   options                    BOQItemOption[]
   verificationExceptions     VerificationException[]
   sourceMasterItem           MasterItem?             @relation(fields: [sourceMasterItemId], references: [id], onDelete: SetNull)
+  sourceMasterItemVersion    MasterItemVersion?      @relation(fields: [sourceMasterItemVersionId], references: [id], onDelete: SetNull)
   sourceCompanyLibraryItem   CompanyLibraryItem?     @relation(fields: [sourceCompanyLibraryItemId], references: [id], onDelete: SetNull)
   sourceCatalogueItem        RateCatalogueItem?      @relation(fields: [sourceCatalogueItemId], references: [id], onDelete: SetNull)
   sourcePreviousBoqItem      BOQItem?                @relation("BoqItemSourceChain", fields: [sourcePreviousBoqItemId], references: [id], onDelete: SetNull)
@@ -1160,6 +1483,7 @@ model BOQItem {
   @@index([status])
   @@index([sortOrder])
   @@index([sourceMasterItemId])
+  @@index([sourceMasterItemVersionId])
   @@index([sourceCompanyLibraryItemId])
 }
 
@@ -1441,6 +1765,72 @@ model GeneratedDocument {
   @@index([createdAt])
 }
 
+/// A reusable, section-based report template (e.g. an FM/technical condition-report standard) —
+/// standalone from BOQ/GeneratedDocument on purpose, since a technical report is not necessarily
+/// generated from a priced BOQ. `sectionsJson` holds the full structured content (front matter +
+/// ordered sections of heading/paragraph/table/callout blocks, matching the JSON shape produced by
+/// the template-import tooling) — the same shape `GeneratedTechnicalReport.sectionsSnapshotJson`
+/// copies at creation time so a later template edit never silently changes an in-flight report.
+model TechnicalReportTemplate {
+  id               String                     @id @default(uuid()) @db.Uuid
+  companyId        String                     @db.Uuid
+  name             String
+  code             String
+  disciplineTag    String                     @default("")
+  description      String                     @default("")
+  sectionsJson     Json
+  isDefault        Boolean                    @default(false)
+  isActive         Boolean                    @default(true)
+  createdAt        DateTime                   @default(now())
+  updatedAt        DateTime                   @updatedAt
+  company          Company                    @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  generatedReports GeneratedTechnicalReport[]
+
+  @@unique([companyId, code])
+  @@index([companyId])
+  @@index([isActive])
+}
+
+/// One filled-in (or in-progress) instance of a TechnicalReportTemplate for a specific project.
+/// `placeholdersJson` is the list of distinct bracketed placeholder strings found in the template
+/// snapshot at creation time (e.g. "[Insert project or property name]"); `fieldValuesJson` maps
+/// each of those placeholder strings to the value a user has typed in. Generation performs a
+/// literal substitution pass over the section snapshot using that map — no inference, no invented
+/// values, matching the rest of this codebase's no-fake-AI discipline.
+model GeneratedTechnicalReport {
+  id                   String                  @id @default(uuid()) @db.Uuid
+  companyId            String                  @db.Uuid
+  projectId            String                  @db.Uuid
+  templateId           String                  @db.Uuid
+  name                 String
+  status               TechnicalReportStatus   @default(DRAFT)
+  sectionsSnapshotJson Json
+  placeholdersJson     Json
+  fieldValuesJson      Json
+  documentType         GeneratedDocumentType?
+  storageKey           String?
+  fileName             String?
+  mimeType             String?
+  fileSize             Int?
+  checksum             String?
+  generatedByUserId    String?                 @db.Uuid
+  generatedByName      String
+  errorMessage         String?
+  createdAt            DateTime                @default(now())
+  updatedAt            DateTime                @updatedAt
+  completedAt          DateTime?
+  company              Company                 @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  project              Project                 @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  template             TechnicalReportTemplate @relation(fields: [templateId], references: [id], onDelete: Restrict)
+  generatedByUser      User?                   @relation(fields: [generatedByUserId], references: [id], onDelete: SetNull)
+
+  @@index([companyId])
+  @@index([projectId])
+  @@index([templateId])
+  @@index([status])
+  @@index([createdAt])
+}
+
 model EmailTemplate {
   id              String          @id @default(uuid()) @db.Uuid
   companyId       String          @db.Uuid
@@ -1593,44 +1983,44 @@ model EmailDispatch {
  * annotations) are stored separately under their own storage-key prefixes.
  */
 model ProjectFile {
-  id                            String                     @id @default(uuid()) @db.Uuid
-  companyId                     String                     @db.Uuid
-  projectId                     String                     @db.Uuid
-  uploadedByUserId              String                     @db.Uuid
-  originalName                  String
-  safeFileName                  String
-  storageKey                    String
-  mimeType                      String
-  extension                     String
-  fileSize                      Int
-  checksum                      String
-  classification                ProjectFileClassification @default(UNKNOWN)
-  classificationConfidence      Decimal?                   @db.Decimal(5, 2)
-  classificationConfirmedByUserId String?                  @db.Uuid
-  classificationConfirmedAt     DateTime?
-  status                        ProjectFileStatus          @default(UPLOADED)
-  language                      String?
-  pageCount                     Int?
-  sheetCount                    Int?
-  drawingNumber                 String?
-  drawingTitle                  String?
-  revisionNumber                String?
-  scaleText                     String?
-  detectedScale                 String?
-  measurementUnit               String?
-  metadataJson                  Json?
-  processingErrorCode           String?
-  processingErrorMessage        String?
-  createdAt                     DateTime                   @default(now())
-  updatedAt                     DateTime                   @updatedAt
-  company                       Company                    @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  project                       Project                    @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  uploadedByUser                User                       @relation("ProjectFileUploadedByUser", fields: [uploadedByUserId], references: [id], onDelete: Restrict)
-  classificationConfirmedByUser User?                      @relation("ProjectFileClassificationConfirmedByUser", fields: [classificationConfirmedByUserId], references: [id], onDelete: SetNull)
-  extractionJobs                 ExtractionJob[]
+  id                              String                    @id @default(uuid()) @db.Uuid
+  companyId                       String                    @db.Uuid
+  projectId                       String                    @db.Uuid
+  uploadedByUserId                String                    @db.Uuid
+  originalName                    String
+  safeFileName                    String
+  storageKey                      String
+  mimeType                        String
+  extension                       String
+  fileSize                        Int
+  checksum                        String
+  classification                  ProjectFileClassification @default(UNKNOWN)
+  classificationConfidence        Decimal?                  @db.Decimal(5, 2)
+  classificationConfirmedByUserId String?                   @db.Uuid
+  classificationConfirmedAt       DateTime?
+  status                          ProjectFileStatus         @default(UPLOADED)
+  language                        String?
+  pageCount                       Int?
+  sheetCount                      Int?
+  drawingNumber                   String?
+  drawingTitle                    String?
+  revisionNumber                  String?
+  scaleText                       String?
+  detectedScale                   String?
+  measurementUnit                 String?
+  metadataJson                    Json?
+  processingErrorCode             String?
+  processingErrorMessage          String?
+  createdAt                       DateTime                  @default(now())
+  updatedAt                       DateTime                  @updatedAt
+  company                         Company                   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  project                         Project                   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  uploadedByUser                  User                      @relation("ProjectFileUploadedByUser", fields: [uploadedByUserId], references: [id], onDelete: Restrict)
+  classificationConfirmedByUser   User?                     @relation("ProjectFileClassificationConfirmedByUser", fields: [classificationConfirmedByUserId], references: [id], onDelete: SetNull)
+  extractionJobs                  ExtractionJob[]
   extractedTables                 ExtractedTable[]
-  drawingPages                     DrawingPage[]
-  extractedEntities                ExtractedEntity[]
+  drawingPages                    DrawingPage[]
+  extractedEntities               ExtractedEntity[]
 
   @@index([companyId])
   @@index([projectId])
@@ -1698,32 +2088,32 @@ enum ProjectFileStatus {
  * handlers). Processed by the queue in src/lib/jobs/*.
  */
 model ExtractionJob {
-  id                  String                @id @default(uuid()) @db.Uuid
-  companyId           String                @db.Uuid
-  projectId           String                @db.Uuid
-  projectFileId       String                @db.Uuid
-  engineType          ExtractionEngineType
-  provider            String                @default("local")
-  status              ExtractionJobStatus   @default(QUEUED)
-  progressPercentage  Int                   @default(0)
-  currentStep         String?
-  startedAt           DateTime?
-  completedAt         DateTime?
-  failedAt            DateTime?
-  attempts            Int                   @default(0)
-  maximumAttempts     Int                   @default(3)
-  configurationJson   Json?
-  resultSummaryJson   Json?
-  usageMetadataJson   Json?
-  errorCode           String?
-  errorMessage        String?
-  createdByUserId     String                @db.Uuid
-  createdAt           DateTime              @default(now())
-  updatedAt           DateTime              @updatedAt
-  company             Company               @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  project             Project               @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  projectFile         ProjectFile           @relation(fields: [projectFileId], references: [id], onDelete: Cascade)
-  createdByUser       User                  @relation(fields: [createdByUserId], references: [id], onDelete: Restrict)
+  id                 String               @id @default(uuid()) @db.Uuid
+  companyId          String               @db.Uuid
+  projectId          String               @db.Uuid
+  projectFileId      String               @db.Uuid
+  engineType         ExtractionEngineType
+  provider           String               @default("local")
+  status             ExtractionJobStatus  @default(QUEUED)
+  progressPercentage Int                  @default(0)
+  currentStep        String?
+  startedAt          DateTime?
+  completedAt        DateTime?
+  failedAt           DateTime?
+  attempts           Int                  @default(0)
+  maximumAttempts    Int                  @default(3)
+  configurationJson  Json?
+  resultSummaryJson  Json?
+  usageMetadataJson  Json?
+  errorCode          String?
+  errorMessage       String?
+  createdByUserId    String               @db.Uuid
+  createdAt          DateTime             @default(now())
+  updatedAt          DateTime             @updatedAt
+  company            Company              @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  project            Project              @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  projectFile        ProjectFile          @relation(fields: [projectFileId], references: [id], onDelete: Cascade)
+  createdByUser      User                 @relation(fields: [createdByUserId], references: [id], onDelete: Restrict)
 
   @@index([companyId])
   @@index([projectId])
@@ -1771,22 +2161,22 @@ enum ExtractionJobStatus {
  * own migration, rather than guessing at that model's shape now.
  */
 model ExtractedTable {
-  id                  String             @id @default(uuid()) @db.Uuid
-  companyId           String             @db.Uuid
-  projectFileId       String             @db.Uuid
-  drawingPageId       String?            @db.Uuid
-  sheetName           String?
-  title               String?
-  tableType           ExtractedTableType @default(UNKNOWN)
-  confidence          Decimal            @db.Decimal(5, 2)
+  id                   String               @id @default(uuid()) @db.Uuid
+  companyId            String               @db.Uuid
+  projectFileId        String               @db.Uuid
+  drawingPageId        String?              @db.Uuid
+  sheetName            String?
+  title                String?
+  tableType            ExtractedTableType   @default(UNKNOWN)
+  confidence           Decimal              @db.Decimal(5, 2)
   boundingGeometryJson Json?
-  sourceReference     String?
-  status              ExtractedTableStatus @default(EXTRACTED)
-  createdAt           DateTime           @default(now())
-  updatedAt           DateTime           @updatedAt
-  company             Company            @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  projectFile         ProjectFile        @relation(fields: [projectFileId], references: [id], onDelete: Cascade)
-  rows                ExtractedTableRow[]
+  sourceReference      String?
+  status               ExtractedTableStatus @default(EXTRACTED)
+  createdAt            DateTime             @default(now())
+  updatedAt            DateTime             @updatedAt
+  company              Company              @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  projectFile          ProjectFile          @relation(fields: [projectFileId], references: [id], onDelete: Cascade)
+  rows                 ExtractedTableRow[]
 
   @@index([companyId])
   @@index([projectFileId])
@@ -1803,21 +2193,21 @@ model ExtractedTable {
  * value (spec section 12).
  */
 model ExtractedTableRow {
-  id                 String              @id @default(uuid()) @db.Uuid
-  companyId          String              @db.Uuid
-  extractedTableId   String              @db.Uuid
+  id                 String               @id @default(uuid()) @db.Uuid
+  companyId          String               @db.Uuid
+  extractedTableId   String               @db.Uuid
   rowNumber          Int
-  parentRowId        String?             @db.Uuid
+  parentRowId        String?              @db.Uuid
   normalizedDataJson Json?
   rawDataJson        Json?
-  confidence         Decimal             @db.Decimal(5, 2)
+  confidence         Decimal              @db.Decimal(5, 2)
   status             ExtractedTableStatus @default(EXTRACTED)
-  createdAt          DateTime            @default(now())
-  updatedAt          DateTime            @updatedAt
-  company            Company             @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  extractedTable     ExtractedTable      @relation(fields: [extractedTableId], references: [id], onDelete: Cascade)
-  parentRow          ExtractedTableRow?  @relation("ExtractedTableRowParent", fields: [parentRowId], references: [id], onDelete: Cascade)
-  childRows          ExtractedTableRow[] @relation("ExtractedTableRowParent")
+  createdAt          DateTime             @default(now())
+  updatedAt          DateTime             @updatedAt
+  company            Company              @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  extractedTable     ExtractedTable       @relation(fields: [extractedTableId], references: [id], onDelete: Cascade)
+  parentRow          ExtractedTableRow?   @relation("ExtractedTableRowParent", fields: [parentRowId], references: [id], onDelete: Cascade)
+  childRows          ExtractedTableRow[]  @relation("ExtractedTableRowParent")
   cells              ExtractedTableCell[]
 
   @@index([companyId])
@@ -1867,11 +2257,13 @@ enum ExtractedTableStatus {
   REJECTED
 }
 
-/** Phase 8 section 7/16 — one viewable/rasterized page of a drawing file (a PDF page, or the single implicit page of a standalone image). */
+/**
+ * Phase 8 section 7/16 — one viewable/rasterized page of a drawing file (a PDF page, or the single implicit page of a standalone image).
+ */
 model DrawingPage {
-  id                   String   @id @default(uuid()) @db.Uuid
-  companyId            String   @db.Uuid
-  projectFileId        String   @db.Uuid
+  id                   String                    @id @default(uuid()) @db.Uuid
+  companyId            String                    @db.Uuid
+  projectFileId        String                    @db.Uuid
   pageNumber           Int
   sheetName            String?
   width                Int?
@@ -1884,14 +2276,14 @@ model DrawingPage {
   titleBlockJson       Json?
   detectedScale        String?
   scaleUnit            String?
-  scaleConfidence      Decimal? @db.Decimal(5, 2)
+  scaleConfidence      Decimal?                  @db.Decimal(5, 2)
   orientation          String?
   cropBoxJson          Json?
-  processingStatus     String   @default("PENDING")
-  createdAt            DateTime @default(now())
-  updatedAt            DateTime @updatedAt
-  company              Company     @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  projectFile          ProjectFile @relation(fields: [projectFileId], references: [id], onDelete: Cascade)
+  processingStatus     String                    @default("PENDING")
+  createdAt            DateTime                  @default(now())
+  updatedAt            DateTime                  @updatedAt
+  company              Company                   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  projectFile          ProjectFile               @relation(fields: [projectFileId], references: [id], onDelete: Cascade)
   layers               DrawingLayer[]
   scaleCalibrations    DrawingScaleCalibration[]
 
@@ -1901,16 +2293,16 @@ model DrawingPage {
 }
 
 model DrawingLayer {
-  id              String   @id @default(uuid()) @db.Uuid
-  companyId       String   @db.Uuid
-  drawingPageId   String   @db.Uuid
+  id              String      @id @default(uuid()) @db.Uuid
+  companyId       String      @db.Uuid
+  drawingPageId   String      @db.Uuid
   name            String
   layerType       String?
   sourceLayerName String?
-  isVisible       Boolean  @default(true)
+  isVisible       Boolean     @default(true)
   metadataJson    Json?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
   company         Company     @relation(fields: [companyId], references: [id], onDelete: Cascade)
   drawingPage     DrawingPage @relation(fields: [drawingPageId], references: [id], onDelete: Cascade)
 
@@ -1918,25 +2310,27 @@ model DrawingLayer {
   @@index([drawingPageId])
 }
 
-/** Phase 8 section 15 — spatial quantities are blocked without a verified calibration per page; a detected scale is only ever a suggestion, never auto-trusted. */
+/**
+ * Phase 8 section 15 — spatial quantities are blocked without a verified calibration per page; a detected scale is only ever a suggestion, never auto-trusted.
+ */
 model DrawingScaleCalibration {
-  id                 String                    @id @default(uuid()) @db.Uuid
-  companyId          String                    @db.Uuid
-  drawingPageId      String                    @db.Uuid
-  calibrationType     ScaleCalibrationType
-  scaleRatio         Decimal                   @db.Decimal(14, 6)
+  id                 String               @id @default(uuid()) @db.Uuid
+  companyId          String               @db.Uuid
+  drawingPageId      String               @db.Uuid
+  calibrationType    ScaleCalibrationType
+  scaleRatio         Decimal              @db.Decimal(14, 6)
   drawingUnit        String
   realWorldUnit      String
   sourceText         String?
   sourceGeometryJson Json?
-  confidence         Decimal?                  @db.Decimal(5, 2)
-  isVerified         Boolean                   @default(false)
-  verifiedByUserId   String?                   @db.Uuid
+  confidence         Decimal?             @db.Decimal(5, 2)
+  isVerified         Boolean              @default(false)
+  verifiedByUserId   String?              @db.Uuid
   verifiedAt         DateTime?
-  createdAt          DateTime                  @default(now())
-  updatedAt          DateTime                  @updatedAt
-  company            Company                   @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  drawingPage        DrawingPage               @relation(fields: [drawingPageId], references: [id], onDelete: Cascade)
+  createdAt          DateTime             @default(now())
+  updatedAt          DateTime             @updatedAt
+  company            Company              @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  drawingPage        DrawingPage          @relation(fields: [drawingPageId], references: [id], onDelete: Cascade)
 
   @@index([companyId])
   @@index([drawingPageId])
@@ -1950,41 +2344,43 @@ enum ScaleCalibrationType {
   MANUAL_INPUT
 }
 
-/** Phase 8 section 17 — a detected/manually-entered spatial or schedule item awaiting human verification. Covers rooms, furniture, MEP equipment, and more via entityType; never auto-trusted. */
+/**
+ * Phase 8 section 17 — a detected/manually-entered spatial or schedule item awaiting human verification. Covers rooms, furniture, MEP equipment, and more via entityType; never auto-trusted.
+ */
 model ExtractedEntity {
-  id                         String            @id @default(uuid()) @db.Uuid
-  companyId                  String            @db.Uuid
-  projectId                  String            @db.Uuid
-  projectFileId              String            @db.Uuid
-  drawingPageId              String?           @db.Uuid
-  extractionJobId            String?           @db.Uuid
-  entityType                 ExtractedEntityType
-  categoryKey                String?
-  label                      String
-  normalizedLabel            String?
-  quantity                   Decimal?          @db.Decimal(14, 4)
-  unit                       String?
-  confidence                 Decimal           @db.Decimal(5, 2)
-  extractionMethod           ExtractionMethod  @default(MANUAL)
-  boundingGeometryJson       Json?
-  sourceText                 String?
-  sourceReference            String?
-  technicalDataJson          Json?
-  matchedMasterItemId        String?           @db.Uuid
-  matchedCompanyLibraryItemId String?          @db.Uuid
-  matchedCatalogueItemId     String?           @db.Uuid
-  status                     ExtractedEntityStatus @default(EXTRACTED)
-  confirmedByUserId          String?           @db.Uuid
-  confirmedAt                DateTime?
-  rejectedByUserId           String?           @db.Uuid
-  rejectedAt                 DateTime?
-  correctionJson             Json?
-  createdAt                  DateTime          @default(now())
-  updatedAt                  DateTime          @updatedAt
-  company                    Company           @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  project                    Project           @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  projectFile                ProjectFile       @relation(fields: [projectFileId], references: [id], onDelete: Cascade)
-  quantityCalculations       QuantityCalculation[]
+  id                          String                @id @default(uuid()) @db.Uuid
+  companyId                   String                @db.Uuid
+  projectId                   String                @db.Uuid
+  projectFileId               String                @db.Uuid
+  drawingPageId               String?               @db.Uuid
+  extractionJobId             String?               @db.Uuid
+  entityType                  ExtractedEntityType
+  categoryKey                 String?
+  label                       String
+  normalizedLabel             String?
+  quantity                    Decimal?              @db.Decimal(14, 4)
+  unit                        String?
+  confidence                  Decimal               @db.Decimal(5, 2)
+  extractionMethod            ExtractionMethod      @default(MANUAL)
+  boundingGeometryJson        Json?
+  sourceText                  String?
+  sourceReference             String?
+  technicalDataJson           Json?
+  matchedMasterItemId         String?               @db.Uuid
+  matchedCompanyLibraryItemId String?               @db.Uuid
+  matchedCatalogueItemId      String?               @db.Uuid
+  status                      ExtractedEntityStatus @default(EXTRACTED)
+  confirmedByUserId           String?               @db.Uuid
+  confirmedAt                 DateTime?
+  rejectedByUserId            String?               @db.Uuid
+  rejectedAt                  DateTime?
+  correctionJson              Json?
+  createdAt                   DateTime              @default(now())
+  updatedAt                   DateTime              @updatedAt
+  company                     Company               @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  project                     Project               @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  projectFile                 ProjectFile           @relation(fields: [projectFileId], references: [id], onDelete: Cascade)
+  quantityCalculations        QuantityCalculation[]
 
   @@index([companyId])
   @@index([projectId])
@@ -2044,100 +2440,106 @@ enum ExtractedEntityStatus {
   IMPORTED
 }
 
-/** Phase 8 section 18 — a room boundary, detected or manually entered. */
+/**
+ * Phase 8 section 18 — a room boundary, detected or manually entered.
+ */
 model DetectedRoom {
-  id                    String    @id @default(uuid()) @db.Uuid
-  companyId             String    @db.Uuid
-  projectId             String    @db.Uuid
-  drawingPageId         String?   @db.Uuid
-  roomName              String
-  roomNumber            String?
-  boundaryGeometryJson  Json?
-  area                  Decimal?  @db.Decimal(14, 4)
-  perimeter             Decimal?  @db.Decimal(14, 4)
-  ceilingHeight         Decimal?  @db.Decimal(8, 3)
-  floorLevel            String?
-  scaleCalibrationId    String?   @db.Uuid
-  confidence            Decimal   @db.Decimal(5, 2)
-  status                ExtractedEntityStatus @default(EXTRACTED)
-  correctedDataJson     Json?
-  confirmedByUserId     String?   @db.Uuid
-  confirmedAt           DateTime?
-  createdAt             DateTime  @default(now())
-  updatedAt             DateTime  @updatedAt
-  company               Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  project               Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  id                   String                @id @default(uuid()) @db.Uuid
+  companyId            String                @db.Uuid
+  projectId            String                @db.Uuid
+  drawingPageId        String?               @db.Uuid
+  roomName             String
+  roomNumber           String?
+  boundaryGeometryJson Json?
+  area                 Decimal?              @db.Decimal(14, 4)
+  perimeter            Decimal?              @db.Decimal(14, 4)
+  ceilingHeight        Decimal?              @db.Decimal(8, 3)
+  floorLevel           String?
+  scaleCalibrationId   String?               @db.Uuid
+  confidence           Decimal               @db.Decimal(5, 2)
+  status               ExtractedEntityStatus @default(EXTRACTED)
+  correctedDataJson    Json?
+  confirmedByUserId    String?               @db.Uuid
+  confirmedAt          DateTime?
+  createdAt            DateTime              @default(now())
+  updatedAt            DateTime              @updatedAt
+  company              Company               @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  project              Project               @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
   @@index([companyId])
   @@index([projectId])
   @@index([status])
 }
 
-/** Phase 8 section 20 — configurable MEP symbol recognition. No automatic matching engine exists yet; this is the schema + company-mapping layer only. */
+/**
+ * Phase 8 section 20 — configurable MEP symbol recognition. No automatic matching engine exists yet; this is the schema + company-mapping layer only.
+ */
 model SymbolDefinition {
-  id                    String   @id @default(uuid()) @db.Uuid
-  disciplineId          String   @db.Uuid
-  symbolKey             String   @unique
-  name                  String
-  description           String?
-  referenceImagesJson   Json?
-  vectorPatternJson     Json?
-  defaultMasterItemId   String?  @db.Uuid
-  metadataJson          Json?
-  version               Int      @default(1)
-  isActive              Boolean  @default(true)
-  createdAt             DateTime @default(now())
-  updatedAt             DateTime @updatedAt
-  discipline            MasterDiscipline @relation(fields: [disciplineId], references: [id], onDelete: Cascade)
-  companyMappings       CompanySymbolMapping[]
+  id                  String                 @id @default(uuid()) @db.Uuid
+  disciplineId        String                 @db.Uuid
+  symbolKey           String                 @unique
+  name                String
+  description         String?
+  referenceImagesJson Json?
+  vectorPatternJson   Json?
+  defaultMasterItemId String?                @db.Uuid
+  metadataJson        Json?
+  version             Int                    @default(1)
+  isActive            Boolean                @default(true)
+  createdAt           DateTime               @default(now())
+  updatedAt           DateTime               @updatedAt
+  discipline          MasterDiscipline       @relation(fields: [disciplineId], references: [id], onDelete: Cascade)
+  companyMappings     CompanySymbolMapping[]
 
   @@index([disciplineId])
 }
 
 model CompanySymbolMapping {
-  id                          String   @id @default(uuid()) @db.Uuid
-  companyId                   String   @db.Uuid
-  symbolDefinitionId          String   @db.Uuid
-  customLabel                 String?
-  customReferenceImagesJson   Json?
-  mappedCompanyLibraryItemId  String?  @db.Uuid
-  usageCount                  Int      @default(0)
-  createdAt                   DateTime @default(now())
-  updatedAt                   DateTime @updatedAt
-  company                     Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  symbolDefinition            SymbolDefinition @relation(fields: [symbolDefinitionId], references: [id], onDelete: Cascade)
+  id                         String           @id @default(uuid()) @db.Uuid
+  companyId                  String           @db.Uuid
+  symbolDefinitionId         String           @db.Uuid
+  customLabel                String?
+  customReferenceImagesJson  Json?
+  mappedCompanyLibraryItemId String?          @db.Uuid
+  usageCount                 Int              @default(0)
+  createdAt                  DateTime         @default(now())
+  updatedAt                  DateTime         @updatedAt
+  company                    Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  symbolDefinition           SymbolDefinition @relation(fields: [symbolDefinitionId], references: [id], onDelete: Cascade)
 
   @@unique([companyId, symbolDefinitionId])
   @@index([companyId])
 }
 
-/** Phase 8 sections 22-24 — deterministic quantity calculation from a confirmed extracted entity. Formulas are always visible; no confidence threshold may auto-lock or auto-issue a BOQ. */
+/**
+ * Phase 8 sections 22-24 — deterministic quantity calculation from a confirmed extracted entity. Formulas are always visible; no confidence threshold may auto-lock or auto-issue a BOQ.
+ */
 model QuantityCalculation {
-  id                  String   @id @default(uuid()) @db.Uuid
-  companyId           String   @db.Uuid
-  projectId           String   @db.Uuid
-  extractedEntityId   String?  @db.Uuid
+  id                  String                  @id @default(uuid()) @db.Uuid
+  companyId           String                  @db.Uuid
+  projectId           String                  @db.Uuid
+  extractedEntityId   String?                 @db.Uuid
   calculationType     QuantityCalculationType
   inputValuesJson     Json
   deductionsJson      Json?
   allowancesJson      Json?
   formula             String
-  resultValue         Decimal  @db.Decimal(18, 6)
+  resultValue         Decimal                 @db.Decimal(18, 6)
   resultUnit          String
-  confidence          Decimal  @db.Decimal(5, 2)
-  status              ExtractedEntityStatus @default(EXTRACTED)
-  manuallyOverridden  Boolean  @default(false)
-  originalResultValue Decimal? @db.Decimal(18, 6)
+  confidence          Decimal                 @db.Decimal(5, 2)
+  status              ExtractedEntityStatus   @default(EXTRACTED)
+  manuallyOverridden  Boolean                 @default(false)
+  originalResultValue Decimal?                @db.Decimal(18, 6)
   overrideReason      String?
-  calculatedBy        String   @default("deterministic-formula")
-  calculatedAt        DateTime @default(now())
-  confirmedByUserId   String?  @db.Uuid
+  calculatedBy        String                  @default("deterministic-formula")
+  calculatedAt        DateTime                @default(now())
+  confirmedByUserId   String?                 @db.Uuid
   confirmedAt         DateTime?
-  createdAt           DateTime @default(now())
-  updatedAt           DateTime @updatedAt
-  company             Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  project             Project          @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  extractedEntity     ExtractedEntity? @relation(fields: [extractedEntityId], references: [id], onDelete: SetNull)
+  createdAt           DateTime                @default(now())
+  updatedAt           DateTime                @updatedAt
+  company             Company                 @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  project             Project                 @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  extractedEntity     ExtractedEntity?        @relation(fields: [extractedEntityId], references: [id], onDelete: SetNull)
 
   @@index([companyId])
   @@index([projectId])
@@ -2166,36 +2568,38 @@ enum QuantityCalculationType {
   CUSTOM
 }
 
-/** Phase 8 section 29 — the inspection record itself. */
+/**
+ * Phase 8 section 29 — the inspection record itself.
+ */
 model Inspection {
-  id                       String   @id @default(uuid()) @db.Uuid
-  companyId                String   @db.Uuid
-  projectId                String   @db.Uuid
-  disciplineId             String?  @db.Uuid
-  reportType               String
-  reference                String
-  title                    String
-  description              String?
-  clientId                 String?  @db.Uuid
-  consultantName           String?
-  mainContractorName       String?
-  subcontractorName        String?
-  projectLocation          String?
-  buildingType             String?
-  inspectionDate           DateTime?
-  reportDate               DateTime?
-  preparedByUserId         String?  @db.Uuid
-  reviewedByUserId         String?  @db.Uuid
-  approvedByUserId         String?  @db.Uuid
-  revisionNumber           Int      @default(1)
-  status                   InspectionStatus @default(DRAFT)
-  relatedBoqId             String?  @db.Uuid
-  createdAt                DateTime @default(now())
-  updatedAt                DateTime @updatedAt
-  company                  Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  project                  Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  responses                InspectionResponse[]
-  findings                 InspectionFinding[]
+  id                 String               @id @default(uuid()) @db.Uuid
+  companyId          String               @db.Uuid
+  projectId          String               @db.Uuid
+  disciplineId       String?              @db.Uuid
+  reportType         String
+  reference          String
+  title              String
+  description        String?
+  clientId           String?              @db.Uuid
+  consultantName     String?
+  mainContractorName String?
+  subcontractorName  String?
+  projectLocation    String?
+  buildingType       String?
+  inspectionDate     DateTime?
+  reportDate         DateTime?
+  preparedByUserId   String?              @db.Uuid
+  reviewedByUserId   String?              @db.Uuid
+  approvedByUserId   String?              @db.Uuid
+  revisionNumber     Int                  @default(1)
+  status             InspectionStatus     @default(DRAFT)
+  relatedBoqId       String?              @db.Uuid
+  createdAt          DateTime             @default(now())
+  updatedAt          DateTime             @updatedAt
+  company            Company              @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  project            Project              @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  responses          InspectionResponse[]
+  findings           InspectionFinding[]
 
   @@unique([companyId, reference])
   @@index([companyId])
@@ -2215,44 +2619,44 @@ enum InspectionStatus {
 }
 
 model InspectionTemplate {
-  id                    String   @id @default(uuid()) @db.Uuid
-  companyId             String?  @db.Uuid
-  disciplineId          String?  @db.Uuid
-  reportType            String
-  name                  String
-  description           String?
-  sectionsJson          Json
-  fieldDefinitionsJson  Json
-  scoringConfigJson     Json?
-  riskConfigJson        Json?
-  outputConfigJson      Json?
-  isSystemTemplate      Boolean  @default(false)
-  isActive              Boolean  @default(true)
-  createdAt             DateTime @default(now())
-  updatedAt             DateTime @updatedAt
+  id                   String   @id @default(uuid()) @db.Uuid
+  companyId            String?  @db.Uuid
+  disciplineId         String?  @db.Uuid
+  reportType           String
+  name                 String
+  description          String?
+  sectionsJson         Json
+  fieldDefinitionsJson Json
+  scoringConfigJson    Json?
+  riskConfigJson       Json?
+  outputConfigJson     Json?
+  isSystemTemplate     Boolean  @default(false)
+  isActive             Boolean  @default(true)
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
 
   @@index([companyId])
   @@index([reportType])
 }
 
 model InspectionResponse {
-  id                 String   @id @default(uuid()) @db.Uuid
-  companyId          String   @db.Uuid
-  inspectionId       String   @db.Uuid
-  sectionKey         String
-  fieldKey           String
-  valueJson          Json
-  unit               String?
-  status             ExtractedEntityStatus @default(EXTRACTED)
-  sourceType         InspectionResponseSourceType @default(MANUAL)
-  sourceReference    String?
-  enteredByUserId    String?  @db.Uuid
-  confirmedByUserId  String?  @db.Uuid
-  confirmedAt        DateTime?
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @updatedAt
-  company            Company    @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  inspection         Inspection @relation(fields: [inspectionId], references: [id], onDelete: Cascade)
+  id                String                       @id @default(uuid()) @db.Uuid
+  companyId         String                       @db.Uuid
+  inspectionId      String                       @db.Uuid
+  sectionKey        String
+  fieldKey          String
+  valueJson         Json
+  unit              String?
+  status            ExtractedEntityStatus        @default(EXTRACTED)
+  sourceType        InspectionResponseSourceType @default(MANUAL)
+  sourceReference   String?
+  enteredByUserId   String?                      @db.Uuid
+  confirmedByUserId String?                      @db.Uuid
+  confirmedAt       DateTime?
+  createdAt         DateTime                     @default(now())
+  updatedAt         DateTime                     @updatedAt
+  company           Company                      @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  inspection        Inspection                   @relation(fields: [inspectionId], references: [id], onDelete: Cascade)
 
   @@unique([inspectionId, sectionKey, fieldKey])
   @@index([companyId])
@@ -2271,35 +2675,35 @@ enum InspectionResponseSourceType {
 }
 
 model InspectionFinding {
-  id                     String   @id @default(uuid()) @db.Uuid
-  companyId              String   @db.Uuid
-  inspectionId           String   @db.Uuid
-  findingNumber          Int
-  disciplineId           String?  @db.Uuid
-  assetId                String?
-  location               String?
-  title                  String
-  description            String
-  observedCondition      String?
-  expectedCondition      String?
-  severity               String   @default("MEDIUM")
-  confidence             Decimal? @db.Decimal(5, 2)
-  sourceReferencesJson   Json?
-  photoReferencesJson    Json?
-  drawingReferencesJson  Json?
-  status                 InspectionFindingStatus @default(DRAFT)
-  createdByType          String   @default("HUMAN")
-  createdByUserId        String?  @db.Uuid
-  confirmedByUserId      String?  @db.Uuid
-  confirmedAt            DateTime?
-  createdAt              DateTime @default(now())
-  updatedAt              DateTime @updatedAt
-  company                Company    @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  inspection             Inspection @relation(fields: [inspectionId], references: [id], onDelete: Cascade)
-  rootCauseAnalyses      RootCauseAnalysis[]
-  riskAssessments        RiskAssessment[]
-  correctiveActions      CorrectiveAction[]
-  boqLinks               FindingBoqLink[]
+  id                    String                  @id @default(uuid()) @db.Uuid
+  companyId             String                  @db.Uuid
+  inspectionId          String                  @db.Uuid
+  findingNumber         Int
+  disciplineId          String?                 @db.Uuid
+  assetId               String?
+  location              String?
+  title                 String
+  description           String
+  observedCondition     String?
+  expectedCondition     String?
+  severity              String                  @default("MEDIUM")
+  confidence            Decimal?                @db.Decimal(5, 2)
+  sourceReferencesJson  Json?
+  photoReferencesJson   Json?
+  drawingReferencesJson Json?
+  status                InspectionFindingStatus @default(DRAFT)
+  createdByType         String                  @default("HUMAN")
+  createdByUserId       String?                 @db.Uuid
+  confirmedByUserId     String?                 @db.Uuid
+  confirmedAt           DateTime?
+  createdAt             DateTime                @default(now())
+  updatedAt             DateTime                @updatedAt
+  company               Company                 @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  inspection            Inspection              @relation(fields: [inspectionId], references: [id], onDelete: Cascade)
+  rootCauseAnalyses     RootCauseAnalysis[]
+  riskAssessments       RiskAssessment[]
+  correctiveActions     CorrectiveAction[]
+  boqLinks              FindingBoqLink[]
 
   @@unique([inspectionId, findingNumber])
   @@index([companyId])
@@ -2318,22 +2722,22 @@ enum InspectionFindingStatus {
 }
 
 model RootCauseAnalysis {
-  id                     String   @id @default(uuid()) @db.Uuid
-  companyId              String   @db.Uuid
-  inspectionFindingId    String   @db.Uuid
+  id                     String                @id @default(uuid()) @db.Uuid
+  companyId              String                @db.Uuid
+  inspectionFindingId    String                @db.Uuid
   method                 String
   primaryCauseCategory   RootCauseCategory
   analysisJson           Json?
   conclusion             String?
-  confidence             Decimal? @db.Decimal(5, 2)
-  furtherTestingRequired Boolean  @default(false)
+  confidence             Decimal?              @db.Decimal(5, 2)
+  furtherTestingRequired Boolean               @default(false)
   status                 ExtractedEntityStatus @default(EXTRACTED)
-  createdByUserId        String?  @db.Uuid
-  confirmedByUserId      String?  @db.Uuid
-  createdAt              DateTime @default(now())
-  updatedAt              DateTime @updatedAt
-  company                Company           @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  inspectionFinding      InspectionFinding @relation(fields: [inspectionFindingId], references: [id], onDelete: Cascade)
+  createdByUserId        String?               @db.Uuid
+  confirmedByUserId      String?               @db.Uuid
+  createdAt              DateTime              @default(now())
+  updatedAt              DateTime              @updatedAt
+  company                Company               @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  inspectionFinding      InspectionFinding     @relation(fields: [inspectionFindingId], references: [id], onDelete: Cascade)
 
   @@index([companyId])
   @@index([inspectionFindingId])
@@ -2354,28 +2758,28 @@ enum RootCauseCategory {
 }
 
 model RiskAssessment {
-  id                          String   @id @default(uuid()) @db.Uuid
-  companyId                   String   @db.Uuid
-  inspectionFindingId         String   @db.Uuid
-  likelihood                  Int
-  severity                    Int
-  riskScore                   Int
-  riskLevel                   RiskLevel
-  affectedArea                String?
-  operationalImpact           String?
-  healthSafetyImpact          String?
-  propertyDamageImpact        String?
-  complianceImpact            String?
-  businessContinuityImpact    String?
-  recommendedUrgency          RiskUrgency
-  rationale                   String?
-  status                      ExtractedEntityStatus @default(EXTRACTED)
-  assessedByUserId            String?  @db.Uuid
-  confirmedByUserId           String?  @db.Uuid
-  createdAt                   DateTime @default(now())
-  updatedAt                   DateTime @updatedAt
-  company                     Company           @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  inspectionFinding           InspectionFinding @relation(fields: [inspectionFindingId], references: [id], onDelete: Cascade)
+  id                       String                @id @default(uuid()) @db.Uuid
+  companyId                String                @db.Uuid
+  inspectionFindingId      String                @db.Uuid
+  likelihood               Int
+  severity                 Int
+  riskScore                Int
+  riskLevel                RiskLevel
+  affectedArea             String?
+  operationalImpact        String?
+  healthSafetyImpact       String?
+  propertyDamageImpact     String?
+  complianceImpact         String?
+  businessContinuityImpact String?
+  recommendedUrgency       RiskUrgency
+  rationale                String?
+  status                   ExtractedEntityStatus @default(EXTRACTED)
+  assessedByUserId         String?               @db.Uuid
+  confirmedByUserId        String?               @db.Uuid
+  createdAt                DateTime              @default(now())
+  updatedAt                DateTime              @updatedAt
+  company                  Company               @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  inspectionFinding        InspectionFinding     @relation(fields: [inspectionFindingId], references: [id], onDelete: Cascade)
 
   @@index([companyId])
   @@index([inspectionFindingId])
@@ -2402,29 +2806,29 @@ enum RiskUrgency {
 }
 
 model CorrectiveAction {
-  id                        String   @id @default(uuid()) @db.Uuid
-  companyId                 String   @db.Uuid
-  inspectionFindingId       String   @db.Uuid
-  actionType                CorrectiveActionType
-  title                     String
-  description               String?
-  requiredMaterialsJson     Json?
-  requiredManpowerJson      Json?
-  requiredEquipmentJson     Json?
-  accessRequirements        String?
-  safetyControlsJson        Json?
-  testingRequirementsJson   Json?
-  completionCriteriaJson    Json?
-  estimatedDurationHours    Decimal? @db.Decimal(8, 2)
-  priority                  String   @default("MEDIUM")
-  status                    ExtractedEntityStatus @default(EXTRACTED)
-  createdByUserId           String?  @db.Uuid
-  confirmedByUserId         String?  @db.Uuid
-  createdAt                 DateTime @default(now())
-  updatedAt                 DateTime @updatedAt
-  company                   Company           @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  inspectionFinding         InspectionFinding @relation(fields: [inspectionFindingId], references: [id], onDelete: Cascade)
-  boqLinks                  FindingBoqLink[]
+  id                      String                @id @default(uuid()) @db.Uuid
+  companyId               String                @db.Uuid
+  inspectionFindingId     String                @db.Uuid
+  actionType              CorrectiveActionType
+  title                   String
+  description             String?
+  requiredMaterialsJson   Json?
+  requiredManpowerJson    Json?
+  requiredEquipmentJson   Json?
+  accessRequirements      String?
+  safetyControlsJson      Json?
+  testingRequirementsJson Json?
+  completionCriteriaJson  Json?
+  estimatedDurationHours  Decimal?              @db.Decimal(8, 2)
+  priority                String                @default("MEDIUM")
+  status                  ExtractedEntityStatus @default(EXTRACTED)
+  createdByUserId         String?               @db.Uuid
+  confirmedByUserId       String?               @db.Uuid
+  createdAt               DateTime              @default(now())
+  updatedAt               DateTime              @updatedAt
+  company                 Company               @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  inspectionFinding       InspectionFinding     @relation(fields: [inspectionFindingId], references: [id], onDelete: Cascade)
+  boqLinks                FindingBoqLink[]
 
   @@index([companyId])
   @@index([inspectionFindingId])
@@ -2441,20 +2845,22 @@ enum CorrectiveActionType {
   NO_ACTION
 }
 
-/** Phase 8 section 39 — links a confirmed finding + confirmed corrective action to a real BOQItem; never auto-created without both being confirmed. */
+/**
+ * Phase 8 section 39 — links a confirmed finding + confirmed corrective action to a real BOQItem; never auto-created without both being confirmed.
+ */
 model FindingBoqLink {
-  id                     String   @id @default(uuid()) @db.Uuid
-  companyId              String   @db.Uuid
-  inspectionFindingId    String   @db.Uuid
-  correctiveActionId     String?  @db.Uuid
-  boqId                  String   @db.Uuid
-  boqItemId              String   @db.Uuid
-  quantitySource         String
-  createdByUserId        String   @db.Uuid
-  createdAt              DateTime @default(now())
-  company                Company           @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  inspectionFinding      InspectionFinding @relation(fields: [inspectionFindingId], references: [id], onDelete: Cascade)
-  correctiveAction       CorrectiveAction? @relation(fields: [correctiveActionId], references: [id], onDelete: SetNull)
+  id                  String            @id @default(uuid()) @db.Uuid
+  companyId           String            @db.Uuid
+  inspectionFindingId String            @db.Uuid
+  correctiveActionId  String?           @db.Uuid
+  boqId               String            @db.Uuid
+  boqItemId           String            @db.Uuid
+  quantitySource      String
+  createdByUserId     String            @db.Uuid
+  createdAt           DateTime          @default(now())
+  company             Company           @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  inspectionFinding   InspectionFinding @relation(fields: [inspectionFindingId], references: [id], onDelete: Cascade)
+  correctiveAction    CorrectiveAction? @relation(fields: [correctiveActionId], references: [id], onDelete: SetNull)
 
   @@index([companyId])
   @@index([inspectionFindingId])

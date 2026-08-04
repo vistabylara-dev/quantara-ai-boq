@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { X } from "lucide-react";
 import { apiClient, getApiErrorMessage } from "@/lib/api/client";
 import ExecutiveTemplateThumbnail from "@/components/visuals/executive-template-thumbnail";
@@ -87,6 +87,26 @@ const ARCHETYPE_META: Record<Archetype, { label: string; audience: string; style
 
 const AVAILABLE_FORMATS = ["CSV", "XLSX", "PDF", "DOCX", "HTML"];
 
+type ReportTemplateSectionsView = {
+  templateName?: string;
+  templateCode?: string;
+  disciplinesCovered?: string[];
+  note?: string;
+  frontMatter: unknown[];
+  sections: { sectionCode: string; title: string; blocks: unknown[] }[];
+};
+
+type ReportTemplateView = {
+  id: string;
+  name: string;
+  code: string;
+  disciplineTag: string;
+  description: string;
+  sections: ReportTemplateSectionsView;
+  isDefault: boolean;
+  isActive: boolean;
+};
+
 function keySections(content: TemplateContentConfig): string[] {
   const sections: string[] = [];
   if (content.showCoverPage) sections.push("Cover page");
@@ -112,6 +132,82 @@ export default function TemplatesPage() {
   const [isSaving, setIsSaving] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [previewTemplate, setPreviewTemplate] = useState<TemplateView | null>(null);
+
+  const [reportTemplates, setReportTemplates] = useState<ReportTemplateView[]>([]);
+  const [reportTemplatesLoading, setReportTemplatesLoading] = useState(true);
+  const [reportTemplatesError, setReportTemplatesError] = useState<string | null>(null);
+  const [reportImportBusy, setReportImportBusy] = useState(false);
+  const [reportImportError, setReportImportError] = useState<string | null>(null);
+  const [reportBusyId, setReportBusyId] = useState<string | null>(null);
+  const reportFileInputRef = useRef<HTMLInputElement>(null);
+
+  const loadReportTemplates = useCallback(async (signal?: AbortSignal) => {
+    setReportTemplatesLoading(true);
+    setReportTemplatesError(null);
+    try {
+      const data = await apiClient.get<ReportTemplateView[]>("/api/report-templates?includeInactive=true", signal);
+      setReportTemplates(data);
+    } catch (error) {
+      if (error instanceof DOMException && error.name === "AbortError") return;
+      setReportTemplatesError(getApiErrorMessage(error));
+    } finally {
+      if (!signal?.aborted) setReportTemplatesLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    void loadReportTemplates(controller.signal);
+    return () => controller.abort();
+  }, [loadReportTemplates]);
+
+  // Accepts the same structured JSON shape the conversion tooling produces (templateName/
+  // templateCode/disciplinesCovered/note/frontMatter/sections) — the whole parsed file doubles as
+  // the "sections" payload the API expects, since that's already the exact shape it validates.
+  const importReportTemplate = useCallback(async (file: File) => {
+    setReportImportBusy(true);
+    setReportImportError(null);
+    try {
+      const text = await file.text();
+      let parsed: ReportTemplateSectionsView;
+      try {
+        parsed = JSON.parse(text);
+      } catch {
+        throw new Error("That file isn't valid JSON.");
+      }
+      if (!Array.isArray(parsed.sections) || !Array.isArray(parsed.frontMatter)) {
+        throw new Error("That file doesn't match the expected template shape (missing \"sections\" or \"frontMatter\").");
+      }
+      const fallbackCode = file.name.replace(/\.json$/i, "").toUpperCase().replace(/[^A-Z0-9_-]+/g, "-").slice(0, 100) || "REPORT-TEMPLATE";
+      await apiClient.post("/api/report-templates", {
+        name: parsed.templateName || file.name.replace(/\.json$/i, ""),
+        code: parsed.templateCode || fallbackCode,
+        disciplineTag: (parsed.disciplinesCovered ?? []).join(", "),
+        description: parsed.note ?? "",
+        sections: parsed,
+        isActive: true,
+      });
+      await loadReportTemplates();
+    } catch (error) {
+      setReportImportError(getApiErrorMessage(error));
+    } finally {
+      setReportImportBusy(false);
+      if (reportFileInputRef.current) reportFileInputRef.current.value = "";
+    }
+  }, [loadReportTemplates]);
+
+  const toggleReportTemplateActive = useCallback(async (id: string, isActive: boolean) => {
+    setReportBusyId(id);
+    setReportImportError(null);
+    try {
+      await apiClient.patch(`/api/report-templates/${encodeURIComponent(id)}`, { isActive: !isActive });
+      await loadReportTemplates();
+    } catch (error) {
+      setReportImportError(getApiErrorMessage(error));
+    } finally {
+      setReportBusyId(null);
+    }
+  }, [loadReportTemplates]);
 
   const load = useCallback(async (signal?: AbortSignal) => {
     setIsLoading(true);
@@ -404,22 +500,99 @@ export default function TemplatesPage() {
         </div>
       )}
 
-      <div>
-        <h2 className="mb-1 text-lg font-semibold text-[#08152E] dark:text-white">Technical report templates</h2>
-        <p className="mb-4 text-sm text-[#7B879C] dark:text-[#8CA0BE]">Used when generating an inspection technical report. Not available yet.</p>
-      </div>
-
-      <div className={panel}>
-        <div className="flex flex-col items-center py-4 text-center">
-          <div className="h-20 w-32 text-[#7B879C] dark:text-[#8CA0BE]">
-            <EmptyStateIllustration className="h-full w-full" />
-          </div>
-          <p className="mt-3 text-sm font-semibold text-[#08152E] dark:text-white">Coming soon</p>
-          <p className="mt-2 max-w-sm text-sm text-[#7B879C] dark:text-[#8CA0BE]">
-            Technical report generation hasn&apos;t been built yet. Once it is, its templates will appear in this section automatically.
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h2 className="mb-1 text-lg font-semibold text-[#08152E] dark:text-white">Technical report templates</h2>
+          <p className="text-sm text-[#7B879C] dark:text-[#8CA0BE]">
+            Reusable, section-based report standards (FM/technical condition reports, evidence appendices, etc.) — open a project
+            and pick one to generate a filled-in report.
           </p>
         </div>
+        <div>
+          <input
+            ref={reportFileInputRef}
+            type="file"
+            accept=".json,application/json"
+            className="hidden"
+            onChange={(event) => {
+              const file = event.target.files?.[0];
+              if (file) void importReportTemplate(file);
+            }}
+          />
+          <button
+            type="button"
+            onClick={() => reportFileInputRef.current?.click()}
+            disabled={reportImportBusy}
+            className="rounded-2xl bg-[#009FE3] px-4 py-2 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-50 dark:bg-[#21C7F3] dark:text-[#040A16]"
+          >
+            {reportImportBusy ? "Importing…" : "Import template (JSON)"}
+          </button>
+        </div>
       </div>
+
+      {reportImportError && (
+        <div className="rounded-[28px] border border-rose-300 bg-rose-50 p-5 text-sm text-rose-700 dark:border-rose-900 dark:bg-rose-950/40 dark:text-rose-200" role="alert">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <p>{reportImportError}</p>
+            <button type="button" onClick={() => setReportImportError(null)} className="rounded-2xl border border-rose-400 px-3 py-2 font-semibold hover:bg-rose-100 dark:border-rose-800 dark:hover:bg-rose-900/40">
+              Dismiss
+            </button>
+          </div>
+        </div>
+      )}
+
+      {reportTemplatesLoading ? (
+        <div className={panel}>
+          <p className="text-sm text-[#536078] dark:text-[#8CA0BE]">Loading report templates…</p>
+        </div>
+      ) : reportTemplatesError ? (
+        <div className={panel}>
+          <p className="text-sm text-[#D84A4A] dark:text-rose-300">{reportTemplatesError}</p>
+        </div>
+      ) : reportTemplates.length === 0 ? (
+        <div className={panel}>
+          <div className="flex flex-col items-center py-4 text-center">
+            <div className="h-20 w-32 text-[#7B879C] dark:text-[#8CA0BE]">
+              <EmptyStateIllustration className="h-full w-full" />
+            </div>
+            <p className="mt-3 text-sm font-semibold text-[#08152E] dark:text-white">No report templates yet</p>
+            <p className="mt-2 max-w-sm text-sm text-[#7B879C] dark:text-[#8CA0BE]">
+              Import a structured template JSON (front matter + sections) to make it available to every project.
+            </p>
+          </div>
+        </div>
+      ) : (
+        <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
+          {reportTemplates.map((template) => (
+            <div key={template.id} className="rounded-[28px] border-2 border-[#D5E0EC] bg-white p-5 dark:border-[#20304D] dark:bg-[#091326]">
+              <div className="flex items-start justify-between gap-2">
+                <div>
+                  <p className="text-xs uppercase tracking-[0.24em] text-[#7B879C] dark:text-[#8CA0BE]">{template.disciplineTag || "General"}</p>
+                  <h3 className="mt-1 text-lg font-semibold text-[#08152E] dark:text-white">{template.name}</h3>
+                </div>
+                <span className={`rounded-full px-2 py-0.5 text-[0.65rem] uppercase tracking-[0.2em] ${template.isActive ? "bg-[#159A6A]/10 text-[#159A6A] dark:bg-emerald-400/10 dark:text-emerald-300" : "bg-[#EAF1F8] text-[#7B879C] dark:bg-[#101D34] dark:text-[#8CA0BE]"}`}>
+                  {template.isActive ? "Active" : "Inactive"}
+                </span>
+              </div>
+              <p className="mt-2 text-sm text-[#536078] dark:text-[#8CA0BE]">{template.description || `${template.sections.sections.length} sections`}</p>
+              <p className="mt-3 text-xs text-[#7B879C] dark:text-[#8CA0BE]">{template.sections.sections.length} sections · {template.code}</p>
+              <div className="mt-5 flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => void toggleReportTemplateActive(template.id, template.isActive)}
+                  disabled={reportBusyId === template.id}
+                  className="rounded-2xl border border-rose-300 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-700 hover:bg-rose-100 disabled:opacity-50 dark:border-rose-900 dark:bg-rose-950/30 dark:text-rose-300 dark:hover:bg-rose-900/40"
+                >
+                  {template.isActive ? "Deactivate" : "Activate"}
+                </button>
+              </div>
+              <p className="mt-3 text-[10px] uppercase tracking-[0.18em] text-[#7B879C] dark:text-[#8CA0BE]">
+                To generate: open a project → Technical reports → New report.
+              </p>
+            </div>
+          ))}
+        </div>
+      )}
 
       {previewTemplate && (
         <div

@@ -54,6 +54,12 @@ export default async function ProjectLayout({ children, params }: ProjectLayoutP
               Documents
             </Link>
             <Link
+              href={`${basePath}/technical-reports`}
+              className="rounded-full border border-slate-800 bg-slate-900 px-4 py-2 text-sm text-slate-200 transition hover:bg-slate-800"
+            >
+              Technical Reports
+            </Link>
+            <Link
               href={`${basePath}/client-preview`}
               className="rounded-full border border-slate-800 bg-slate-900 px-4 py-2 text-sm text-slate-200 transition hover:bg-slate-800"
             >

@@ -89,3 +89,11 @@ export const findingIdParamsSchema = z.object({
 export const inspectionIdParamsSchema = z.object({
   inspectionId: z.string().uuid("A valid inspection ID is required."),
 }).strict();
+
+export const reportTemplateIdParamsSchema = z.object({
+  reportTemplateId: z.string().uuid("A valid report template ID is required."),
+}).strict();
+
+export const technicalReportIdParamsSchema = z.object({
+  reportId: z.string().uuid("A valid report ID is required."),
+}).strict();

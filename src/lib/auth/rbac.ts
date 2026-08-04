@@ -34,7 +34,10 @@ export type Capability =
   | "email-templates:manage"
   | "library:manage"
   | "imports:manage"
-  | "entitlements:manage";
+  | "entitlements:manage"
+  | "report-templates:manage"
+  | "technical-reports:generate"
+  | "technical-reports:delete";
 
 const ALL_CAPABILITIES: Capability[] = [
   "company:manage",
@@ -61,6 +64,9 @@ const ALL_CAPABILITIES: Capability[] = [
   "library:manage",
   "imports:manage",
   "entitlements:manage",
+  "report-templates:manage",
+  "technical-reports:generate",
+  "technical-reports:delete",
 ];
 
 const ROLE_CAPABILITIES: Record<UserRole, Capability[]> = {
@@ -88,9 +94,14 @@ const ROLE_CAPABILITIES: Record<UserRole, Capability[]> = {
     "library:manage",
     "imports:manage",
     "entitlements:manage",
+    "report-templates:manage",
+    "technical-reports:generate",
+    "technical-reports:delete",
   ],
   // "generate and download" (section 21): full generate access, no delete, no template management.
   // Phase 7 section 31: "search, add to BOQ, create and edit company items, import BOQ items".
+  // Technical reports: can generate (fill in and produce a report for a project) but not manage the
+  // template library itself — mirrors the documents:generate / templates:manage split above.
   QUANTITY_SURVEYOR: [
     "projects:create",
     "projects:update",
@@ -102,6 +113,7 @@ const ROLE_CAPABILITIES: Record<UserRole, Capability[]> = {
     "documents:download",
     "library:manage",
     "imports:manage",
+    "technical-reports:generate",
   ],
   // "generate internal and approved client outputs where allowed" (section 21): same generate
   // capability as QUANTITY_SURVEYOR — the "where allowed" nuance is the lock-required rule
@@ -118,6 +130,7 @@ const ROLE_CAPABILITIES: Record<UserRole, Capability[]> = {
     "documents:download",
     "library:manage",
     "imports:manage",
+    "technical-reports:generate",
   ],
   // Phase 7 section 31: "search, create technical items, edit technical specifications" — no import access.
   DESIGNER: ["files:manage", "review:comment", "library:manage"],

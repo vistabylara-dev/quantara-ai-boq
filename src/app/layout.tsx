@@ -5,8 +5,32 @@ import { THEME_MODE_KEY } from "@/lib/theme";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Quantara AI BOQ",
-  description: "Enterprise quantity intelligence dashboard foundation.",
+  title: {
+    template: "%s | Quantara AI BOQ",
+    default: "Quantara AI BOQ - Advanced Quantity Intelligence & GEO AI",
+  },
+  description: "Enterprise-grade AI-powered Bill of Quantities (BOQ) management platform by Vista By Lara. Seamlessly manage projects with advanced Geo AI and structural intelligence.",
+  keywords: ["AI BOQ", "Quantity Surveying", "Construction AI", "Geo AI", "Dubai Construction Tech", "Vista By Lara"],
+  authors: [{ name: "Vista By Lara", url: "https://www.vistabylara.com" }],
+  creator: "Vista By Lara",
+  publisher: "Vista By Lara",
+  openGraph: {
+    title: "Quantara AI BOQ - Advanced Quantity Intelligence",
+    description: "Enterprise-grade AI-powered Bill of Quantities (BOQ) management platform by Vista By Lara.",
+    url: "https://www.vistabylara.com",
+    siteName: "Quantara AI",
+    locale: "en_AE",
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Quantara AI BOQ",
+    description: "Enterprise-grade AI-powered Bill of Quantities (BOQ) management platform.",
+    creator: "@vistabylara",
+  },
+  alternates: {
+    canonical: "https://www.vistabylara.com",
+  },
 };
 
 /**

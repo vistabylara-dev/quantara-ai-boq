@@ -163,6 +163,7 @@ export default function TemplatesPage() {
   const [reportImportBusy, setReportImportBusy] = useState(false);
   const [reportImportError, setReportImportError] = useState<string | null>(null);
   const [reportBusyId, setReportBusyId] = useState<string | null>(null);
+  const [reportStarterBusy, setReportStarterBusy] = useState(false);
   const reportFileInputRef = useRef<HTMLInputElement>(null);
 
   const loadReportTemplates = useCallback(async (signal?: AbortSignal) => {
@@ -273,6 +274,19 @@ export default function TemplatesPage() {
       setReportImportError(getApiErrorMessage(error));
     } finally {
       setReportBusyId(null);
+    }
+  }, [loadReportTemplates]);
+
+  const installStarterReportTemplate = useCallback(async () => {
+    setReportStarterBusy(true);
+    setReportImportError(null);
+    try {
+      await apiClient.post("/api/report-templates/starter");
+      await loadReportTemplates();
+    } catch (error) {
+      setReportImportError(getApiErrorMessage(error));
+    } finally {
+      setReportStarterBusy(false);
     }
   }, [loadReportTemplates]);
 
@@ -670,7 +684,15 @@ export default function TemplatesPage() {
             and pick one to generate a filled-in report.
           </p>
         </div>
-        <div>
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => void installStarterReportTemplate()}
+            disabled={reportStarterBusy}
+            className="rounded-2xl border border-[#D5E0EC] bg-[#EAF1F8] px-4 py-2 text-sm font-semibold text-[#08152E] hover:bg-white disabled:opacity-50 dark:border-[#20304D] dark:bg-[#101D34] dark:text-[#F4F8FF] dark:hover:bg-[#091326]"
+          >
+            {reportStarterBusy ? "Adding…" : "Add starter template"}
+          </button>
           <input
             ref={reportFileInputRef}
             type="file"
@@ -719,7 +741,7 @@ export default function TemplatesPage() {
             </div>
             <p className="mt-3 text-sm font-semibold text-[#08152E] dark:text-white">No report templates yet</p>
             <p className="mt-2 max-w-sm text-sm text-[#7B879C] dark:text-[#8CA0BE]">
-              Import a structured template JSON (front matter + sections) to make it available to every project.
+              Click &quot;Add starter template&quot; above for a ready-made FM/technical condition report — or import your own structured template JSON (front matter + sections).
             </p>
           </div>
         </div>

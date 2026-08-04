@@ -22,6 +22,8 @@ export async function GET(request: Request) {
       disciplineId: url.searchParams.get("disciplineId") ?? undefined,
       categoryId: url.searchParams.get("categoryId") ?? undefined,
       hierarchyNodeId: url.searchParams.get("hierarchyNodeId") ?? undefined,
+      manufacturerId: url.searchParams.get("manufacturerId") ?? undefined,
+      regionScope: (url.searchParams.get("regionScope") as never) ?? undefined,
       isPremium: url.searchParams.get("isPremium") === null ? undefined : url.searchParams.get("isPremium") === "true",
       search: url.searchParams.get("search") ?? undefined,
       page: url.searchParams.get("page") ? Number(url.searchParams.get("page")) : undefined,

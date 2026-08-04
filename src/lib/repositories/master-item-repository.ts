@@ -57,6 +57,10 @@ export type MasterItemListFilters = {
   categoryId?: string;
   /** MASTER-BOQ-1A — filters by any node in the new deep hierarchy (industry/discipline/system/category/subcategory/item family). */
   hierarchyNodeId?: string;
+  /** MASTER-SCALE-1A — items with at least one verified manufacturer product model. */
+  manufacturerId?: string;
+  /** MASTER-SCALE-1A — items with a regional applicability row for this scope. */
+  regionScope?: "UAE" | "GCC" | "INTERNATIONAL" | "COUNTRY_SPECIFIC";
   isPremium?: boolean;
   search?: string;
   page?: number;
@@ -77,6 +81,10 @@ export async function listMasterItems(filters: MasterItemListFilters) {
     ...(filters.disciplineId ? { disciplineId: filters.disciplineId } : {}),
     ...(filters.categoryId ? { categoryId: filters.categoryId } : {}),
     ...(hierarchyNodeIds ? { hierarchyNodeId: { in: hierarchyNodeIds } } : {}),
+    ...(filters.manufacturerId
+      ? { versions: { some: { productModels: { some: { productSeries: { manufacturerId: filters.manufacturerId } } } } } }
+      : {}),
+    ...(filters.regionScope ? { regionalApplicability: { some: { scope: filters.regionScope } } } : {}),
     ...(filters.isPremium !== undefined ? { isPremium: filters.isPremium } : {}),
     ...(filters.search
       ? {

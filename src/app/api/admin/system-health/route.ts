@@ -27,7 +27,7 @@ export async function GET() {
     // so the owner can match this against the correct project/database in their Postgres
     // provider's console without ever seeing a connection string.
     const [identity] = await prisma.$queryRaw<{ current_database: string; current_schema: string }[]>`
-      SELECT current_database(), current_schema()
+      SELECT current_database()::text AS current_database, current_schema()::text AS current_schema
     `;
 
     const [companyCount, userCount, projectCount, boqCount, masterItemCount, documentTemplateCount, generatedDocumentCount] = await Promise.all([

@@ -151,6 +151,43 @@ export async function canUsePremiumItemEffective(actor: EntitlementActor, master
     : deny(`${effective.planName} does not permit premium master-catalogue items.`);
 }
 
+export type MasterItemViewAccess = {
+  allowed: boolean;
+  /** True only for a real (non-simulating) PLATFORM_OWNER — the signal a route uses to attach admin-only fields and skip the commercial lock. */
+  isOwnerView: boolean;
+  source: EffectiveSource;
+  simulationMode: SimulationMode | null;
+};
+
+/**
+ * ADMIN-DATA-ACCESS-1 — the centralized "can this actor view this data-library
+ * item's full detail" policy (spec section "CENTRAL AUTHORIZATION RULE").
+ * Mirrors canUsePremiumItemEffective's real/owner-override/simulation branches
+ * exactly (never more permissive for a real company user than that function),
+ * but also reports whether this is a genuine unrestricted owner view so a
+ * route can safely attach internal/administrative fields — a plain boolean
+ * would lose that distinction.
+ */
+export async function getMasterItemViewAccessEffective(actor: EntitlementActor, masterItemId: string): Promise<MasterItemViewAccess> {
+  const effective = await getEffectiveEntitlements(actor);
+  const base = { source: effective.source, simulationMode: effective.simulationMode };
+
+  if (effective.source === "owner-override") {
+    return { allowed: true, isOwnerView: true, ...base };
+  }
+
+  const item = await prisma.masterItem.findUnique({ where: { id: masterItemId }, select: { isPremium: true } });
+  if (!item) return { allowed: false, isOwnerView: false, ...base };
+  if (!item.isPremium) return { allowed: true, isOwnerView: false, ...base };
+
+  if (effective.source === "real") {
+    const check = await canUsePremiumItemReal(actor.companyId, masterItemId);
+    return { allowed: check.allowed, isOwnerView: false, ...base };
+  }
+
+  return { allowed: effective.simulationMode === "PRO", isOwnerView: false, ...base };
+}
+
 /**
  * Hard gate (throws) for full technical detail / copying a master item —
  * owner-override and PRO simulation bypass the underlying real check

@@ -1,12 +1,14 @@
 import { CompanyLibrarySourceType } from "@prisma/client";
 import type { CurrentActor } from "@/lib/auth/current-actor";
+import type { PlatformActor } from "@/lib/auth/platform-authorization";
 import { requireCapability } from "@/lib/auth/rbac";
 import { prisma } from "@/lib/db/prisma";
-import { NotFoundError } from "@/lib/errors/app-error";
+import { NotFoundError, PermissionDeniedError } from "@/lib/errors/app-error";
 import { companyHasPackageAccessForItem } from "@/lib/entitlements/package-entitlement-service";
 import { recordPremiumItemUnlock } from "@/lib/entitlements/entitlement-service";
 import { assertMasterItemAccessEffective } from "@/lib/entitlements/effective-entitlement-service";
 import { getMasterItemRecord } from "@/lib/repositories/master-item-repository";
+import { recordPlatformActionAudit } from "@/lib/repositories/platform-action-audit-repository";
 import {
   createLibraryItem,
   createVariant,
@@ -18,6 +20,7 @@ import {
   recordItemUsage,
   setLibraryItemActive,
   setLibraryItemFavorite,
+  toLibraryItemDTO,
   updateLibraryItem,
   type CreateLibraryItemInput,
   type LibraryItemListFilters,
@@ -30,6 +33,36 @@ export async function listLibraryItemsForCompany(actor: CurrentActor, filters: L
 
 export async function getLibraryItemForCompany(actor: CurrentActor, itemId: string) {
   return getLibraryItem(actor.companyId, itemId);
+}
+
+/**
+ * ADMIN-DATA-ACCESS-1 — cross-tenant, owner-only operational inspection of a
+ * company's library item, for support/QA/import-validation. Deliberately not
+ * cross-tenant for anyone else: a normal company user must keep using
+ * getLibraryItemForCompany above, which stays hard-scoped to actor.companyId.
+ * Returns a safe company name, never the full Company record.
+ */
+export async function getLibraryItemForOwner(owner: PlatformActor, itemId: string) {
+  if (owner.platformRole !== "PLATFORM_OWNER") {
+    throw new PermissionDeniedError("Cross-tenant library item inspection is restricted to the platform owner.");
+  }
+  const row = await prisma.companyLibraryItem.findUnique({ where: { id: itemId } });
+  if (!row) throw new NotFoundError("Company library item not found.");
+  const company = await prisma.company.findUnique({ where: { id: row.companyId }, select: { id: true, tradeName: true, legalName: true } });
+
+  await recordPlatformActionAudit({
+    actorUserId: owner.userId,
+    actorPlatformRole: owner.platformRole,
+    action: "ADMIN_ITEM_VIEWED",
+    targetType: "CompanyLibraryItem",
+    targetId: itemId,
+    metadata: { owningCompanyId: row.companyId },
+  });
+
+  return {
+    ...toLibraryItemDTO(row),
+    owningCompany: company ? { id: company.id, name: company.tradeName || company.legalName } : null,
+  };
 }
 
 export async function createManualLibraryItem(actor: CurrentActor, input: Omit<CreateLibraryItemInput, "sourceType" | "sourceMasterItemId" | "sourcePackageId">) {

@@ -4,6 +4,9 @@ import Link from "next/link";
 import { useCallback, useEffect, useState, use } from "react";
 import { apiClient, getApiErrorMessage } from "@/lib/api/client";
 
+type AdminVersion = { id: string; versionNumber: number; status: string; effectiveDate: string | null; name: string; primaryUnit: string };
+type AdminClassification = { system: string; code: string; label: string; isPrimary: boolean };
+
 type ItemDetail = {
   id: string;
   itemCode: string;
@@ -20,6 +23,18 @@ type ItemDetail = {
   classifications?: { system: string; code: string; label: string; isPrimary: boolean }[];
   regionalApplicability?: { scope: string; countryCode: string }[];
   publishedVersion?: { versionNumber: number; specificationTemplate: string; inclusionTemplate: string; exclusionTemplate: string } | null;
+  isOwnerView?: boolean;
+  simulationMode?: string | null;
+  admin?: {
+    status: string;
+    isPremium: boolean;
+    sourceBatchId: string | null;
+    version: number;
+    versions: AdminVersion[];
+    classifications: AdminClassification[];
+    hierarchyBreadcrumb: { id: string; name: string; nodeType: string }[];
+    attributeValues: { id: string; valueText: string | null; valueNumber: number | null; unit: string | null; fieldDefinition: { label: string } }[];
+  };
 };
 
 type PageProps = { params: Promise<{ itemId: string }> };
@@ -65,6 +80,19 @@ export default function DataLibraryItemPage(props: PageProps) {
     }
   }, [params.itemId]);
 
+  const exitSimulation = useCallback(async () => {
+    setIsSaving(true);
+    setActionMessage(null);
+    try {
+      await apiClient.delete("/api/admin/simulation");
+      await load();
+    } catch (error) {
+      setActionMessage(getApiErrorMessage(error));
+    } finally {
+      setIsSaving(false);
+    }
+  }, [load]);
+
   if (isLoading) {
     return (
       <div className="rounded-[32px] border border-slate-800 bg-slate-950 p-8 text-slate-300">
@@ -86,6 +114,20 @@ export default function DataLibraryItemPage(props: PageProps) {
 
   return (
     <div className="space-y-6">
+      {item.simulationMode && (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-amber-700 bg-amber-950/40 px-5 py-3 text-sm text-amber-200">
+          <span>CUSTOMER SIMULATION ACTIVE — viewing as: {item.simulationMode}</span>
+          <button type="button" onClick={() => void exitSimulation()} disabled={isSaving} className="rounded-xl border border-amber-600 bg-amber-900/60 px-3 py-1.5 text-xs font-semibold text-white hover:bg-amber-900 disabled:opacity-50">
+            Exit Simulation
+          </button>
+        </div>
+      )}
+      {item.isOwnerView && (
+        <div className="rounded-2xl border border-sky-700 bg-sky-950/40 px-5 py-3 text-sm text-sky-200">
+          Platform Owner View — operational inspection access, not a customer entitlement.
+        </div>
+      )}
+
       <div className="rounded-[32px] border border-slate-800 bg-slate-950 p-8">
         <Link href="/data-library" className="text-xs text-slate-500 hover:text-slate-300">← Back to Data Library</Link>
         <div className="mt-3 flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
@@ -174,6 +216,58 @@ export default function DataLibraryItemPage(props: PageProps) {
                     </span>
                   ))}
                 </div>
+              )}
+            </div>
+          )}
+
+          {item.admin && (
+            <div className="rounded-[32px] border border-sky-900 bg-sky-950/20 p-8">
+              <h2 className="text-xl font-semibold text-white">Administrative detail</h2>
+              <div className="mt-4 grid gap-2 sm:grid-cols-3">
+                <div className="rounded-xl border border-sky-900 bg-slate-950 px-4 py-2"><p className="text-xs text-slate-500">Status</p><p className="text-sm text-slate-200">{item.admin.status}</p></div>
+                <div className="rounded-xl border border-sky-900 bg-slate-950 px-4 py-2"><p className="text-xs text-slate-500">Item revision</p><p className="text-sm text-slate-200">v{item.admin.version}</p></div>
+                <div className="rounded-xl border border-sky-900 bg-slate-950 px-4 py-2"><p className="text-xs text-slate-500">Source batch</p><p className="text-sm text-slate-200">{item.admin.sourceBatchId ? item.admin.sourceBatchId.slice(0, 8) + "…" : "Untraceable"}</p></div>
+              </div>
+
+              {item.admin.hierarchyBreadcrumb.length > 0 && (
+                <p className="mt-4 text-xs text-slate-500">
+                  Hierarchy: <span className="text-slate-300">{item.admin.hierarchyBreadcrumb.map((n) => n.name).join(" → ")}</span>
+                </p>
+              )}
+
+              <p className="mt-5 text-sm font-semibold text-white">Versions ({item.admin.versions.length})</p>
+              {item.admin.versions.length === 0 ? (
+                <p className="mt-1 text-xs text-slate-500">No versions.</p>
+              ) : (
+                <ul className="mt-2 space-y-1">
+                  {item.admin.versions.map((v) => (
+                    <li key={v.id} className="text-xs text-slate-400">v{v.versionNumber} — {v.status}{v.effectiveDate ? ` (effective ${new Date(v.effectiveDate).toLocaleDateString()})` : ""}</li>
+                  ))}
+                </ul>
+              )}
+
+              <p className="mt-5 text-sm font-semibold text-white">All classifications ({item.admin.classifications.length})</p>
+              {item.admin.classifications.length === 0 ? (
+                <p className="mt-1 text-xs text-slate-500">Not defined.</p>
+              ) : (
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {item.admin.classifications.map((c) => (
+                    <span key={`${c.system}-${c.code}`} className="rounded-full border border-sky-800 bg-slate-950 px-3 py-1 text-xs text-slate-300">
+                      {c.system.replace(/_/g, " ")}: {c.code}{c.isPrimary ? " (primary)" : ""}
+                    </span>
+                  ))}
+                </div>
+              )}
+
+              <p className="mt-5 text-sm font-semibold text-white">Technical attributes ({item.admin.attributeValues.length})</p>
+              {item.admin.attributeValues.length === 0 ? (
+                <p className="mt-1 text-xs text-slate-500">Not defined.</p>
+              ) : (
+                <ul className="mt-2 space-y-1">
+                  {item.admin.attributeValues.map((a) => (
+                    <li key={a.id} className="text-xs text-slate-400">{a.fieldDefinition.label}: {a.valueText ?? a.valueNumber ?? "—"}{a.unit ? ` ${a.unit}` : ""}</li>
+                  ))}
+                </ul>
               )}
             </div>
           )}

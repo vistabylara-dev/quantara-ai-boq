@@ -397,8 +397,14 @@ export async function setAttributeValue(owner: PlatformActor, input: SetAttribut
 }
 
 /** Full detail for the owner-only admin surface — everything a customer detail view withholds. */
-export async function getMasterItemAdminDetail(owner: PlatformActor, masterItemId: string) {
-  requireOwner(owner);
+/**
+ * The actual query logic behind the owner admin detail view — deliberately
+ * separate from any authorization check, so a second, already-independently-
+ * authorized call site (the data-library item route's owner view — see
+ * effective-entitlement-service.ts's getMasterItemViewAccessEffective) can
+ * reuse the exact same data instead of duplicating these six queries.
+ */
+export async function buildMasterItemAdminDetail(masterItemId: string) {
   const item = await getMasterItemRecord(masterItemId);
   const [versions, classifications, regionalApplicability, drawingProfile, attributeValues, breadcrumb] = await Promise.all([
     prisma.masterItemVersion.findMany({ where: { masterItemId }, orderBy: { versionNumber: "desc" } }),
@@ -418,4 +424,9 @@ export async function getMasterItemAdminDetail(owner: PlatformActor, masterItemI
     attributeValues,
     hierarchyBreadcrumb: breadcrumb,
   };
+}
+
+export async function getMasterItemAdminDetail(owner: PlatformActor, masterItemId: string) {
+  requireOwner(owner);
+  return buildMasterItemAdminDetail(masterItemId);
 }

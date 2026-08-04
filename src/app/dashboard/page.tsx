@@ -259,9 +259,19 @@ export default function DashboardPage() {
           <div className="cyber-border cyber-panel p-5">
             <h2 className="text-white text-[10px] uppercase tracking-widest font-bold mb-4 border-b border-[#00F0FF]/30 pb-2">System Directives</h2>
             <nav className="grid grid-cols-2 gap-2">
-              <QuickActionButton href="/projects/new" label="New Project" icon={FolderKanban} />
-              <QuickActionButton href="/clients/new" label="New Client" icon={Users} />
-              <QuickActionButton href="/catalogue" label="Catalogue" icon={Layers} />
+              <QuickActionButton href="/clients/new" label="Create Client" icon={Users} />
+              <QuickActionButton 
+                href="/catalogue" 
+                label="Catalogue" 
+                icon={Layers} 
+                image="/images/dashboard/cyber_catalogue.jpg" 
+              />
+              <QuickActionButton 
+                href="/suppliers" 
+                label="Manage Suppliers" 
+                icon={Truck} 
+                image="/images/dashboard/cyber_suppliers.jpg" 
+              />
               <QuickActionButton href="/templates" label="Templates" icon={BookOpen} />
             </nav>
           </div>

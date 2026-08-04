@@ -61,11 +61,23 @@ async function resolveMasterItemDefaults(actor: CurrentActor, masterItemId: stri
   // version + classification/region at the moment this item is added, so
   // editing this BOQ line never touches the master item, and a later master
   // item edit never retroactively changes this already-created line.
-  const [publishedVersion, classifications, regionalApplicability] = await Promise.all([
-    prisma.masterItemVersion.findFirst({ where: { masterItemId, status: "PUBLISHED" } }),
-    prisma.masterItemClassification.findMany({ where: { masterItemId }, select: { system: true, code: true, label: true, isPrimary: true } }),
-    prisma.masterItemRegionalApplicability.findMany({ where: { masterItemId }, select: { scope: true, countryCode: true } }),
-  ]);
+  // Defensive: the MASTER-BOQ-1A tables ship in a code deploy that lands
+  // before its `prisma migrate deploy` is run against production (Vercel's
+  // build never runs migrations automatically) — until that migration runs,
+  // fall back to no snapshot rather than breaking this core, previously-
+  // working "add item to BOQ" action.
+  let publishedVersion: { id: string; versionNumber: number; name: string; specificationTemplate: string; primaryUnit: string } | null = null;
+  let classifications: unknown[] = [];
+  let regionalApplicability: unknown[] = [];
+  try {
+    [publishedVersion, classifications, regionalApplicability] = await Promise.all([
+      prisma.masterItemVersion.findFirst({ where: { masterItemId, status: "PUBLISHED" } }),
+      prisma.masterItemClassification.findMany({ where: { masterItemId }, select: { system: true, code: true, label: true, isPrimary: true } }),
+      prisma.masterItemRegionalApplicability.findMany({ where: { masterItemId }, select: { scope: true, countryCode: true } }),
+    ]);
+  } catch {
+    // Tables not migrated yet — see comment above.
+  }
 
   return {
     itemCode: master.itemCode,

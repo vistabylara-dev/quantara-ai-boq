@@ -110,31 +110,41 @@ export async function listMasterItems(filters: MasterItemListFilters) {
  */
 export async function getMasterItemCustomerDetail(itemId: string) {
   const row = await getMasterItemRecord(itemId);
-  const [classifications, regionalApplicability, publishedVersion, hierarchyBreadcrumb] = await Promise.all([
-    prisma.masterItemClassification.findMany({
-      where: { masterItemId: itemId },
-      select: { system: true, code: true, label: true, isPrimary: true },
-    }),
-    prisma.masterItemRegionalApplicability.findMany({
-      where: { masterItemId: itemId },
-      select: { scope: true, countryCode: true },
-    }),
-    prisma.masterItemVersion.findFirst({
-      where: { masterItemId: itemId, status: "PUBLISHED" },
-      select: { versionNumber: true, specificationTemplate: true, inclusionTemplate: true, exclusionTemplate: true, effectiveDate: true },
-    }),
-    row.hierarchyNodeId
-      ? prisma.masterHierarchyNode.findUnique({ where: { id: row.hierarchyNodeId }, select: { id: true, code: true, name: true, nodeType: true } })
-      : Promise.resolve(null),
-  ]);
 
-  return {
-    ...toMasterItemDTO(row),
-    hierarchyNode: hierarchyBreadcrumb,
-    classifications,
-    regionalApplicability,
-    publishedVersion,
-  };
+  try {
+    const [classifications, regionalApplicability, publishedVersion, hierarchyNode] = await Promise.all([
+      prisma.masterItemClassification.findMany({
+        where: { masterItemId: itemId },
+        select: { system: true, code: true, label: true, isPrimary: true },
+      }),
+      prisma.masterItemRegionalApplicability.findMany({
+        where: { masterItemId: itemId },
+        select: { scope: true, countryCode: true },
+      }),
+      prisma.masterItemVersion.findFirst({
+        where: { masterItemId: itemId, status: "PUBLISHED" },
+        select: { versionNumber: true, specificationTemplate: true, inclusionTemplate: true, exclusionTemplate: true, effectiveDate: true },
+      }),
+      row.hierarchyNodeId
+        ? prisma.masterHierarchyNode.findUnique({ where: { id: row.hierarchyNodeId }, select: { id: true, code: true, name: true, nodeType: true } })
+        : Promise.resolve(null),
+    ]);
+
+    return { ...toMasterItemDTO(row), hierarchyNode, classifications, regionalApplicability, publishedVersion };
+  } catch {
+    // MASTER-BOQ-1A tables ship in a code deploy that lands before the
+    // corresponding `prisma migrate deploy` is run against production
+    // (Vercel's build never runs migrations automatically) — until that
+    // migration runs, degrade to the pre-existing base fields rather than
+    // 500ing a previously-working item detail view.
+    return {
+      ...toMasterItemDTO(row),
+      hierarchyNode: null as { id: string; code: string; name: string; nodeType: string } | null,
+      classifications: [] as { system: string; code: string; label: string; isPrimary: boolean }[],
+      regionalApplicability: [] as { scope: string; countryCode: string }[],
+      publishedVersion: null as { versionNumber: number; specificationTemplate: string; inclusionTemplate: string; exclusionTemplate: string; effectiveDate: Date | null } | null,
+    };
+  }
 }
 
 /** Seed-time only. Idempotent on (disciplineId, itemCode). */

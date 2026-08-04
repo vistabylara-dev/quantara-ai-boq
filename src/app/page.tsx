@@ -399,27 +399,84 @@ export default function LandingPage() {
         </section>
 
         {/* SECTION 10: Pricing */}
-        <section id="pricing" className="py-24 bg-slate-50 dark:bg-[#030508]">
-          <div className="max-w-5xl mx-auto px-4 text-center">
-            <h2 className="text-3xl font-bold text-slate-900 dark:text-white mb-12">Simple, transparent pricing</h2>
-            <div className="max-w-sm mx-auto bg-white dark:bg-slate-900/80 p-8 rounded-3xl shadow-xl border border-slate-200 dark:border-slate-700 relative overflow-hidden backdrop-blur-sm">
-              <div className="absolute top-0 inset-x-0 h-1 bg-gradient-to-r from-blue-500 to-indigo-600" />
-              <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-2 mt-4">Early Access Plan</h3>
-              <div className="text-5xl font-extrabold text-slate-900 dark:text-white mb-2 mt-6 tracking-tight">
-                $49<span className="text-lg text-slate-500 dark:text-slate-400 font-medium">/mo</span>
+        <section id="pricing" className="py-24 bg-slate-50 dark:bg-[#030508] relative">
+          <div className="absolute inset-0 bg-[url('/noise.png')] opacity-10 mix-blend-overlay pointer-events-none" />
+          <div className="max-w-7xl mx-auto px-4 text-center relative z-10">
+            <h2 className="text-3xl md:text-4xl font-bold text-slate-900 dark:text-white mb-6">Simple, transparent pricing</h2>
+            <p className="text-lg text-slate-600 dark:text-slate-400 mb-16 max-w-2xl mx-auto">Choose the plan that fits your business. Start with a 14-day free trial on any tier.</p>
+            
+            <div className="grid lg:grid-cols-3 gap-8 items-center max-w-6xl mx-auto">
+              
+              {/* Starter Package */}
+              <div className="bg-white dark:bg-slate-900/40 p-8 rounded-3xl border border-slate-200 dark:border-slate-800 backdrop-blur-sm shadow-sm transition-transform hover:-translate-y-1 duration-300 relative text-left">
+                <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-2">Starter</h3>
+                <p className="text-sm text-slate-500 dark:text-slate-400 mb-6">For freelancers and small contractors.</p>
+                <div className="text-4xl font-extrabold text-slate-900 dark:text-white mb-2 tracking-tight">
+                  AED 149<span className="text-lg text-slate-500 dark:text-slate-400 font-medium">/mo</span>
+                </div>
+                <ul className="space-y-4 text-sm text-slate-700 dark:text-slate-300 mt-8 mb-8 border-t border-slate-100 dark:border-slate-800 pt-8">
+                  <li className="flex items-start gap-3"><span className="text-blue-500 mt-0.5">✓</span> 1 User, 1 Company</li>
+                  <li className="flex items-start gap-3"><span className="text-blue-500 mt-0.5">✓</span> 2 Projects</li>
+                  <li className="flex items-start gap-3"><span className="text-blue-500 mt-0.5">✓</span> 10 AI BOQs / month</li>
+                  <li className="flex items-start gap-3"><span className="text-blue-500 mt-0.5">✓</span> 5 Technical Reports / month</li>
+                  <li className="flex items-start gap-3"><span className="text-blue-500 mt-0.5">✓</span> 5 Watermark-Free Downloads</li>
+                  <li className="flex items-start gap-3"><span className="text-blue-500 mt-0.5">✓</span> PDF & Excel Export</li>
+                </ul>
+                <a href="/register?plan=starter" className="block w-full text-center rounded-xl bg-slate-100 dark:bg-slate-800 px-4 py-3 text-sm font-semibold text-slate-900 dark:text-white hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors border border-slate-200 dark:border-slate-700 shadow-sm">
+                  Start Free Trial
+                </a>
               </div>
-              <p className="text-sm text-slate-600 dark:text-slate-400 mb-8 pb-8 border-b border-slate-100 dark:border-slate-800">
-                14-day free trial. No card required to start.
-              </p>
-              <ul className="space-y-4 text-left text-sm text-slate-700 dark:text-slate-300 mb-10">
-                <li className="flex items-center gap-3"><span className="text-blue-500 dark:text-blue-400">✓</span> Unlimited plain-English queries</li>
-                <li className="flex items-center gap-3"><span className="text-blue-500 dark:text-blue-400">✓</span> QuickBooks & Xero support</li>
-                <li className="flex items-center gap-3"><span className="text-blue-500 dark:text-blue-400">✓</span> Weekly check-ins & warnings</li>
-                <li className="flex items-center gap-3"><span className="text-blue-500 dark:text-blue-400">✓</span> Cancel anytime</li>
-              </ul>
-              <a href="/register" className="block w-full rounded-xl bg-blue-600 px-4 py-3.5 text-sm font-semibold text-white hover:bg-blue-700 transition-colors shadow-md shadow-blue-500/20">
-                Start Free Trial
-              </a>
+
+              {/* Professional Package (Most Popular) */}
+              <div className="bg-white dark:bg-slate-900/80 p-8 rounded-3xl shadow-2xl shadow-blue-900/10 dark:shadow-blue-900/30 border-2 border-blue-500 dark:border-blue-500 relative overflow-hidden backdrop-blur-md transform lg:-translate-y-4 text-left z-10">
+                <div className="absolute top-0 inset-x-0 h-1.5 bg-gradient-to-r from-blue-400 to-indigo-500" />
+                <div className="absolute top-0 right-8 -translate-y-1">
+                  <span className="bg-blue-600 text-white text-[10px] font-bold uppercase tracking-widest py-1 px-3 rounded-b-lg shadow-sm">
+                    Most Popular
+                  </span>
+                </div>
+                <h3 className="text-2xl font-bold text-slate-900 dark:text-white mb-2 mt-2 flex items-center gap-2">
+                  Professional
+                </h3>
+                <p className="text-sm text-slate-500 dark:text-slate-400 mb-6">Full power for growing teams.</p>
+                <div className="text-5xl font-extrabold text-blue-600 dark:text-blue-400 mb-2 tracking-tight drop-shadow-[0_0_15px_rgba(37,99,235,0.2)]">
+                  AED 399<span className="text-lg text-slate-500 dark:text-slate-400 font-medium text-slate-900 dark:text-white">/mo</span>
+                </div>
+                <ul className="space-y-4 text-sm text-slate-700 dark:text-slate-300 mt-8 mb-8 border-t border-slate-100 dark:border-slate-800 pt-8 font-medium">
+                  <li className="flex items-start gap-3"><span className="text-blue-600 dark:text-blue-400 mt-0.5">✓</span> 5 Users, 1 Company</li>
+                  <li className="flex items-start gap-3"><span className="text-blue-600 dark:text-blue-400 mt-0.5">✓</span> 10 Projects</li>
+                  <li className="flex items-start gap-3"><span className="text-blue-600 dark:text-blue-400 mt-0.5">✓</span> 50 AI BOQs / month</li>
+                  <li className="flex items-start gap-3"><span className="text-blue-600 dark:text-blue-400 mt-0.5">✓</span> 25 Technical Reports / month</li>
+                  <li className="flex items-start gap-3"><span className="text-blue-600 dark:text-blue-400 mt-0.5">✓</span> Full Industry Libraries</li>
+                  <li className="flex items-start gap-3"><span className="text-blue-600 dark:text-blue-400 mt-0.5">✓</span> AI BOQ & Tech Report Generators</li>
+                  <li className="flex items-start gap-3"><span className="text-blue-600 dark:text-blue-400 mt-0.5">✓</span> PDF, Excel, Word Export</li>
+                  <li className="flex items-start gap-3"><span className="text-blue-600 dark:text-blue-400 mt-0.5">✓</span> Company Branding & Usage Dashboard</li>
+                </ul>
+                <a href="/register?plan=pro" className="block w-full text-center rounded-xl bg-blue-600 px-4 py-3.5 text-sm font-bold text-white hover:bg-blue-700 transition-all shadow-[0_0_20px_rgba(37,99,235,0.4)] hover:shadow-[0_0_30px_rgba(37,99,235,0.6)]">
+                  Start Professional Trial
+                </a>
+              </div>
+
+              {/* Business Package */}
+              <div className="bg-white dark:bg-slate-900/40 p-8 rounded-3xl border border-slate-200 dark:border-slate-800 backdrop-blur-sm shadow-sm transition-transform hover:-translate-y-1 duration-300 relative text-left">
+                <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-2">Business</h3>
+                <p className="text-sm text-slate-500 dark:text-slate-400 mb-6">For large teams and enterprises.</p>
+                <div className="text-4xl font-extrabold text-slate-900 dark:text-white mb-2 tracking-tight">
+                  AED 899<span className="text-lg text-slate-500 dark:text-slate-400 font-medium">/mo</span>
+                </div>
+                <ul className="space-y-4 text-sm text-slate-700 dark:text-slate-300 mt-8 mb-8 border-t border-slate-100 dark:border-slate-800 pt-8">
+                  <li className="flex items-start gap-3"><span className="text-blue-500 mt-0.5">✓</span> 15 Users, 3 Companies</li>
+                  <li className="flex items-start gap-3"><span className="text-blue-500 mt-0.5">✓</span> Unlimited Projects (Fair Use)</li>
+                  <li className="flex items-start gap-3"><span className="text-blue-500 mt-0.5">✓</span> Higher AI & Report Limits</li>
+                  <li className="flex items-start gap-3"><span className="text-blue-500 mt-0.5">✓</span> Advanced AI capabilities</li>
+                  <li className="flex items-start gap-3"><span className="text-blue-500 mt-0.5">✓</span> Team Permissions & Workflows</li>
+                  <li className="flex items-start gap-3"><span className="text-blue-500 mt-0.5">✓</span> Audit Logs & Onboarding</li>
+                </ul>
+                <a href="/register?plan=business" className="block w-full text-center rounded-xl bg-slate-100 dark:bg-slate-800 px-4 py-3 text-sm font-semibold text-slate-900 dark:text-white hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors border border-slate-200 dark:border-slate-700 shadow-sm">
+                  Start Free Trial
+                </a>
+              </div>
+
             </div>
           </div>
         </section>

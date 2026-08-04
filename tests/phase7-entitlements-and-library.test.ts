@@ -95,10 +95,16 @@ describe("Phase 7: commercial entitlements + industry data platform (integration
   beforeAll(async () => {
     const discipline = await prisma.masterDiscipline.findUniqueOrThrow({ where: { key: "mechanical" } });
     mechanicalDisciplineId = discipline.id;
-    const items = await prisma.masterItem.findMany({ where: { disciplineId: discipline.id, isPremium: true }, take: 10, orderBy: { itemCode: "asc" } });
-    premiumItemIds = items.map((i) => i.id);
     const pkg = await prisma.industryDataPackage.findUniqueOrThrow({ where: { key: "mechanical-hvac-professional" } });
     mechanicalPackageId = pkg.id;
+    // MASTER-SCALE-1B grew the mechanical discipline well beyond the package's
+    // own item list (891 imported HVAC items were never added to
+    // IndustryDataPackageItem, correctly — no pricing/entitlement data was
+    // fabricated for them) — "first 10 premium items in the discipline" is no
+    // longer a valid proxy for "items in this package". Use the real
+    // association instead.
+    const packageItems = await prisma.industryDataPackageItem.findMany({ where: { packageId: pkg.id }, take: 10, orderBy: { sortOrder: "asc" } });
+    premiumItemIds = packageItems.map((i) => i.masterItemId);
   });
 
   afterAll(async () => {

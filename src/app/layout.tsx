@@ -7,16 +7,16 @@ import "./globals.css";
 export const metadata: Metadata = {
   title: {
     template: "%s | Quantara",
-    default: "Quantara: Plain-English Financial Insights for Small Businesses",
+    default: "Quantara: AI BOQ and Construction Estimating Platform",
   },
-  description: "Connect QuickBooks or Xero and turn business financial reports into clear explanations, cash-flow warnings and practical next steps with Quantara.",
-  keywords: ["Financial Insights", "Small Business Finance", "QuickBooks integration", "Xero integration", "Cash flow analysis", "Financial Co-pilot"],
-  authors: [{ name: "Vista By Lara", url: "https://quantara.vistabylara.com" }],
-  creator: "Vista By Lara",
-  publisher: "Vista By Lara",
+  description: "Create structured BOQs, organize project items, manage templates and pricing data, and generate professional construction documents with Quantara.",
+  keywords: ["BOQ", "Construction Estimating", "Quantity Surveying", "Project Extraction", "Construction Intelligence"],
+  authors: [{ name: "Quantara", url: "https://quantara.vistabylara.com" }],
+  creator: "Quantara",
+  publisher: "Quantara",
   openGraph: {
-    title: "Quantara: Plain-English Financial Insights for Small Businesses",
-    description: "Connect QuickBooks or Xero and turn business financial reports into clear explanations, cash-flow warnings and practical next steps with Quantara.",
+    title: "Quantara: AI BOQ and Construction Estimating Platform",
+    description: "Create structured BOQs, organize project items, manage templates and pricing data, and generate professional construction documents with Quantara.",
     url: "https://quantara.vistabylara.com",
     siteName: "Quantara",
     locale: "en_US",
@@ -24,9 +24,9 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: "Quantara: Plain-English Financial Insights for Small Businesses",
-    description: "Connect QuickBooks or Xero and turn business financial reports into clear explanations.",
-    creator: "@vistabylara",
+    title: "Quantara: AI BOQ and Construction Estimating Platform",
+    description: "Create structured BOQs, organize project items, manage templates and pricing data, and generate professional construction documents with Quantara.",
+    creator: "@quantara",
   },
   alternates: {
     canonical: "https://quantara.vistabylara.com",
@@ -69,7 +69,9 @@ export default function RootLayout({ children }: { children: ReactNode }) {
     <html lang="en">
       <body>
         <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
-        <ConditionalAppShell>{children}</ConditionalAppShell>
+        <ConditionalAppShell>
+          <main>{children}</main>
+        </ConditionalAppShell>
       </body>
     </html>
   );

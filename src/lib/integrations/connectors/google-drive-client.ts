@@ -57,7 +57,7 @@ export type GoogleTokenResponse = {
 };
 
 async function parseTokenResponse(response: Response): Promise<GoogleTokenResponse> {
-  const body = await response.json().catch(() => null);
+  const body = await response.json().catch(() => null) as any;
   if (!response.ok || !body || typeof body.access_token !== "string") {
     const message = body && typeof body.error_description === "string" ? body.error_description : `Google token request failed (${response.status}).`;
     throw new AppError("GOOGLE_DRIVE_TOKEN_ERROR", message, 502);
@@ -123,7 +123,7 @@ export async function listGoogleDriveFiles(accessToken: string, folderId?: strin
   const response = await fetch(`${DRIVE_FILES_ENDPOINT}?${params.toString()}`, {
     headers: { Authorization: `Bearer ${accessToken}` },
   });
-  const body = await response.json().catch(() => null);
+  const body = await response.json().catch(() => null) as any;
   if (!response.ok) {
     const message = body?.error?.message ?? `Google Drive files.list failed (${response.status}).`;
     throw new AppError("GOOGLE_DRIVE_API_ERROR", message, response.status === 401 ? 401 : 502);
@@ -140,7 +140,7 @@ export async function getGoogleDriveFileMetadata(accessToken: string, fileId: st
   const response = await fetch(`${DRIVE_FILES_ENDPOINT}/${fileId}?${params.toString()}`, {
     headers: { Authorization: `Bearer ${accessToken}` },
   });
-  const body = await response.json().catch(() => null);
+  const body = await response.json().catch(() => null) as any;
   if (!response.ok) {
     const message = body?.error?.message ?? `Google Drive files.get failed (${response.status}).`;
     throw new AppError("GOOGLE_DRIVE_API_ERROR", message, response.status === 401 ? 401 : 502);

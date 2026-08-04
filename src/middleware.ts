@@ -12,6 +12,15 @@ const PUBLIC_PAGE_PREFIXES = [
   "/reset-password",
   "/proposal",
   "/technical-report",
+  "/privacy",
+  "/terms",
+  "/data-processing",
+  "/cookie-policy",
+  "/acceptable-use",
+  "/subprocessors",
+  "/security",
+  "/contact-sales",
+  "/features",
   ADMIN_LOGIN_PAGE,
 ];
 
@@ -58,5 +67,5 @@ export function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"],
+  matcher: ["/((?!_next/static|_next/image|favicon.ico|robots.txt|sitemap.xml|manifest.webmanifest|.*\\\\.png|.*\\\\.jpg).*)"],
 };

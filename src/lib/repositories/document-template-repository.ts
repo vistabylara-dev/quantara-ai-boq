@@ -96,6 +96,23 @@ export async function createTemplate(companyId: string, input: DocumentTemplateW
       },
       include: templateInclude,
     });
+    // TEMPLATE-LINK-1 — company self-service creation is usable right away: version 1 is
+    // created already PUBLISHED with the exact config just submitted, mirroring
+    // email-template-repository.ts's createEmailTemplate. Document generation itself never
+    // requires a published version (resolveDocumentTemplateVersion falls back to the
+    // template's own live JSON), but a real version keeps the admin Template Centre's
+    // version history and usage tracking meaningful from the start.
+    await tx.documentTemplateVersion.create({
+      data: {
+        documentTemplateId: created.id,
+        versionNumber: 1,
+        status: "PUBLISHED",
+        styleConfigJson: created.styleConfigJson as Prisma.InputJsonValue,
+        contentConfigJson: created.contentConfigJson as Prisma.InputJsonValue,
+        effectiveDate: new Date(),
+        changeSummary: "Initial version.",
+      },
+    });
     await createAuditLog(companyId, {
       entityType: "DocumentTemplate",
       entityId: created.id,
@@ -146,6 +163,25 @@ export async function updateTemplate(companyId: string, templateId: string, inpu
       },
       include: templateInclude,
     });
+    // TEMPLATE-LINK-1 — a config change must never rewrite the version a previously generated
+    // document points to; instead retire the currently published version (if any) and publish
+    // a new one, mirroring email-template-repository.ts's updateEmailTemplate.
+    if (nextStyle !== undefined || nextContent !== undefined) {
+      const currentPublished = await tx.documentTemplateVersion.findFirst({ where: { documentTemplateId: updated.id, status: "PUBLISHED" } });
+      if (currentPublished) await tx.documentTemplateVersion.update({ where: { id: currentPublished.id }, data: { status: "RETIRED", retiredDate: new Date() } });
+      const latest = await tx.documentTemplateVersion.findFirst({ where: { documentTemplateId: updated.id }, orderBy: { versionNumber: "desc" } });
+      await tx.documentTemplateVersion.create({
+        data: {
+          documentTemplateId: updated.id,
+          versionNumber: (latest?.versionNumber ?? 0) + 1,
+          status: "PUBLISHED",
+          styleConfigJson: updated.styleConfigJson as Prisma.InputJsonValue,
+          contentConfigJson: updated.contentConfigJson as Prisma.InputJsonValue,
+          effectiveDate: new Date(),
+          changeSummary: "Updated via company self-service edit.",
+        },
+      });
+    }
     await createAuditLog(companyId, {
       entityType: "DocumentTemplate",
       entityId: updated.id,

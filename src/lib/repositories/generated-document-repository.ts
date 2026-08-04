@@ -5,6 +5,7 @@ import { createAuditLog } from "@/lib/repositories/audit-repository";
 
 const documentInclude = {
   template: true,
+  templateVersion: { select: { versionNumber: true } },
   generatedByUser: { select: { fullName: true } },
 } satisfies Prisma.GeneratedDocumentInclude;
 
@@ -17,6 +18,8 @@ export function toGeneratedDocumentDTO(row: DocumentRecord) {
     projectId: row.projectId,
     boqId: row.boqId,
     templateId: row.templateId,
+    templateVersionId: row.templateVersionId,
+    templateVersionNumber: row.templateVersion?.versionNumber ?? null,
     templateName: row.template.name,
     revisionNumber: row.revisionNumber,
     type: row.type,
@@ -40,6 +43,8 @@ export type CreateQueuedDocumentInput = {
   projectId: string;
   boqId: string;
   templateId: string;
+  /** TEMPLATE-LINK-1 — the exact PUBLISHED DocumentTemplateVersion resolved at generation time; null if the template has no published version yet. */
+  templateVersionId?: string | null;
   revisionNumber: number;
   type: GeneratedDocumentType;
   audience: DocumentAudience;
@@ -56,6 +61,7 @@ export async function createQueuedDocument(companyId: string, input: CreateQueue
         projectId: input.projectId,
         boqId: input.boqId,
         templateId: input.templateId,
+        templateVersionId: input.templateVersionId ?? null,
         revisionNumber: input.revisionNumber,
         type: input.type,
         audience: input.audience,

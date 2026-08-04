@@ -22,6 +22,7 @@ type GeneratedDocumentView = {
   boqId: string;
   templateId: string;
   templateName: string;
+  templateVersionNumber: number | null;
   revisionNumber: number;
   type: string;
   audience: string;
@@ -233,7 +234,12 @@ export default function ProjectDocumentsPage(props: PageProps) {
                       R{String(doc.revisionNumber).padStart(2, "0")}
                       {doc.isDraft && <span className="ml-2 rounded-full bg-amber-950/60 px-2 py-0.5 text-[0.65rem] uppercase tracking-[0.2em] text-amber-300">draft</span>}
                     </td>
-                    <td className="px-4 py-3">{doc.templateName}</td>
+                    <td className="px-4 py-3">
+                      {doc.templateName}
+                      {doc.templateVersionNumber !== null && (
+                        <span className="ml-1.5 text-xs text-slate-500">v{doc.templateVersionNumber}</span>
+                      )}
+                    </td>
                     <td className="px-4 py-3">{doc.audience}</td>
                     <td className="px-4 py-3">
                       <span

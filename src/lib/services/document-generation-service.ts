@@ -8,6 +8,9 @@ import { getProjectRecord } from "@/lib/repositories/project-repository";
 import { getBOQRecord, toBOQDTO } from "@/lib/repositories/boq-repository";
 import { runBOQVerification } from "@/lib/repositories/verification-repository";
 import { getTemplate } from "@/lib/repositories/document-template-repository";
+import { resolveDocumentTemplateVersion } from "@/lib/services/template-resolution-service";
+import { mergeStyleConfig, mergeContentConfig } from "@/lib/documents/template-config";
+import type { DocumentTemplateStyleConfig, DocumentTemplateContentConfig } from "@/lib/documents/template-config";
 import {
   createQueuedDocument,
   deleteGeneratedDocument as deleteGeneratedDocumentRow,
@@ -149,6 +152,16 @@ export async function generateDocument(actor: CurrentActor, projectIdentifier: s
     throw new AppError("TEMPLATE_INACTIVE", "This template has been deactivated and cannot be used for generation.", 409);
   }
 
+  // TEMPLATE-LINK-1 — pin generation to the exact PUBLISHED version in effect
+  // right now, so a later template edit never silently changes what this
+  // already-generated document actually contains. Falls back to the
+  // template's own live config only when it has no published version yet
+  // (e.g. immediately after this migration, before the backfill runs) —
+  // generation must never be blocked by this addition.
+  const resolvedVersion = await resolveDocumentTemplateVersion({ companyId: actor.companyId, templateId: template.id });
+  const effectiveStyleConfig: DocumentTemplateStyleConfig = resolvedVersion.versionId ? mergeStyleConfig(resolvedVersion.styleConfigJson as Partial<DocumentTemplateStyleConfig> | null) : template.styleConfig;
+  const effectiveContentConfig: DocumentTemplateContentConfig = resolvedVersion.versionId ? mergeContentConfig(resolvedVersion.contentConfigJson as Partial<DocumentTemplateContentConfig> | null) : template.contentConfig;
+
   const isLocked = boqRecord.isLocked;
   const isDraft = !isLocked;
 
@@ -240,7 +253,7 @@ export async function generateDocument(actor: CurrentActor, projectIdentifier: s
     documentType: input.documentType,
     generatedByName: actor.fullName,
     isDraft,
-    showInternalCostFieldsToClient: template.contentConfig.showInternalCostFieldsToClient,
+    showInternalCostFieldsToClient: effectiveContentConfig.showInternalCostFieldsToClient,
     watermarkText: applyTrialWatermark ? TRIAL_WATERMARK_TEXT : null,
   });
 
@@ -248,6 +261,7 @@ export async function generateDocument(actor: CurrentActor, projectIdentifier: s
     projectId: project.id,
     boqId: boqRecord.id,
     templateId: template.id,
+    templateVersionId: resolvedVersion.versionId,
     revisionNumber: boqRecord.revisionNumber,
     type: input.documentType,
     audience: input.audience,
@@ -266,13 +280,13 @@ export async function generateDocument(actor: CurrentActor, projectIdentifier: s
         fileBuffer = await generateXlsx(documentData);
         break;
       case GeneratedDocumentType.PDF:
-        fileBuffer = await generatePdf({ data: documentData, style: template.styleConfig, content: template.contentConfig });
+        fileBuffer = await generatePdf({ data: documentData, style: effectiveStyleConfig, content: effectiveContentConfig });
         break;
       case GeneratedDocumentType.DOCX:
-        fileBuffer = await generateDocx({ data: documentData, style: template.styleConfig, content: template.contentConfig });
+        fileBuffer = await generateDocx({ data: documentData, style: effectiveStyleConfig, content: effectiveContentConfig });
         break;
       case GeneratedDocumentType.HTML:
-        fileBuffer = Buffer.from(generateHtml({ data: documentData, style: template.styleConfig, content: template.contentConfig }), "utf-8");
+        fileBuffer = Buffer.from(generateHtml({ data: documentData, style: effectiveStyleConfig, content: effectiveContentConfig }), "utf-8");
         break;
       default:
         throw new AppError("UNSUPPORTED_DOCUMENT_TYPE", "Unsupported document type.", 400);
@@ -299,6 +313,7 @@ export async function generateDocument(actor: CurrentActor, projectIdentifier: s
       generationMetadataJson: {
         templateCode: template.code,
         templateName: template.name,
+        templateVersionNumber: resolvedVersion.versionNumber,
         audience: input.audience,
         isDraft,
         acknowledgedWarnings: Boolean(input.acknowledgedWarnings),

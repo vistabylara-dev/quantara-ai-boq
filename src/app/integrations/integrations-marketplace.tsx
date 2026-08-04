@@ -27,7 +27,9 @@ import {
   Wrench,
   type LucideIcon,
 } from "lucide-react";
+import Link from "next/link";
 import { apiClient, getApiErrorMessage } from "@/lib/api/client";
+import IntegrationsTabs from "./integrations-tabs";
 
 const ICONS: Record<string, LucideIcon> = {
   Box, Boxes, Building, Building2, Calculator, ClipboardList, Cloud, Cog, Cpu,
@@ -206,6 +208,8 @@ export default function IntegrationsMarketplace() {
           Independent integrations — connection availability depends on your provider account and permissions. Quantara is not affiliated with, endorsed by, or an official partner of any provider listed here unless stated otherwise.
         </p>
       </header>
+
+      <IntegrationsTabs />
 
       <div className="flex flex-wrap gap-3">
         <div className="flex min-w-[240px] flex-1 items-center gap-2 rounded-2xl border border-[#D9E2EC] bg-white px-4 py-3 dark:border-[#1E2A42] dark:bg-[#0B1426]">
@@ -388,14 +392,12 @@ function ProviderDetailDrawer({ provider, onClose }: { provider: Provider; onClo
         )}
 
         <div className="mt-6 flex flex-wrap gap-2">
-          <button
-            type="button"
-            disabled
-            title="Not yet available — connection architecture is still in development for this provider"
-            className="cursor-not-allowed rounded-2xl border border-[#D9E2EC] bg-[#EEF3F8] px-4 py-2 text-sm font-semibold text-[#B5C0CE] dark:border-[#1E2A42] dark:bg-[#111D33] dark:text-[#4A5A78]"
+          <Link
+            href={`/integrations/${provider.id}`}
+            className="rounded-2xl border border-[#0EA5E9] bg-[#0EA5E9]/10 px-4 py-2 text-sm font-semibold text-[#0284C7] hover:bg-[#0EA5E9]/20 dark:border-[#22D3EE] dark:bg-[#22D3EE]/10 dark:text-[#22D3EE]"
           >
-            {actionLabel(provider)}
-          </button>
+            View full details
+          </Link>
           <button
             type="button"
             onClick={onClose}

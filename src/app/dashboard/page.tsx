@@ -72,9 +72,9 @@ type SubscriptionSummary = {
 };
 
 const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
-const panel = "rounded-[28px] border border-[#D5E0EC] dark:border-[#20304D] bg-white dark:bg-[#091326] p-6 sm:p-8";
+const panel = "cyber-panel cyber-border p-6 sm:p-8 rounded-sm relative overflow-hidden group";
 const panelAction =
-  "rounded-2xl border border-[#D5E0EC] dark:border-[#20304D] bg-[#EAF1F8] dark:bg-[#101D34] px-4 py-2 text-sm font-semibold text-[#08152E] dark:text-[#F4F8FF] hover:bg-white dark:hover:bg-[#091326]";
+  "terminal-text text-[10px] uppercase tracking-widest text-[#00F0FF] border border-[#00F0FF]/30 px-4 py-2 hover:bg-[#00F0FF]/10 transition-colors bg-[#00F0FF]/5 hover:shadow-[0_0_15px_rgba(0,240,255,0.2)]";
 
 const SUBSCRIPTION_STATUS_TONE: Record<string, StatusTone> = {
   TRIAL: "warning",
@@ -186,14 +186,14 @@ export default function DashboardPage() {
   if (loadError || !metrics || !session?.user || !subscription) {
     return (
       <div className={panel}>
-        <p className="text-lg font-semibold text-[#08152E] dark:text-white">Dashboard unavailable</p>
-        <p className="mt-2 text-sm text-[#D84A4A] dark:text-rose-300">{loadError ?? "Your workspace data could not be loaded."}</p>
+        <p className="terminal-text text-sm font-bold text-[#FF0055] uppercase tracking-widest">System Failure</p>
+        <p className="mt-2 text-xs terminal-text text-slate-400">{loadError ?? "Neural grid linkage could not be established."}</p>
         <button
           type="button"
           onClick={() => void load()}
-          className="mt-6 rounded-2xl border border-[#009FE3] dark:border-[#21C7F3] bg-[#009FE3] dark:bg-[#21C7F3] px-4 py-2 text-sm font-semibold text-white dark:text-[#040A16] hover:opacity-90"
+          className="mt-6 border border-[#FF0055]/50 bg-[#FF0055]/10 px-4 py-2 text-[10px] font-bold text-[#FF0055] hover:bg-[#FF0055]/20 terminal-text uppercase tracking-widest transition-colors"
         >
-          Try again
+          Re-Initialize
         </button>
       </div>
     );
@@ -359,13 +359,20 @@ export default function DashboardPage() {
         <SectionHeader title="Upload center" description="Drawings and source files, ready for extraction." />
         <Link
           href="/imports"
-          className="mt-4 flex flex-col items-center gap-3 rounded-2xl border-2 border-dashed border-[#D5E0EC] dark:border-[#20304D] px-6 py-10 text-center transition-all duration-200 hover:-translate-y-0.5 hover:border-[#009FE3]/50 hover:bg-[#EAF1F8] hover:shadow-md dark:hover:border-[#21C7F3]/50 dark:hover:bg-[#101D34] motion-reduce:transition-none motion-reduce:hover:translate-y-0"
+          className="mt-6 relative flex flex-col items-center justify-center gap-4 border border-[#00F0FF]/30 px-6 py-12 text-center transition-all duration-300 hover:border-[#FF0055]/50 hover:shadow-[0_0_30px_rgba(255,0,85,0.15)] bg-black/40 overflow-hidden group/upload"
         >
-          <span className="flex h-11 w-11 items-center justify-center rounded-2xl border border-[#009FE3]/40 bg-[#009FE3]/10 dark:border-[#21C7F3]/40 dark:bg-[#21C7F3]/10">
-            <Upload className="h-5 w-5 text-[#0077B6] dark:text-[#21C7F3]" aria-hidden="true" />
-          </span>
-          <p className="text-sm font-semibold text-[#08152E] dark:text-white">Drag and drop files, or click to upload</p>
-          <p className="text-xs text-[#7B879C] dark:text-[#8CA0BE]">Drawings, spreadsheets, and specification documents</p>
+          <div className="absolute inset-0 bg-gradient-to-br from-[#00F0FF]/5 to-[#FF0055]/5 opacity-0 group-hover/upload:opacity-100 transition-opacity duration-500 pointer-events-none"></div>
+          <div className="absolute top-0 left-0 w-full h-[1px] bg-gradient-to-r from-transparent via-[#00F0FF] to-transparent translate-x-[-100%] group-hover/upload:translate-x-[100%] transition-transform duration-1000 ease-in-out"></div>
+          
+          <div className="relative z-10 flex h-16 w-16 items-center justify-center rounded-sm border border-[#00F0FF]/50 bg-[#00F0FF]/10 group-hover/upload:scale-110 group-hover/upload:border-[#FF0055]/50 transition-all duration-300 shadow-[0_0_15px_rgba(0,240,255,0.2)] group-hover/upload:shadow-[0_0_20px_rgba(255,0,85,0.3)]">
+            <Upload className="h-6 w-6 text-[#00F0FF] group-hover/upload:text-[#FF0055] group-hover/upload:-translate-y-1 transition-all duration-300" aria-hidden="true" />
+            <div className="absolute bottom-[-4px] w-8 h-[2px] bg-[#00F0FF] group-hover/upload:bg-[#FF0055] rounded-full blur-[1px]"></div>
+          </div>
+          
+          <div className="relative z-10 space-y-1">
+            <p className="terminal-text text-[11px] font-bold text-[#00F0FF] uppercase tracking-widest group-hover/upload:text-[#FF0055] transition-colors">Establish Data Uplink</p>
+            <p className="terminal-text text-[9px] text-slate-500 uppercase tracking-widest">Drawings // Spreadsheets // Specs</p>
+          </div>
         </Link>
 
         <p className="mt-6 text-xs uppercase tracking-[0.2em] text-[#7B879C] dark:text-[#8CA0BE]">Recent uploads</p>
@@ -457,8 +464,12 @@ export default function DashboardPage() {
 
 function PanelError({ message }: { message: string }) {
   return (
-    <p className="mt-4 rounded-2xl border border-[#D84A4A]/30 bg-[#D84A4A]/5 px-4 py-3 text-sm text-[#D84A4A] dark:border-rose-900 dark:bg-rose-950/20 dark:text-rose-300">
-      This panel could not load: {message}
-    </p>
+    <div className="mt-4 border border-[#FF0055]/30 bg-[#FF0055]/5 p-4 relative overflow-hidden">
+      <div className="absolute left-0 top-0 bottom-0 w-1 bg-[#FF0055]"></div>
+      <p className="terminal-text text-[10px] text-[#FF0055] uppercase tracking-widest flex items-center gap-2">
+        <AlertTriangle className="w-4 h-4" />
+        System Failure // {message}
+      </p>
+    </div>
   );
 }

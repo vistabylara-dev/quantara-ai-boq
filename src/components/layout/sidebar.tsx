@@ -54,15 +54,15 @@ export default function Sidebar() {
 
   return (
     <aside
-      className={`hidden xl:flex xl:flex-col xl:gap-6 xl:border-r xl:border-[#D5E0EC] dark:xl:border-[#20304D] xl:py-8 bg-white dark:bg-[#091326] text-[#08152E] dark:text-[#F4F8FF] transition-[width] ${
+      className={`hidden xl:flex xl:flex-col xl:gap-6 xl:border-r xl:border-white/10 xl:py-8 bg-black/40 backdrop-blur-xl text-slate-300 transition-[width] relative z-20 cyber-border ${
         collapsed ? "xl:w-20 xl:px-3" : "xl:w-72 xl:px-6"
       }`}
     >
-      <div className="flex items-center justify-between gap-2">
+      <div className="flex items-center justify-between gap-2 border-b border-white/10 pb-6 mb-2">
         {!collapsed && (
           <div className="space-y-1">
-            <p className="text-xs uppercase tracking-[0.24em] text-[#7B879C] dark:text-[#8CA0BE]">Workspace</p>
-            <h2 className="text-xl font-semibold text-[#08152E] dark:text-white">Quantara AI</h2>
+            <p className="terminal-text text-[9px] uppercase tracking-[0.4em] text-[#00F0FF]">System Active</p>
+            <h2 className="text-xl font-bold text-white tracking-widest uppercase">Quantara AI</h2>
           </div>
         )}
         <button
@@ -70,20 +70,20 @@ export default function Sidebar() {
           onClick={() => setCollapsed((value) => !value)}
           aria-label={collapsed ? "Expand navigation" : "Collapse navigation"}
           aria-pressed={collapsed}
-          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-[#D5E0EC] dark:border-[#20304D] text-[#536078] dark:text-[#8CA0BE] hover:bg-[#EAF1F8] dark:hover:bg-[#101D34] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#38BDF8] dark:focus-visible:outline-[#21C7F3]"
+          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-sm border border-white/10 text-slate-500 hover:bg-[#00F0FF]/10 hover:text-[#00F0FF] hover:border-[#00F0FF]/30 transition-all focus-visible:outline-none"
         >
           {collapsed ? <ChevronRight className="h-4 w-4" aria-hidden="true" /> : <ChevronLeft className="h-4 w-4" aria-hidden="true" />}
         </button>
       </div>
 
-      <nav className="flex flex-1 flex-col gap-5 overflow-y-auto" aria-label="Primary">
+      <nav className="flex flex-1 flex-col gap-6 overflow-y-auto" aria-label="Primary">
         {GROUPS.map((group) => {
           const groupItems = group.hrefs.map((href) => itemsByHref.get(href)).filter((item): item is NonNullable<typeof item> => Boolean(item));
           if (groupItems.length === 0) return null;
           return (
-            <div key={group.label} className="flex flex-col gap-1">
+            <div key={group.label} className="flex flex-col gap-2">
               {!collapsed && (
-                <p className="px-3 text-[10px] font-semibold uppercase tracking-[0.2em] text-[#7B879C] dark:text-[#8CA0BE]">{group.label}</p>
+                <p className="px-3 terminal-text text-[10px] uppercase tracking-[0.3em] text-slate-600 mb-2">{group.label}</p>
               )}
               {groupItems.map((item) => {
                 const isActive = pathname === item.href || pathname?.startsWith(`${item.href}/`);
@@ -94,17 +94,17 @@ export default function Sidebar() {
                     href={item.href}
                     aria-current={isActive ? "page" : undefined}
                     title={collapsed ? item.label : undefined}
-                    className={`group relative flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#38BDF8] dark:focus-visible:outline-[#21C7F3] ${
+                    className={`group relative flex items-center gap-3 px-3 py-2.5 text-sm transition-all focus-visible:outline-none ${
                       isActive
-                        ? "bg-[#009FE3]/10 text-[#0077B6] dark:bg-[#21C7F3]/10 dark:text-[#21C7F3]"
-                        : "text-[#536078] hover:bg-[#EAF1F8] hover:text-[#08152E] dark:text-[#8CA0BE] dark:hover:bg-[#101D34] dark:hover:text-white"
+                        ? "bg-[#00F0FF]/10 text-[#00F0FF]"
+                        : "text-slate-400 hover:bg-white/5 hover:text-white"
                     }`}
                   >
                     {isActive && (
-                      <span className="absolute left-0 top-1/2 h-5 w-0.5 -translate-y-1/2 rounded-full bg-[#009FE3] dark:bg-[#21C7F3]" aria-hidden="true" />
+                      <span className="absolute left-0 top-0 bottom-0 w-[2px] bg-[#00F0FF] shadow-[0_0_10px_#00F0FF]" aria-hidden="true" />
                     )}
                     <Icon className="h-4 w-4 shrink-0" aria-hidden="true" />
-                    {!collapsed && <span>{item.label}</span>}
+                    {!collapsed && <span className="font-medium tracking-wide">{item.label}</span>}
                   </Link>
                 );
               })}
@@ -114,12 +114,13 @@ export default function Sidebar() {
       </nav>
 
       {!collapsed && (
-        <div className="relative overflow-hidden rounded-2xl border border-[#D5E0EC] dark:border-[#20304D] bg-[#EAF1F8] dark:bg-[#101D34] p-4 text-sm">
-          <span className="absolute -right-6 -top-6 h-16 w-16 rounded-full bg-[#009FE3]/10 dark:bg-[#21C7F3]/10" aria-hidden="true" />
-          <p className="font-semibold text-[#08152E] dark:text-white">Quantara AI Workspace</p>
-          <p className="mt-2 text-xs leading-5 text-[#536078] dark:text-[#8CA0BE]">
-            AI construction intelligence for BOQs, drawings, and documents.
-          </p>
+        <div className="relative overflow-hidden border border-[#00F0FF]/20 bg-[#00F0FF]/5 p-5 text-sm mt-4 cyber-panel">
+          <span className="absolute -right-6 -top-6 h-16 w-16 rounded-full bg-[#00F0FF]/10 animate-pulse" aria-hidden="true" />
+          <p className="font-bold text-[#00F0FF] uppercase tracking-widest text-[11px] mb-2">Engine Status</p>
+          <div className="flex items-center gap-2 text-xs text-slate-400 terminal-text">
+            <span className="w-2 h-2 rounded-full bg-[#00F0FF] animate-pulse"></span>
+            All systems nominal
+          </div>
         </div>
       )}
     </aside>

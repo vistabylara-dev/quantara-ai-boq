@@ -13,6 +13,17 @@ const nextConfig = {
   // compilation and page generation succeed. Pinning it explicitly avoids
   // that machine-dependent misdetection entirely.
   outputFileTracingRoot: projectRoot,
+  // CATALOGUE-PROD-ACTIVATE — the approved HVAC/plumbing dataset CSVs are
+  // read server-side at runtime (catalogue-dataset-registry.ts) via a path
+  // built from a config-controlled directory + registry filename, not a
+  // statically analyzable literal `fs.readFileSync("...")` call, so
+  // Vercel's build-time output tracing (@vercel/nft) can't be trusted to
+  // discover and include them on its own. Declaring them here guarantees
+  // they ship in the deployed function bundle regardless.
+  outputFileTracingIncludes: {
+    "/api/admin/master-catalogue/datasets/[datasetId]/dry-run": ["./data-imports/hvac/*.csv", "./data-imports/plumbing/*.csv"],
+    "/api/admin/master-catalogue/datasets/jobs/[jobId]/continue": ["./data-imports/hvac/*.csv", "./data-imports/plumbing/*.csv"],
+  },
   // pdfkit reads its standard-14 font metrics (data/*.afm) from disk via a
   // path relative to its own package directory at runtime. Letting webpack
   // bundle it moves/mangles that relative path and the AFM files are never

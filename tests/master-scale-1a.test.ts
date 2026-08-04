@@ -199,7 +199,13 @@ describe("MASTER-SCALE-1A: enterprise catalogue foundation (integration)", () =>
   describe("catalogue-growth honesty — never claims a milestone the data doesn't support", () => {
     it("reports true, current counts — not an inflated target", async () => {
       const snapshot = await getCatalogueGrowthSnapshot(ownerActor());
-      expect(snapshot.totalMasterItems).toBeLessThan(1000);
+      // CATALOGUE-CLOSE legitimately grew the real catalogue past the original
+      // small M1 baseline (HVAC + plumbing imports), so a hardcoded ceiling
+      // here would just be re-fighting real growth. The actual "not inflated"
+      // property is that the snapshot matches an independently-counted real
+      // row count, not some fabricated milestone number.
+      const actualCount = await prisma.masterItem.count();
+      expect(snapshot.totalMasterItems).toBe(actualCount);
       expect(snapshot.totalMasterItems).toBeGreaterThan(0);
       expect(typeof snapshot.manufacturers).toBe("number");
     });

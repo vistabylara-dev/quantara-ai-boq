@@ -104,3 +104,76 @@ export async function getCatalogueGrowthSnapshot(owner: PlatformActor): Promise<
 
   return { totalMasterItems, publishedVersions, itemsWithClassification, itemsWithHierarchy, manufacturers, verifiedProductModels, standardAuthorities, disciplines, hierarchyNodes };
 }
+
+export type HvacMasterDataSummary = {
+  itemCount: number;
+  familyCount: number;
+  variantCount: number;
+  publishedCount: number;
+  draftCount: number;
+  hierarchyNodeCount: number;
+  categoryCount: number;
+  classificationCount: number;
+  recentBatches: {
+    id: string;
+    uploadedFileName: string;
+    status: string;
+    totalRows: number;
+    insertedCount: number;
+    updatedCount: number;
+    unchangedCount: number;
+    rejectedCount: number;
+    warningRows: number;
+    executedAt: string | null;
+  }[];
+};
+
+/**
+ * MASTER-SCALE-1B admin review dashboard — the smallest useful set of real
+ * counts for the HVAC import (item/family/variant/published/draft/hierarchy/
+ * classification counts + recent batch summaries). No 100%-complete claim is
+ * ever computed here; that stays the per-item job of computeCompletenessProfile.
+ */
+export async function getHvacMasterDataSummary(owner: PlatformActor): Promise<HvacMasterDataSummary> {
+  requireOwner(owner);
+  const mechanical = await prisma.masterDiscipline.findUnique({ where: { key: "mechanical" } });
+  const disciplineId = mechanical?.id;
+
+  const [itemCount, familyCount, variantCount, publishedCount, draftCount, hierarchyNodeCount, categoryCount, classificationCount, batches] = await Promise.all([
+    disciplineId ? prisma.masterItem.count({ where: { disciplineId } }) : 0,
+    prisma.masterHierarchyNode.count({ where: { nodeType: "ITEM_FAMILY" } }),
+    prisma.masterItemVariant.count(),
+    disciplineId ? prisma.masterItemVersion.count({ where: { status: "PUBLISHED", masterItem: { disciplineId } } }) : 0,
+    disciplineId ? prisma.masterItemVersion.count({ where: { status: { in: ["DRAFT", "REVIEW", "APPROVED"] }, masterItem: { disciplineId } } }) : 0,
+    disciplineId ? prisma.masterHierarchyNode.count({ where: { code: { startsWith: "construction.mechanical.hvac" } } }) : 0,
+    disciplineId ? prisma.masterCategory.count({ where: { disciplineId } }) : 0,
+    disciplineId ? prisma.masterItemClassification.count({ where: { masterItem: { disciplineId } } }) : 0,
+    prisma.masterCatalogueImportBatch.findMany({ orderBy: { createdAt: "desc" }, take: 10 }),
+  ]);
+
+  return {
+    itemCount,
+    familyCount,
+    variantCount,
+    publishedCount,
+    draftCount,
+    hierarchyNodeCount,
+    categoryCount,
+    classificationCount,
+    recentBatches: batches.map((batch) => {
+      const report = batch.validationReportJson as { summary?: { warningRows?: number } } | null;
+      return {
+        id: batch.id,
+        uploadedFileName: batch.uploadedFileName,
+        status: batch.status,
+        totalRows: batch.totalRows,
+        insertedCount: batch.insertedCount,
+        updatedCount: batch.updatedCount,
+        unchangedCount: batch.unchangedCount,
+        rejectedCount: batch.rejectedCount,
+        warningRows: report?.summary?.warningRows ?? 0,
+        executedAt: batch.executedAt?.toISOString() ?? null,
+      };
+    }),
+  };
+}

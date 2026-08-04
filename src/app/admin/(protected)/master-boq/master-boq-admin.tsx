@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Boxes, Layers, Search } from "lucide-react";
+import { Boxes, ClipboardList, Layers, Search } from "lucide-react";
 import { apiClient, getApiErrorMessage } from "@/lib/api/client";
 
 type HierarchyNode = {
@@ -71,8 +71,42 @@ function HierarchyTree({ nodes, selectedId, onSelect }: { nodes: HierarchyNode[]
   );
 }
 
+type HvacSummary = {
+  itemCount: number;
+  familyCount: number;
+  variantCount: number;
+  publishedCount: number;
+  draftCount: number;
+  hierarchyNodeCount: number;
+  categoryCount: number;
+  classificationCount: number;
+  recentBatches: {
+    id: string;
+    uploadedFileName: string;
+    status: string;
+    totalRows: number;
+    insertedCount: number;
+    updatedCount: number;
+    unchangedCount: number;
+    rejectedCount: number;
+    warningRows: number;
+    executedAt: string | null;
+  }[];
+};
+
+function SummaryStat({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="rounded-2xl border border-[#D9E2EC] bg-[#EEF3F8] px-4 py-3 dark:border-[#1E2A42] dark:bg-[#111D33]">
+      <p className="text-xs text-[#7B879C] dark:text-[#7F8DA6]">{label}</p>
+      <p className="mt-1 text-xl font-semibold text-[#0B1630] dark:text-white">{value}</p>
+    </div>
+  );
+}
+
 export default function MasterBoqAdmin() {
   const [tree, setTree] = useState<HierarchyNode[] | null>(null);
+  const [hvacSummary, setHvacSummary] = useState<HvacSummary | null>(null);
+  const [hvacSummaryError, setHvacSummaryError] = useState<string | null>(null);
   const [selectedNode, setSelectedNode] = useState<HierarchyNode | null>(null);
   const [search, setSearch] = useState("");
   const [items, setItems] = useState<ItemRow[]>([]);
@@ -90,6 +124,15 @@ export default function MasterBoqAdmin() {
       .get<HierarchyNode[]>("/api/admin/master-catalogue/hierarchy", controller.signal)
       .then(setTree)
       .catch((error) => setLoadError(getApiErrorMessage(error)));
+    return () => controller.abort();
+  }, []);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    apiClient
+      .get<HvacSummary>("/api/admin/master-catalogue/hvac-summary", controller.signal)
+      .then(setHvacSummary)
+      .catch((error) => setHvacSummaryError(getApiErrorMessage(error)));
     return () => controller.abort();
   }, []);
 
@@ -167,6 +210,70 @@ export default function MasterBoqAdmin() {
       {actionMessage && (
         <div className="rounded-2xl border border-[#D9E2EC] bg-white p-4 text-sm text-[#0B1630] dark:border-[#1E2A42] dark:bg-[#0B1426] dark:text-white">{actionMessage}</div>
       )}
+
+      <div className={panel}>
+        <p className="flex items-center gap-2 text-sm font-semibold text-[#0B1630] dark:text-white">
+          <ClipboardList className="h-4 w-4" aria-hidden="true" /> HVAC master data — import summary
+        </p>
+        {hvacSummaryError && <p className="mt-3 text-sm text-[#D84A4A] dark:text-rose-300">{hvacSummaryError}</p>}
+        {!hvacSummary && !hvacSummaryError && <p className="mt-3 text-xs text-[#7B879C] dark:text-[#7F8DA6]">Loading…</p>}
+        {hvacSummary && (
+          <>
+            <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-8">
+              <SummaryStat label="Items" value={hvacSummary.itemCount} />
+              <SummaryStat label="Categories" value={hvacSummary.categoryCount} />
+              <SummaryStat label="Families" value={hvacSummary.familyCount} />
+              <SummaryStat label="Variants" value={hvacSummary.variantCount} />
+              <SummaryStat label="Published versions" value={hvacSummary.publishedCount} />
+              <SummaryStat label="Draft/review versions" value={hvacSummary.draftCount} />
+              <SummaryStat label="Hierarchy nodes" value={hvacSummary.hierarchyNodeCount} />
+              <SummaryStat label="Classifications" value={hvacSummary.classificationCount} />
+            </div>
+            {hvacSummary.familyCount === 0 && hvacSummary.variantCount === 0 && (
+              <p className="mt-3 text-xs text-[#7B879C] dark:text-[#7F8DA6]">
+                No item families or variants exist yet — the imported source data is flat (one row per item), so none were fabricated.
+              </p>
+            )}
+            <p className="mt-5 text-sm font-semibold text-[#0B1630] dark:text-white">Recent import batches</p>
+            {hvacSummary.recentBatches.length === 0 ? (
+              <p className="mt-1 text-xs text-[#7B879C] dark:text-[#7F8DA6]">No import batches yet.</p>
+            ) : (
+              <div className="mt-2 overflow-x-auto rounded-2xl border border-[#D9E2EC] dark:border-[#1E2A42]">
+                <table className="min-w-full text-left text-sm">
+                  <thead className="bg-[#EEF3F8] text-[#536078] dark:bg-[#111D33] dark:text-[#7F8DA6]">
+                    <tr>
+                      <th className="px-4 py-2">File</th>
+                      <th className="px-4 py-2">Status</th>
+                      <th className="px-4 py-2">Rows</th>
+                      <th className="px-4 py-2">Inserted</th>
+                      <th className="px-4 py-2">Updated</th>
+                      <th className="px-4 py-2">Unchanged</th>
+                      <th className="px-4 py-2">Rejected</th>
+                      <th className="px-4 py-2">Warnings</th>
+                      <th className="px-4 py-2">Executed</th>
+                    </tr>
+                  </thead>
+                  <tbody className="text-[#0B1630] dark:text-[#F7FAFC]">
+                    {hvacSummary.recentBatches.map((batch) => (
+                      <tr key={batch.id} className="border-t border-[#D9E2EC] dark:border-[#1E2A42]">
+                        <td className="px-4 py-2">{batch.uploadedFileName}</td>
+                        <td className="px-4 py-2">{batch.status}</td>
+                        <td className="px-4 py-2">{batch.totalRows}</td>
+                        <td className="px-4 py-2">{batch.insertedCount}</td>
+                        <td className="px-4 py-2">{batch.updatedCount}</td>
+                        <td className="px-4 py-2">{batch.unchangedCount}</td>
+                        <td className="px-4 py-2">{batch.rejectedCount}</td>
+                        <td className="px-4 py-2">{batch.warningRows}</td>
+                        <td className="px-4 py-2">{batch.executedAt ? new Date(batch.executedAt).toLocaleString() : "—"}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </>
+        )}
+      </div>
 
       <div className="grid gap-6 lg:grid-cols-[280px_1fr]">
         <div className={panel}>

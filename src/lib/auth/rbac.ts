@@ -37,7 +37,10 @@ export type Capability =
   | "entitlements:manage"
   | "report-templates:manage"
   | "technical-reports:generate"
-  | "technical-reports:delete";
+  | "technical-reports:delete"
+  | "integrations:connect"
+  | "integrations:disconnect"
+  | "integrations:sync";
 
 const ALL_CAPABILITIES: Capability[] = [
   "company:manage",
@@ -67,6 +70,9 @@ const ALL_CAPABILITIES: Capability[] = [
   "report-templates:manage",
   "technical-reports:generate",
   "technical-reports:delete",
+  "integrations:connect",
+  "integrations:disconnect",
+  "integrations:sync",
 ];
 
 const ROLE_CAPABILITIES: Record<UserRole, Capability[]> = {
@@ -97,6 +103,9 @@ const ROLE_CAPABILITIES: Record<UserRole, Capability[]> = {
     "report-templates:manage",
     "technical-reports:generate",
     "technical-reports:delete",
+    "integrations:connect",
+    "integrations:disconnect",
+    "integrations:sync",
   ],
   // "generate and download" (section 21): full generate access, no delete, no template management.
   // Phase 7 section 31: "search, add to BOQ, create and edit company items, import BOQ items".
@@ -114,6 +123,9 @@ const ROLE_CAPABILITIES: Record<UserRole, Capability[]> = {
     "library:manage",
     "imports:manage",
     "technical-reports:generate",
+    "integrations:connect",
+    "integrations:disconnect",
+    "integrations:sync",
   ],
   // "generate internal and approved client outputs where allowed" (section 21): same generate
   // capability as QUANTITY_SURVEYOR — the "where allowed" nuance is the lock-required rule
@@ -131,6 +143,9 @@ const ROLE_CAPABILITIES: Record<UserRole, Capability[]> = {
     "library:manage",
     "imports:manage",
     "technical-reports:generate",
+    "integrations:connect",
+    "integrations:disconnect",
+    "integrations:sync",
   ],
   // Phase 7 section 31: "search, create technical items, edit technical specifications" — no import access.
   DESIGNER: ["files:manage", "review:comment", "library:manage"],

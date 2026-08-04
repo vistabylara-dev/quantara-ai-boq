@@ -1188,6 +1188,7 @@ model Company {
   riskAssessments             RiskAssessment[]
   correctiveActions           CorrectiveAction[]
   findingBoqLinks             FindingBoqLink[]
+  externalConnections         ExternalConnection[]
 }
 
 model User {
@@ -1228,6 +1229,8 @@ model User {
   masterItemVersionsCreated    MasterItemVersion[]          @relation("MasterItemVersionCreatedBy")
   masterItemVersionsReviewed   MasterItemVersion[]          @relation("MasterItemVersionReviewedBy")
   masterItemVersionsApproved   MasterItemVersion[]          @relation("MasterItemVersionApprovedBy")
+  externalConnectionsMade      ExternalConnection[]
+  synchronizationRunsActed     SynchronizationRun[]         @relation("SynchronizationRunActor")
 
   @@index([companyId])
   @@index([role])
@@ -1359,6 +1362,7 @@ model Project {
   detectedRooms             DetectedRoom[]
   quantityCalculations      QuantityCalculation[]
   inspections               Inspection[]
+  projectIntegrations       ProjectIntegration[]
 
   @@unique([companyId, reference])
   @@unique([companyId, slug])
@@ -2868,4 +2872,173 @@ model FindingBoqLink {
   @@index([companyId])
   @@index([inspectionFindingId])
   @@index([boqId])
+}
+
+/// INTEGRATIONS-1A — AEC applications and connected data hub foundation.
+/// Deliberately four new, standalone tables with no columns added to any
+/// existing model (MasterItem/BOQItem lesson from MASTER-BOQ-1A: adding
+/// columns to hot, already-queried tables breaks every unscoped query
+/// against them the moment the code deploy lands ahead of the migration —
+/// entirely new tables carry no such risk, since nothing pre-existing ever
+/// queries them). No OAuth, sync, or live connector exists yet in this
+/// phase; these are the identity/connection/link/audit records that 1B+
+/// will populate.
+enum IntegrationConnectionType {
+  OAUTH_CLOUD
+  PLUGIN_DESKTOP
+  API_KEY
+  SERVICE_ACCOUNT
+  FILE_IMPORT
+  WEBHOOK
+  COMING_SOON
+}
+
+/// Matches the provider card statuses required by the spec — deliberately
+/// distinct from ExternalConnectionStatus below (a provider's *general
+/// availability* vs. one company's *specific connection health*).
+enum IntegrationProviderStatus {
+  AVAILABLE
+  BETA
+  REQUIRES_PLUGIN
+  FILE_IMPORT_ONLY
+  COMING_SOON
+}
+
+enum ExternalConnectionStatus {
+  CONNECTED
+  REAUTH_REQUIRED
+  SYNCING
+  DEGRADED
+  DISCONNECTED
+  ERROR
+}
+
+enum ProjectIntegrationSyncState {
+  NOT_SYNCED
+  QUEUED
+  SYNCING
+  SYNCED
+  FAILED
+}
+
+enum SynchronizationRunResult {
+  SUCCESS
+  PARTIAL
+  FAILED
+}
+
+/// Registry row per provider (e.g. "autodesk", "revit", "procore",
+/// "microsoft-365") — id is the same stable string key the code-side
+/// provider registry (src/lib/integrations/provider-registry.ts) uses, so
+/// ExternalConnection can reference a real row without a separate mapping
+/// table. Seeded from that registry; the registry (not this table) is the
+/// authoritative source the marketplace UI reads from directly, so the
+/// marketplace renders correctly even before this table is seeded.
+model IntegrationProvider {
+  id                        String                    @id
+  providerFamily            String
+  displayName               String
+  category                  String
+  connectionType            IntegrationConnectionType
+  status                    IntegrationProviderStatus
+  configurationMetadataJson Json?
+  isActive                  Boolean                   @default(true)
+  sortOrder                 Int                       @default(0)
+  createdAt                 DateTime                  @default(now())
+  updatedAt                 DateTime                  @updatedAt
+  externalConnections       ExternalConnection[]
+  synchronizationRuns       SynchronizationRun[]
+
+  @@index([providerFamily])
+  @@index([category])
+  @@index([status])
+}
+
+/// One company's connection to one provider. Credentials are never stored
+/// here directly — encryptedCredentialsRef is an opaque pointer into a
+/// dedicated encrypted secret store (see docs/authentication.md-style
+/// design note in the credential-encryption service added alongside the
+/// first real connector in 1B); this table only ever holds the reference,
+/// grant metadata, and connection health.
+model ExternalConnection {
+  id                      String                   @id @default(uuid()) @db.Uuid
+  companyId               String                   @db.Uuid
+  connectedByUserId       String                   @db.Uuid
+  providerId              String
+  encryptedCredentialsRef String?
+  grantedScopesJson       Json?
+  providerAccountId       String?
+  status                  ExternalConnectionStatus @default(CONNECTED)
+  connectedAt             DateTime                 @default(now())
+  tokenExpiresAt          DateTime?
+  lastSyncAt              DateTime?
+  disconnectedAt          DateTime?
+  lastErrorCode           String?
+  lastErrorMessage        String?
+  createdAt               DateTime                 @default(now())
+  updatedAt               DateTime                 @updatedAt
+  company                 Company                  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  connectedByUser         User                     @relation(fields: [connectedByUserId], references: [id], onDelete: Restrict)
+  provider                IntegrationProvider      @relation(fields: [providerId], references: [id], onDelete: Restrict)
+  projectIntegrations     ProjectIntegration[]
+  synchronizationRuns     SynchronizationRun[]
+
+  @@index([companyId])
+  @@index([providerId])
+  @@index([status])
+}
+
+/// Links one Quantara project to an external project/hub/folder/file/model/
+/// version. Multiple rows per project are expected (e.g. one Autodesk model
+/// link + one Procore documents link).
+model ProjectIntegration {
+  id                   String                      @id @default(uuid()) @db.Uuid
+  projectId            String                      @db.Uuid
+  externalConnectionId String                      @db.Uuid
+  externalAccountId    String?
+  externalProjectId    String?
+  externalFolderId     String?
+  externalFileId       String?
+  externalModelId      String?
+  externalVersionId    String?
+  syncState            ProjectIntegrationSyncState @default(NOT_SYNCED)
+  lastSyncedVersionId  String?
+  syncSettingsJson     Json?
+  createdAt            DateTime                    @default(now())
+  updatedAt            DateTime                    @updatedAt
+  project              Project                     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  externalConnection   ExternalConnection          @relation(fields: [externalConnectionId], references: [id], onDelete: Cascade)
+  synchronizationRuns  SynchronizationRun[]
+
+  @@index([projectId])
+  @@index([externalConnectionId])
+}
+
+/// One audit row per synchronization attempt — never overwritten, so sync
+/// history is always inspectable (spec: "safe error code/message, audit
+/// actor").
+model SynchronizationRun {
+  id                   String                    @id @default(uuid()) @db.Uuid
+  providerId           String
+  externalConnectionId String                    @db.Uuid
+  projectIntegrationId String                    @db.Uuid
+  sourceVersionId      String?
+  startedAt            DateTime                  @default(now())
+  completedAt          DateTime?
+  result               SynchronizationRunResult?
+  insertedCount        Int                       @default(0)
+  updatedCount         Int                       @default(0)
+  skippedCount         Int                       @default(0)
+  errorCode            String?
+  errorMessage         String?
+  actorUserId          String?                   @db.Uuid
+  createdAt            DateTime                  @default(now())
+  provider             IntegrationProvider       @relation(fields: [providerId], references: [id], onDelete: Restrict)
+  externalConnection   ExternalConnection        @relation(fields: [externalConnectionId], references: [id], onDelete: Cascade)
+  projectIntegration   ProjectIntegration        @relation(fields: [projectIntegrationId], references: [id], onDelete: Cascade)
+  actorUser            User?                     @relation("SynchronizationRunActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@index([projectIntegrationId])
+  @@index([externalConnectionId])
+  @@index([providerId])
 }

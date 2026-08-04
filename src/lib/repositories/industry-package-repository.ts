@@ -80,17 +80,21 @@ export async function createPackage(input: {
   return toPackageDTO(created);
 }
 
-/** Seed-time only. Idempotent on (packageId, masterItemId); refreshes the package's itemCount. */
+/**
+ * Seed-time only. Idempotent on (packageId, masterItemId); refreshes the package's itemCount.
+ *
+ * Uses a single batched createMany (skipDuplicates) instead of N sequential upserts inside an
+ * interactive transaction — the latter hit Prisma's default 5s interactive-transaction timeout
+ * once masterItemIds got past a few dozen entries on a WAN connection (each upsert is its own
+ * round trip). createMany does it in one round trip and needs no transaction wrapper; a rerun
+ * after a partial failure is still safe since createMany skips existing rows and the count/update
+ * below always reflects whatever is actually in the table.
+ */
 export async function addItemsToPackage(packageId: string, masterItemIds: string[]) {
-  await prisma.$transaction(async (tx) => {
-    for (const [index, masterItemId] of masterItemIds.entries()) {
-      await tx.industryDataPackageItem.upsert({
-        where: { packageId_masterItemId: { packageId, masterItemId } },
-        update: {},
-        create: { packageId, masterItemId, sortOrder: index },
-      });
-    }
-    const count = await tx.industryDataPackageItem.count({ where: { packageId } });
-    await tx.industryDataPackage.update({ where: { id: packageId }, data: { itemCount: count } });
+  await prisma.industryDataPackageItem.createMany({
+    data: masterItemIds.map((masterItemId, index) => ({ packageId, masterItemId, sortOrder: index })),
+    skipDuplicates: true,
   });
+  const count = await prisma.industryDataPackageItem.count({ where: { packageId } });
+  await prisma.industryDataPackage.update({ where: { id: packageId }, data: { itemCount: count } });
 }

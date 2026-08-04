@@ -1,7 +1,15 @@
 import { PlatformRole, UserRole } from "@prisma/client";
-import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+
+const currentActorMock = vi.hoisted(() => vi.fn());
+vi.mock("@/lib/auth/current-actor", async () => {
+  const actual = await vi.importActual<typeof import("../src/lib/auth/current-actor")>("../src/lib/auth/current-actor");
+  return { ...actual, getCurrentActor: currentActorMock };
+});
+
+import { GET as itemDetailGET } from "../src/app/api/master-data/items/[itemId]/route";
 import { prisma } from "../src/lib/db/prisma";
-import { NotFoundError, PermissionDeniedError } from "../src/lib/errors/app-error";
+import { NotFoundError, PermissionDeniedError, UnauthorizedError } from "../src/lib/errors/app-error";
 import type { PlatformActor } from "../src/lib/auth/platform-authorization";
 import type { CurrentActor } from "../src/lib/auth/current-actor";
 import { getMasterItemViewAccessEffective } from "../src/lib/entitlements/effective-entitlement-service";
@@ -23,6 +31,8 @@ let disciplineId = "";
 let categoryId = "";
 let premiumItemId = "";
 let freeItemId = "";
+let draftItemId = "";
+let archivedItemId = "";
 let libraryItemAId = "";
 let libraryItemBId = "";
 let mechanicalPackageId = "";
@@ -76,6 +86,14 @@ describe("ADMIN-DATA-ACCESS-1: platform owner data-library access (integration)"
       data: { disciplineId, categoryId, itemCode: `ADA1-FREE-${RUN_ID}`, name: "Free Test Item", shortDescription: "short", defaultUnit: "EA", isPremium: false },
     });
     freeItemId = freeItem.id;
+    const draftItem = await prisma.masterItem.create({
+      data: { disciplineId, categoryId, itemCode: `ADA1-DRAFT-${RUN_ID}`, name: "Draft Test Item", shortDescription: "short", defaultUnit: "EA", isPremium: false, status: "DRAFT" },
+    });
+    draftItemId = draftItem.id;
+    const archivedItem = await prisma.masterItem.create({
+      data: { disciplineId, categoryId, itemCode: `ADA1-ARCH-${RUN_ID}`, name: "Archived Test Item", shortDescription: "short", defaultUnit: "EA", isPremium: false, status: "ARCHIVED" },
+    });
+    archivedItemId = archivedItem.id;
 
     // Give the premium item a published version + classification so admin detail has real content to assert on.
     const v1 = await createDraftVersion(ownerActor(), premiumItemId, { name: "V1", primaryUnit: "EA" });
@@ -176,6 +194,33 @@ describe("ADMIN-DATA-ACCESS-1: platform owner data-library access (integration)"
     });
   });
 
+  describe("unpublished (DRAFT/ARCHIVED) item visibility", () => {
+    it("owner can view a DRAFT-status item (governance/QA inspection of not-yet-published content)", async () => {
+      const access = await getMasterItemViewAccessEffective({ userId: ownerUserId, companyId: companyAId }, draftItemId);
+      expect(access.allowed).toBe(true);
+      expect(access.isOwnerView).toBe(true);
+      expect(access.notFound).toBe(false);
+    });
+
+    it("owner can view an ARCHIVED-status item", async () => {
+      const access = await getMasterItemViewAccessEffective({ userId: ownerUserId, companyId: companyAId }, archivedItemId);
+      expect(access.allowed).toBe(true);
+      expect(access.isOwnerView).toBe(true);
+    });
+
+    it("a company user cannot view a DRAFT-status item — reported as not-found, never a premium-locked preview", async () => {
+      const access = await getMasterItemViewAccessEffective({ userId: companyAUserId, companyId: companyAId }, draftItemId);
+      expect(access.allowed).toBe(false);
+      expect(access.notFound).toBe(true);
+    });
+
+    it("a company user cannot view an ARCHIVED-status item", async () => {
+      const access = await getMasterItemViewAccessEffective({ userId: companyAUserId, companyId: companyAId }, archivedItemId);
+      expect(access.allowed).toBe(false);
+      expect(access.notFound).toBe(true);
+    });
+  });
+
   describe("customer simulation", () => {
     it("owner simulating Trial sees trial restrictions on a premium item (locked, not owner view)", async () => {
       await startOrChangeSimulation(ownerActor(), "TRIAL_ACTIVE");
@@ -248,6 +293,77 @@ describe("ADMIN-DATA-ACCESS-1: platform owner data-library access (integration)"
     it("free item detail is identical in shape whether fetched as owner-detail-base or customer detail", async () => {
       const customerDetail = await getMasterItemCustomerDetail(freeItemId);
       expect(customerDetail.itemCode).toBe(`ADA1-FREE-${RUN_ID}`);
+    });
+  });
+
+  describe("HTTP route — GET /api/master-data/items/[itemId] (the exact production route from the bug report)", () => {
+    beforeEach(() => {
+      currentActorMock.mockReset();
+    });
+
+    async function getJson(res: Response): Promise<any> {
+      return res.json();
+    }
+
+    it("returns 401 for an anonymous request", async () => {
+      currentActorMock.mockRejectedValueOnce(new UnauthorizedError());
+      const res = await itemDetailGET(new Request(`http://localhost/api/master-data/items/${premiumItemId}`), {
+        params: Promise.resolve({ itemId: premiumItemId }),
+      });
+      expect(res.status).toBe(401);
+    });
+
+    it("returns full detail with isOwnerView and an admin block for the platform owner, no upgrade lock", async () => {
+      currentActorMock.mockResolvedValueOnce(ownerAsCurrentActor());
+      const res = await itemDetailGET(new Request(`http://localhost/api/master-data/items/${premiumItemId}`), {
+        params: Promise.resolve({ itemId: premiumItemId }),
+      });
+      expect(res.status).toBe(200);
+      const body = await getJson(res);
+      expect(body.data.locked).toBe(false);
+      expect(body.data.isOwnerView).toBe(true);
+      expect(body.data.admin).toBeTruthy();
+      expect(body.data.admin.versions.length).toBeGreaterThanOrEqual(2);
+    });
+
+    it("returns a locked preview (never the full detail) for a company user with no entitlement", async () => {
+      // companyB, not companyA — an earlier test in this file activates a real package for
+      // companyA, so companyA is no longer a reliable "no entitlement" fixture by this point.
+      currentActorMock.mockResolvedValueOnce(companyBActor());
+      const res = await itemDetailGET(new Request(`http://localhost/api/master-data/items/${premiumItemId}`), {
+        params: Promise.resolve({ itemId: premiumItemId }),
+      });
+      expect(res.status).toBe(200);
+      const body = await getJson(res);
+      expect(body.data.locked).toBe(true);
+      expect(body.data.isOwnerView).toBe(false);
+      expect(body.data.admin).toBeUndefined();
+    });
+
+    it("returns a safe not-found for a nonexistent item id", async () => {
+      currentActorMock.mockResolvedValueOnce(ownerAsCurrentActor());
+      const res = await itemDetailGET(new Request("http://localhost/api/master-data/items/00000000-0000-4000-8000-000000000000"), {
+        params: Promise.resolve({ itemId: "00000000-0000-4000-8000-000000000000" }),
+      });
+      expect(res.status).toBe(404);
+    });
+
+    it("returns a safe not-found (not a premium-locked preview) for a DRAFT item requested by a company user", async () => {
+      currentActorMock.mockResolvedValueOnce(companyAActor());
+      const res = await itemDetailGET(new Request(`http://localhost/api/master-data/items/${draftItemId}`), {
+        params: Promise.resolve({ itemId: draftItemId }),
+      });
+      expect(res.status).toBe(404);
+    });
+
+    it("returns full detail for a DRAFT item requested by the platform owner", async () => {
+      currentActorMock.mockResolvedValueOnce(ownerAsCurrentActor());
+      const res = await itemDetailGET(new Request(`http://localhost/api/master-data/items/${draftItemId}`), {
+        params: Promise.resolve({ itemId: draftItemId }),
+      });
+      expect(res.status).toBe(200);
+      const body = await getJson(res);
+      expect(body.data.isOwnerView).toBe(true);
     });
   });
 });

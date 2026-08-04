@@ -1189,6 +1189,7 @@ model Company {
   correctiveActions           CorrectiveAction[]
   findingBoqLinks             FindingBoqLink[]
   externalConnections         ExternalConnection[]
+  integrationEvents           IntegrationEvent[]
 }
 
 model User {
@@ -1231,6 +1232,7 @@ model User {
   masterItemVersionsApproved   MasterItemVersion[]          @relation("MasterItemVersionApprovedBy")
   externalConnectionsMade      ExternalConnection[]
   synchronizationRunsActed     SynchronizationRun[]         @relation("SynchronizationRunActor")
+  integrationEventsActed       IntegrationEvent[]           @relation("IntegrationEventActor")
 
   @@index([companyId])
   @@index([role])
@@ -2982,6 +2984,7 @@ model ExternalConnection {
   provider                IntegrationProvider      @relation(fields: [providerId], references: [id], onDelete: Restrict)
   projectIntegrations     ProjectIntegration[]
   synchronizationRuns     SynchronizationRun[]
+  integrationEvents       IntegrationEvent[]
 
   @@index([companyId])
   @@index([providerId])
@@ -3009,6 +3012,7 @@ model ProjectIntegration {
   project              Project                     @relation(fields: [projectId], references: [id], onDelete: Cascade)
   externalConnection   ExternalConnection          @relation(fields: [externalConnectionId], references: [id], onDelete: Cascade)
   synchronizationRuns  SynchronizationRun[]
+  integrationEvents    IntegrationEvent[]
 
   @@index([projectId])
   @@index([externalConnectionId])
@@ -3041,4 +3045,49 @@ model SynchronizationRun {
   @@index([projectIntegrationId])
   @@index([externalConnectionId])
   @@index([providerId])
+}
+
+enum IntegrationEventType {
+  CONNECTION_CREATED
+  CONNECTION_REFRESHED
+  CONNECTION_REAUTH_REQUIRED
+  CONNECTION_DISCONNECTED
+  CONNECTION_ERROR
+  PROJECT_LINKED
+  PROJECT_UNLINKED
+  SYNC_STARTED
+  SYNC_COMPLETED
+  SYNC_FAILED
+}
+
+/// INTEGRATIONS-1A completion pass — safe, customer-visible operational
+/// history ("Connected -> project linked -> synchronization started -> ...")
+/// distinct from the app-wide PlatformAuditLog (that log is platform-owner-
+/// only and covers admin actions across every feature; this one is scoped
+/// to a single company's integrations and is meant to be shown directly to
+/// that company's own users). `summary` and `metadataJson` must never
+/// contain a token, secret, authorization code, or raw provider payload —
+/// enforced by convention at the one write site (integration-event-service.ts),
+/// not by the schema.
+model IntegrationEvent {
+  id                   String               @id @default(uuid()) @db.Uuid
+  companyId            String               @db.Uuid
+  providerId           String
+  externalConnectionId String?              @db.Uuid
+  projectIntegrationId String?              @db.Uuid
+  eventType            IntegrationEventType
+  status               String
+  summary              String
+  metadataJson         Json?
+  actorUserId          String?              @db.Uuid
+  createdAt            DateTime             @default(now())
+  company              Company              @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  externalConnection   ExternalConnection?  @relation(fields: [externalConnectionId], references: [id], onDelete: SetNull)
+  projectIntegration   ProjectIntegration?  @relation(fields: [projectIntegrationId], references: [id], onDelete: SetNull)
+  actorUser            User?                @relation("IntegrationEventActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@index([companyId, createdAt])
+  @@index([externalConnectionId])
+  @@index([projectIntegrationId])
+  @@index([eventType])
 }

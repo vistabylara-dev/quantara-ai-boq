@@ -2,6 +2,7 @@ import { PlatformRole } from "@prisma/client";
 import { apiSuccess, handleApiError } from "@/lib/http/api-response";
 import { getCurrentActor } from "@/lib/auth/current-actor";
 import { setActorContext } from "@/lib/auth/request-context";
+import { NotFoundError } from "@/lib/errors/app-error";
 import { getMasterItemViewAccessEffective } from "@/lib/entitlements/effective-entitlement-service";
 import { getMasterItemRecord, getMasterItemCustomerDetail, toMasterItemPreviewDTO } from "@/lib/repositories/master-item-repository";
 import { buildMasterItemAdminDetail } from "@/lib/services/master-item-governance-service";
@@ -35,6 +36,13 @@ export async function GET(_request: Request, context: RouteContext) {
     const row = await getMasterItemRecord(itemId);
 
     const access = await getMasterItemViewAccessEffective(actor, itemId);
+
+    if (!access.allowed && access.notFound) {
+      // DRAFT/DEPRECATED/ARCHIVED items were never published — indistinguishable from "does not
+      // exist" for anyone but the owner, never a premium-locked preview (would misleadingly imply
+      // it could be purchased).
+      throw new NotFoundError("Master item not found.");
+    }
 
     if (!access.allowed) {
       const packageLinks = await prisma.industryDataPackageItem.findMany({ where: { masterItemId: itemId }, include: { package: { select: { name: true } } } });

@@ -4,6 +4,7 @@ import { useState, type ReactNode } from "react";
 import Sidebar from "./sidebar";
 import TopHeader from "./top-header";
 import MobileNavigation from "./mobile-navigation";
+import SimulationStatusBanner from "./simulation-status-banner";
 
 type AppShellProps = {
   children: ReactNode;
@@ -20,6 +21,7 @@ export default function AppShell({ children }: AppShellProps) {
       <div className="xl:flex relative z-10">
         <Sidebar />
         <div className="flex flex-1 flex-col overflow-hidden">
+          <SimulationStatusBanner />
           <TopHeader onMenuClick={() => setIsMobileMenuOpen(true)} />
           <MobileNavigation open={isMobileMenuOpen} onClose={() => setIsMobileMenuOpen(false)} />
           <main className="flex-1 px-4 pb-8 pt-6 sm:px-6 xl:px-10 overflow-y-auto">

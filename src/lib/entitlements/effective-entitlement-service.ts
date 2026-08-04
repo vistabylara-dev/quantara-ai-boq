@@ -157,6 +157,14 @@ export type MasterItemViewAccess = {
   isOwnerView: boolean;
   source: EffectiveSource;
   simulationMode: SimulationMode | null;
+  /**
+   * True when access was denied because the item isn't ACTIVE (DRAFT,
+   * DEPRECATED, ARCHIVED) rather than because it's premium/unentitled — the
+   * route should respond with a plain not-found in this case, never a
+   * premium-locked preview (a draft item was never published for sale, so
+   * "purchase a package to unlock it" would be actively misleading).
+   */
+  notFound: boolean;
 };
 
 /**
@@ -167,25 +175,33 @@ export type MasterItemViewAccess = {
  * but also reports whether this is a genuine unrestricted owner view so a
  * route can safely attach internal/administrative fields — a plain boolean
  * would lose that distinction.
+ *
+ * Publication status is checked before premium status: an ACTIVE item's
+ * commercial (premium/free) status is a separate question from whether it
+ * has been published at all. A real/simulated (non-owner) actor never sees a
+ * DRAFT/DEPRECATED/ARCHIVED item's detail, regardless of premium status —
+ * only a genuine platform-owner view bypasses this, for governance/QA
+ * inspection of not-yet-published or retired catalogue content.
  */
 export async function getMasterItemViewAccessEffective(actor: EntitlementActor, masterItemId: string): Promise<MasterItemViewAccess> {
   const effective = await getEffectiveEntitlements(actor);
   const base = { source: effective.source, simulationMode: effective.simulationMode };
 
   if (effective.source === "owner-override") {
-    return { allowed: true, isOwnerView: true, ...base };
+    return { allowed: true, isOwnerView: true, notFound: false, ...base };
   }
 
-  const item = await prisma.masterItem.findUnique({ where: { id: masterItemId }, select: { isPremium: true } });
-  if (!item) return { allowed: false, isOwnerView: false, ...base };
-  if (!item.isPremium) return { allowed: true, isOwnerView: false, ...base };
+  const item = await prisma.masterItem.findUnique({ where: { id: masterItemId }, select: { isPremium: true, status: true } });
+  if (!item) return { allowed: false, isOwnerView: false, notFound: true, ...base };
+  if (item.status !== "ACTIVE") return { allowed: false, isOwnerView: false, notFound: true, ...base };
+  if (!item.isPremium) return { allowed: true, isOwnerView: false, notFound: false, ...base };
 
   if (effective.source === "real") {
     const check = await canUsePremiumItemReal(actor.companyId, masterItemId);
-    return { allowed: check.allowed, isOwnerView: false, ...base };
+    return { allowed: check.allowed, isOwnerView: false, notFound: false, ...base };
   }
 
-  return { allowed: effective.simulationMode === "PRO", isOwnerView: false, ...base };
+  return { allowed: effective.simulationMode === "PRO", isOwnerView: false, notFound: false, ...base };
 }
 
 /**

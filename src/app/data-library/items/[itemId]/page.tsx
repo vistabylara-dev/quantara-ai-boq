@@ -80,19 +80,6 @@ export default function DataLibraryItemPage(props: PageProps) {
     }
   }, [params.itemId]);
 
-  const exitSimulation = useCallback(async () => {
-    setIsSaving(true);
-    setActionMessage(null);
-    try {
-      await apiClient.delete("/api/admin/simulation");
-      await load();
-    } catch (error) {
-      setActionMessage(getApiErrorMessage(error));
-    } finally {
-      setIsSaving(false);
-    }
-  }, [load]);
-
   if (isLoading) {
     return (
       <div className="rounded-[32px] border border-slate-800 bg-slate-950 p-8 text-slate-300">
@@ -114,14 +101,6 @@ export default function DataLibraryItemPage(props: PageProps) {
 
   return (
     <div className="space-y-6">
-      {item.simulationMode && (
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-amber-700 bg-amber-950/40 px-5 py-3 text-sm text-amber-200">
-          <span>CUSTOMER SIMULATION ACTIVE — viewing as: {item.simulationMode}</span>
-          <button type="button" onClick={() => void exitSimulation()} disabled={isSaving} className="rounded-xl border border-amber-600 bg-amber-900/60 px-3 py-1.5 text-xs font-semibold text-white hover:bg-amber-900 disabled:opacity-50">
-            Exit Simulation
-          </button>
-        </div>
-      )}
       {item.isOwnerView && (
         <div className="rounded-2xl border border-sky-700 bg-sky-950/40 px-5 py-3 text-sm text-sky-200">
           Platform Owner View — operational inspection access, not a customer entitlement.

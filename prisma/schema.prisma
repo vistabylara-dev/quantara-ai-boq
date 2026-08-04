@@ -805,7 +805,10 @@ model MasterItemRegionalApplicability {
   id                       String            @id @default(uuid()) @db.Uuid
   masterItemId             String            @db.Uuid
   scope                    MasterRegionScope
-  countryCode              String?
+  /// Empty string (not null) for scope-only rows (UAE/GCC/INTERNATIONAL) so
+  /// the compound unique constraint below has a well-defined value —
+  /// Prisma's generated compound-unique lookup type does not accept null.
+  countryCode              String            @default("")
   effectiveFrom            DateTime?
   effectiveTo              DateTime?
   languageAvailabilityJson Json?

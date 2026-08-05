@@ -82,7 +82,9 @@ export const publicNavigation: NavigationSection[] = [
       {
         label: "Resource Hub",
         items: [
-          { label: "Resource Centre", href: "/resources", description: "Articles, guides, and tools for construction estimating." }
+          { label: "Resource Centre", href: "/resources", description: "Articles, guides, and tools for construction estimating." },
+          { label: "BOQ Calculation Formulas", href: "/boq-calculation-formulas" },
+          { label: "Free BOQ Calculator — External Vista By Lara Tool", href: "https://www.vistabylara.com/ai-tools/boq-calculator-uae" }
         ]
       },
       {

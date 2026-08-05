@@ -551,6 +551,23 @@ export default function HomePage() {
         </div>
       </section>
 
+      <section className="py-16 px-4 bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-950/40 dark:to-indigo-950/40 border-t border-blue-100 dark:border-blue-900">
+        <div className="container mx-auto max-w-4xl text-center">
+          <h2 className="text-3xl font-bold text-slate-900 dark:text-white mb-6">BOQ Formulas and Quantity Calculator</h2>
+          <p className="text-lg text-slate-600 dark:text-slate-300 mb-8 leading-relaxed max-w-2xl mx-auto">
+            Review practical formulas for excavation, concrete, masonry, finishes, reinforcement, roofing and BOQ cost calculations, or use the free Vista By Lara BOQ Calculator.
+          </p>
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
+            <Link href="/boq-calculation-formulas" className="inline-flex items-center justify-center rounded-lg text-base font-medium bg-blue-600 text-white hover:bg-blue-700 h-12 px-6 py-3 w-full sm:w-auto shadow-sm">
+              View BOQ Formulas
+            </Link>
+            <a href="https://www.vistabylara.com/ai-tools/boq-calculator-uae" target="_blank" rel="noopener noreferrer" className="inline-flex items-center justify-center rounded-lg text-base font-medium border border-blue-200 bg-white text-blue-700 hover:bg-slate-50 dark:border-blue-800 dark:bg-slate-900 dark:text-blue-400 dark:hover:bg-slate-800 h-12 px-6 py-3 w-full sm:w-auto">
+              Open Free BOQ Calculator
+            </a>
+          </div>
+        </div>
+      </section>
+
       <section className="py-24 px-4 bg-white dark:bg-slate-950 border-t border-slate-100 dark:border-slate-900">
         <div className="container mx-auto max-w-5xl">
           <h2 className="text-3xl font-bold text-center text-slate-900 dark:text-white mb-12">Explore Quantara Resources</h2>

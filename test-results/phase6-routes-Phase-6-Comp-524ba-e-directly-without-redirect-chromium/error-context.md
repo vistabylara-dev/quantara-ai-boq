@@ -1,0 +1,77 @@
+# Instructions
+
+- Following Playwright test failed.
+- Explain why, be concise, respect Playwright best practices.
+- Provide a snippet of code with the fix, if possible.
+
+# Test info
+
+- Name: phase6-routes.spec.ts >> Phase 6 Comparison Routes Anonymous Access >> Anonymous user can access /when-to-use-boq-software directly without redirect
+- Location: tests\e2e\phase6-routes.spec.ts:17:9
+
+# Error details
+
+```
+Error: expect(locator).toBeVisible() failed
+
+Locator: locator('footer')
+Expected: visible
+Timeout: 5000ms
+Error: element(s) not found
+
+Call log:
+  - Expect "toBeVisible" with timeout 5000ms
+  - waiting for locator('footer')
+
+```
+
+```yaml
+- 'heading "Application error: a client-side exception has occurred while loading localhost (see the browser console for more information)." [level=2]'
+```
+
+# Test source
+
+```ts
+  1  | import { test, expect } from '@playwright/test';
+  2  | 
+  3  | const ROUTES = [
+  4  |   '/comparisons',
+  5  |   '/quantara-vs-excel-for-boq',
+  6  |   '/boq-software-vs-spreadsheets',
+  7  |   '/ai-boq-vs-manual-boq-preparation',
+  8  |   '/ocr-vs-structured-boq-extraction',
+  9  |   '/quantity-takeoff-vs-boq-software',
+  10 |   '/boq-software-vs-document-management',
+  11 |   '/construction-estimating-software-vs-excel',
+  12 |   '/when-to-use-boq-software'
+  13 | ];
+  14 | 
+  15 | test.describe('Phase 6 Comparison Routes Anonymous Access', () => {
+  16 |   for (const route of ROUTES) {
+  17 |     test(`Anonymous user can access ${route} directly without redirect`, async ({ page }) => {
+  18 |       const response = await page.goto(route);
+  19 |       expect(response?.status()).toBe(200);
+  20 | 
+  21 |       // Verify we are not redirected to login
+  22 |       await expect(page).toHaveURL(new RegExp(`${route}$`));
+  23 | 
+  24 |       // Ensure the dashboard sidebar does NOT render (no app-shell specific elements if possible, or just verify public layout)
+  25 |       // We can verify a known public footer element is visible
+  26 |       const footer = page.locator('footer');
+> 27 |       await expect(footer).toBeVisible();
+     |                            ^ Error: expect(locator).toBeVisible() failed
+  28 | 
+  29 |       // Verify the H1 exists
+  30 |       const h1 = page.locator('h1');
+  31 |       await expect(h1).toBeVisible();
+  32 |       
+  33 |       // Ensure the professional disclaimer is visible somewhere on the page (except on the hub page)
+  34 |       if (route !== '/comparisons') {
+  35 |         const disclaimer = page.getByText(/This comparison is provided for general workflow guidance/);
+  36 |         await expect(disclaimer.first()).toBeVisible();
+  37 |       }
+  38 |     });
+  39 |   }
+  40 | });
+  41 | 
+```

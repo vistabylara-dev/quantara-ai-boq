@@ -32,6 +32,7 @@ const PUBLIC_ROUTES = new Set([
   "/quantity-surveying-software",
   "/boq-document-generation",
   "/resources",
+  "/boq-calculation-formulas",
   "/what-is-a-boq",
   "/boq-vs-construction-estimate",
   "/boq-vs-bill-of-materials",

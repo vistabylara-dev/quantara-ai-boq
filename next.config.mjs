@@ -25,6 +25,27 @@ const nextConfig = {
   outputFileTracingIncludes: {
     "/api/admin/master-catalogue/datasets/[datasetId]/dry-run": ["./data-imports/hvac/*.csv", "./data-imports/plumbing/*.csv"],
     "/api/admin/master-catalogue/datasets/jobs/[jobId]/continue": ["./data-imports/hvac/*.csv", "./data-imports/plumbing/*.csv"],
+    // CORE-FLOW-1 — every route below transitively imports the extraction
+    // pipeline (project-file-service/drawing-service -> register-handlers ->
+    // preprocessing-handler -> pdfjs-dist's legacy Node build), which tries
+    // to `require("@napi-rs/canvas")` inside a try/catch at module-load time
+    // to polyfill DOMMatrix/ImageData/Path2D. That require is dynamic, so
+    // @vercel/nft's static trace misses it and the package is absent from
+    // the deployed function's node_modules — the catch swallows the load
+    // failure (only a warning), but the next line dereferences the
+    // now-unpolyfilled DOMMatrix directly, crashing with a bare
+    // ReferenceError before any route handler code runs. Same tracing-gap
+    // class as the catalogue CSVs above; same fix. Only the linux-x64-gnu
+    // native binary is needed since that's Vercel's runtime target.
+    "/api/drawings/[fileId]": ["./node_modules/@napi-rs/canvas/**", "./node_modules/@napi-rs/canvas-linux-x64-gnu/**"],
+    "/api/files/[fileId]": ["./node_modules/@napi-rs/canvas/**", "./node_modules/@napi-rs/canvas-linux-x64-gnu/**"],
+    "/api/files/[fileId]/classification": ["./node_modules/@napi-rs/canvas/**", "./node_modules/@napi-rs/canvas-linux-x64-gnu/**"],
+    "/api/files/[fileId]/classify": ["./node_modules/@napi-rs/canvas/**", "./node_modules/@napi-rs/canvas-linux-x64-gnu/**"],
+    "/api/files/[fileId]/download": ["./node_modules/@napi-rs/canvas/**", "./node_modules/@napi-rs/canvas-linux-x64-gnu/**"],
+    "/api/projects/[projectId]/drawings": ["./node_modules/@napi-rs/canvas/**", "./node_modules/@napi-rs/canvas-linux-x64-gnu/**"],
+    "/api/projects/[projectId]/drawings/upload-authorization": ["./node_modules/@napi-rs/canvas/**", "./node_modules/@napi-rs/canvas-linux-x64-gnu/**"],
+    "/api/projects/[projectId]/drawings/upload-authorization/[sessionId]/finalize": ["./node_modules/@napi-rs/canvas/**", "./node_modules/@napi-rs/canvas-linux-x64-gnu/**"],
+    "/api/projects/[projectId]/files": ["./node_modules/@napi-rs/canvas/**", "./node_modules/@napi-rs/canvas-linux-x64-gnu/**"],
   },
   // pdfkit reads its standard-14 font metrics (data/*.afm) from disk via a
   // path relative to its own package directory at runtime. Letting webpack

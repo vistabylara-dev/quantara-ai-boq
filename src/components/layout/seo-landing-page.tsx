@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, type ReactNode } from "react";
 import Link from "next/link";
 import { ChevronRight, ChevronDown, CheckCircle2, FileText, Settings, ShieldCheck, ArrowRight, Zap, FolderKanban } from "lucide-react";
 import PublicFooter from "@/components/layout/public-footer";

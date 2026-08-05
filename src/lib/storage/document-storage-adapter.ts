@@ -39,6 +39,16 @@ export type ObjectMetadata = {
  */
 export type AuthorizedDownload = { mode: "stream" } | { mode: "redirect"; url: string };
 
+export type ByteRange = { start: number; end: number };
+
+export type ObjectStreamResult = {
+  body: ReadableStream<Uint8Array>;
+  totalSize: number;
+  contentType: string;
+  /** Present only when the adapter actually honored the requested range (206-capable); absent means the full object is being streamed. */
+  servedRange?: ByteRange;
+};
+
 export type DocumentStorageAdapter = {
   putObject(input: PutObjectInput): Promise<PutObjectResult>;
   getObject(key: string): Promise<Buffer>;
@@ -46,6 +56,14 @@ export type DocumentStorageAdapter = {
   objectExists(key: string): Promise<boolean>;
   getMetadata(key: string): Promise<ObjectMetadata | null>;
   createAuthorizedDownload(key: string): Promise<AuthorizedDownload>;
+  /**
+   * CORE-FLOW-1 — streams an object (optionally a byte range) without
+   * buffering it into memory. Used for large-PDF preview/download (Range
+   * requests) and for streaming checksum computation. `range` is a
+   * best-effort request; check `servedRange` on the result before trusting
+   * a 206 response is actually correct.
+   */
+  getObjectStream(key: string, range?: ByteRange): Promise<ObjectStreamResult>;
 };
 
 export class StorageKeyError extends Error {

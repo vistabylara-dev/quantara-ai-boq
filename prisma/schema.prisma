@@ -1429,6 +1429,7 @@ model Company {
   importJobs                  ImportJob[]
   importRows                  ImportRow[]
   projectFiles                ProjectFile[]
+  projectFileUploadSessions   ProjectFileUploadSession[]
   extractionJobs              ExtractionJob[]
   extractedTables             ExtractedTable[]
   extractedTableRows          ExtractedTableRow[]
@@ -1484,6 +1485,7 @@ model User {
   copiedBoqItems                         BOQItem[]                        @relation("BoqItemCopiedByUser")
   uploadedProjectFiles                   ProjectFile[]                    @relation("ProjectFileUploadedByUser")
   classificationConfirmedFiles           ProjectFile[]                    @relation("ProjectFileClassificationConfirmedByUser")
+  projectFileUploadSessions              ProjectFileUploadSession[]
   createdExtractionJobs                  ExtractionJob[]
   platformAuditLogs                      PlatformAuditLog[]               @relation("PlatformAuditActor")
   commercePriceReviews                   CommercePrice[]                  @relation("CommercePriceReviewer")
@@ -1626,6 +1628,7 @@ model Project {
   itemUsages                CompanyItemUsage[]
   importJobs                ImportJob[]
   files                     ProjectFile[]
+  fileUploadSessions        ProjectFileUploadSession[]
   extractionJobs            ExtractionJob[]
   extractedEntities         ExtractedEntity[]
   detectedRooms             DetectedRoom[]
@@ -3817,4 +3820,50 @@ model CommerceSyncRun {
   @@index([provider, environment])
   @@index([status])
   @@index([startedAt])
+}
+
+// ---------------------------------------------------------------------------
+// CORE-FLOW-1 — direct-to-Blob large drawing upload
+// ---------------------------------------------------------------------------
+// Short-lived, single-use binding between an authorized upload target (one
+// exact Blob pathname, generated server-side — never client-supplied) and
+// the ProjectFile it will become once finalized. The browser never talks to
+// this app for the file bytes themselves; it PUTs directly to private Vercel
+// Blob using a scoped client token, then calls the finalize route with this
+// session's id so the server can verify what actually landed in Blob before
+// ever trusting it as real project data.
+
+enum ProjectFileUploadSessionStatus {
+  PENDING
+  FINALIZED
+  EXPIRED
+  CANCELLED
+}
+
+model ProjectFileUploadSession {
+  id               String                         @id @default(uuid()) @db.Uuid
+  companyId        String                         @db.Uuid
+  projectId        String                         @db.Uuid
+  actorUserId      String                         @db.Uuid
+  /// Pre-generated — becomes ProjectFile.id on successful finalize.
+  fileId           String                         @db.Uuid
+  /// Server-generated, e.g. companies/{companyId}/projects/{projectId}/drawings/{fileId}/{safeFileName} — the only pathname this session's token is valid for.
+  storageKey       String                         @unique
+  originalName     String
+  declaredMimeType String
+  declaredByteSize Int
+  extension        String
+  status           ProjectFileUploadSessionStatus @default(PENDING)
+  finalizedAt      DateTime?
+  expiresAt        DateTime
+  createdAt        DateTime                       @default(now())
+  updatedAt        DateTime                       @updatedAt
+  company          Company                        @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  project          Project                        @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  actorUser        User                           @relation(fields: [actorUserId], references: [id], onDelete: Cascade)
+
+  @@index([companyId])
+  @@index([projectId])
+  @@index([expiresAt])
+  @@index([status])
 }

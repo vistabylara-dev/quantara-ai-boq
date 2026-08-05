@@ -12,6 +12,8 @@ const projectFileInclude = {
 export type ProjectFileRecord = Prisma.ProjectFileGetPayload<{ include: typeof projectFileInclude }>;
 
 export type CreateProjectFileInput = {
+  /** CORE-FLOW-1: explicit id so a pre-generated fileId (embedded in the Blob storage pathname before finalize) becomes the real ProjectFile.id. Omit to auto-generate as before. */
+  id?: string;
   projectId: string;
   uploadedByUserId: string;
   originalName: string;
@@ -68,6 +70,7 @@ export function toProjectFileDTO(row: ProjectFileRecord) {
 export async function createProjectFile(companyId: string, input: CreateProjectFileInput, db: DbClient = prisma): Promise<ProjectFileRecord> {
   return db.projectFile.create({
     data: {
+      ...(input.id ? { id: input.id } : {}),
       companyId,
       projectId: input.projectId,
       uploadedByUserId: input.uploadedByUserId,
@@ -98,6 +101,11 @@ export async function getProjectFileRecord(companyId: string, fileId: string, db
   });
   if (!row) throw new NotFoundError("File not found.");
   return row;
+}
+
+/** Non-throwing lookup — used by finalize to detect an already-completed (idempotent replay) upload. */
+export async function findProjectFileRecord(companyId: string, fileId: string, db: DbClient = prisma): Promise<ProjectFileRecord | null> {
+  return db.projectFile.findFirst({ where: { id: fileId, companyId }, include: projectFileInclude });
 }
 
 export async function listProjectFiles(companyId: string, projectId: string, db: DbClient = prisma): Promise<ProjectFileRecord[]> {

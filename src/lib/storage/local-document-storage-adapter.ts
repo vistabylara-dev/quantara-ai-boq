@@ -1,10 +1,14 @@
+import { createReadStream } from "node:fs";
 import { mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { Readable } from "node:stream";
 import path from "node:path";
 import {
   assertSafeStorageKey,
   type AuthorizedDownload,
+  type ByteRange,
   type DocumentStorageAdapter,
   type ObjectMetadata,
+  type ObjectStreamResult,
   type PutObjectInput,
   type PutObjectResult,
 } from "./document-storage-adapter";
@@ -76,5 +80,23 @@ export const localDocumentStorageAdapter: DocumentStorageAdapter = {
 
   async createAuthorizedDownload(_key: string): Promise<AuthorizedDownload> {
     return { mode: "stream" };
+  },
+
+  async getObjectStream(key: string, range?: ByteRange): Promise<ObjectStreamResult> {
+    const filePath = resolvePath(key);
+    const info = await stat(filePath);
+    const contentType = contentTypeByKey.get(key) ?? "application/octet-stream";
+    if (range) {
+      const end = Math.min(range.end, info.size - 1);
+      const nodeStream = createReadStream(filePath, { start: range.start, end });
+      return {
+        body: Readable.toWeb(nodeStream) as ReadableStream<Uint8Array>,
+        totalSize: info.size,
+        contentType,
+        servedRange: { start: range.start, end },
+      };
+    }
+    const nodeStream = createReadStream(filePath);
+    return { body: Readable.toWeb(nodeStream) as ReadableStream<Uint8Array>, totalSize: info.size, contentType };
   },
 };

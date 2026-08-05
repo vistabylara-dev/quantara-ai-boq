@@ -10,8 +10,16 @@ export function isDrawingExtensionPreviewable(extension: string): boolean {
   return PREVIEWABLE_EXTENSIONS.has(extension.toLowerCase());
 }
 
-/** Server-upload path limit for tonight — deliberately stricter than file-security.ts's general 200MB cap, and enforced only for this drawing-specific path so the existing generic files feature is untouched. */
-export const DRAWING_MAX_FILE_SIZE_BYTES = 25 * 1024 * 1024;
+/**
+ * CORE-FLOW-1 — the single source of truth for the drawing upload size
+ * limit. This constant (imported by both the client upload UI and the
+ * server) is the safe default; the server additionally honors
+ * DRAWING_UPLOAD_MAX_BYTES if set (see resolveDrawingUploadMaxBytes in
+ * drawing-service.ts) — the client never re-derives its own number, and
+ * the server is the only place that actually enforces it. Never duplicate
+ * this value elsewhere.
+ */
+export const DRAWING_UPLOAD_MAX_BYTES_DEFAULT = 250 * 1024 * 1024;
 
 export const DRAWING_DISCIPLINES = [
   "ARCHITECTURAL",

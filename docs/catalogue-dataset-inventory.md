@@ -9,8 +9,8 @@ mapping, and a specification-parsing profile.
 
 | Dataset | Folder | Files | Rows (registry manifest) | Industry | Discipline | Target package | Status | Import readiness | Blocker |
 |---|---|---|---|---|---|---|---|---|---|
-| HVAC Master Catalogue (`quantara-master-hvac-v1`) | `data-imports/hvac` | 2 | 891 (707 + 184) | Construction | Mechanical (HVAC) | HVAC | **Registered, approved, checksummed** | Ready — dry-run and execute routes exist and are wired to this exact dataset | Production execution status unconfirmed (needs owner check, see below) |
-| Plumbing Master Catalogue (`quantara-master-plumbing-v1`) | `data-imports/plumbing` | 13 | ~13,111 (manifest total) | Construction | Plumbing | Plumbing | **Registered, approved, checksummed** | Ready — same pipeline | Production execution status unconfirmed |
+| HVAC Master Catalogue (`quantara-master-hvac-v1`) | `data-imports/hvac` | 2 | 891 (707 + 184) | Construction | Mechanical (HVAC) | HVAC | **Registered, approved, checksummed** | Ready — dry-run and execute routes exist and are wired to this exact dataset | `IMPORTED_UNPUBLISHED` (unconfirmed origin) — 44 production items exist but `latestJob: null` (no governed import batch ever ran), `publishedVersions: 0`, zero classification/hierarchy — the 44 items likely did not come from this pipeline; needs inspection before executing (see production evidence below) |
+| Plumbing Master Catalogue (`quantara-master-plumbing-v1`) | `data-imports/plumbing` | 13 | ~13,111 (manifest total) | Construction | Plumbing | Plumbing | **Registered, approved, checksummed** | Ready — same pipeline | `NOT_IMPORTED` — 0 production items, `latestJob: null`; awaiting owner approval to execute |
 | Architectural Finishes | `data-imports/architectural-finishes` | 15 | Unknown — not registered | — | — | — | **Not registered/approved** | Blocked | No registry entry, no checksum, no hierarchy/parser mapping |
 | BIM Digital Deliverables | `data-imports/bim-digital-deliverables` | 1 | Unknown | — | — | — | Not registered | Blocked | Same |
 | Civil Works | `data-imports/civil-works` | 1 | Unknown | — | — | — | Not registered | Blocked | Same |
@@ -65,9 +65,48 @@ implemented and was not re-built:
   `POST /api/admin/master-catalogue/import/[batchId]/rollback` — all
   `PLATFORM_OWNER`-gated.
 
-## Genuinely open item
+## Production evidence — 2026-08-05, owner-provided
 
-Whether the HVAC/Plumbing datasets have actually been **executed** against
-the production database (not just dry-run, and not just code-deployed) is
-unconfirmed. See `docs/catalogue-commercial-activation-evidence.md` for the
-exact owner action needed to establish this with real counts.
+Real values from `GET /api/admin/master-catalogue/growth-snapshot` and
+`GET /api/admin/master-catalogue/datasets`, run by the platform owner in a
+live authenticated session. Not estimated, not sourced from any local
+database.
+
+```
+growth-snapshot: totalMasterItems=44, publishedVersions=0,
+  itemsWithClassification=0, itemsWithHierarchy=0, manufacturers=0,
+  verifiedProductModels=0, standardAuthorities=0, disciplines=5,
+  hierarchyNodes=0
+
+datasets:
+  quantara-master-hvac-v1     — currentProductionItemCount=44, latestJob=null
+  quantara-master-plumbing-v1 — currentProductionItemCount=0,  latestJob=null
+```
+
+**HVAC — `IMPORTED_UNPUBLISHED`, unconfirmed origin.** 44 items exist in
+production, but `latestJob: null` means the governed dataset-registry
+pipeline (checksum-verified dry-run/execute, the one this file documents)
+has never actually run for this dataset. Combined with
+`publishedVersions: 0`, `itemsWithClassification: 0`, `itemsWithHierarchy: 0`
+platform-wide, these 44 items have none of the enrichment the HVAC profile
+(`parseHvacSpecification`, `hierarchyParentChain`) would produce, and 44
+doesn't correspond to either source file's row count (707, 184) or their
+sum. These items most likely predate this dataset's governed pipeline
+entirely (leftover from an earlier/different import path) rather than being
+a partial run of the approved 891-row dataset. Recommend inspecting their
+`itemCode`/source metadata before running execute — execute is idempotent
+by stable item code so it should be safe regardless, but the origin should
+be understood first rather than assumed.
+
+**Plumbing — `NOT_IMPORTED`.** 0 items, no job record. Clean, unambiguous —
+ready to execute pending owner approval.
+
+**Package/entitlement state — `UNKNOWN`.** Neither endpoint above reports
+`IndustryDataPackage`, `IndustryDataPackageItem`, or
+`CompanyPackageSubscription` counts. This needs a dedicated check (not yet
+built) before Checkpoint 5/6/8 production state can be confirmed.
+
+**Exact next action:** awaiting explicit owner approval to (a) inspect the
+44 existing HVAC items' source/item-code metadata, then (b) execute the
+governed import for Plumbing (and HVAC, once the anomaly is understood).
+No dry-run or execute has been triggered yet.

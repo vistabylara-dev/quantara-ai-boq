@@ -69,8 +69,12 @@ export default function CataloguePage() {
     };
   }, [loadCatalogue]);
 
+  const categories = useMemo(() => {
+    const arr = result?.items ?? [];
+    return Array.from(new Set(arr.map((item) => item.category))).sort();
+  }, [result?.items]);
+
   const items = result?.items ?? [];
-  const categories = useMemo(() => Array.from(new Set(items.map((item) => item.category))).sort(), [items]);
 
   const handleDeactivate = async (item: CatalogueItem) => {
     if (!window.confirm(`Deactivate ${item.itemCode}? It will no longer be selectable for new BOQ items.`)) return;

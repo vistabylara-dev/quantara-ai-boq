@@ -210,13 +210,28 @@ export default function RegisterPage() {
 
           {error && <p className="text-sm text-rose-300">{error}</p>}
 
-          <button
-            type="submit"
-            disabled={isSubmitting}
-            className="w-full mt-4 rounded-2xl bg-blue-600 px-4 py-3 text-sm font-semibold text-white transition hover:bg-blue-500 disabled:opacity-60"
-          >
-            {isSubmitting ? "Submitting..." : "Request Access"}
-          </button>
+          <div className="pt-2">
+            <button
+              type="submit"
+              disabled={isSubmitting}
+              className="w-full h-12 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-bold transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
+            >
+              {isSubmitting ? (
+                <span className="flex items-center gap-2">
+                  <span className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
+                  Submitting Request...
+                </span>
+              ) : (
+                "Request Early Access"
+              )}
+            </button>
+          </div>
+          
+          <div className="pt-4 border-t border-slate-800">
+            <p className="text-xs text-slate-400 text-center leading-relaxed">
+              We use the information you provide to review your request and contact you about Quantara. Do not submit confidential project documents through this form. <Link href="/privacy" className="text-blue-400 hover:underline">Read our Privacy Policy</Link>.
+            </p>
+          </div>
         </form>
 
         <div className="mt-6 text-sm text-slate-400 text-center">

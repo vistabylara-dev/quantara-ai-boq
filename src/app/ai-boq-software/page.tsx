@@ -1,5 +1,6 @@
 import React from "react";
 import { Metadata } from "next";
+import Link from "next/link";
 import SeoLandingPage, { SeoLandingPageContent } from "@/components/layout/seo-landing-page";
 
 export const metadata: Metadata = {
@@ -31,7 +32,10 @@ const content: SeoLandingPageContent = {
   },
   workflowProblem: {
     heading: "The Challenge of Manual BOQ Workflows",
-    paragraphs: ["Construction projects begin with complex, unstructured documents. Traditionally, estimating teams spend countless hours manually copying data from text-based PDFs or scanned files into spreadsheets. This process is not only tedious but prone to data entry errors that can cascade into significant commercial risks.","Furthermore, simple OCR tools often fail to understand the complex hierarchy and nested structure of a true Bill of Quantities, leaving teams with disjointed data that still requires massive manual reformatting."]
+    paragraphs: [
+      <>Construction projects begin with complex, unstructured documents. Traditionally, estimating teams spend countless hours manually copying data from text-based PDFs or scanned files into spreadsheets. This process is not only tedious but prone to data entry errors that can cascade into significant commercial risks. Many firms are now weighing <Link href="/ai-boq-vs-manual-boq-preparation" className="text-blue-600 hover:underline font-medium">AI BOQ vs manual BOQ preparation</Link> to resolve this.</>,
+      <>Furthermore, <Link href="/ocr-vs-structured-boq-extraction" className="text-blue-600 hover:underline font-medium">basic OCR tools</Link> often fail to understand the complex hierarchy and nested structure of a true Bill of Quantities, leaving teams with disjointed data that still requires massive manual reformatting.</>
+    ]
   },
   quantaraSupport: {
     heading: "How Quantara Transforms the Workflow",

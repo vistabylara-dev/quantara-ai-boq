@@ -1,237 +1,119 @@
 import { Metadata } from "next";
-import RegionalLandingPage, { RegionalLandingPageContent } from "@/components/layout/regional-landing-page";
+import SeoLandingPage, { SeoLandingPageContent } from "@/components/layout/seo-landing-page";
 
 export const metadata: Metadata = {
-  title: "BOQ Software Qatar for Contractors and Project Teams | Quantara",
-  description: "Organize Qatar BOQ workflows, project documents, revisions, templates and professional construction outputs using Quantara.",
+  title: "BOQ Software for Qatar MEP and Consultant Workflows | Quantara",
+  description: "Organize consultant-issued BOQs, manage MEP packages, and track tender revisions with structured software for Qatar projects.",
   alternates: {
     canonical: "https://quantara.vistabylara.com/boq-software-qatar",
   },
   openGraph: {
-    title: "BOQ Software Qatar for Contractors and Project Teams | Quantara",
-    description: "Organize Qatar BOQ workflows, project documents, revisions, templates and professional construction outputs using Quantara.",
+    title: "BOQ Software for Qatar MEP and Consultant Workflows | Quantara",
+    description: "Organize consultant-issued BOQs, manage MEP packages, and track tender revisions with structured software for Qatar projects.",
     url: "https://quantara.vistabylara.com/boq-software-qatar",
-    type: "website",
+    type: "article",
   },
-  twitter: {
-    card: "summary_large_image",
-    title: "BOQ Software Qatar for Contractors and Project Teams | Quantara",
-    description: "Organize Qatar BOQ workflows, project documents, revisions, templates and professional construction outputs using Quantara.",
-  },
-  robots: {
-    index: true,
-    follow: true,
-  }
 };
 
 export default function Page() {
-  const content: RegionalLandingPageContent = {
-    breadcrumbLabel: "BOQ Software Qatar",
-    breadcrumbParent: {"href":"/gcc-boq-software","label":"GCC BOQ Software"},
-    title: "BOQ Software for Qatar Construction and Project Workflows",
-    audienceDescription: "For Qatar construction, MEP, consultant and contractor teams seeking structured BOQ workflows.",
-    directAnswer: "Quantara provides Qatar project teams with a structured platform to manage consultant documentation, MEP coordination, and tender revisions.",
-    challenges: [
-  {
-    "title": "Rigorous Consultant Review",
-    "description": "Tender submissions often require strict adherence to consultant-issued BOQ formats, making manual data entry risky."
-  },
-  {
-    "title": "MEP Coordination",
-    "description": "Managing the overlap between structural and MEP BOQ sections requires clean, structured data organization."
-  }
-],
-    workflowDescription: "Quantara assists with structuring BOQ records from consultant and contractor documentation. It simplifies MEP coordination, manages tender revisions, and utilizes templates to prepare documents for professional review.",
-    workflowExample: "A Qatar-based MEP contractor uses Quantara to extract equipment schedules from a consultant’s PDF, structuring the items into a master BOQ to ensure no required testing and commissioning items are missed during pricing.",
-    typicalCategories: [
-  "Substructure",
-  "Superstructure",
-  "MEP Services",
-  "External Works",
-  "Provisional Sums"
-],
-    supportedInputs: [
-  "Text-based PDF",
-  "Scanned PDF",
-  "XLSX",
-  "CSV"
-],
-    plannedInputs: [
-  "CAD",
-  "BIM",
-  "IFC"
-],
-    supportedOutputs: [
-  "Structured Excel (XLSX)",
-  "Formatted PDF Proposals",
-  "CSV Exports"
-],
-    limitations: [
-  "Quantara does not claim Qatar regulatory compliance.",
-  "Quantara does not include Qatar market-rate data or pricing libraries.",
-  "Quantara does not integrate directly with local tender portals."
-],
-    faqs: [
-  {
-    "question": "Does Quantara support Qatar tender portals?",
-    "answer": "No, Quantara does not integrate directly with local tender portals. You can export your structured BOQ to Excel for manual submission."
-  },
-  {
-    "question": "Does it include Qatar market rates?",
-    "answer": "No, Quantara does not provide pricing databases. You must use your own commercial rates."
-  },
-  {
-    "question": "Can I manage MEP coordination?",
-    "answer": "Yes, you can structure specific sections within your BOQ to clearly separate and coordinate MEP scope."
-  },
-  {
-    "question": "Is it suitable for consultant workflows?",
-    "answer": "Yes, consultants can use Quantara to structure their BOQs and manage revisions before issuing them to contractors."
-  },
-  {
-    "question": "How do I handle scanned documents?",
-    "answer": "Quantara supports OCR for scanned PDFs, but rigorous professional review of the extracted text is mandatory."
-  },
-  {
-    "question": "Can I use company templates?",
-    "answer": "Yes, you can save standardized BOQ structures as templates for recurring project types."
-  },
-  {
-    "question": "Does Quantara validate compliance?",
-    "answer": "No, it is a document workflow tool and does not validate engineering or regulatory compliance."
-  },
-  {
-    "question": "Can I export a professional proposal?",
-    "answer": "Yes, the platform allows you to generate formatted PDF proposals from your structured data."
-  }
-],
-    relatedPages: [
-  {
-    "href": "/gcc-boq-software",
-    "label": "GCC BOQ Software"
-  },
-  {
-    "href": "/boq-software",
-    "label": "BOQ Software"
-  },
-  {
-    "href": "/boq-software-for-mep-contractors",
-    "label": "MEP BOQ Software"
-  },
-  {
-    "href": "/boq-revision-control",
-    "label": "BOQ Revision Control"
-  },
-  {
-    "href": "/features",
-    "label": "Features"
-  }
-],
-    schema: {
-      "@context": "https://schema.org",
-      "@graph": [
-        {
-          "@type": "WebPage",
-          "@id": "https://quantara.vistabylara.com/boq-software-qatar",
-          "url": "https://quantara.vistabylara.com/boq-software-qatar",
-          "name": "BOQ Software Qatar for Contractors and Project Teams | Quantara",
-          "description": "Organize Qatar BOQ workflows, project documents, revisions, templates and professional construction outputs using Quantara."
-        },
-        {
-          "@type": "BreadcrumbList",
-          "itemListElement": [
-            {
-              "@type": "ListItem",
-              "position": 1,
-              "name": "Home",
-              "item": "https://quantara.vistabylara.com/"
-            },
-            {
-              "@type": "ListItem",
-              "position": 2,
-              "name": "GCC BOQ Software",
-              "item": "https://quantara.vistabylara.com/gcc-boq-software"
-            },
-            {
-              "@type": "ListItem",
-              "position": 3,
-              "name": "BOQ Software Qatar",
-              "item": "https://quantara.vistabylara.com/boq-software-qatar"
-            }
-          ]
-        },
-        {
-          "@type": "FAQPage",
-          "mainEntity": [
-  {
-    "@type": "Question",
-    "name": "Does Quantara support Qatar tender portals?",
-    "acceptedAnswer": {
-      "@type": "Answer",
-      "text": "No, Quantara does not integrate directly with local tender portals. You can export your structured BOQ to Excel for manual submission."
-    }
-  },
-  {
-    "@type": "Question",
-    "name": "Does it include Qatar market rates?",
-    "acceptedAnswer": {
-      "@type": "Answer",
-      "text": "No, Quantara does not provide pricing databases. You must use your own commercial rates."
-    }
-  },
-  {
-    "@type": "Question",
-    "name": "Can I manage MEP coordination?",
-    "acceptedAnswer": {
-      "@type": "Answer",
-      "text": "Yes, you can structure specific sections within your BOQ to clearly separate and coordinate MEP scope."
-    }
-  },
-  {
-    "@type": "Question",
-    "name": "Is it suitable for consultant workflows?",
-    "acceptedAnswer": {
-      "@type": "Answer",
-      "text": "Yes, consultants can use Quantara to structure their BOQs and manage revisions before issuing them to contractors."
-    }
-  },
-  {
-    "@type": "Question",
-    "name": "How do I handle scanned documents?",
-    "acceptedAnswer": {
-      "@type": "Answer",
-      "text": "Quantara supports OCR for scanned PDFs, but rigorous professional review of the extracted text is mandatory."
-    }
-  },
-  {
-    "@type": "Question",
-    "name": "Can I use company templates?",
-    "acceptedAnswer": {
-      "@type": "Answer",
-      "text": "Yes, you can save standardized BOQ structures as templates for recurring project types."
-    }
-  },
-  {
-    "@type": "Question",
-    "name": "Does Quantara validate compliance?",
-    "acceptedAnswer": {
-      "@type": "Answer",
-      "text": "No, it is a document workflow tool and does not validate engineering or regulatory compliance."
-    }
-  },
-  {
-    "@type": "Question",
-    "name": "Can I export a professional proposal?",
-    "acceptedAnswer": {
-      "@type": "Answer",
-      "text": "Yes, the platform allows you to generate formatted PDF proposals from your structured data."
-    }
-  }
-]
-        }
+  const content: SeoLandingPageContent = {
+    breadcrumbLabel: "BOQ Software",
+    h1: "BOQ Software for Qatar Tender Revisions",
+    directDefinition: "Qatar construction projects rely heavily on consultant-issued BOQs and complex MEP packages. Quantara provides the structured records required for rigorous professional review and revision tracking.",
+    audience: {
+      heading: "Designed for Professional Estimators",
+      content: "Quantara supports professionals who require structured data management for complex projects. All extracted quantities and generated proposals must be reviewed by a qualified human professional.",
+      items: ["Contractors managing complex tenders", "Consultants structuring master templates", "MEP and fit-out specialists"]
+    },
+    workflowProblem: {
+      heading: "Consultant-Issued BOQ Management",
+      paragraphs: ["When contractors receive consultant-issued BOQs, especially large MEP packages, they must quickly structure the data for pricing. Managing frequent tender revisions without a dedicated system leads to lost tracking and pricing errors.","Estimators waste valuable time reformatting consultant documents rather than applying professional commercial judgment."]
+    },
+    quantaraSupport: {
+      heading: "Structured Records for Professional Review",
+      paragraphs: ["Quantara structures these complex MEP packages and consultant-issued BOQs into a secure database. Tender revisions are tracked distinctly, maintaining a clear audit trail of the project scope.","This structured approach ensures that the human professional always has accurate, organized data ready for commercial review."]
+    },
+    relevantFeatures: [
+      { name: "Hierarchical Structuring", status: "Live", description: "Organize items safely by trade or section." },
+      { name: "Revision Tracking", status: "Preview UI", description: "Maintain a distinct commercial audit trail." },
+      { name: "Format Extraction", status: "Live", description: "Extract items from text-based PDFs and spreadsheets." }
+    ],
+    workflowExample: {
+      heading: "Hypothetical Workflow Example",
+      introduction: "How a team might manage a major revision during the tender phase:",
+      steps: [
+        { title: "Baseline Upload", description: "The original tender package is securely imported." },
+        { title: "Variation Arrival", description: "A revised specification is received via PDF." },
+        { title: "Data Structuring", description: "New items are mapped into the controlled BOQ format." },
+        { title: "Professional Review", description: "The estimator applies commercial judgment to the varied quantities." }
       ]
-    }
+    },
+    supportedInputs: [
+      { name: "XLSX / CSV", status: "Live", description: "Spreadsheet imports." },
+      { name: "Text-based PDF", status: "Live", description: "Extraction from standard PDFs." },
+      { name: "CAD / BIM", status: "Planned", description: "Future model integration.", limitation: "Capability to be confirmed." }
+    ],
+    supportedOutputs: [
+      { name: "Structured XLSX", status: "Live", description: "Export governed data." },
+      { name: "PDF Proposals", status: "Live", description: "Generate standardized documents." }
+    ],
+    limitations: [
+      "Quantara does not provide automated visual measurement or drawing takeoff.",
+      "The software does not certify costs, calculate taxes, or claim regional regulatory compliance.",
+      "All outputs strictly require independent professional validation."
+    ],
+    faqs: [
+      { question: "Does Quantara calculate local taxes?", answer: "No, Quantara does not calculate taxes, statutory deductions, or provide local regulatory compliance checks." },
+      { question: "Is this software approved by local authorities?", answer: "Quantara does not claim official government or authority approval. It is a commercial administrative tool." },
+      { question: "Does it include a local rate database?", answer: "No, Quantara does not include a verified local rate database. Estimators must supply their own professionally reviewed pricing." },
+      { question: "Can it replace professional judgment?", answer: "Absolutely not. Quantara handles data extraction and structuring, but a qualified professional must verify all commercial data." }
+    ],
+    relatedPages: [
+      { href: "/boq-software", label: "BOQ Software", description: "Learn about structured BOQ management." },
+      { href: "/boq-management", label: "BOQ Management", description: "Controlling project records and templates." },
+      { href: "/ai-boq-software", label: "AI BOQ Software", description: "AI-assisted document extraction workflows." }
+    ]
   };
 
-  return <RegionalLandingPage content={content} />;
+  return (
+    <>
+      <SeoLandingPage content={content} currentPath="/boq-software-qatar" />
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify({
+            "@context": "https://schema.org",
+            "@graph": [
+              {
+                "@type": "WebPage",
+                "@id": "https://quantara.vistabylara.com/boq-software-qatar#webpage",
+                "url": "https://quantara.vistabylara.com/boq-software-qatar",
+                "name": "BOQ Software for Qatar MEP and Consultant Workflows | Quantara",
+                "description": "Organize consultant-issued BOQs, manage MEP packages, and track tender revisions with structured software for Qatar projects.",
+                "isPartOf": { "@id": "https://quantara.vistabylara.com/#website" },
+                "about": { "@id": "https://quantara.vistabylara.com/#organization" }
+              },
+              {
+                "@type": "BreadcrumbList",
+                "@id": "https://quantara.vistabylara.com/boq-software-qatar#breadcrumb",
+                "itemListElement": [
+                  { "@type": "ListItem", "position": 1, "name": "Home", "item": "https://quantara.vistabylara.com/" },
+                  { "@type": "ListItem", "position": 2, "name": "Regional BOQ Software" }
+                ]
+              },
+              {
+                "@type": "FAQPage",
+                "@id": "https://quantara.vistabylara.com/boq-software-qatar#faq",
+                "mainEntity": content.faqs.map(faq => ({
+                  "@type": "Question",
+                  "name": faq.question,
+                  "acceptedAnswer": { "@type": "Answer", "text": faq.answer }
+                }))
+              }
+            ]
+          })
+        }}
+      />
+    </>
+  );
 }

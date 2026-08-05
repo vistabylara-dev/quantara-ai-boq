@@ -454,6 +454,30 @@ export default function HomePage() {
         </div>
       </section>
 
+      <section className="py-24 px-4 bg-white dark:bg-slate-950 border-t border-slate-100 dark:border-slate-900">
+        <div className="container mx-auto max-w-5xl">
+          <h2 className="text-3xl font-bold text-center text-slate-900 dark:text-white mb-12">Explore Quantara Resources</h2>
+          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
+            <Link href="/resources" className="block p-6 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 hover:border-blue-400 transition-colors shadow-sm">
+              <h3 className="font-semibold text-slate-900 dark:text-slate-100 mb-2">BOQ Resources</h3>
+              <p className="text-sm text-slate-600 dark:text-slate-400">Knowledge base, definitions, and methodology guides.</p>
+            </Link>
+            <Link href="/industries" className="block p-6 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 hover:border-blue-400 transition-colors shadow-sm">
+              <h3 className="font-semibold text-slate-900 dark:text-slate-100 mb-2">Industries</h3>
+              <p className="text-sm text-slate-600 dark:text-slate-400">Specific workflows for contractors and trades.</p>
+            </Link>
+            <Link href="/gcc-boq-software" className="block p-6 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 hover:border-blue-400 transition-colors shadow-sm">
+              <h3 className="font-semibold text-slate-900 dark:text-slate-100 mb-2">GCC BOQ Software</h3>
+              <p className="text-sm text-slate-600 dark:text-slate-400">Regional information for the UAE, Saudi Arabia, and beyond.</p>
+            </Link>
+            <Link href="/comparisons" className="block p-6 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 hover:border-blue-400 transition-colors shadow-sm">
+              <h3 className="font-semibold text-slate-900 dark:text-slate-100 mb-2">Workflow Comparisons</h3>
+              <p className="text-sm text-slate-600 dark:text-slate-400">Compare Quantara against spreadsheets, manual processes, and OCR.</p>
+            </Link>
+          </div>
+        </div>
+      </section>
+
       <section className="py-24 px-4 bg-blue-600">
         <div className="container mx-auto max-w-4xl text-center">
           <h2 className="text-3xl md:text-4xl font-bold text-white mb-8">Ready to streamline your BOQ workflows?</h2>
@@ -475,31 +499,6 @@ export default function HomePage() {
             "@context": "https://schema.org",
             "@graph": [
               {
-                "@type": "Organization",
-                "@id": "https://quantara.vistabylara.com/#organization",
-                "name": "Quantara",
-                "url": "https://quantara.vistabylara.com/",
-                "logo": "https://quantara.vistabylara.com/logo.png",
-                "contactPoint": {
-                  "@type": "ContactPoint",
-                  "telephone": "+971507994292",
-                  "contactType": "customer support",
-                  "email": "solution@vistabylara.com"
-                },
-                "parentOrganization": {
-                  "@type": "Organization",
-                  "name": "Vista By Lara",
-                  "description": "A technology business focused on AI-assisted tools for construction, project, design and business workflows."
-                }
-              },
-              {
-                "@type": "WebSite",
-                "@id": "https://quantara.vistabylara.com/#website",
-                "url": "https://quantara.vistabylara.com/",
-                "name": "Quantara",
-                "publisher": { "@id": "https://quantara.vistabylara.com/#organization" }
-              },
-              {
                 "@type": "WebPage",
                 "@id": "https://quantara.vistabylara.com/#webpage",
                 "url": "https://quantara.vistabylara.com/",
@@ -508,11 +507,14 @@ export default function HomePage() {
               },
               {
                 "@type": "SoftwareApplication",
+                "@id": "https://quantara.vistabylara.com/#software",
                 "name": "Quantara",
                 "applicationCategory": "BusinessApplication",
                 "operatingSystem": "Web",
                 "url": "https://quantara.vistabylara.com/",
-                "description": "Quantara is an AI-assisted BOQ and construction-estimating platform that helps contractors, estimators, quantity surveyors and project teams organize supported documents into structured BOQ workflows, controlled project records and professional outputs."
+                "description": "Quantara is an AI-assisted BOQ and construction-estimating platform that helps contractors, estimators, quantity surveyors and project teams organize supported documents into structured BOQ workflows, controlled project records and professional outputs.",
+                "publisher": { "@id": "https://quantara.vistabylara.com/#organization" },
+                "provider": { "@id": "https://quantara.vistabylara.com/#organization" }
               },
               {
                 "@type": "FAQPage",

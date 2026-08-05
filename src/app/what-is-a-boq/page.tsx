@@ -1,4 +1,5 @@
 import { Metadata } from "next";
+import Link from "next/link";
 import KnowledgePage, { KnowledgePageContent } from "@/components/layout/knowledge-page";
 
 export const metadata: Metadata = {
@@ -20,14 +21,21 @@ export default function Page() {
     breadcrumbLabel: "What Is a BOQ? A Practical Guide to Bills of Quantities",
     title: "What Is a BOQ? A Practical Guide to Bills of Quantities",
     summary: "A Bill of Quantities (BOQ) is a structured document used in construction tendering and estimating. It itemizes the materials, parts, and labor (and their costs) required to construct, maintain, or repair a specific project structure or system. The BOQ provides a level playing field for contractors to price their work on the same terms.",
+    directAnswer: "A Bill of Quantities (BOQ) is a detailed, itemized list of materials, labor, and parts required for a construction project. It provides a standardized breakdown of scope, allowing all bidding contractors to price the project on the same terms and quantities.",
+    keyTakeaways: [
+      "A BOQ standardizes the bidding process for contractors.",
+      "It contains preliminaries, measured works, and provisional sums.",
+      "The BOQ forms a critical part of traditional construction contracts."
+    ],
     reviewedDate: new Date().toISOString().split("T")[0],
     sections: [
   {
     "id": "understanding-boqs",
     "heading": "Why the BOQ Matters in Construction",
     "paragraphs": [
-      "For contractors, quantity surveyors, and estimators, the Bill of Quantities is the foundation of competitive tendering. It translates complex architectural and engineering drawings into a readable, line-by-line list of tasks.",
-      "Instead of every contractor interpreting the drawings differently and measuring their own quantities, the BOQ provides a standardized measurement. This standardization allows clients to compare bids \"apples to apples.\""
+      <>For contractors, <Link href="/boq-software-for-quantity-surveyors" className="text-blue-600 hover:underline font-medium">quantity surveyors</Link>, and estimators, the Bill of Quantities is the foundation of competitive tendering. It translates complex architectural and engineering drawings into a readable, line-by-line list of tasks.</>,
+      "Instead of every contractor interpreting the drawings differently and measuring their own quantities, the BOQ provides a standardized measurement. This standardization allows clients to compare bids \"apples to apples.\"",
+      <>For procurement professionals, understanding how this differs from a <Link href="/boq-vs-bill-of-materials" className="text-blue-600 hover:underline font-medium">Bill of Materials</Link> is essential for proper supply chain planning.</>
     ]
   },
   {

@@ -100,7 +100,7 @@ export default function PrivacyPage() {
         <section>
           <h2 className="text-2xl font-bold text-slate-900 dark:text-white mb-4">Sharing</h2>
           <p className="text-slate-700 dark:text-slate-300">
-            Vista By Lara does not sell personal information submitted through the Quantara website.
+            Vista By Lara does not sell personal information submitted through the Quantara website. Information may be disclosed to service providers acting on our behalf, professional advisers or authorities where reasonably required for operational, security or legal purposes.
           </p>
         </section>
 

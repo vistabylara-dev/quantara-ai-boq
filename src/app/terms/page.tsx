@@ -67,10 +67,11 @@ export default function TermsPage() {
             <li>OCR errors;</li>
             <li>omissions;</li>
             <li>duplicated items;</li>
-            <li>incorrect categorization;</li>
-            <li>formatting issues;</li>
-            <li>misread quantities;</li>
-            <li>incomplete specifications.</li>
+            <li>incorrect grouping;</li>
+            <li>incorrect quantities;</li>
+            <li>formatting problems;</li>
+            <li>incomplete descriptions;</li>
+            <li>misinterpreted specifications.</li>
           </ul>
         </section>
 

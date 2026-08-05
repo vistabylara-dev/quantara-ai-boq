@@ -1,4 +1,4 @@
-﻿export type FeatureStatus = "live" | "preview" | "development" | "planned";
+export type FeatureStatus = "live" | "preview" | "development" | "planned";
 
 export interface PublicFeature {
   slug: string;
@@ -47,15 +47,15 @@ export const publicFeatures: PublicFeature[] = [
   {
     slug: "pricing-intelligence",
     name: "Pricing and Supplier Intelligence",
-    shortDescription: "Build controlled pricing information and supplier-related workflows to support future estimating intelligence.",
-    longDescription: "Build controlled pricing information and supplier-related workflows to support future estimating intelligence.",
+    shortDescription: "Supplier and supply-chain workflows are in development. Final supported data sources and functionality remain subject to implementation and testing.",
+    longDescription: "Supplier and supply-chain workflows are in development. Final supported data sources and functionality remain subject to implementation and testing.",
     status: "development"
   },
   {
     slug: "google-drive",
     name: "Google Drive integration",
-    shortDescription: "Document import and export support for Google Drive is in development. Availability remains subject to implementation, authorization and testing.",
-    longDescription: "Document import and export support for Google Drive is in development. Availability remains subject to implementation, authorization and testing.",
+    shortDescription: "Google Drive document import and export support is in development. Availability remains subject to authorization, implementation and testing.",
+    longDescription: "Google Drive document import and export support is in development. Availability remains subject to authorization, implementation and testing.",
     status: "development"
   },
   {

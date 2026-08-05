@@ -60,6 +60,15 @@ const PUBLIC_ROUTES = new Set([
   "/boq-software-saudi-arabia",
   "/boq-software-qatar",
   "/boq-software-oman",
+  "/comparisons",
+  "/quantara-vs-excel-for-boq",
+  "/boq-software-vs-spreadsheets",
+  "/ai-boq-vs-manual-boq-preparation",
+  "/ocr-vs-structured-boq-extraction",
+  "/quantity-takeoff-vs-boq-software",
+  "/boq-software-vs-document-management",
+  "/construction-estimating-software-vs-excel",
+  "/when-to-use-boq-software",
 ]);
 
 const PUBLIC_PREFIXES = [

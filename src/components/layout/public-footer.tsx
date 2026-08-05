@@ -40,6 +40,7 @@ export default function PublicFooter() {
               <li><Link href="/construction-estimating-software" className="hover:text-slate-900 dark:hover:text-white">Construction Estimating Software</Link></li>
               <li><Link href="/pdf-boq-extraction" className="hover:text-slate-900 dark:hover:text-white">PDF BOQ Extraction</Link></li>
               <li><Link href="/quantity-surveying-software" className="hover:text-slate-900 dark:hover:text-white">Quantity Surveying Software</Link></li>
+              <li><Link href="/comparisons" className="hover:text-slate-900 dark:hover:text-white">Comparisons</Link></li>
             </ul>
           </div>
           

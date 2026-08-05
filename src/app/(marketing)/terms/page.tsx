@@ -1,8 +1,6 @@
 import React from "react";
 import Link from "next/link";
 import { Metadata } from "next";
-import PublicFooter from "@/components/layout/public-footer";
-
 export const metadata: Metadata = {
   alternates: { canonical: "/terms" },
   title: "Terms of Controlled Early Access",
@@ -161,7 +159,6 @@ export default function TermsPage() {
           </div>
         </section>
       </div>
-      <PublicFooter />
-    </div>
+      </div>
   );
 }

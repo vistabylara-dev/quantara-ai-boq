@@ -1,8 +1,6 @@
 import React from "react";
 import Link from "next/link";
 import { Metadata } from "next";
-import PublicFooter from "@/components/layout/public-footer";
-
 export const metadata: Metadata = {
   alternates: { canonical: "/privacy" },
   title: "Privacy Policy",
@@ -168,7 +166,6 @@ export default function PrivacyPage() {
           </div>
         </section>
       </div>
-      <PublicFooter />
-    </div>
+      </div>
   );
 }

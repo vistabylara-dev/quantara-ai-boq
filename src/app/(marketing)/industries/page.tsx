@@ -1,9 +1,6 @@
 import { Metadata } from "next";
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
-import PublicFooter from "@/components/layout/public-footer";
-import PublicHeader from "@/components/layout/public-header";
-
 export const metadata: Metadata = {
   title: "BOQ Software by Industry | Quantara",
   description: "Explore how Quantara supports structured BOQ and estimating workflows across construction, MEP, fit-out, and consulting industries.",
@@ -70,9 +67,7 @@ const industryLinks = [
 export default function IndustriesIndexPage() {
   return (
     <div className="flex flex-col min-h-screen bg-white text-slate-900 font-sans">
-      <PublicHeader />
-
-      <main className="flex-1 w-full max-w-6xl mx-auto px-4 py-16 md:py-24">
+      
         <header className="mb-16 text-center max-w-3xl mx-auto">
           <h1 className="text-4xl md:text-5xl font-bold text-slate-900 tracking-tight mb-6">BOQ Software by Industry</h1>
           <p className="text-lg text-slate-600 leading-relaxed">
@@ -96,9 +91,8 @@ export default function IndustriesIndexPage() {
             </Link>
           ))}
         </div>
-      </main>
+      
 
-      <PublicFooter />
-    </div>
+      </div>
   );
 }

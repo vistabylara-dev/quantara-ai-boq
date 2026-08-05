@@ -1,9 +1,7 @@
 import React from "react";
 import Link from "next/link";
-import PublicHeader from "@/components/layout/public-header";
 import { ArrowRight, FileText, LayoutTemplate, BoxSelect, FolderKanban, ShieldCheck, Database, FileBox, FileSpreadsheet, CheckCircle2, XCircle, Mic2, Keyboard, GitCompareArrows, ClipboardCheck, History, AlertTriangle, LockKeyhole } from "lucide-react";
 import type { Metadata } from "next";
-import PublicFooter from "@/components/layout/public-footer";
 import { publicFeatures } from "@/lib/config/features";
 
 export const metadata: Metadata = {
@@ -78,15 +76,13 @@ const governedWorkflow = [
 export default function HomePage() {
   return (
     <div className="flex flex-col min-h-screen bg-white dark:bg-slate-950">
-      <PublicHeader />
-
       <section className="pt-24 pb-16 px-4">
         <div className="container mx-auto text-center max-w-4xl">
           <h1 className="text-5xl md:text-6xl font-extrabold tracking-tight text-slate-900 dark:text-white mb-6">
-            AI BOQ Software for Dubai and UAE Project Teams
+            AI-Assisted BOQ Software for Structured, Traceable Project Workflows
           </h1>
           <p className="text-xl text-slate-600 dark:text-slate-400 mb-10 max-w-3xl mx-auto leading-relaxed">
-            Quantara helps contractors, estimators, quantity surveyors, MEP teams and fit-out companies across Dubai and the UAE turn supported project data into governed BOQs and technical reports. Bring source information into one controlled workspace, review AI-assisted changes, approve only what is correct, and generate professional outputs.
+            Create one controlled project workspace, bring in supported information through uploads, structured imports or authorized connected sources, review AI-assisted proposals and generate governed BOQs and technical reports.
           </p>
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-16">
             <Link href="/register" className="inline-flex items-center justify-center rounded-lg text-base font-medium bg-blue-600 text-white hover:bg-blue-700 h-12 px-8 py-3 w-full sm:w-auto shadow-sm">
@@ -650,7 +646,6 @@ export default function HomePage() {
         }}
       />
 
-      <PublicFooter />
-    </div>
+      </div>
   );
 }

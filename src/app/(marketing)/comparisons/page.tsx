@@ -1,7 +1,5 @@
 import { Metadata } from 'next';
 import Link from 'next/link';
-import PublicFooter from '@/components/layout/public-footer';
-
 export const metadata: Metadata = {
   title: 'BOQ and Construction Workflow Comparisons | Quantara',
   description: 'Compare BOQ software, spreadsheets, Excel, OCR, manual preparation, document management and quantity takeoff workflows.',
@@ -82,7 +80,7 @@ export default function ComparisonsHubPage() {
     <div className="min-h-screen flex flex-col bg-white font-sans text-slate-900">
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
 
-      <main className="flex-1 max-w-5xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-12 md:py-20 mt-16">
+      
         <header className="mb-12 text-center">
           <h1 className="text-4xl md:text-5xl font-extrabold text-slate-900 tracking-tight mb-6">
             BOQ and Construction Workflow Comparisons
@@ -116,8 +114,7 @@ export default function ComparisonsHubPage() {
             <Link href="/about" className="px-5 py-2 bg-slate-100 hover:bg-slate-200 rounded-lg text-sm font-medium transition-colors">About Quantara</Link>
           </div>
         </section>
-      </main>
-      <PublicFooter />
-    </div>
+      
+      </div>
   );
 }

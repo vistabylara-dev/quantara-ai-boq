@@ -1,8 +1,6 @@
 import React from "react";
 import Link from "next/link";
 import { Metadata } from "next";
-import PublicHeader from "@/components/layout/public-header";
-import PublicFooter from "@/components/layout/public-footer";
 import PublicBreadcrumb from "@/components/ui/public-breadcrumb";
 import { publicFeatures } from "@/lib/config/features";
 import { ShieldCheck, CheckCircle2 } from "lucide-react";
@@ -18,7 +16,6 @@ export const metadata: Metadata = {
 export default function FeaturesPage() {
   return (
     <div className="flex flex-col min-h-screen bg-white dark:bg-slate-950">
-      <PublicHeader />
       <PublicBreadcrumb 
         items={[
           { name: "Home", item: "/" },
@@ -27,7 +24,7 @@ export default function FeaturesPage() {
         ]}
       />
       
-      <main className="flex-1">
+      
         <section className="pt-16 pb-12 px-4">
           <div className="container mx-auto text-center max-w-4xl">
             <h1 className="text-4xl md:text-5xl font-extrabold tracking-tight text-slate-900 dark:text-white mb-6">
@@ -174,9 +171,8 @@ export default function FeaturesPage() {
             </div>
           </div>
         </section>
-      </main>
       
-      <PublicFooter />
-    </div>
+      
+      </div>
   );
 }

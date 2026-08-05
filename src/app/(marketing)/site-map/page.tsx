@@ -3,9 +3,6 @@ import Link from "next/link";
 import PublicBreadcrumb from "@/components/ui/public-breadcrumb";
 import { Metadata } from "next";
 import { publicNavigation, legalNavigation } from "@/config/public-navigation";
-import PublicHeader from "@/components/layout/public-header";
-import PublicFooter from "@/components/layout/public-footer";
-
 export const metadata: Metadata = {
   title: "HTML Sitemap | Quantara",
   description: "Navigate all public pages, tools, and resources for the Quantara BOQ software platform.",
@@ -37,10 +34,9 @@ export default function SiteMapPage() {
 
   return (
     <div className="flex flex-col min-h-screen bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100">
-      <PublicHeader />
-      <PublicBreadcrumb items={[{ name: "Home", item: "/" }, { name: "Site Map", item: "/site-map" }]} />
+      <PublicBreadcrumb items={[{ label: "Home", href: "/" }, { label: "Site Map", href: "/site-map" }]} />
       
-      <main className="flex-1 w-full max-w-4xl mx-auto px-4 py-12 md:py-16">
+      
         
         
         
@@ -90,9 +86,8 @@ export default function SiteMapPage() {
             </div>
           </section>
         </div>
-      </main>
+      
 
-      <PublicFooter />
-    </div>
+      </div>
   );
 }

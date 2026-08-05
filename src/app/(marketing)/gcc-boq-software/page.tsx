@@ -1,9 +1,6 @@
 import { Metadata } from "next";
 import Link from "next/link";
 import { ArrowRight, Globe } from "lucide-react";
-import PublicFooter from "@/components/layout/public-footer";
-import PublicHeader from "@/components/layout/public-header";
-
 export const metadata: Metadata = {
   title: "GCC BOQ Software for Construction and Estimating Teams | Quantara",
   description: "Explore how Quantara supports structured BOQ, document, revision and professional-review workflows for construction teams across the GCC.",
@@ -36,9 +33,7 @@ const regionalLinks = [
 export default function GCCIndexPage() {
   return (
     <div className="flex flex-col min-h-screen bg-slate-50 text-slate-900 font-sans">
-      <PublicHeader />
-
-      <main className="flex-1 w-full max-w-6xl mx-auto px-4 py-16 md:py-24">
+      
         <header className="mb-16 text-center max-w-4xl mx-auto">
           <div className="inline-flex items-center gap-2 px-3 py-1 bg-blue-50 text-blue-700 rounded-full text-xs font-semibold mb-6 uppercase tracking-wider">
             <Globe className="w-4 h-4" /> Regional Workflows
@@ -84,9 +79,8 @@ export default function GCCIndexPage() {
             Quantara assists with supported document extraction, BOQ organization, project records, templates, revisions and document-generation workflows. Regional project requirements, contractual obligations, measurement methods, rates, tax treatment, regulations and professional responsibilities vary. All quantities, units, descriptions, specifications, rates, assumptions, exclusions and generated outputs must be reviewed by appropriately qualified local construction professionals before tender, procurement, contractual or construction use.
           </p>
         </section>
-      </main>
+      
 
-      <PublicFooter />
-    </div>
+      </div>
   );
 }

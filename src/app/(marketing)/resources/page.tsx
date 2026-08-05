@@ -1,9 +1,6 @@
 import { Metadata } from "next";
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
-import PublicFooter from "@/components/layout/public-footer";
-import PublicHeader from "@/components/layout/public-header";
-
 export const metadata: Metadata = {
   title: "BOQ Resources and Educational Guides | Quantara",
   description: "Explore our knowledge base on Bill of Quantities fundamentals, extraction workflows, document review, and estimating best practices.",
@@ -52,9 +49,7 @@ const categories = [
 export default function ResourcesPage() {
   return (
     <div className="flex flex-col min-h-screen bg-white text-slate-900 font-sans">
-      <PublicHeader />
-
-      <main className="flex-1 w-full max-w-5xl mx-auto px-4 py-16 md:py-24">
+      
         <header className="mb-16 text-center max-w-3xl mx-auto">
           <h1 className="text-4xl md:text-5xl font-bold text-slate-900 tracking-tight mb-6">BOQ Resources & Knowledge Base</h1>
           <p className="text-lg text-slate-600 leading-relaxed">
@@ -80,9 +75,8 @@ export default function ResourcesPage() {
             </section>
           ))}
         </div>
-      </main>
+      
 
-      <PublicFooter />
-    </div>
+      </div>
   );
 }

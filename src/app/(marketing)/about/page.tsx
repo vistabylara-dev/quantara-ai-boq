@@ -1,7 +1,6 @@
 import React from "react";
 import Link from "next/link";
 import { Metadata } from "next";
-import PublicFooter from "@/components/layout/public-footer";
 
 export const metadata: Metadata = {
   title: "About Quantara | Vista By Lara",
@@ -10,14 +9,38 @@ export const metadata: Metadata = {
 };
 
 export default function AboutPage() {
+  const jsonLd = {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    "itemListElement": [
+      {
+        "@type": "ListItem",
+        "position": 1,
+        "name": "Home",
+        "item": "https://quantara.vistabylara.com"
+      },
+      {
+        "@type": "ListItem",
+        "position": 2,
+        "name": "About",
+        "item": "https://quantara.vistabylara.com/about"
+      }
+    ]
+  };
+
   return (
-    <div className="min-h-screen flex flex-col">
+    <>
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
       <div className="max-w-3xl mx-auto py-24 px-4 flex-1">
-        <div className="mb-8">
-          <Link href="/" className="text-blue-600 hover:underline flex items-center gap-2 text-sm font-medium">
-            ← Back to Home
-          </Link>
-        </div>
+        <nav className="mb-8 text-sm" aria-label="Breadcrumb">
+          <ol className="flex items-center space-x-2 text-slate-500">
+            <li>
+              <Link href="/" className="hover:text-slate-900 transition-colors">Home</Link>
+            </li>
+            <li aria-hidden="true">/</li>
+            <li className="text-slate-900 font-medium" aria-current="page">About</li>
+          </ol>
+        </nav>
         
         <div className="mb-12">
           <h1 className="text-4xl font-bold text-slate-900 dark:text-white mb-4">About Quantara</h1>
@@ -53,7 +76,6 @@ export default function AboutPage() {
           </section>
         </div>
       </div>
-      <PublicFooter />
-    </div>
+    </>
   );
 }

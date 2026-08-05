@@ -2,9 +2,6 @@
 
 import React, { useState } from "react";
 import Link from "next/link";
-import PublicFooter from "@/components/layout/public-footer";
-
-
 export default function ContactSalesPage() {
   const [formData, setFormData] = useState({
     fullName: "",
@@ -228,7 +225,6 @@ export default function ContactSalesPage() {
           </div>
         </div>
       </div>
-      <PublicFooter />
-    </div>
+      </div>
   );
 }

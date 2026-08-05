@@ -7,46 +7,76 @@ a per-file checksum verified against the live file on every read (a changed
 or missing file is rejected, not silently imported), an industry/discipline
 mapping, and a specification-parsing profile.
 
-| Dataset | Folder | Files | Rows (registry manifest) | Industry | Discipline | Target package | Status | Import readiness | Blocker |
-|---|---|---|---|---|---|---|---|---|---|
-| HVAC Master Catalogue (`quantara-master-hvac-v1`) | `data-imports/hvac` | 2 | 891 (707 + 184) | Construction | Mechanical (HVAC) | HVAC | **Registered, approved, checksummed** | Ready — dry-run and execute routes exist and are wired to this exact dataset | `IMPORTED_UNPUBLISHED` (unconfirmed origin) — 44 production items exist but `latestJob: null` (no governed import batch ever ran), `publishedVersions: 0`, zero classification/hierarchy — the 44 items likely did not come from this pipeline; needs inspection before executing (see production evidence below) |
-| Plumbing Master Catalogue (`quantara-master-plumbing-v1`) | `data-imports/plumbing` | 13 | ~13,111 (manifest total) | Construction | Plumbing | Plumbing | **Registered, approved, checksummed** | Ready — same pipeline | `NOT_IMPORTED` — 0 production items, `latestJob: null`; awaiting owner approval to execute |
-| Architectural Finishes | `data-imports/architectural-finishes` | 15 | Unknown — not registered | — | — | — | **Not registered/approved** | Blocked | No registry entry, no checksum, no hierarchy/parser mapping |
-| BIM Digital Deliverables | `data-imports/bim-digital-deliverables` | 1 | Unknown | — | — | — | Not registered | Blocked | Same |
-| Civil Works | `data-imports/civil-works` | 1 | Unknown | — | — | — | Not registered | Blocked | Same |
-| Closeout | `data-imports/closeout` | 2 | Unknown | — | — | — | Not registered | Blocked | Same |
-| Doors and Windows | `data-imports/doors-and-windows` | 3 | Unknown | — | — | — | Not registered | Blocked | Same |
-| Facade | `data-imports/facade` | 5 | Unknown | — | — | — | Not registered | Blocked | Same |
-| General Requirements | `data-imports/general-requirements` | 1 | Unknown | — | — | — | Not registered | Blocked | Same |
-| Landscaping | `data-imports/landscaping` | 1 | Unknown | — | — | — | Not registered | Blocked | Same |
-| Roofing | `data-imports/roofing` | 1 | Unknown | — | — | — | Not registered | Blocked | Same |
-| Site Infrastructure | `data-imports/site-infrastructure` | 1 | Unknown | — | — | — | Not registered | Blocked | Same |
-| Structural | `data-imports/structural` | 2 | Unknown | — | — | — | Not registered | Blocked | Same |
-| Temporary Works | `data-imports/temporary-works` | 2 | Unknown | — | — | — | Not registered | Blocked | Same |
-| UAE Authority/Regulatory | `data-imports/uae-authority-regulatory` | 3 | Unknown | — | — | — | Not registered | Blocked | Same |
+## Automated discovery result — 2026-08-05
 
-## Why only 2 of 15 are "approved"
+Produced by `discoverCatalogueDatasets()` (`src/lib/services/catalogue-discovery-service.ts`),
+run via `GET /api/admin/master-catalogue/discovery`. This is a **strictly
+read-only filesystem scan** — it streams and checksums every CSV under
+`data-imports/**`, confirms folder/filename classification against each
+file's own `discipline` column, and cross-checks against the
+`MasterDiscipline` rows that actually exist. It makes zero database writes.
 
-The task's own rule is explicit: *"Do not assume all folders are approved... Do
-not treat scratch scripts or unknown CSVs as approved datasets."* Registering
-a new dataset is real curation work per discipline — it requires:
+**Totals: 15 folders, 53 CSV files, 183,497 data rows, ~118MB.** All 53
+files match the expected `company-library-import` header schema exactly;
+zero blank/malformed rows found in any file.
 
-1. A specification parser for that discipline's row format (see
-   `parseHvacSpecification` / `parsePlumbingSpecification` as the existing
-   pattern — each is discipline-specific, not generic).
-2. A hierarchy parent chain (industry → discipline → system) matching the
-   existing `MasterHierarchyNode` tree.
-3. A reviewed, approved checksum per file, computed from a validated source
-   — not just whatever bytes currently sit in the repo.
-4. Expected row counts confirmed against a real read.
+| Dataset folder | Files | Rows | Bytes | Candidate discipline | Confidence | Notes |
+|---|---:|---:|---:|---|---|---|
+| `architectural-finishes` | 15 | 80,176 | 49.5MB | `interior-fit-out` | **AUTO_VALIDATED** | |
+| `bim-digital-deliverables` | 1 | 4,718 | 2.5MB | `construction` | **AUTO_VALIDATED** | |
+| `civil-works` | 1 | 3,675 | 1.8MB | `construction` | **AUTO_VALIDATED** | |
+| `closeout` | 2 | 9,452 | 6.3MB | `construction` | **AUTO_VALIDATED** | |
+| `doors-and-windows` | 3 | 11,567 | 8.5MB | `construction` | **AUTO_VALIDATED** | |
+| `facade` | 5 | 15,786 | 13.9MB | `construction` | **AUTO_VALIDATED** | |
+| `general-requirements` | 1 | 4,065 | 2.2MB | `construction` | **AUTO_VALIDATED** | |
+| `hvac` | 2 | 891 | 0.34MB | *(none — see below)* | **NEEDS_OWNER_REVIEW** | already registered manually as `quantara-master-hvac-v1` mapping to `mechanical` |
+| `landscaping` | 1 | 2,867 | 1.7MB | `landscaping` | **AUTO_VALIDATED** | |
+| `plumbing` | 13 | 13,111 | 7.4MB | `plumbing` | **AUTO_VALIDATED** | already registered manually as `quantara-master-plumbing-v1` |
+| `roofing` | 1 | 4,162 | 2.9MB | `construction` | **AUTO_VALIDATED** | |
+| `site-infrastructure` | 1 | 4,345 | 2.7MB | `construction` | **AUTO_VALIDATED** | |
+| `structural` | 2 | 9,047 | 5.1MB | `construction` | **AUTO_VALIDATED** | |
+| `temporary-works` | 2 | 7,954 | 5.1MB | `construction` | **AUTO_VALIDATED** | |
+| `uae-authority-regulatory` | 3 | 11,681 | 9.2MB | `construction` | **AUTO_VALIDATED** | |
 
-None of the other 13 folders have had this done. Registering them is real,
-separate work — rushing it to hit an "import everything" instruction would
-mean either fabricating checksums/mappings without validation (exactly what
-the task prohibits) or reusing the HVAC/Plumbing parsers on data they were
-never built for, silently corrupting hierarchy/classification data. Neither
-is safe. This inventory documents them as a known, explicit backlog rather
-than silently ignoring them.
+**Why HVAC shows `NEEDS_OWNER_REVIEW`:** the classifier is deliberately
+literal — it only accepts a folder's discipline if every file's own
+`discipline` column value is an *exact string match* against an existing
+`MasterDiscipline.key`. HVAC's files declare `discipline=hvac`, but the
+existing `MasterDiscipline` row is keyed `mechanical` (a human decision
+already encoded in the manually-curated registry's
+`HVAC_PROFILE.disciplineKey`). This is the classifier correctly refusing to
+silently assume a synonym rather than a bug — HVAC is not actually blocked,
+since it already has an approved manual registry entry with the exact same
+checksums this discovery scan independently recomputed (verified: first 16
+hex chars of the recomputed HVAC file checksums match the registry's
+recorded `approvedChecksum` values exactly). A future alias table
+(`hvac` → `mechanical`) would let this resolve automatically; not added
+yet since it would be guessing at a mapping policy rather than reading one
+that already exists in code.
+
+**13 of 15 folders map to the existing `construction` MasterDiscipline**,
+not 13 new disciplines — the folder name (civil-works, structural, facade,
+etc.) is the *package/category* distinction within construction, not a new
+top-level discipline. This matches the existing HVAC pattern, where the
+*industry* is always `construction` and the *discipline* (`mechanical`) is
+one level below it.
+
+## What "AUTO_VALIDATED" does and does not mean
+
+`AUTO_VALIDATED` means: the folder/filename classification is confirmed by
+real row content, the header schema is a known, already-handled shape, and
+the target `MasterDiscipline` genuinely exists. It does **not** mean these
+13 folders are registered, dry-run, or imported yet. Formal registration
+(Checkpoint 4 below) still requires generating a manifest, a schema mapping
+profile, and — per the existing HVAC/Plumbing pattern — a specification
+parser appropriate to each dataset's content, none of which existed before
+this discovery pass and none of which have been built yet. Rushing straight
+to import without that would mean reusing the HVAC/Plumbing parsers on data
+they were never built for, which risks silently corrupting hierarchy and
+classification data. This inventory documents the discovery result as the
+now-completed Checkpoint 1 and stops there pending owner review of this
+report, per the task's own rule: *"Do not begin destructive import until
+this report is produced."*
 
 ## What already exists (not being rebuilt)
 

@@ -105,6 +105,13 @@ enum TechnicalReportStatus {
   COMPLETED
 }
 
+/// PROPOSAL-SOURCE-TYPE-RECOVERY — a proposal's immutable source is exactly one of these two kinds.
+/// Enforced by a CHECK constraint in the migration (never both boqId and technicalReportId set).
+enum ClientProposalSourceType {
+  BOQ_REVISION
+  TECHNICAL_REPORT_REVISION
+}
+
 enum ClientProposalStatus {
   DRAFT
   READY
@@ -2190,6 +2197,7 @@ model GeneratedTechnicalReport {
   templateVersion      TechnicalReportTemplateVersion? @relation(fields: [templateVersionId], references: [id], onDelete: SetNull)
   generatedByUser      User?                           @relation(fields: [generatedByUserId], references: [id], onDelete: SetNull)
   emailDispatches      EmailDispatch[]
+  clientProposals      ClientProposal[]
 
   @@index([companyId])
   @@index([projectId])
@@ -2261,18 +2269,26 @@ model EmailTemplateVersion {
 }
 
 model ClientProposal {
-  id                  String                   @id @default(uuid()) @db.Uuid
-  companyId           String                   @db.Uuid
-  projectId           String                   @db.Uuid
-  boqId               String                   @db.Uuid
-  revisionNumber      Int
-  clientId            String                   @db.Uuid
-  createdByUserId     String?                  @db.Uuid
+  id                  String                    @id @default(uuid()) @db.Uuid
+  companyId           String                    @db.Uuid
+  projectId           String                    @db.Uuid
+  /// PROPOSAL-SOURCE-TYPE-RECOVERY — discriminates which of the two nullable source
+  /// references below is populated. Defaults to BOQ_REVISION so every pre-existing row
+  /// (all of which have a non-null boqId) backfills correctly with zero data loss.
+  sourceType          ClientProposalSourceType  @default(BOQ_REVISION)
+  boqId               String?                   @db.Uuid
+  revisionNumber      Int?
+  /// Set only when sourceType = TECHNICAL_REPORT_REVISION. GeneratedTechnicalReport combines
+  /// content and generated artifact in one immutable-once-COMPLETED row, so unlike BOQ this
+  /// needs no separate documentId — the report record itself is the source and the document.
+  technicalReportId   String?                   @db.Uuid
+  clientId            String                    @db.Uuid
+  createdByUserId     String?                   @db.Uuid
   createdByName       String
   recipientEmail      String
   recipientName       String
-  tokenHash           String                   @unique
-  status              ClientProposalStatus     @default(DRAFT)
+  tokenHash           String                    @unique
+  status              ClientProposalStatus      @default(DRAFT)
   expiresAt           DateTime
   revokedAt           DateTime?
   firstOpenedAt       DateTime?
@@ -2286,13 +2302,14 @@ model ClientProposal {
   rejectionReason     String?
   selectedOptionsJson Json?
   settingsJson        Json
-  createdAt           DateTime                 @default(now())
-  updatedAt           DateTime                 @updatedAt
-  company             Company                  @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  project             Project                  @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  boq                 BOQ                      @relation(fields: [boqId], references: [id], onDelete: Cascade)
-  client              Client                   @relation(fields: [clientId], references: [id], onDelete: Restrict)
-  createdByUser       User?                    @relation(fields: [createdByUserId], references: [id], onDelete: SetNull)
+  createdAt           DateTime                  @default(now())
+  updatedAt           DateTime                  @updatedAt
+  company             Company                   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  project             Project                   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  boq                 BOQ?                      @relation(fields: [boqId], references: [id], onDelete: Cascade)
+  technicalReport     GeneratedTechnicalReport? @relation(fields: [technicalReportId], references: [id], onDelete: Cascade)
+  client              Client                    @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  createdByUser       User?                     @relation(fields: [createdByUserId], references: [id], onDelete: SetNull)
   documents           ClientProposalDocument[]
   events              ClientProposalEvent[]
   emailDispatches     EmailDispatch[]
@@ -2300,6 +2317,7 @@ model ClientProposal {
   @@index([companyId])
   @@index([projectId])
   @@index([boqId])
+  @@index([technicalReportId])
   @@index([tokenHash])
   @@index([status])
   @@index([expiresAt])

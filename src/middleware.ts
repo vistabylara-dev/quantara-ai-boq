@@ -3,15 +3,13 @@ import { SESSION_COOKIE_NAME } from "@/lib/auth/session-cookie-name";
 
 const ADMIN_LOGIN_PAGE = "/admin/login";
 
-const PUBLIC_PAGE_PREFIXES = [
+const PUBLIC_ROUTES = new Set([
   "/",
   "/login",
   "/register",
   "/verify-email",
   "/forgot-password",
   "/reset-password",
-  "/proposal",
-  "/technical-report",
   "/privacy",
   "/terms",
   "/data-processing",
@@ -21,18 +19,50 @@ const PUBLIC_PAGE_PREFIXES = [
   "/security",
   "/contact-sales",
   "/features",
+  "/about",
   ADMIN_LOGIN_PAGE,
+  "/ai-boq-software",
+  "/boq-software",
+  "/construction-estimating-software",
+  "/boq-management",
+  "/pdf-boq-extraction",
+  "/scanned-pdf-boq",
+  "/quantity-surveying-software",
+  "/boq-document-generation",
+  "/resources",
+  "/what-is-a-boq",
+  "/boq-vs-construction-estimate",
+  "/boq-vs-bill-of-materials",
+  "/how-to-prepare-a-boq",
+  "/boq-review-checklist",
+  "/common-boq-errors",
+  "/boq-revision-control",
+  "/how-to-convert-pdf-boq-to-excel",
+  "/text-pdf-vs-scanned-pdf",
+  "/ocr-for-boq-documents",
+  "/how-to-review-ai-extracted-boq",
+  "/quantity-takeoff-vs-boq-management",
+  "/industries",
+  "/boq-software-for-contractors",
+  "/boq-software-for-quantity-surveyors",
+  "/boq-software-for-mep-contractors",
+  "/boq-software-for-hvac-contractors",
+  "/boq-software-for-fit-out-companies",
+  "/boq-software-for-fire-fighting-contractors",
+  "/boq-software-for-facilities-management",
+  "/boq-software-for-engineering-consultants",
+]);
+
+const PUBLIC_PREFIXES = [
+  "/proposal/",
+  "/technical-report/",
 ];
 
 const AUTH_ENTRY_PAGES = ["/login", "/register"];
 
 function isPublicPage(pathname: string): boolean {
-  if (pathname === "/") {
-    return true;
-  }
-  return PUBLIC_PAGE_PREFIXES.some(
-    (prefix) => prefix !== "/" && (pathname === prefix || pathname.startsWith(`${prefix}/`)),
-  );
+  if (PUBLIC_ROUTES.has(pathname)) return true;
+  return PUBLIC_PREFIXES.some((prefix) => pathname.startsWith(prefix));
 }
 
 /**

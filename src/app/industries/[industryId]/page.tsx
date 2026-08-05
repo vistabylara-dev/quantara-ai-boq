@@ -10,7 +10,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   const { industryId } = await params;
   const industry = demoIndustries.find((item) => item.id === industryId);
   return {
-    title: industry ? `${industry.name} Engine | Quantara AI BOQ` : "Industry Engine | Quantara AI BOQ",
+    title: industry ? `${industry.name} Engine | Quantara BOQ` : "Industry Engine | Quantara BOQ",
   };
 }
 

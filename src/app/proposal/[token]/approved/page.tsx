@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { PortalShell } from "../../portal-shell";
 
 export const metadata: Metadata = {
-  title: "Proposal Approved | Quantara AI BOQ",
+  title: "Proposal Approved | Quantara BOQ",
 };
 
 export default function ProposalApprovedPage() {

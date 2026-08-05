@@ -12,7 +12,13 @@ import AppShell from "./app-shell";
  */
 export default function ConditionalAppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
-  if (pathname?.startsWith("/proposal")) {
+  const publicRoutes = ["/", "/features", "/privacy", "/terms", "/security", "/contact-sales", "/register", "/login", "/forgot-password", "/reset-password", "/verify-email"];
+  
+  if (
+    pathname?.startsWith("/proposal") ||
+    publicRoutes.includes(pathname || "") ||
+    (pathname && ["/cookie-policy", "/acceptable-use", "/subprocessors", "/data-processing"].includes(pathname))
+  ) {
     return <>{children}</>;
   }
   return <AppShell>{children}</AppShell>;

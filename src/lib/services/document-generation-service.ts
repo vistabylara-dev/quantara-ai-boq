@@ -31,7 +31,7 @@ import { calculateBOQTotals } from "@/lib/calculations/boq-calculator";
 import { recordDocumentGenerated } from "@/lib/entitlements/entitlement-service";
 import { canGenerateDocumentEffective } from "@/lib/entitlements/effective-entitlement-service";
 
-export const TRIAL_WATERMARK_TEXT = "Generated with Quantara AI — Trial Version";
+export const TRIAL_WATERMARK_TEXT = "Generated with Quantara — Trial Version";
 
 const FINAL_ONLY_TYPES: GeneratedDocumentType[] = [
   GeneratedDocumentType.PDF,

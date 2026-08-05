@@ -49,6 +49,8 @@ export async function registerCompanyOwner(input: RegisterInput) {
         legalName: input.companyName,
         tradeName: input.companyName,
         email: input.email.toLowerCase(),
+        primaryIndustry: input.primaryIndustry,
+        monthlyVolume: input.approximateVolume,
       },
       tx,
     );
@@ -59,6 +61,8 @@ export async function registerCompanyOwner(input: RegisterInput) {
         passwordHash,
         fullName: input.fullName,
         role: UserRole.COMPANY_OWNER,
+        jobTitle: input.role, // role maps to jobTitle in our UI
+        marketingConsent: input.consent,
       },
     });
 

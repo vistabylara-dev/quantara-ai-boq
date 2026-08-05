@@ -27,7 +27,8 @@
 	"hyperdrive": [
 		{
 			"binding": "HYPERDRIVE",
-			"id": "1f26ca4bd7f644969aa2b9d8901a7e70"
+			"id": "1f26ca4bd7f644969aa2b9d8901a7e70",
+			"localConnectionString": "postgresql://postgres:postgres@localhost:5432/quantara_db"
 		}
 	]
 	// Hyperdrive binding — NOT yet configured. No Hyperdrive resource has

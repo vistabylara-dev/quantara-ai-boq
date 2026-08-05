@@ -287,7 +287,7 @@ export const PROVIDER_REGISTRY: ProviderRegistryEntry[] = [
     displayName: "Google Drive",
     category: "DOCUMENTS_STORAGE",
     connectionType: "OAUTH_CLOUD",
-    status: "AVAILABLE",
+    status: "COMING_SOON",
     shortPurpose: "Cloud file storage.",
     description: "Google OAuth with least-privilege (read-only) scope — browse folders and files directly from Drive.",
     supportedData: ["Folder/file browsing"],
@@ -481,8 +481,6 @@ export const PROVIDER_REGISTRY: ProviderRegistryEntry[] = [
     ["sap", "SAP", "SAP"],
     ["oracle-erp", "Oracle ERP", "Oracle"],
     ["microsoft-dynamics-365", "Microsoft Dynamics 365", "Microsoft"],
-    ["quickbooks", "QuickBooks", "Intuit"],
-    ["xero", "Xero", "Xero"],
   ] as const).map(([id, displayName, familyDisplayName]) => ({
     id,
     providerFamily: id,

@@ -30,7 +30,7 @@ export default function AppShell({ children }: AppShellProps) {
         </div>
       </div>
       <footer className="border-t border-white/10 cyber-panel px-4 py-4 text-xs text-slate-600 xl:px-10 relative z-10">
-        <span className="terminal-text tracking-widest uppercase">Quantara AI // System V.1.0 // Operational</span>
+        <span className="terminal-text tracking-widest uppercase">Quantara // System V.1.0 // Operational</span>
       </footer>
     </div>
   );

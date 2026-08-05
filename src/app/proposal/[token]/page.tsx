@@ -8,7 +8,7 @@ import ProposalClientView from "./proposal-client-view";
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
-  title: "Client Proposal | Quantara AI BOQ",
+  title: "Client Proposal | Quantara BOQ",
 };
 
 type PageProps = { params: Promise<{ token: string }> };

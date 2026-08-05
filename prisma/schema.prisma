@@ -1389,6 +1389,8 @@ model Company {
   /// ADMIN-CONTROL-1 section 6 — marks a company as sandbox/demo data, never a paying customer.
   /// Additive-only: every existing query is unaffected unless it explicitly filters on this.
   isTestCompany               Boolean                       @default(false)
+  primaryIndustry             String?
+  monthlyVolume               String?
   createdAt                   DateTime                      @default(now())
   updatedAt                   DateTime                      @updatedAt
   industryEngines             CompanyIndustryEngine[]
@@ -1459,6 +1461,8 @@ model User {
   platformRole                           PlatformRole?
   emailVerifiedAt                        DateTime?
   isActive                               Boolean                          @default(true)
+  jobTitle                               String?
+  marketingConsent                       Boolean?
   createdAt                              DateTime                         @default(now())
   updatedAt                              DateTime                         @updatedAt
   company                                Company                          @relation(fields: [companyId], references: [id], onDelete: Cascade)
@@ -3646,4 +3650,26 @@ model EntitlementTemplate {
   createdAt                       DateTime        @default(now())
   updatedAt                       DateTime        @updatedAt
   product                         CommerceProduct @relation(fields: [productId], references: [id], onDelete: Cascade)
+}
+
+model SalesInquiry {
+  id                      String   @id @default(uuid()) @db.Uuid
+  firstName               String
+  lastName                String
+  workEmail               String
+  companySize             String
+  useCase                 String
+  companyType             String?
+  constructionDiscipline  String?
+  currentBoqProcess       String?
+  monthlyVolume           String?
+  requiredInputs          String?
+  requiredOutputs         String?
+  numberOfUsers           String?
+  integrationRequirements String?
+  preferredContactMethod  String?
+  consent                 Boolean?
+  deliveryStatus          String   @default("stored")
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
 }

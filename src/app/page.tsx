@@ -14,7 +14,7 @@ export const metadata: Metadata = {
   openGraph: {
     title: "Quantara BOQ and Construction Estimating Platform",
     description: "Create structured BOQs, organize project items, manage templates and pricing data, and generate professional construction documents with Quantara.",
-    url: "https://quantara.local",
+    url: "https://quantara.vistabylara.com",
     siteName: "Quantara",
   },
 };

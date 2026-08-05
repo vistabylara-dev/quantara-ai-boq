@@ -10,6 +10,12 @@ export const metadata: Metadata = {
   alternates: {
     canonical: "/features",
   },
+  openGraph: {
+    title: "Features | Quantara Early Access",
+    description: "Explore the features available in Quantara's Early Access BOQ platform, features in development, and planned capabilities.",
+    url: "https://quantara.vistabylara.com/features",
+    siteName: "Quantara",
+  },
 };
 
 export default function FeaturesPage() {

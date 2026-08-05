@@ -24,30 +24,39 @@ export default function TermsPage() {
           Last updated: August 5, 2026
         </p>
         <p className="text-lg text-slate-700 dark:text-slate-300">
-          These temporary Terms apply to the Quantara public website and Controlled Early Access programme.
+          These temporary Terms apply to use of the Quantara public website and participation in the Quantara Controlled Early Access programme.
+        </p>
+        <p className="text-lg text-slate-700 dark:text-slate-300 mt-4">
+          A complete Terms of Service agreement will be finalized before broader commercial use.
         </p>
       </div>
 
       <div className="space-y-12">
         <section>
           <h2 className="text-2xl font-bold text-slate-900 dark:text-white mb-4">Product status</h2>
-          <div className="prose prose-slate dark:prose-invert max-w-none space-y-4">
-            <p>Quantara is an AI-assisted BOQ and construction-estimating platform in Controlled Early Access.</p>
-            <p>Features may be incomplete, changed, limited, interrupted or removed.</p>
-            <p>Feature statuses may be:</p>
-            <ul className="list-disc pl-5">
-              <li>Live</li>
-              <li>Preview UI</li>
-              <li>In Development</li>
-              <li>Planned</li>
-            </ul>
-          </div>
+          <p className="text-slate-700 dark:text-slate-300">
+            Quantara is an AI-assisted BOQ and construction-estimating platform in Controlled Early Access.
+          </p>
+          <p className="text-slate-700 dark:text-slate-300 mt-4">
+            Features may be incomplete, changed, limited, interrupted or removed during this stage.
+          </p>
+          <p className="text-slate-700 dark:text-slate-300 mt-4">
+            Feature status may be shown as:</p>
+          <ul className="list-disc pl-5 space-y-1 text-slate-700 dark:text-slate-300 mt-3">
+            <li>Live;</li>
+            <li>Preview UI;</li>
+            <li>In Development;</li>
+            <li>Planned.</li>
+          </ul>
         </section>
 
         <section>
           <h2 className="text-2xl font-bold text-slate-900 dark:text-white mb-4">No paid subscription</h2>
           <p className="text-slate-700 dark:text-slate-300">
             Creating an Early Access account does not begin a paid subscription, automatic renewal or automatic billing.
+          </p>
+          <p className="text-slate-700 dark:text-slate-300 mt-4">
+            Commercial plans, usage limits and payment terms will be provided separately before any paid service begins.
           </p>
         </section>
 
@@ -61,7 +70,7 @@ export default function TermsPage() {
 
         <section>
           <h2 className="text-2xl font-bold text-slate-900 dark:text-white mb-4">No guarantee of accuracy</h2>
-          <p className="text-slate-700 dark:text-slate-300 mb-2">Outputs may contain:</p>
+          <p className="text-slate-700 dark:text-slate-300 mb-2">Early Access output may contain:</p>
           <ul className="list-disc pl-5 space-y-1 text-slate-700 dark:text-slate-300">
             <li>extraction errors;</li>
             <li>OCR errors;</li>
@@ -77,41 +86,67 @@ export default function TermsPage() {
 
         <section>
           <h2 className="text-2xl font-bold text-slate-900 dark:text-white mb-4">Supported formats</h2>
-          <div className="prose prose-slate dark:prose-invert max-w-none space-y-4">
-            <p>Only formats marked Live should be treated as supported.</p>
-            <p className="font-medium text-rose-600 dark:text-rose-400">
-              Do not imply CAD, BIM, IFC, DWG, Revit, visual takeoff or drawing-scale measurement unless separately verified.
-            </p>
-          </div>
+          <p className="text-slate-700 dark:text-slate-300">
+            Only formats expressly marked Live should be treated as currently supported.
+          </p>
+          <p className="text-slate-700 dark:text-slate-300 mt-4">
+            CAD, BIM, IFC, DWG, Revit, visual quantity takeoff, drawing-scale measurement and automatic floor-plan interpretation must not be assumed to be available unless explicitly confirmed as Live.
+          </p>
         </section>
 
         <section>
           <h2 className="text-2xl font-bold text-slate-900 dark:text-white mb-4">User responsibilities</h2>
           <p className="text-slate-700 dark:text-slate-300 mb-2">Users must:</p>
           <ul className="list-disc pl-5 space-y-1 text-slate-700 dark:text-slate-300">
-            <li>provide accurate information;</li>
-            <li>protect credentials;</li>
-            <li>use the platform lawfully;</li>
+            <li>provide accurate account and company information;</li>
+            <li>protect their credentials;</li>
+            <li>use Quantara lawfully;</li>
             <li>upload only authorized content;</li>
-            <li>avoid malware;</li>
-            <li>review all outputs;</li>
-            <li>respect confidentiality;</li>
-            <li>respect intellectual property;</li>
-            <li>avoid representing unreviewed output as certified work.</li>
+            <li>avoid uploading malware;</li>
+            <li>professionally review all outputs;</li>
+            <li>respect confidentiality and intellectual property;</li>
+            <li>avoid presenting unreviewed output as certified professional work.</li>
           </ul>
+        </section>
+
+        <section>
+          <h2 className="text-2xl font-bold text-slate-900 dark:text-white mb-4">Ownership and authority</h2>
+          <p className="text-slate-700 dark:text-slate-300">
+            Users retain responsibility for information and documents they submit.
+          </p>
+          <p className="text-slate-700 dark:text-slate-300 mt-4">
+            Users must hold the rights or authority necessary to upload client drawings, specifications, supplier information, prices, templates and other project records.
+          </p>
         </section>
 
         <section>
           <h2 className="text-2xl font-bold text-slate-900 dark:text-white mb-4">Availability</h2>
           <p className="text-slate-700 dark:text-slate-300">
-            Access may be suspended or limited for maintenance, product changes, security, abuse prevention or operational reasons.
+            Early Access availability is not guaranteed.
           </p>
+          <p className="text-slate-700 dark:text-slate-300 mt-4">
+            Quantara may suspend, limit or change access for maintenance, security, abuse prevention, technical issues, operational reasons or product changes.
+          </p>
+        </section>
+
+        <section>
+          <h2 className="text-2xl font-bold text-slate-900 dark:text-white mb-4">Prohibited use</h2>
+          <p className="text-slate-700 dark:text-slate-300 mb-2">Users must not:</p>
+          <ul className="list-disc pl-5 space-y-1 text-slate-700 dark:text-slate-300">
+            <li>attempt unauthorized access;</li>
+            <li>interfere with service operation;</li>
+            <li>upload malicious code;</li>
+            <li>violate privacy or intellectual-property rights;</li>
+            <li>submit unlawful content;</li>
+            <li>misrepresent unreviewed output;</li>
+            <li>attempt to extract protected credentials or source code unlawfully.</li>
+          </ul>
         </section>
 
         <section className="bg-amber-50 dark:bg-amber-900/10 border border-amber-200 dark:border-amber-900/50 p-6 rounded-xl">
           <h2 className="text-xl font-bold text-amber-900 dark:text-amber-100 mb-4">Reliance limitation</h2>
           <p className="text-amber-800 dark:text-amber-200 font-medium">
-            Do not rely exclusively on Quantara for tender submission, pricing, procurement, contractual commitments, project valuation, payment certification, construction execution or regulatory compliance.
+            Do not rely exclusively on Quantara for tender submission, pricing, procurement, contractual commitments, project valuation, payment certification, construction execution or regulatory compliance. Independent professional review is required.
           </p>
         </section>
 

@@ -81,18 +81,28 @@ export default function ContactSalesPage() {
           <div>
             <h1 className="text-4xl font-bold text-slate-900 dark:text-white mb-6">Contact Sales</h1>
             <p className="text-lg text-slate-600 dark:text-slate-400 mb-8">
-              Discuss enterprise implementation, custom integrations, or get answers to security and compliance questions for your BOQ workflows.
+              Tell us about your BOQ workflow, project-document formats, team requirements and Early Access needs.
             </p>
             <div className="bg-blue-50 dark:bg-blue-900/20 p-6 rounded-2xl border border-blue-100 dark:border-blue-800/50 mb-8">
-              <h3 className="font-bold text-slate-900 dark:text-white mb-4">Contact details</h3>
+              <h3 className="font-bold text-slate-900 dark:text-white mb-4">Talk to the Quantara Team</h3>
               <ul className="space-y-3 text-slate-700 dark:text-slate-300">
+                <li className="flex gap-2"><strong>Email:</strong> <a href="mailto:solution@vistabylara.com" className="text-blue-600 hover:underline">solution@vistabylara.com</a></li>
                 <li className="flex gap-2"><strong>Telephone:</strong> <a href="tel:+971507994292" className="text-blue-600 hover:underline">+971 50 799 4292</a></li>
                 <li className="flex gap-2"><strong>WhatsApp:</strong> <a href="https://wa.me/971507994292" className="text-blue-600 hover:underline">+971 50 799 4292</a></li>
-                <li className="flex gap-2"><strong>Email:</strong> <a href="mailto:solution@vistabylara.com" className="text-blue-600 hover:underline">solution@vistabylara.com</a></li>
               </ul>
               <p className="mt-4 text-sm text-slate-600 dark:text-slate-400">
-                Support requests can be submitted 24 hours a day. Response times may vary during Controlled Early Access.
+                Sales and support requests can be submitted 24 hours a day. Response times may vary during Controlled Early Access.
               </p>
+            </div>
+            
+            <div className="bg-slate-100 dark:bg-slate-900/50 p-6 rounded-2xl border border-slate-200 dark:border-slate-800/50">
+              <h3 className="font-bold text-slate-900 dark:text-white mb-4">Why contact sales?</h3>
+              <ul className="space-y-2 text-sm text-slate-600 dark:text-slate-400 list-disc pl-4">
+                <li>Discuss your current BOQ process</li>
+                <li>Review supported input and output requirements</li>
+                <li>Request an Early Access product walkthrough</li>
+                <li>Share team and project-volume requirements</li>
+              </ul>
             </div>
           </div>
 

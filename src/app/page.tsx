@@ -59,20 +59,12 @@ const faqs = [
 ];
 
 const governedWorkflow = [
-  { title: "Create a project", desc: "Start one controlled project record for the work." },
-  { title: "Open the project workspace", desc: "Work inside the authenticated project environment." },
-  { title: "Choose supported data sources", desc: "Select one or more available sources for the project." },
-  { title: "Bring data into the workspace", desc: "Upload files, import schedules or connect an authorized application." },
-  { title: "Normalize source information", desc: "Organize supported information into the project workspace." },
-  { title: "Preview and review", desc: "Check the source data before requesting any change." },
-  { title: "Speak or type an instruction", desc: "Give Quantara a clear drafting or structured-editing request." },
-  { title: "Generate a structured proposal", desc: "Prepare proposed operations without silently changing the source record." },
-  { title: "Inspect the proposed impact", desc: "Review affected records, assumptions, ambiguities and warnings." },
-  { title: "Decide what to approve", desc: "Approve all, approve selected changes, edit, reject or request reinterpretation." },
-  { title: "Apply approved operations only", desc: "Quantara applies only the operations explicitly approved by the user." },
-  { title: "Create a governed revision", desc: "Preserve the previous approved or locked version and record the new revision." },
-  { title: "Complete professional review", desc: "A qualified professional checks quantities, rates, specifications and conclusions." },
-  { title: "Generate a traceable output", desc: "Create the supported BOQ or technical report from the reviewed revision." },
+  { title: "Create a Project", desc: "Start by creating a project and entering the relevant project information. The project becomes the controlled workspace for drawings, BOQ records, revisions and generated documents." },
+  { title: "Open the Project", desc: "Open the required project from the project list. Confirm that you are working inside the correct client and project record before uploading documents or creating BOQ information." },
+  { title: "Open Drawings", desc: "Select the Drawings area inside the project. This is where supported project drawing files are uploaded, previewed and stored." },
+  { title: "Upload the PDF", desc: "Upload the supported PDF drawing or document. File processing and preview availability may depend on the file size, format, scan quality and current Early Access limits." },
+  { title: "Preview and Store the Drawing", desc: "Review the uploaded PDF preview and confirm that the correct drawing and revision have been added to the project. The source document should remain connected to the project record for reference and professional review." },
+  { title: "Create the BOQ", desc: "After the drawing is available within the project, begin creating the BOQ. Organize the required sections and items, then review descriptions, quantities, units, specifications, assumptions and exclusions before generating or issuing any document." }
 ];
 
 export default function HomePage() {
@@ -384,18 +376,16 @@ export default function HomePage() {
 
       <section className="py-24 px-4 bg-white dark:bg-slate-950 border-t border-slate-100 dark:border-slate-900">
         <div className="container mx-auto max-w-4xl">
-          <h2 className="text-3xl font-bold text-center text-slate-900 dark:text-white">How Quantara Works</h2>
+          <h2 className="text-3xl font-bold text-center text-slate-900 dark:text-white">How to Use Quantara</h2>
           <p className="mx-auto mt-5 mb-12 max-w-2xl text-center text-slate-600 dark:text-slate-400">
-            One governed journey connects project data, user instructions, visible approval decisions, controlled revisions and reviewed professional outputs.
+            Quantara follows a project-based workflow. Users first create and open a project, then upload supported PDF files through the Drawings area. The uploaded drawing can be previewed and stored within the project before the user begins creating the BOQ.
           </p>
 
           <ol className="grid gap-4 md:grid-cols-2">
             {governedWorkflow.map((step, index) => {
-              const isProposalStage = index >= 6 && index <= 11;
-
               return (
-                <li key={step.title} className={`relative rounded-2xl border p-5 pl-16 ${isProposalStage ? "border-blue-200 bg-blue-50 dark:border-blue-900/50 dark:bg-blue-950/30" : "border-slate-200 bg-slate-50 dark:border-slate-800 dark:bg-slate-900/60"}`}>
-                  <span className={`absolute left-5 top-5 flex h-8 w-8 items-center justify-center rounded-full text-sm font-bold ${isProposalStage ? "bg-blue-600 text-white" : "bg-slate-200 text-slate-700 dark:bg-slate-800 dark:text-slate-200"}`} aria-hidden="true">
+                <li key={step.title} className="relative rounded-2xl border p-5 pl-16 border-slate-200 bg-slate-50 dark:border-slate-800 dark:bg-slate-900/60">
+                  <span className="absolute left-5 top-5 flex h-8 w-8 items-center justify-center rounded-full text-sm font-bold bg-slate-200 text-slate-700 dark:bg-slate-800 dark:text-slate-200" aria-hidden="true">
                     {index + 1}
                   </span>
                   <h3 className="font-bold text-slate-900 dark:text-slate-100">{step.title}</h3>
@@ -408,7 +398,7 @@ export default function HomePage() {
           <aside aria-label="Professional review notice" className="mt-12 bg-amber-50 dark:bg-amber-900/20 border-l-4 border-amber-500 p-6 rounded-r-lg">
             <h3 className="font-semibold text-amber-800 dark:text-amber-300 mb-2">Professional Review Required</h3>
             <p className="text-amber-700 dark:text-amber-400/90 text-sm leading-relaxed">
-              Voice and typed AI instructions assist with drafting and structured editing. They do not replace professional judgment. All descriptions, quantities, units, specifications, rates, assumptions, exclusions, technical findings and generated outputs must be reviewed by an appropriately qualified professional before tender, procurement, contractual, regulatory or construction use.
+              Uploading a drawing does not automatically confirm quantities, measurements, scope or technical accuracy. All BOQ information must be reviewed by an appropriately qualified estimator, quantity surveyor, engineer or responsible project professional before tender, procurement, contractual or construction use.
             </p>
           </aside>
         </div>

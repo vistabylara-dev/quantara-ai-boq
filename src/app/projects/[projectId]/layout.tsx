@@ -10,7 +10,7 @@ type ProjectLayoutProps = {
 export async function generateMetadata({ params }: ProjectLayoutProps): Promise<Metadata> {
   const { projectId } = await params;
   return {
-    title: `Project ${projectId} | Quantara AI BOQ`,
+    title: `Project ${projectId} | Quantara BOQ`,
   };
 }
 

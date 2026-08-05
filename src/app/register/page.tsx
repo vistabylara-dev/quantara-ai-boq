@@ -74,7 +74,7 @@ export default function RegisterPage() {
   return (
     <div className="mx-auto max-w-xl py-12 px-4">
       <div className="rounded-[32px] border border-slate-800 bg-slate-950 p-8">
-        <p className="text-sm uppercase tracking-[0.28em] text-slate-500">Quantara AI</p>
+        <p className="text-sm uppercase tracking-[0.28em] text-slate-500">Quantara</p>
         <h1 className="mt-2 text-2xl font-semibold text-white">Request Early Access</h1>
         <p className="mt-2 text-sm text-slate-400">Creating an Early Access account does not begin a paid subscription or automatic billing.</p>
 

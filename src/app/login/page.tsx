@@ -40,7 +40,7 @@ function LoginForm() {
       <div className="w-full max-w-[360px] relative z-10 cyber-panel cyber-border p-10 rounded-sm">
         <div className="flex flex-col items-center justify-center mb-8 border-b border-white/10 pb-6">
           <div className="w-12 h-12 mb-4 overflow-hidden mix-blend-screen opacity-90 border border-[#00F0FF]/30 p-1 bg-[#00F0FF]/5">
-            <img src="/images/logo.jpg" alt="Quantara AI" className="w-full h-full object-cover grayscale" />
+            <img src="/images/logo.jpg" alt="Quantara" className="w-full h-full object-cover grayscale" />
           </div>
           <span className="terminal-text text-[10px] text-[#00F0FF] uppercase tracking-[0.3em] mb-1">Authorization</span>
           <h1 className="text-xl font-bold text-white tracking-widest uppercase">System Login</h1>

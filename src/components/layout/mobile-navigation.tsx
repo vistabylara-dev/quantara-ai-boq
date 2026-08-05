@@ -48,7 +48,7 @@ export default function MobileNavigation({ open, onClose }: MobileNavigationProp
         <div className="flex items-center justify-between">
           <div>
             <p className="text-xs uppercase tracking-[0.24em] text-[#7B879C] dark:text-[#7F8DA6]">Workspace</p>
-            <h2 className="text-xl font-semibold text-[#08152E] dark:text-white">Quantara AI</h2>
+            <h2 className="text-xl font-semibold text-[#08152E] dark:text-white">Quantara</h2>
           </div>
           <button
             type="button"

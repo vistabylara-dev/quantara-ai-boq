@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { PortalShell } from "../../portal-shell";
 
 export const metadata: Metadata = {
-  title: "Link Unavailable | Quantara AI BOQ",
+  title: "Link Unavailable | Quantara BOQ",
 };
 
 const MESSAGES: Record<string, string> = {

@@ -4,10 +4,10 @@ import { ArrowRight, FileText, LayoutTemplate, BoxSelect, FolderKanban, ShieldCh
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "Quantara AI BOQ and Construction Estimating Platform",
+  title: "Quantara BOQ and Construction Estimating Platform",
   description: "Create structured BOQs, organize project items, manage templates and pricing data, and generate professional construction documents with Quantara.",
   openGraph: {
-    title: "Quantara AI BOQ and Construction Estimating Platform",
+    title: "Quantara BOQ and Construction Estimating Platform",
     description: "Create structured BOQs, organize project items, manage templates and pricing data, and generate professional construction documents with Quantara.",
     url: "https://quantara.local",
     siteName: "Quantara",
@@ -268,7 +268,7 @@ export default function HomePage() {
       <footer className="py-12 border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950">
         <div className="container mx-auto px-4 max-w-6xl flex flex-col md:flex-row justify-between items-center text-sm text-slate-500 dark:text-slate-400">
           <div className="mb-4 md:mb-0">
-            &copy; {new Date().getFullYear()} Quantara AI. All rights reserved.
+            &copy; {new Date().getFullYear()} Vista By Lara. All rights reserved.
           </div>
           <div className="flex space-x-6">
             <Link href="/privacy" className="hover:text-slate-900 dark:hover:text-white">Privacy</Link>

@@ -30,7 +30,7 @@ function wrapHtml(heading: string, bodyHtml: string, url: string): string {
         <td align="center">
           <table role="presentation" width="480" cellpadding="0" cellspacing="0" style="background-color:#0f172a;border:1px solid #1e293b;border-radius:24px;padding:32px;">
             <tr>
-              <td style="color:#64748b;font-size:12px;letter-spacing:2px;text-transform:uppercase;">Quantara AI</td>
+              <td style="color:#64748b;font-size:12px;letter-spacing:2px;text-transform:uppercase;">Quantara</td>
             </tr>
             <tr>
               <td style="color:#ffffff;font-size:22px;font-weight:600;padding-top:8px;">${escapeHtml(heading)}</td>

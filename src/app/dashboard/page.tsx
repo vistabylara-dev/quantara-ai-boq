@@ -441,7 +441,7 @@ export default function DashboardPage() {
         <div className="cyber-border cyber-panel p-6 flex flex-col md:flex-row items-center justify-between text-[10px] uppercase tracking-widest text-slate-500 font-mono">
           <div className="flex items-center gap-2 mb-4 md:mb-0">
              <div className="w-2 h-2 bg-blue-600 dark:bg-[#00F0FF] animate-pulse"></div>
-             <span className="text-slate-900 dark:text-white font-bold">Quantara AI Support Network</span>
+             <span className="text-slate-900 dark:text-white font-bold">Quantara Support Network</span>
           </div>
           <div className="flex flex-col md:flex-row gap-4 md:gap-8 text-center md:text-left">
             <a href="https://www.vistabylara.com" target="_blank" rel="noopener noreferrer" className="hover:text-blue-600 dark:hover:text-[#00F0FF] transition-colors">

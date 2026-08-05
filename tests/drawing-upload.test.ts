@@ -31,14 +31,25 @@ import {
   updateProjectDrawingMetadata,
   uploadProjectDrawing,
 } from "../src/lib/services/drawing-service";
-import { getProjectFileForDownload } from "../src/lib/services/project-file-service";
-import { DRAWING_MAX_FILE_SIZE_BYTES } from "../src/lib/validation/drawing-schema";
+import { getProjectFileForStreamingDownload } from "../src/lib/services/project-file-service";
+import { DRAWING_UPLOAD_MAX_BYTES_DEFAULT } from "../src/lib/validation/drawing-schema";
 import { localProjectFileStorageAdapter } from "../src/lib/storage/local-project-file-storage-adapter";
 import { AppError, NotFoundError, PermissionDeniedError, UnauthorizedError } from "../src/lib/errors/app-error";
 import type { CurrentActor } from "../src/lib/auth/current-actor";
 import PDFDocument from "pdfkit";
 
 const RUN_ID = Date.now();
+
+async function readStreamToBuffer(stream: ReadableStream<Uint8Array>): Promise<Buffer> {
+  const reader = stream.getReader();
+  const chunks: Uint8Array[] = [];
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    chunks.push(value);
+  }
+  return Buffer.concat(chunks);
+}
 
 function pdfBuffer(content: string): Buffer {
   return Buffer.from(`%PDF-1.4\n${content}\n%%EOF`);
@@ -155,12 +166,12 @@ describe("Drawing upload & intake pipeline (integration, real local Postgres)", 
       ).rejects.toMatchObject({ code: "FILE_EMPTY" });
     });
 
-    it("rejects a file over the 25MB drawing-specific limit", async () => {
+    it("rejects a file over the 250MB drawing-specific limit", async () => {
       await expect(
         uploadProjectDrawing(ownerActorA, projectAId, {
           originalName: "huge.pdf",
           mimeType: "application/pdf",
-          buffer: Buffer.alloc(DRAWING_MAX_FILE_SIZE_BYTES + 1),
+          buffer: Buffer.alloc(DRAWING_UPLOAD_MAX_BYTES_DEFAULT + 1),
           metadata: {},
         }),
       ).rejects.toMatchObject({ code: "FILE_TOO_LARGE" });
@@ -190,8 +201,9 @@ describe("Drawing upload & intake pipeline (integration, real local Postgres)", 
       });
       expect(result.drawing.id).toBeTruthy();
       // The stored bytes must still be readable back through the tenant-scoped download path.
-      const download = await getProjectFileForDownload(ownerActorA, result.drawing.id);
-      expect(download.buffer.toString()).toBe(pdfBuffer("traversal attempt").toString());
+      const download = await getProjectFileForStreamingDownload(ownerActorA, result.drawing.id);
+      const body = await readStreamToBuffer(download.body);
+      expect(body.toString()).toBe(pdfBuffer("traversal attempt").toString());
     });
 
     it("gives two drawings with the identical original filename distinct, non-colliding storage keys", async () => {
@@ -201,10 +213,10 @@ describe("Drawing upload & intake pipeline (integration, real local Postgres)", 
       const second = await uploadProjectDrawing(ownerActorA, projectAId, { originalName: "same-name.pdf", mimeType: "application/pdf", buffer: bufferB, metadata: {} });
       expect(first.drawing.id).not.toBe(second.drawing.id);
 
-      const downloadA = await getProjectFileForDownload(ownerActorA, first.drawing.id);
-      const downloadB = await getProjectFileForDownload(ownerActorA, second.drawing.id);
-      expect(downloadA.buffer.toString()).toBe(bufferA.toString());
-      expect(downloadB.buffer.toString()).toBe(bufferB.toString());
+      const downloadA = await getProjectFileForStreamingDownload(ownerActorA, first.drawing.id);
+      const downloadB = await getProjectFileForStreamingDownload(ownerActorA, second.drawing.id);
+      expect((await readStreamToBuffer(downloadA.body)).toString()).toBe(bufferA.toString());
+      expect((await readStreamToBuffer(downloadB.body)).toString()).toBe(bufferB.toString());
     });
 
     it("saves a real sha256 checksum", async () => {
@@ -323,7 +335,7 @@ describe("Drawing upload & intake pipeline (integration, real local Postgres)", 
       const uploaded = await uploadProjectDrawing(ownerActorA, projectAId, { originalName: "tenant-isolation.pdf", mimeType: "application/pdf", buffer: pdfBuffer("tenant isolation content"), metadata: {} });
 
       await expect(getProjectDrawing(ownerActorB, uploaded.drawing.id)).rejects.toThrow(NotFoundError);
-      await expect(getProjectFileForDownload(ownerActorB, uploaded.drawing.id)).rejects.toThrow(NotFoundError);
+      await expect(getProjectFileForStreamingDownload(ownerActorB, uploaded.drawing.id)).rejects.toThrow(NotFoundError);
       await expect(updateProjectDrawingMetadata(ownerActorB, uploaded.drawing.id, { discipline: "CIVIL" })).rejects.toThrow(NotFoundError);
       await expect(deleteProjectDrawing(ownerActorB, uploaded.drawing.id)).rejects.toThrow(NotFoundError);
     });
@@ -341,7 +353,7 @@ describe("Drawing upload & intake pipeline (integration, real local Postgres)", 
       const uploaded = await uploadProjectDrawing(ownerActorA, projectAId, { originalName: "to-delete.pdf", mimeType: "application/pdf", buffer: pdfBuffer("delete me"), metadata: {} });
       await deleteProjectDrawing(ownerActorA, uploaded.drawing.id);
       await expect(getProjectDrawing(ownerActorA, uploaded.drawing.id)).rejects.toThrow(NotFoundError);
-      await expect(getProjectFileForDownload(ownerActorA, uploaded.drawing.id)).rejects.toThrow(NotFoundError);
+      await expect(getProjectFileForStreamingDownload(ownerActorA, uploaded.drawing.id)).rejects.toThrow(NotFoundError);
     });
   });
 
@@ -411,7 +423,7 @@ describe("Drawing upload & intake pipeline (integration, real local Postgres)", 
       const row = await prisma.projectFile.findUniqueOrThrow({ where: { id: uploaded.drawing.id } });
       await localProjectFileStorageAdapter.deleteObject(row.storageKey);
 
-      await expect(getProjectFileForDownload(ownerActorA, uploaded.drawing.id)).rejects.toThrow();
+      await expect(getProjectFileForStreamingDownload(ownerActorA, uploaded.drawing.id)).rejects.toThrow();
       // The database record itself is still readable — only the byte fetch fails, not the metadata layer.
       expect(await getProjectDrawing(ownerActorA, uploaded.drawing.id)).toBeTruthy();
     });

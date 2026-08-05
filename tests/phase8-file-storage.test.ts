@@ -6,10 +6,21 @@ import { createProjectWithDefaultBoq } from "../src/lib/services/project-service
 import {
   deleteProjectFile,
   getProjectFile,
-  getProjectFileForDownload,
+  getProjectFileForStreamingDownload,
   listProjectFilesForProject,
   uploadProjectFile,
 } from "../src/lib/services/project-file-service";
+
+async function readStreamToBuffer(stream: ReadableStream<Uint8Array>): Promise<Buffer> {
+  const reader = stream.getReader();
+  const chunks: Uint8Array[] = [];
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    chunks.push(value);
+  }
+  return Buffer.concat(chunks);
+}
 import { buildStorageKey, computeChecksum, MAX_FILE_SIZE_BYTES, validateUpload } from "../src/lib/files/file-security";
 import { StorageKeyError } from "../src/lib/storage/document-storage-adapter";
 import { localProjectFileStorageAdapter } from "../src/lib/storage/local-project-file-storage-adapter";
@@ -203,8 +214,9 @@ describe("Phase 8 sub-phase 1: file security and storage (integration, real loca
       expect(list.some((f) => f.id === uploaded.file.id)).toBe(true);
       const detail = await getProjectFile(reviewerActorA, uploaded.file.id);
       expect(detail.id).toBe(uploaded.file.id);
-      const download = await getProjectFileForDownload(reviewerActorA, uploaded.file.id);
-      expect(download.buffer.toString()).toBe(pdfBuffer("readable content").toString());
+      const download = await getProjectFileForStreamingDownload(reviewerActorA, uploaded.file.id);
+      const body = await readStreamToBuffer(download.body);
+      expect(body.toString()).toBe(pdfBuffer("readable content").toString());
       expect(download.fileName).toBe("readable.pdf");
     });
 
@@ -212,7 +224,7 @@ describe("Phase 8 sub-phase 1: file security and storage (integration, real loca
       const uploaded = await uploadProjectFile(ownerActorA, projectAId, { originalName: "tenant-isolation.pdf", mimeType: "application/pdf", buffer: pdfBuffer("tenant isolation content") });
 
       await expect(getProjectFile(ownerActorB, uploaded.file.id)).rejects.toThrow(NotFoundError);
-      await expect(getProjectFileForDownload(ownerActorB, uploaded.file.id)).rejects.toThrow(NotFoundError);
+      await expect(getProjectFileForStreamingDownload(ownerActorB, uploaded.file.id)).rejects.toThrow(NotFoundError);
       await expect(deleteProjectFile(ownerActorB, uploaded.file.id)).rejects.toThrow(NotFoundError);
     });
 
@@ -220,7 +232,7 @@ describe("Phase 8 sub-phase 1: file security and storage (integration, real loca
       const uploaded = await uploadProjectFile(ownerActorA, projectAId, { originalName: "to-delete.pdf", mimeType: "application/pdf", buffer: pdfBuffer("delete me") });
       await deleteProjectFile(ownerActorA, uploaded.file.id);
       await expect(getProjectFile(ownerActorA, uploaded.file.id)).rejects.toThrow(NotFoundError);
-      await expect(getProjectFileForDownload(ownerActorA, uploaded.file.id)).rejects.toThrow(NotFoundError);
+      await expect(getProjectFileForStreamingDownload(ownerActorA, uploaded.file.id)).rejects.toThrow(NotFoundError);
     });
 
     it("rejects delete from a role without the files:manage capability", async () => {

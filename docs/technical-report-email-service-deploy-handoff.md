@@ -1,4 +1,4 @@
-# Deploy handoff: Technical Report Email Service (Email Service 1B)
+                                                                                                                                # Deploy handoff: Technical Report Email Service (Email Service 1B)
 
 **Audience:** any agent or developer picking this up fresh, with no memory of how it was built.
 **Repo:** `quantara-ai-boq` (Next.js 14 App Router + Prisma/PostgreSQL, multi-tenant BOQ SaaS).

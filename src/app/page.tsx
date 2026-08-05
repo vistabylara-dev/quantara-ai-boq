@@ -74,13 +74,9 @@ export default function HomePage() {
       <section className="py-12 px-4 bg-slate-50 dark:bg-slate-900/50">
         <div className="container mx-auto max-w-6xl">
           <div className="rounded-2xl border border-slate-200 dark:border-slate-800 overflow-hidden shadow-2xl bg-white dark:bg-slate-950 p-2 md:p-4">
-            <div className="aspect-video bg-slate-100 dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-800 flex items-center justify-center flex-col relative overflow-hidden">
+            <div className="relative overflow-hidden rounded-lg border border-slate-200 dark:border-slate-800 flex items-center justify-center bg-slate-100 dark:bg-slate-900">
                <div className="absolute inset-0 bg-[linear-gradient(to_right,#80808012_1px,transparent_1px),linear-gradient(to_bottom,#80808012_1px,transparent_1px)] bg-[size:24px_24px]"></div>
-               <div className="z-10 text-center">
-                 <BoxSelect className="h-16 w-16 mx-auto text-blue-600 mb-4 opacity-80" />
-                 <h2 className="text-2xl font-bold text-slate-900 dark:text-white">Workspace Preview</h2>
-                 <p className="text-slate-600 dark:text-slate-400 mt-2">Manage sections, items, quantities, and pricing data.</p>
-               </div>
+               <img src="/workspace-preview.png" alt="Workspace Preview" className="z-10 w-full h-auto rounded-lg shadow-sm" />
             </div>
           </div>
         </div>

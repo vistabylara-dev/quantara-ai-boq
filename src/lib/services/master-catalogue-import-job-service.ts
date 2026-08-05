@@ -38,8 +38,8 @@ function requireOwner(actor: PlatformActor): void {
   }
 }
 
-const CONTINUABLE_STATUSES: MasterCatalogueImportJobStatus[] = [MasterCatalogueImportJobStatus.PAUSED, MasterCatalogueImportJobStatus.IMPORT_RUNNING];
-const TERMINAL_STATUSES: MasterCatalogueImportJobStatus[] = [
+export const CONTINUABLE_STATUSES: MasterCatalogueImportJobStatus[] = [MasterCatalogueImportJobStatus.PAUSED, MasterCatalogueImportJobStatus.IMPORT_RUNNING];
+export const TERMINAL_STATUSES: MasterCatalogueImportJobStatus[] = [
   MasterCatalogueImportJobStatus.COMPLETED,
   MasterCatalogueImportJobStatus.COMPLETED_WITH_WARNINGS,
   MasterCatalogueImportJobStatus.FAILED,
@@ -450,6 +450,30 @@ export async function processNextBatch(owner: PlatformActor, jobId: string) {
     });
     throw error;
   }
+}
+
+const MAX_BATCHES_PER_CALL = 40;
+
+/**
+ * CATALOGUE-CREATE-1 — drives processNextBatch repeatedly within one
+ * authenticated call instead of requiring the owner to trigger every single
+ * batch by hand. Reuses processNextBatch's own optimistic lock and
+ * checkpointing unchanged; this is purely a server-side loop around it, so
+ * every safety property (resumability, single-batch atomicity, failure
+ * isolation) still holds. Capped at MAX_BATCHES_PER_CALL (40 x 200 rows =
+ * 8,000 rows) to stay well inside a serverless function's execution window
+ * for very large datasets — calling this again resumes from the persisted
+ * cursor exactly like calling processNextBatch again would.
+ */
+export async function runJobBatches(owner: PlatformActor, jobId: string, maxBatches: number = MAX_BATCHES_PER_CALL) {
+  requireOwner(owner);
+  let last = await getJob(owner, jobId);
+  let batchesRun = 0;
+  while (batchesRun < maxBatches && CONTINUABLE_STATUSES.includes(last.status as MasterCatalogueImportJobStatus)) {
+    last = await processNextBatch(owner, jobId);
+    batchesRun += 1;
+  }
+  return { job: last, batchesRun, isComplete: TERMINAL_STATUSES.includes(last.status as MasterCatalogueImportJobStatus) };
 }
 
 export async function cancelJob(owner: PlatformActor, jobId: string) {

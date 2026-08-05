@@ -18,9 +18,9 @@ export interface KnowledgeSection {
   id: string;
   heading: string;
   level?: 2 | 3;
-  paragraphs?: string[];
-  bullets?: string[];
-  numberedItems?: string[];
+  paragraphs?: (string | ReactNode)[];
+  bullets?: (string | ReactNode)[];
+  numberedItems?: (string | ReactNode)[];
   table?: {
     headers: string[];
     rows: string[][];
@@ -36,6 +36,8 @@ export interface KnowledgePageContent {
   breadcrumbLabel: string;
   title: string;
   summary: string;
+  directAnswer?: string;
+  keyTakeaways?: string[];
   reviewedDate: string;
   sections: KnowledgeSection[];
   faqs: KnowledgeFaq[];
@@ -91,6 +93,29 @@ export default function KnowledgePage({ content }: { content: KnowledgePageConte
             <h1 className="text-4xl md:text-5xl font-bold text-slate-900 tracking-tight leading-tight mb-6">
               {content.title}
             </h1>
+            
+            {content.directAnswer && (
+              <div className="text-lg text-slate-800 leading-relaxed border-l-4 border-blue-600 pl-5 py-2 bg-slate-50 mb-8 rounded-r-lg">
+                {content.directAnswer}
+              </div>
+            )}
+
+            {content.keyTakeaways && content.keyTakeaways.length > 0 && (
+              <div className="bg-blue-50/50 border border-blue-100 rounded-xl p-6 mb-8">
+                <h2 className="text-sm font-bold text-blue-900 uppercase tracking-wider mb-4 flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4" /> Key Takeaways
+                </h2>
+                <ul className="space-y-3">
+                  {content.keyTakeaways.map((takeaway, i) => (
+                    <li key={i} className="flex items-start gap-3">
+                      <span className="text-blue-500 font-bold mt-0.5 shrink-0">•</span>
+                      <span className="text-slate-700 font-medium">{takeaway}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
             <div className="bg-slate-50 border border-slate-100 rounded-xl p-6 md:p-8">
               <p className="text-lg text-slate-700 leading-relaxed font-medium">
                 {content.summary}

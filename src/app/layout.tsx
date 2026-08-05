@@ -70,6 +70,27 @@ export default function RootLayout({ children }: { children: ReactNode }) {
     <html lang="en">
       <body>
         <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
+        <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify({
+          "@context": "https://schema.org",
+          "@graph": [
+            {
+              "@type": "Organization",
+              "@id": "https://quantara.vistabylara.com/#organization",
+              "name": "Vista By Lara",
+              "url": "https://quantara.vistabylara.com/",
+              "logo": "https://quantara.vistabylara.com/logo.png",
+              "email": "solution@vistabylara.com",
+              "telephone": "+971507994292"
+            },
+            {
+              "@type": "WebSite",
+              "@id": "https://quantara.vistabylara.com/#website",
+              "url": "https://quantara.vistabylara.com/",
+              "name": "Quantara",
+              "publisher": { "@id": "https://quantara.vistabylara.com/#organization" }
+            }
+          ]
+        }) }} />
         <ConditionalAppShell>
           <main>{children}</main>
         </ConditionalAppShell>

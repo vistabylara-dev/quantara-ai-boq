@@ -1,249 +1,119 @@
 import { Metadata } from "next";
-import RegionalLandingPage, { RegionalLandingPageContent } from "@/components/layout/regional-landing-page";
+import SeoLandingPage, { SeoLandingPageContent } from "@/components/layout/seo-landing-page";
 
 export const metadata: Metadata = {
-  title: "BOQ Software Dubai for Contractors, MEP and Fit-Out Teams | Quantara",
-  description: "Support Dubai BOQ and estimating workflows with structured documents, revisions, templates and professionally reviewed project outputs using Quantara.",
+  title: "BOQ Software for Dubai Projects | Quantara",
+  description: "Support fit-out, MEP coordination, and frequent tender revisions with structured BOQ software designed for Dubai construction workflows.",
   alternates: {
     canonical: "https://quantara.vistabylara.com/boq-software-dubai",
   },
   openGraph: {
-    title: "BOQ Software Dubai for Contractors, MEP and Fit-Out Teams | Quantara",
-    description: "Support Dubai BOQ and estimating workflows with structured documents, revisions, templates and professionally reviewed project outputs using Quantara.",
+    title: "BOQ Software for Dubai Projects | Quantara",
+    description: "Support fit-out, MEP coordination, and frequent tender revisions with structured BOQ software designed for Dubai construction workflows.",
     url: "https://quantara.vistabylara.com/boq-software-dubai",
-    type: "website",
+    type: "article",
   },
-  twitter: {
-    card: "summary_large_image",
-    title: "BOQ Software Dubai for Contractors, MEP and Fit-Out Teams | Quantara",
-    description: "Support Dubai BOQ and estimating workflows with structured documents, revisions, templates and professionally reviewed project outputs using Quantara.",
-  },
-  robots: {
-    index: true,
-    follow: true,
-  }
 };
 
 export default function Page() {
-  const content: RegionalLandingPageContent = {
-    breadcrumbLabel: "BOQ Software Dubai",
-    breadcrumbParent: {"href":"/gcc-boq-software","label":"GCC BOQ Software"},
-    title: "BOQ Software for Dubai Contractors, MEP and Fit-Out Projects",
-    audienceDescription: "For Dubai contractors, MEP firms, fit-out companies and QS teams managing fast-moving tender documentation.",
-    directAnswer: "Quantara provides Dubai construction teams with a workflow platform to manage interior fit-out scope, MEP documents, and high-volume client revisions.",
-    challenges: [
-  {
-    "title": "Fast-Moving Tender Schedules",
-    "description": "Dubai projects often feature aggressive tender timelines, requiring rapid consolidation of PDF and Excel BOQ data."
-  },
-  {
-    "title": "Interior and MEP Complexity",
-    "description": "High-end fit-out and complex MEP coordination require structured BOQ records to prevent scope gaps during fast-track delivery."
-  }
-],
-    workflowDescription: "Quantara allows teams to organize detailed project and proposal documents into controlled records. Whether managing fit-out finishes or MEP schedules, the platform structures the BOQ data for professional review before tender submission.",
-    workflowExample: "A Dubai fit-out company receives a revised scope of works in PDF just days before the tender deadline. They use Quantara to quickly extract the new joinery and ceiling items, updating their structured BOQ to match the client's latest revision.",
-    typicalCategories: [
-  "Fit-out Finishes",
-  "Joinery Works",
-  "MEP Services",
-  "Specialist Installations",
-  "Preliminaries"
-],
-    supportedInputs: [
-  "Text-based PDF",
-  "Scanned PDF",
-  "XLSX",
-  "CSV"
-],
-    plannedInputs: [
-  "CAD",
-  "BIM",
-  "IFC"
-],
-    supportedOutputs: [
-  "Structured Excel (XLSX)",
-  "Formatted PDF Proposals",
-  "CSV Exports"
-],
-    limitations: [
-  "Quantara does not claim a local Dubai office unless explicitly verified.",
-  "Quantara does not claim Dubai authority approval or specific integration with Dubai Municipality systems.",
-  "Quantara does not provide automated visual drawing measurement."
-],
-    faqs: [
-  {
-    "question": "Can Dubai fit-out companies use Quantara for BOQ workflows?",
-    "answer": "Yes, Quantara is well-suited for organizing detailed interior fit-out BOQs and tracking client variations."
-  },
-  {
-    "question": "Does Quantara integrate with Dubai government portals?",
-    "answer": "No, Quantara does not integrate directly with local tender or government portals. Users must export their BOQ to Excel or PDF for manual submission."
-  },
-  {
-    "question": "Is Quantara approved by Dubai authorities?",
-    "answer": "Quantara is an independent software tool and does not claim any official government approval or certification."
-  },
-  {
-    "question": "Can I manage MEP scope separation?",
-    "answer": "Yes, the platform allows you to create structured sections to cleanly separate mechanical, electrical, and plumbing scope."
-  },
-  {
-    "question": "Does it support scanned PDFs from local consultants?",
-    "answer": "Yes, OCR is available for scanned PDFs, though all extracted data must be professionally reviewed."
-  },
-  {
-    "question": "Does Quantara have a local office in Dubai?",
-    "answer": "Quantara operates globally; we do not claim a physical local office in Dubai at this time."
-  },
-  {
-    "question": "Can I track fast-moving revisions?",
-    "answer": "Yes, the platform's revision control is designed to handle multiple iterations of a BOQ quickly."
-  },
-  {
-    "question": "Is there a pre-built library for Dubai rates?",
-    "answer": "No, Quantara provides the structure; you must apply your own market rates."
-  },
-  {
-    "question": "How do I export my final proposal?",
-    "answer": "You can export the structured BOQ as a formatted PDF proposal or an XLSX file."
-  }
-],
-    relatedPages: [
-  {
-    "href": "/boq-software-uae",
-    "label": "BOQ Software UAE"
-  },
-  {
-    "href": "/boq-software-for-fit-out-companies",
-    "label": "Fit-Out BOQ Software"
-  },
-  {
-    "href": "/boq-software-for-mep-contractors",
-    "label": "MEP BOQ Software"
-  },
-  {
-    "href": "/construction-estimating-software",
-    "label": "Construction Estimating Software"
-  },
-  {
-    "href": "/contact-sales",
-    "label": "Contact Sales"
-  }
-],
-    schema: {
-      "@context": "https://schema.org",
-      "@graph": [
-        {
-          "@type": "WebPage",
-          "@id": "https://quantara.vistabylara.com/boq-software-dubai",
-          "url": "https://quantara.vistabylara.com/boq-software-dubai",
-          "name": "BOQ Software Dubai for Contractors, MEP and Fit-Out Teams | Quantara",
-          "description": "Support Dubai BOQ and estimating workflows with structured documents, revisions, templates and professionally reviewed project outputs using Quantara."
-        },
-        {
-          "@type": "BreadcrumbList",
-          "itemListElement": [
-            {
-              "@type": "ListItem",
-              "position": 1,
-              "name": "Home",
-              "item": "https://quantara.vistabylara.com/"
-            },
-            {
-              "@type": "ListItem",
-              "position": 2,
-              "name": "GCC BOQ Software",
-              "item": "https://quantara.vistabylara.com/gcc-boq-software"
-            },
-            {
-              "@type": "ListItem",
-              "position": 3,
-              "name": "BOQ Software Dubai",
-              "item": "https://quantara.vistabylara.com/boq-software-dubai"
-            }
-          ]
-        },
-        {
-          "@type": "FAQPage",
-          "mainEntity": [
-  {
-    "@type": "Question",
-    "name": "Can Dubai fit-out companies use Quantara for BOQ workflows?",
-    "acceptedAnswer": {
-      "@type": "Answer",
-      "text": "Yes, Quantara is well-suited for organizing detailed interior fit-out BOQs and tracking client variations."
-    }
-  },
-  {
-    "@type": "Question",
-    "name": "Does Quantara integrate with Dubai government portals?",
-    "acceptedAnswer": {
-      "@type": "Answer",
-      "text": "No, Quantara does not integrate directly with local tender or government portals. Users must export their BOQ to Excel or PDF for manual submission."
-    }
-  },
-  {
-    "@type": "Question",
-    "name": "Is Quantara approved by Dubai authorities?",
-    "acceptedAnswer": {
-      "@type": "Answer",
-      "text": "Quantara is an independent software tool and does not claim any official government approval or certification."
-    }
-  },
-  {
-    "@type": "Question",
-    "name": "Can I manage MEP scope separation?",
-    "acceptedAnswer": {
-      "@type": "Answer",
-      "text": "Yes, the platform allows you to create structured sections to cleanly separate mechanical, electrical, and plumbing scope."
-    }
-  },
-  {
-    "@type": "Question",
-    "name": "Does it support scanned PDFs from local consultants?",
-    "acceptedAnswer": {
-      "@type": "Answer",
-      "text": "Yes, OCR is available for scanned PDFs, though all extracted data must be professionally reviewed."
-    }
-  },
-  {
-    "@type": "Question",
-    "name": "Does Quantara have a local office in Dubai?",
-    "acceptedAnswer": {
-      "@type": "Answer",
-      "text": "Quantara operates globally; we do not claim a physical local office in Dubai at this time."
-    }
-  },
-  {
-    "@type": "Question",
-    "name": "Can I track fast-moving revisions?",
-    "acceptedAnswer": {
-      "@type": "Answer",
-      "text": "Yes, the platform's revision control is designed to handle multiple iterations of a BOQ quickly."
-    }
-  },
-  {
-    "@type": "Question",
-    "name": "Is there a pre-built library for Dubai rates?",
-    "acceptedAnswer": {
-      "@type": "Answer",
-      "text": "No, Quantara provides the structure; you must apply your own market rates."
-    }
-  },
-  {
-    "@type": "Question",
-    "name": "How do I export my final proposal?",
-    "acceptedAnswer": {
-      "@type": "Answer",
-      "text": "You can export the structured BOQ as a formatted PDF proposal or an XLSX file."
-    }
-  }
-]
-        }
+  const content: SeoLandingPageContent = {
+    breadcrumbLabel: "BOQ Software",
+    h1: "BOQ Software for Dubai Construction Workflows",
+    directDefinition: "Dubai construction projects—especially fast-paced fit-outs and complex MEP installations—require careful coordination of revisions and document exchanges. Quantara provides a structured database environment to manage these workflows safely.",
+    audience: {
+      heading: "Designed for Professional Estimators",
+      content: "Quantara supports professionals who require structured data management for complex projects. All extracted quantities and generated proposals must be reviewed by a qualified human professional.",
+      items: ["Contractors managing complex tenders", "Consultants structuring master templates", "MEP and fit-out specialists"]
+    },
+    workflowProblem: {
+      heading: "Managing Frequent Tender Revisions",
+      paragraphs: ["Fit-out projects and MEP coordination in Dubai often involve rapid design changes and frequent tender revisions. Managing these updates via loose PDF and Excel document exchanges can lead to lost data and commercial risk.","A structured approach is required to ensure that every proposal preparation uses the correct version of the project records."]
+    },
+    quantaraSupport: {
+      heading: "Structured Document Exchange",
+      paragraphs: ["Quantara helps teams organize PDF and Excel inputs into a controlled, hierarchical BOQ. By maintaining strict revision control, estimators and coordinators can track exactly what changed between tender versions.","This reduces the administrative burden of proposal preparation, allowing professionals to focus on commercial analysis rather than reformatting spreadsheets."]
+    },
+    relevantFeatures: [
+      { name: "Hierarchical Structuring", status: "Live", description: "Organize items safely by trade or section." },
+      { name: "Revision Tracking", status: "Preview UI", description: "Maintain a distinct commercial audit trail." },
+      { name: "Format Extraction", status: "Live", description: "Extract items from text-based PDFs and spreadsheets." }
+    ],
+    workflowExample: {
+      heading: "Hypothetical Workflow Example",
+      introduction: "How a team might manage a major revision during the tender phase:",
+      steps: [
+        { title: "Baseline Upload", description: "The original tender package is securely imported." },
+        { title: "Variation Arrival", description: "A revised specification is received via PDF." },
+        { title: "Data Structuring", description: "New items are mapped into the controlled BOQ format." },
+        { title: "Professional Review", description: "The estimator applies commercial judgment to the varied quantities." }
       ]
-    }
+    },
+    supportedInputs: [
+      { name: "XLSX / CSV", status: "Live", description: "Spreadsheet imports." },
+      { name: "Text-based PDF", status: "Live", description: "Extraction from standard PDFs." },
+      { name: "CAD / BIM", status: "Planned", description: "Future model integration.", limitation: "Capability to be confirmed." }
+    ],
+    supportedOutputs: [
+      { name: "Structured XLSX", status: "Live", description: "Export governed data." },
+      { name: "PDF Proposals", status: "Live", description: "Generate standardized documents." }
+    ],
+    limitations: [
+      "Quantara does not provide automated visual measurement or drawing takeoff.",
+      "The software does not certify costs, calculate taxes, or claim regional regulatory compliance.",
+      "All outputs strictly require independent professional validation."
+    ],
+    faqs: [
+      { question: "Does Quantara calculate local taxes?", answer: "No, Quantara does not calculate taxes, statutory deductions, or provide local regulatory compliance checks." },
+      { question: "Is this software approved by local authorities?", answer: "Quantara does not claim official government or authority approval. It is a commercial administrative tool." },
+      { question: "Does it include a local rate database?", answer: "No, Quantara does not include a verified local rate database. Estimators must supply their own professionally reviewed pricing." },
+      { question: "Can it replace professional judgment?", answer: "Absolutely not. Quantara handles data extraction and structuring, but a qualified professional must verify all commercial data." }
+    ],
+    relatedPages: [
+      { href: "/boq-software", label: "BOQ Software", description: "Learn about structured BOQ management." },
+      { href: "/boq-management", label: "BOQ Management", description: "Controlling project records and templates." },
+      { href: "/ai-boq-software", label: "AI BOQ Software", description: "AI-assisted document extraction workflows." }
+    ]
   };
 
-  return <RegionalLandingPage content={content} />;
+  return (
+    <>
+      <SeoLandingPage content={content} currentPath="/boq-software-dubai" />
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify({
+            "@context": "https://schema.org",
+            "@graph": [
+              {
+                "@type": "WebPage",
+                "@id": "https://quantara.vistabylara.com/boq-software-dubai#webpage",
+                "url": "https://quantara.vistabylara.com/boq-software-dubai",
+                "name": "BOQ Software for Dubai Projects | Quantara",
+                "description": "Support fit-out, MEP coordination, and frequent tender revisions with structured BOQ software designed for Dubai construction workflows.",
+                "isPartOf": { "@id": "https://quantara.vistabylara.com/#website" },
+                "about": { "@id": "https://quantara.vistabylara.com/#organization" }
+              },
+              {
+                "@type": "BreadcrumbList",
+                "@id": "https://quantara.vistabylara.com/boq-software-dubai#breadcrumb",
+                "itemListElement": [
+                  { "@type": "ListItem", "position": 1, "name": "Home", "item": "https://quantara.vistabylara.com/" },
+                  { "@type": "ListItem", "position": 2, "name": "Regional BOQ Software" }
+                ]
+              },
+              {
+                "@type": "FAQPage",
+                "@id": "https://quantara.vistabylara.com/boq-software-dubai#faq",
+                "mainEntity": content.faqs.map(faq => ({
+                  "@type": "Question",
+                  "name": faq.question,
+                  "acceptedAnswer": { "@type": "Answer", "text": faq.answer }
+                }))
+              }
+            ]
+          })
+        }}
+      />
+    </>
+  );
 }

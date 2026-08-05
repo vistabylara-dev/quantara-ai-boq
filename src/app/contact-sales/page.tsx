@@ -218,6 +218,12 @@ export default function ContactSalesPage() {
               <button disabled={status === "submitting"} type="submit" className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3.5 px-4 rounded-xl transition-colors disabled:opacity-70 mt-4">
                 {status === "submitting" ? "Submitting..." : "Talk to an Expert"}
               </button>
+              
+              <div className="pt-4 border-t border-slate-200 dark:border-slate-800 mt-6">
+                <p className="text-xs text-slate-500 dark:text-slate-400 text-center leading-relaxed">
+                  We use the information you provide to review your request and contact you about Quantara. Do not submit confidential project documents through this form. <Link href="/privacy" className="text-blue-600 hover:underline">Read our Privacy Policy</Link>.
+                </p>
+              </div>
             </form>
           </div>
         </div>

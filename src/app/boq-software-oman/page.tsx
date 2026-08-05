@@ -1,237 +1,119 @@
 import { Metadata } from "next";
-import RegionalLandingPage, { RegionalLandingPageContent } from "@/components/layout/regional-landing-page";
+import SeoLandingPage, { SeoLandingPageContent } from "@/components/layout/seo-landing-page";
 
 export const metadata: Metadata = {
-  title: "BOQ Software Oman for Construction and Estimating Teams | Quantara",
-  description: "Support Oman BOQ workflows with structured project documents, revisions, templates and professionally reviewed outputs using Quantara.",
+  title: "BOQ Software for Oman Construction Exchange | Quantara",
+  description: "Facilitate contractor and consultant BOQ exchange, manage project revisions, and generate controlled outputs for projects in Oman.",
   alternates: {
     canonical: "https://quantara.vistabylara.com/boq-software-oman",
   },
   openGraph: {
-    title: "BOQ Software Oman for Construction and Estimating Teams | Quantara",
-    description: "Support Oman BOQ workflows with structured project documents, revisions, templates and professionally reviewed outputs using Quantara.",
+    title: "BOQ Software for Oman Construction Exchange | Quantara",
+    description: "Facilitate contractor and consultant BOQ exchange, manage project revisions, and generate controlled outputs for projects in Oman.",
     url: "https://quantara.vistabylara.com/boq-software-oman",
-    type: "website",
+    type: "article",
   },
-  twitter: {
-    card: "summary_large_image",
-    title: "BOQ Software Oman for Construction and Estimating Teams | Quantara",
-    description: "Support Oman BOQ workflows with structured project documents, revisions, templates and professionally reviewed outputs using Quantara.",
-  },
-  robots: {
-    index: true,
-    follow: true,
-  }
 };
 
 export default function Page() {
-  const content: RegionalLandingPageContent = {
-    breadcrumbLabel: "BOQ Software Oman",
-    breadcrumbParent: {"href":"/gcc-boq-software","label":"GCC BOQ Software"},
-    title: "BOQ Software for Oman Construction and Estimating Workflows",
-    audienceDescription: "For Oman contractors, consultants and estimating teams looking for reliable BOQ workflow software.",
-    directAnswer: "Quantara helps Oman construction teams organize PDF and spreadsheet BOQs, manage project revisions, and generate structured outputs.",
-    challenges: [
-  {
-    "title": "Document Consolidation",
-    "description": "Tender packages often arrive in a mix of unstructured PDF and Excel formats that are difficult to consolidate."
-  },
-  {
-    "title": "Tracking Client Changes",
-    "description": "Managing client revisions effectively without a structured system often leads to pricing errors and missed scope."
-  }
-],
-    workflowDescription: "Quantara streamlines contractor and consultant workflows by structuring PDF and spreadsheet BOQs. It tracks project revisions, organizes client records, and produces structured outputs for professional validation.",
-    workflowExample: "A main contractor in Oman uses Quantara to import a text-based PDF BOQ, quickly organizing the items into structured sections for civil works and finishes, allowing their team to begin pricing much faster.",
-    typicalCategories: [
-  "Preliminaries",
-  "Civil Works",
-  "Finishes",
-  "MEP Works",
-  "External Site Works"
-],
-    supportedInputs: [
-  "Text-based PDF",
-  "Scanned PDF",
-  "XLSX",
-  "CSV"
-],
-    plannedInputs: [
-  "CAD",
-  "BIM",
-  "IFC"
-],
-    supportedOutputs: [
-  "Structured Excel (XLSX)",
-  "Formatted PDF Proposals",
-  "CSV Exports"
-],
-    limitations: [
-  "Quantara does not claim Oman regulatory compliance.",
-  "Quantara does not provide local-rate support or cost databases.",
-  "Visual quantity takeoff and drawing measurement are not currently supported."
-],
-    faqs: [
-  {
-    "question": "Is Quantara available to construction teams in Oman?",
-    "answer": "Yes, Quantara is a cloud-based platform available to contractors and estimators in Oman."
-  },
-  {
-    "question": "Does Quantara include Oman market rates?",
-    "answer": "No, Quantara does not supply pricing data or local rates. Users must apply their own pricing."
-  },
-  {
-    "question": "Can I extract BOQs from PDFs?",
-    "answer": "Yes, Quantara can extract items from both text-based and scanned PDFs to help structure your BOQ."
-  },
-  {
-    "question": "Does Quantara comply with local Oman regulations?",
-    "answer": "Quantara is a document management tool and does not claim specific regulatory or engineering compliance."
-  },
-  {
-    "question": "How do I manage client revisions?",
-    "answer": "You can use the platform’s revision control features to track changes between different issues of a BOQ."
-  },
-  {
-    "question": "Does it support automated drawing measurement?",
-    "answer": "No, automated drawing measurement and visual takeoff are currently Planned features."
-  },
-  {
-    "question": "Can I create my own BOQ templates?",
-    "answer": "Yes, you can define and save your own structural templates for use on future projects."
-  },
-  {
-    "question": "What formats can I export my BOQ to?",
-    "answer": "You can export the data to Structured Excel (XLSX), CSV, or formatted PDF proposals."
-  }
-],
-    relatedPages: [
-  {
-    "href": "/gcc-boq-software",
-    "label": "GCC BOQ Software"
-  },
-  {
-    "href": "/boq-software",
-    "label": "BOQ Software"
-  },
-  {
-    "href": "/boq-management",
-    "label": "BOQ Management"
-  },
-  {
-    "href": "/how-to-prepare-a-boq",
-    "label": "How to Prepare a BOQ"
-  },
-  {
-    "href": "/features",
-    "label": "Features"
-  }
-],
-    schema: {
-      "@context": "https://schema.org",
-      "@graph": [
-        {
-          "@type": "WebPage",
-          "@id": "https://quantara.vistabylara.com/boq-software-oman",
-          "url": "https://quantara.vistabylara.com/boq-software-oman",
-          "name": "BOQ Software Oman for Construction and Estimating Teams | Quantara",
-          "description": "Support Oman BOQ workflows with structured project documents, revisions, templates and professionally reviewed outputs using Quantara."
-        },
-        {
-          "@type": "BreadcrumbList",
-          "itemListElement": [
-            {
-              "@type": "ListItem",
-              "position": 1,
-              "name": "Home",
-              "item": "https://quantara.vistabylara.com/"
-            },
-            {
-              "@type": "ListItem",
-              "position": 2,
-              "name": "GCC BOQ Software",
-              "item": "https://quantara.vistabylara.com/gcc-boq-software"
-            },
-            {
-              "@type": "ListItem",
-              "position": 3,
-              "name": "BOQ Software Oman",
-              "item": "https://quantara.vistabylara.com/boq-software-oman"
-            }
-          ]
-        },
-        {
-          "@type": "FAQPage",
-          "mainEntity": [
-  {
-    "@type": "Question",
-    "name": "Is Quantara available to construction teams in Oman?",
-    "acceptedAnswer": {
-      "@type": "Answer",
-      "text": "Yes, Quantara is a cloud-based platform available to contractors and estimators in Oman."
-    }
-  },
-  {
-    "@type": "Question",
-    "name": "Does Quantara include Oman market rates?",
-    "acceptedAnswer": {
-      "@type": "Answer",
-      "text": "No, Quantara does not supply pricing data or local rates. Users must apply their own pricing."
-    }
-  },
-  {
-    "@type": "Question",
-    "name": "Can I extract BOQs from PDFs?",
-    "acceptedAnswer": {
-      "@type": "Answer",
-      "text": "Yes, Quantara can extract items from both text-based and scanned PDFs to help structure your BOQ."
-    }
-  },
-  {
-    "@type": "Question",
-    "name": "Does Quantara comply with local Oman regulations?",
-    "acceptedAnswer": {
-      "@type": "Answer",
-      "text": "Quantara is a document management tool and does not claim specific regulatory or engineering compliance."
-    }
-  },
-  {
-    "@type": "Question",
-    "name": "How do I manage client revisions?",
-    "acceptedAnswer": {
-      "@type": "Answer",
-      "text": "You can use the platform’s revision control features to track changes between different issues of a BOQ."
-    }
-  },
-  {
-    "@type": "Question",
-    "name": "Does it support automated drawing measurement?",
-    "acceptedAnswer": {
-      "@type": "Answer",
-      "text": "No, automated drawing measurement and visual takeoff are currently Planned features."
-    }
-  },
-  {
-    "@type": "Question",
-    "name": "Can I create my own BOQ templates?",
-    "acceptedAnswer": {
-      "@type": "Answer",
-      "text": "Yes, you can define and save your own structural templates for use on future projects."
-    }
-  },
-  {
-    "@type": "Question",
-    "name": "What formats can I export my BOQ to?",
-    "acceptedAnswer": {
-      "@type": "Answer",
-      "text": "You can export the data to Structured Excel (XLSX), CSV, or formatted PDF proposals."
-    }
-  }
-]
-        }
+  const content: SeoLandingPageContent = {
+    breadcrumbLabel: "BOQ Software",
+    h1: "BOQ Software for Oman BOQ Exchange",
+    directDefinition: "Exchanging BOQs between contractors and consultants in Oman requires clear tracking of PDF and spreadsheet workflows. Quantara organizes this data and ensures controlled outputs.",
+    audience: {
+      heading: "Designed for Professional Estimators",
+      content: "Quantara supports professionals who require structured data management for complex projects. All extracted quantities and generated proposals must be reviewed by a qualified human professional.",
+      items: ["Contractors managing complex tenders", "Consultants structuring master templates", "MEP and fit-out specialists"]
+    },
+    workflowProblem: {
+      heading: "Contractor and Consultant BOQ Exchange",
+      paragraphs: ["Standard PDF and spreadsheet workflows in Oman involve constant data exchange between contractors and consultants. When project revisions are handled manually, version control breaks down and outputs become disjointed.","This manual exchange process creates administrative bottlenecks that delay tender submissions and commercial reviews."]
+    },
+    quantaraSupport: {
+      heading: "Project Revisions and Controlled Outputs",
+      paragraphs: ["Quantara secures the contractor and consultant BOQ exchange by enforcing strict project revisions in a structured workspace. Every change is tracked, ensuring that all teams refer to a single, governed source.","The software then generates controlled outputs for proposal preparation, relying completely on professional validation before any document is finalized."]
+    },
+    relevantFeatures: [
+      { name: "Hierarchical Structuring", status: "Live", description: "Organize items safely by trade or section." },
+      { name: "Revision Tracking", status: "Preview UI", description: "Maintain a distinct commercial audit trail." },
+      { name: "Format Extraction", status: "Live", description: "Extract items from text-based PDFs and spreadsheets." }
+    ],
+    workflowExample: {
+      heading: "Hypothetical Workflow Example",
+      introduction: "How a team might manage a major revision during the tender phase:",
+      steps: [
+        { title: "Baseline Upload", description: "The original tender package is securely imported." },
+        { title: "Variation Arrival", description: "A revised specification is received via PDF." },
+        { title: "Data Structuring", description: "New items are mapped into the controlled BOQ format." },
+        { title: "Professional Review", description: "The estimator applies commercial judgment to the varied quantities." }
       ]
-    }
+    },
+    supportedInputs: [
+      { name: "XLSX / CSV", status: "Live", description: "Spreadsheet imports." },
+      { name: "Text-based PDF", status: "Live", description: "Extraction from standard PDFs." },
+      { name: "CAD / BIM", status: "Planned", description: "Future model integration.", limitation: "Capability to be confirmed." }
+    ],
+    supportedOutputs: [
+      { name: "Structured XLSX", status: "Live", description: "Export governed data." },
+      { name: "PDF Proposals", status: "Live", description: "Generate standardized documents." }
+    ],
+    limitations: [
+      "Quantara does not provide automated visual measurement or drawing takeoff.",
+      "The software does not certify costs, calculate taxes, or claim regional regulatory compliance.",
+      "All outputs strictly require independent professional validation."
+    ],
+    faqs: [
+      { question: "Does Quantara calculate local taxes?", answer: "No, Quantara does not calculate taxes, statutory deductions, or provide local regulatory compliance checks." },
+      { question: "Is this software approved by local authorities?", answer: "Quantara does not claim official government or authority approval. It is a commercial administrative tool." },
+      { question: "Does it include a local rate database?", answer: "No, Quantara does not include a verified local rate database. Estimators must supply their own professionally reviewed pricing." },
+      { question: "Can it replace professional judgment?", answer: "Absolutely not. Quantara handles data extraction and structuring, but a qualified professional must verify all commercial data." }
+    ],
+    relatedPages: [
+      { href: "/boq-software", label: "BOQ Software", description: "Learn about structured BOQ management." },
+      { href: "/boq-management", label: "BOQ Management", description: "Controlling project records and templates." },
+      { href: "/ai-boq-software", label: "AI BOQ Software", description: "AI-assisted document extraction workflows." }
+    ]
   };
 
-  return <RegionalLandingPage content={content} />;
+  return (
+    <>
+      <SeoLandingPage content={content} currentPath="/boq-software-oman" />
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify({
+            "@context": "https://schema.org",
+            "@graph": [
+              {
+                "@type": "WebPage",
+                "@id": "https://quantara.vistabylara.com/boq-software-oman#webpage",
+                "url": "https://quantara.vistabylara.com/boq-software-oman",
+                "name": "BOQ Software for Oman Construction Exchange | Quantara",
+                "description": "Facilitate contractor and consultant BOQ exchange, manage project revisions, and generate controlled outputs for projects in Oman.",
+                "isPartOf": { "@id": "https://quantara.vistabylara.com/#website" },
+                "about": { "@id": "https://quantara.vistabylara.com/#organization" }
+              },
+              {
+                "@type": "BreadcrumbList",
+                "@id": "https://quantara.vistabylara.com/boq-software-oman#breadcrumb",
+                "itemListElement": [
+                  { "@type": "ListItem", "position": 1, "name": "Home", "item": "https://quantara.vistabylara.com/" },
+                  { "@type": "ListItem", "position": 2, "name": "Regional BOQ Software" }
+                ]
+              },
+              {
+                "@type": "FAQPage",
+                "@id": "https://quantara.vistabylara.com/boq-software-oman#faq",
+                "mainEntity": content.faqs.map(faq => ({
+                  "@type": "Question",
+                  "name": faq.question,
+                  "acceptedAnswer": { "@type": "Answer", "text": faq.answer }
+                }))
+              }
+            ]
+          })
+        }}
+      />
+    </>
+  );
 }

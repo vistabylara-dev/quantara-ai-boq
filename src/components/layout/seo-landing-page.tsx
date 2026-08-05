@@ -18,12 +18,12 @@ export interface SeoLandingPageContent {
   };
   workflowProblem: {
     heading: string;
-    paragraphs: string[];
+    paragraphs: (string | ReactNode)[];
     items?: string[];
   };
   quantaraSupport: {
     heading: string;
-    paragraphs: string[];
+    paragraphs: (string | ReactNode)[];
   };
   relevantFeatures: Array<{
     name: string;
@@ -52,7 +52,8 @@ export interface SeoLandingPageContent {
   limitations: string[];
   faqs: Array<{
     question: string;
-    answer: string;
+    answer: string | ReactNode;
+    schemaAnswer?: string;
   }>;
   relatedPages: Array<{
     href: string;

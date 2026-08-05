@@ -1,4 +1,5 @@
 import { Metadata } from "next";
+import Link from "next/link";
 import KnowledgePage, { KnowledgePageContent } from "@/components/layout/knowledge-page";
 
 export const metadata: Metadata = {
@@ -20,6 +21,12 @@ export default function Page() {
     breadcrumbLabel: "How to Prepare a BOQ",
     title: "How to Prepare a BOQ: A Structured Step-by-Step Workflow",
     summary: "Preparing a Bill of Quantities (BOQ) is a meticulous process that requires translating architectural, structural, and MEP drawings into a standardized, line-by-line list of measurable items. Following a structured workflow ensures that all project scope is captured, quantities are accurate, and the final document is ready for competitive tendering or pricing.",
+    directAnswer: "Preparing a BOQ requires systematically reviewing construction drawings, defining the scope of work, structuring sections by trade or element, drafting item descriptions, and measuring precise quantities. The final document must undergo professional validation before being issued for tender.",
+    keyTakeaways: [
+      "Review the latest 'Issued for Construction' or 'Tender' drawings.",
+      "Use a logical hierarchy such as Substructure, Superstructure, and MEP.",
+      "Accurate quantities and clear item descriptions prevent future disputes."
+    ],
     reviewedDate: new Date().toISOString().split("T")[0],
     sections: [
   {
@@ -27,7 +34,7 @@ export default function Page() {
     "heading": "Why a Structured Workflow Matters",
     "paragraphs": [
       "For quantity surveyors, consultants, and estimating teams, missing a scope item during BOQ preparation can lead to massive cost overruns or legal disputes during construction.",
-      "A standardized preparation process minimizes omissions, reduces ambiguity, and produces a professional document that contractors can price with confidence."
+      <>A standardized preparation process minimizes omissions, reduces ambiguity, and produces a professional document that contractors can price with confidence. This is especially true when transitioning from <Link href="/ai-boq-vs-manual-boq-preparation" className="text-blue-600 hover:underline font-medium">manual preparation to software</Link>.</>
     ]
   },
   {

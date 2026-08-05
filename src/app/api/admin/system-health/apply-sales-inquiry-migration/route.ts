@@ -63,7 +63,7 @@ export async function GET() {
 
     await prisma.$transaction(async (tx) => {
       const companyCols = await tx.$queryRaw<{ column_name: string }[]>`
-        SELECT column_name FROM information_schema.columns WHERE table_name = 'Company' AND column_name IN ('primaryIndustry', 'monthlyVolume')
+        SELECT column_name::text AS column_name FROM information_schema.columns WHERE table_name = 'Company' AND column_name IN ('primaryIndustry', 'monthlyVolume')
       `;
       const companyColNames = new Set(companyCols.map((c) => c.column_name));
       if (!companyColNames.has("primaryIndustry")) {
@@ -80,7 +80,7 @@ export async function GET() {
       }
 
       const userCols = await tx.$queryRaw<{ column_name: string }[]>`
-        SELECT column_name FROM information_schema.columns WHERE table_name = 'User' AND column_name IN ('jobTitle', 'marketingConsent')
+        SELECT column_name::text AS column_name FROM information_schema.columns WHERE table_name = 'User' AND column_name IN ('jobTitle', 'marketingConsent')
       `;
       const userColNames = new Set(userCols.map((c) => c.column_name));
       if (!userColNames.has("jobTitle")) {
@@ -97,7 +97,7 @@ export async function GET() {
       }
 
       const salesInquiryExists = await tx.$queryRaw<{ table_name: string }[]>`
-        SELECT table_name FROM information_schema.tables WHERE table_name = 'SalesInquiry'
+        SELECT table_name::text AS table_name FROM information_schema.tables WHERE table_name = 'SalesInquiry'
       `;
       if (salesInquiryExists.length === 0) {
         await tx.$executeRaw`

@@ -35,7 +35,7 @@ export async function GET() {
 
     await prisma.$transaction(async (tx) => {
       const existingTypes = await tx.$queryRaw<{ typname: string }[]>`
-        SELECT typname FROM pg_type WHERE typname IN
+        SELECT typname::text AS typname FROM pg_type WHERE typname IN
           ('CommerceProductType', 'CommercePurchaseMode', 'CommerceBillingInterval', 'CommerceCurrency')
       `;
       const typeNames = new Set(existingTypes.map((t) => t.typname));
@@ -132,7 +132,7 @@ export async function GET() {
       log.push("Ensured tables CommerceProduct, CommercePrice, EntitlementTemplate exist.");
 
       const existingIndexes = await tx.$queryRaw<{ indexname: string }[]>`
-        SELECT indexname FROM pg_indexes WHERE tablename IN ('CommerceProduct', 'CommercePrice', 'EntitlementTemplate')
+        SELECT indexname::text AS indexname FROM pg_indexes WHERE tablename IN ('CommerceProduct', 'CommercePrice', 'EntitlementTemplate')
       `;
       const indexNames = new Set(existingIndexes.map((i) => i.indexname));
 
@@ -156,7 +156,7 @@ export async function GET() {
       }
 
       const existingConstraints = await tx.$queryRaw<{ conname: string }[]>`
-        SELECT conname FROM pg_constraint WHERE conname IN
+        SELECT conname::text AS conname FROM pg_constraint WHERE conname IN
           ('CommerceProduct_industryPackageId_fkey', 'CommercePrice_productId_fkey', 'EntitlementTemplate_productId_fkey')
       `;
       const constraintNames = new Set(existingConstraints.map((c) => c.conname));

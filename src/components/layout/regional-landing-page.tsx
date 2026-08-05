@@ -2,6 +2,8 @@ import React from "react";
 import Link from "next/link";
 import { ArrowRight, CheckCircle2, AlertTriangle, MapPin } from "lucide-react";
 import PublicFooter from "@/components/layout/public-footer";
+import PublicHeader from "@/components/layout/public-header";
+import PublicBreadcrumb, { generateBreadcrumbSchema } from "@/components/ui/public-breadcrumb";
 
 export interface RegionalFAQ {
   question: string;
@@ -33,40 +35,17 @@ export interface RegionalLandingPageContent {
 export default function RegionalLandingPage({ content }: { content: RegionalLandingPageContent }) {
   return (
     <div className="flex flex-col min-h-screen bg-slate-50 text-slate-900 font-sans">
-      <header className="sticky top-0 z-50 w-full border-b border-slate-200 bg-white/90 backdrop-blur-md">
-        <div className="container mx-auto px-4 h-16 flex items-center justify-between">
-          <Link href="/" className="flex items-center gap-2">
-            <span className="font-bold text-xl tracking-tight text-blue-900">Quantara</span>
-          </Link>
-          <nav className="hidden md:flex gap-6">
-            <Link href="/features" className="text-sm font-medium text-slate-600 hover:text-blue-600">Features</Link>
-            <Link href="/resources" className="text-sm font-medium text-slate-600 hover:text-blue-600">Resources</Link>
-            <Link href="/industries" className="text-sm font-medium text-slate-600 hover:text-blue-600">Industries</Link>
-            <Link href="/contact-sales" className="text-sm font-medium text-slate-600 hover:text-blue-600">Contact Sales</Link>
-          </nav>
-          <div className="flex items-center gap-4">
-            <Link href="/login" className="text-sm font-medium text-slate-600 hover:text-blue-600 hidden sm:block">Log in</Link>
-            <Link href="/register" className="text-sm font-medium bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition-colors">
-              Request Early Access
-            </Link>
-          </div>
-        </div>
-      </header>
+      <PublicHeader />
 
       <main className="flex-1 w-full max-w-5xl mx-auto px-4 py-12 md:py-16 bg-white shadow-sm border-x border-slate-200">
-        <nav aria-label="Breadcrumb" className="mb-10 px-4 md:px-8">
-          <ol className="flex flex-wrap items-center space-x-2 text-sm text-slate-500">
-            <li><Link href="/" className="hover:text-blue-600">Home</Link></li>
-            <li><span className="mx-2 text-slate-300">→</span></li>
-            {content.breadcrumbParent && (
-              <>
-                <li><Link href={content.breadcrumbParent.href} className="hover:text-blue-600">{content.breadcrumbParent.label}</Link></li>
-                <li><span className="mx-2 text-slate-300">→</span></li>
-              </>
-            )}
-            <li className="text-slate-900 font-medium" aria-current="page">{content.breadcrumbLabel}</li>
-          </ol>
-        </nav>
+        
+        <div className="px-4 md:px-8">
+          <PublicBreadcrumb items={[
+            { name: "Home", item: "/" },
+            { name: "Regional", item: "/gcc-boq-software" },
+            { name: content.breadcrumbLabel }
+          ]} />
+        </div>
 
         <header className="mb-14 px-4 md:px-8">
           <div className="inline-flex items-center gap-2 px-3 py-1 bg-blue-50 text-blue-700 rounded-full text-xs font-semibold mb-6 uppercase tracking-wider">

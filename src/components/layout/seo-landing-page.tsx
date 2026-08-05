@@ -4,6 +4,8 @@ import React, { useState, type ReactNode } from "react";
 import Link from "next/link";
 import { ChevronRight, ChevronDown, CheckCircle2, FileText, Settings, ShieldCheck, ArrowRight, Zap, FolderKanban } from "lucide-react";
 import PublicFooter from "@/components/layout/public-footer";
+import PublicHeader from "@/components/layout/public-header";
+import PublicBreadcrumb, { generateBreadcrumbSchema } from "@/components/ui/public-breadcrumb";
 
 export type FeatureStatus = "Live" | "Preview UI" | "In Development" | "Planned";
 
@@ -74,24 +76,7 @@ export default function SeoLandingPage({ content, currentPath }: { content: SeoL
 
   return (
     <div className="flex flex-col min-h-screen bg-white dark:bg-[#030508] text-slate-900 dark:text-slate-100">
-      <header className="sticky top-0 z-50 w-full border-b border-slate-200 dark:border-slate-800 bg-white/80 dark:bg-slate-950/80 backdrop-blur">
-        <div className="container mx-auto px-4 h-16 flex items-center justify-between">
-          <Link href="/" className="font-bold text-xl tracking-tight text-slate-900 dark:text-white flex items-center gap-2" aria-label="Quantara Home">
-            <img src="/logo.png" alt="Quantara Logo" className="w-8 h-8 rounded-lg shadow-sm" />
-            Quantara
-          </Link>
-          <nav className="hidden md:flex items-center gap-6">
-            <Link href="/features" className="text-sm font-medium text-slate-900 dark:text-white">Features</Link>
-            <Link href="/contact-sales" className="text-sm font-medium text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white">Contact Sales</Link>
-          </nav>
-          <div className="flex items-center gap-4">
-            <Link href="/login" className="text-sm font-medium text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white">Sign In</Link>
-            <Link href="/register" className="inline-flex items-center justify-center rounded-md text-sm font-medium bg-blue-600 text-white hover:bg-blue-700 h-9 px-4 py-2">
-              Request Early Access
-            </Link>
-          </div>
-        </div>
-      </header>
+      <PublicHeader />
 
       <main className="flex-1 pb-24">
         {/* Breadcrumb */}

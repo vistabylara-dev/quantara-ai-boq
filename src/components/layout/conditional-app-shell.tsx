@@ -76,7 +76,8 @@ export default function ConditionalAppShell({ children }: { children: ReactNode 
     '/resources',
     '/privacy',
     '/terms',
-    '/security'
+    '/security',
+    '/site-map'
   ];
   
   if (

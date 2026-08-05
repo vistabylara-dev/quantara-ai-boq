@@ -1,5 +1,6 @@
 import { Metadata } from 'next';
 import { ComparisonPage } from '@/components/layout/comparison-page';
+import PublicBreadcrumb from "@/components/ui/public-breadcrumb";
 
 export const metadata: Metadata = {
   title: 'Quantara vs Excel for BOQ Workflows | Structured Comparison',
@@ -22,6 +23,8 @@ export const metadata: Metadata = {
 
 export default function Page() {
   return (
+    <>
+      <PublicBreadcrumb items={[{ label: "Home", href: "/" }, { label: "Comparisons", href: "/comparisons" }, { label: "Quantara vs Excel for BOQ", href: "/quantara-vs-excel-for-boq" }]} />
     <ComparisonPage 
       slug="quantara-vs-excel-for-boq"
       title="Quantara vs Excel for BOQ Workflows | Structured Comparison"
@@ -45,5 +48,6 @@ export default function Page() {
       relatedLinks={[{"url":"/boq-software-vs-spreadsheets","label":"BOQ Software vs Spreadsheets"},{"url":"/construction-estimating-software-vs-excel","label":"Estimating Software vs Excel"},{"url":"/boq-software","label":"BOQ Software"},{"url":"/boq-management","label":"BOQ Management"},{"url":"/boq-review-checklist","label":"BOQ Review Checklist"}]}
       breadcrumbCurrent="Quantara vs Excel for BOQ Workflows"
     />
+    </>
   );
 }

@@ -1,6 +1,7 @@
 import { Metadata } from "next";
 import Link from "next/link";
 import KnowledgePage, { KnowledgePageContent } from "@/components/layout/knowledge-page";
+import PublicBreadcrumb from "@/components/ui/public-breadcrumb";
 
 export const metadata: Metadata = {
   title: "What Is a BOQ? Bill of Quantities Explained | Quantara",
@@ -155,5 +156,16 @@ export default function Page() {
     }
   };
 
-  return <KnowledgePage content={content} />;
+  return (
+    <>
+      <PublicBreadcrumb
+        items={[
+          { label: "Home", href: "/" },
+          { label: "Resources", href: "/resources" },
+          { label: "What Is a BOQ?", href: "/what-is-a-boq" }
+        ]}
+      />
+      <KnowledgePage content={content} />
+    </>
+  );
 }

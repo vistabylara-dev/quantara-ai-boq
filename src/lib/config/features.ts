@@ -10,66 +10,59 @@ export interface PublicFeature {
 
 export const publicFeatures: PublicFeature[] = [
   {
-    slug: "document-extraction",
-    name: "AI-Assisted Document Extraction",
-    shortDescription: "Extract relevant scope, item, quantity, and specification information from supported project documents for structured human review.",
-    longDescription: "Extract relevant scope, item, quantity, and specification information from supported project documents for structured human review.",
+    slug: "multi-source",
+    name: "Multi-Source Project Workspace",
+    shortDescription: "Bring project data into one workspace via manual uploads, structured imports, or connected applications.",
+    longDescription: "Create a project workspace to manage hybrid sources in one controlled location.",
     status: "live"
   },
   {
-    slug: "boq-management",
+    slug: "ai-extraction",
+    name: "AI-Assisted Document and Data Extraction",
+    shortDescription: "Extract relevant scope, item, quantity, and specification information from supported project documents.",
+    longDescription: "Extract relevant scope, item, quantity, and specification information for structured human review.",
+    status: "live"
+  },
+  {
+    slug: "structured-management",
     name: "Structured BOQ Management",
     shortDescription: "Organize BOQs into sections, items, quantities, units, options, revisions, and project-specific hierarchies.",
     longDescription: "Organize BOQs into sections, items, quantities, units, options, revisions, and project-specific hierarchies.",
     status: "live"
   },
   {
-    slug: "item-grouping",
-    name: "Automated Item Grouping",
-    shortDescription: "Group extracted or entered BOQ content into controlled categories and sections while preserving review and editing.",
-    longDescription: "Group extracted or entered BOQ content into controlled categories and sections while preserving review and editing.",
-    status: "preview"
-  },
-  {
-    slug: "workspaces",
-    name: "Project and Client Workspaces",
-    shortDescription: "Manage BOQs, projects, clients, revisions and generated records within authenticated company workspaces.",
-    longDescription: "Manage BOQs, projects, clients, revisions and generated records within authenticated company workspaces.",
-    status: "live"
-  },
-  {
-    slug: "templates",
-    name: "Governed Templates and Documents",
-    shortDescription: "Use approved templates to create consistent proposals, BOQ documents, and technical project outputs.",
-    longDescription: "Use approved templates to create consistent proposals, BOQ documents, and technical project outputs.",
-    status: "live"
-  },
-  {
-    slug: "pricing-intelligence",
-    name: "Pricing and Supplier Intelligence",
-    shortDescription: "Supplier and supply-chain workflows are in development. Final supported data sources and functionality remain subject to implementation and testing.",
-    longDescription: "Supplier and supply-chain workflows are in development. Final supported data sources and functionality remain subject to implementation and testing.",
+    slug: "governed-ai",
+    name: "Governed AI Change Proposals",
+    shortDescription: "Give Quantara spoken or typed instructions, review structured AI proposals and selectively approve changes.",
+    longDescription: "Give Quantara spoken or typed instructions, review structured AI proposals and selectively approve changes.",
     status: "development"
   },
   {
-    slug: "google-drive",
-    name: "Google Drive integration",
-    shortDescription: "Google Drive document import and export support is in development. Availability remains subject to authorization, implementation and testing.",
-    longDescription: "Google Drive document import and export support is in development. Availability remains subject to authorization, implementation and testing.",
-    status: "development"
+    slug: "traceability",
+    name: "Revision and Source Traceability",
+    shortDescription: "Track changes with governed revision creation and maintain source-linked BOQ traceability.",
+    longDescription: "Track changes with governed revision creation and maintain source-linked BOQ traceability.",
+    status: "live"
   },
   {
-    slug: "cad-bim",
-    name: "CAD/BIM/IFC support",
-    shortDescription: "Planned support for additional model-based and design-file workflows. Final supported formats and capabilities will be confirmed after technical validation.",
-    longDescription: "Planned support for additional model-based and design-file workflows. Final supported formats and capabilities will be confirmed after technical validation.",
-    status: "planned"
+    slug: "document-generation",
+    name: "Professional Document Generation",
+    shortDescription: "Generate professional outputs including PDF and XLSX formats from verified project data.",
+    longDescription: "Generate professional outputs including PDF and XLSX formats from verified project data.",
+    status: "live"
   },
   {
-    slug: "estimating-analytics",
-    name: "Advanced Estimating Analytics",
-    shortDescription: "Planned estimating analytics intended to support review of historical BOQ and pricing information. Final functionality has not yet been confirmed.",
-    longDescription: "Planned estimating analytics intended to support review of historical BOQ and pricing information. Final functionality has not yet been confirmed.",
+    slug: "project-source-centre",
+    name: "Project Source Centre",
+    shortDescription: "Centralized management of normalized source documents and source versions.",
+    longDescription: "Centralized management of normalized source documents and source versions.",
+    status: "live"
+  },
+  {
+    slug: "connected-applications",
+    name: "Connected Project Sources",
+    shortDescription: "Connect verified external applications into the appropriate project when integrations are available.",
+    longDescription: "Connect verified external applications into the appropriate project when integrations are available.",
     status: "planned"
   }
 ];

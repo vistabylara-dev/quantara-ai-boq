@@ -188,7 +188,7 @@ export default function ImportsPage() {
             accept=".csv,.xlsx"
             multiple
             onClick={(e) => e.stopPropagation()}
-            onChange={(e) => e.target.files && e.target.files.length > 0 && void uploadFiles(e.target.files)}
+            onChange={(e) => e.target.files && e.target.files.length > 0 && acceptFileList(e.target.files)}
             className="hidden"
           />
         </div>

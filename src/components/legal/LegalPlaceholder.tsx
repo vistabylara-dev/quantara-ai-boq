@@ -10,14 +10,22 @@ export default function LegalPlaceholder({ title }: { title: string }) {
         </Link>
       </div>
       <h1 className="text-3xl font-bold text-slate-900 dark:text-white mb-8">{title}</h1>
-      <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700/50 p-6 rounded-xl shadow-sm">
-        <p className="text-amber-800 dark:text-amber-200 text-lg leading-relaxed">
-          Legal documentation is being finalized for the Quantara Early Access release. Please contact{" "}
-          <a href="mailto:legal@vistabylara.com" className="font-bold underline hover:text-amber-900 dark:hover:text-amber-100">
-            legal@vistabylara.com
-          </a>{" "}
-          for current data-processing or contractual information.
-        </p>
+      <div className="bg-slate-50 dark:bg-slate-900/30 border border-slate-200 dark:border-slate-800 p-8 rounded-xl shadow-sm text-slate-700 dark:text-slate-300 space-y-6">
+        <div>
+          <h2 className="text-xl font-bold text-slate-900 dark:text-white mb-4">Quantara Support</h2>
+          <ul className="space-y-2">
+            <li><strong>Email:</strong> <a href="mailto:solution@vistabylara.com" className="text-blue-600 hover:underline">solution@vistabylara.com</a></li>
+            <li><strong>Telephone:</strong> <a href="tel:+971507994292" className="text-blue-600 hover:underline">+971 50 799 4292</a></li>
+            <li><strong>WhatsApp:</strong> <a href="https://wa.me/971507994292" className="text-blue-600 hover:underline">+971 50 799 4292</a></li>
+          </ul>
+        </div>
+        <div>
+          <p><strong>Support availability:</strong> Support requests can be submitted 24 hours a day. Response times may vary during Early Access.</p>
+        </div>
+        <div className="pt-6 border-t border-slate-200 dark:border-slate-700">
+          <p>Quantara is an AI-assisted BOQ and construction-estimating platform operated by Vista By Lara.</p>
+          <p className="mt-2">© 2026 Vista By Lara. All rights reserved.</p>
+        </div>
       </div>
     </div>
   );

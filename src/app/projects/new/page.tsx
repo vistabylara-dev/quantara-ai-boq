@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { projectSchema, projectSchemaType } from "@/lib/validation/project-schema";
@@ -24,6 +24,7 @@ type ProjectCreateResult = {
 export default function NewProjectPage() {
   const router = useRouter();
   const [industries, setIndustries] = useState<IndustryOption[]>([]);
+  const [industriesLoading, setIndustriesLoading] = useState(true);
   const [industriesError, setIndustriesError] = useState<string | null>(null);
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
@@ -50,16 +51,35 @@ export default function NewProjectPage() {
     },
   });
 
-  useEffect(() => {
+  // Extracted so the retry button can re-run exactly this without resetting any field the
+  // user has already typed (react-hook-form state is untouched by calling this again).
+  const loadIndustries = useCallback(() => {
+    setIndustriesLoading(true);
+    setIndustriesError(null);
     apiClient
       .get<IndustryOption[]>("/api/industries")
       .then((data) => {
         const enabled = data.filter((industry) => industry.enabled);
         setIndustries(enabled);
-        if (enabled[0]) setValue("industryEngineId", enabled[0].key);
       })
-      .catch((error) => setIndustriesError(getApiErrorMessage(error)));
-  }, [setValue]);
+      .catch((error) => setIndustriesError(getApiErrorMessage(error)))
+      .finally(() => setIndustriesLoading(false));
+  }, []);
+
+  useEffect(() => {
+    loadIndustries();
+  }, [loadIndustries]);
+
+  // Default the select to the first available industry only once, the first time the list
+  // successfully loads with at least one option — never on a retry, so a value the user already
+  // picked (or is mid-typing around) is never silently overwritten.
+  const hasDefaultedIndustryRef = useRef(false);
+  useEffect(() => {
+    if (!hasDefaultedIndustryRef.current && industries[0]) {
+      setValue("industryEngineId", industries[0].key);
+      hasDefaultedIndustryRef.current = true;
+    }
+  }, [industries, setValue]);
 
   const handleClientSelect = (client: Client) => {
     setSelectedClient(client);
@@ -103,14 +123,33 @@ export default function NewProjectPage() {
           </p>
         </div>
 
-        {industriesError && (
-          <div className="mb-6 rounded-2xl border border-rose-900 bg-rose-950/50 px-4 py-3 text-sm text-rose-300">
-            {industriesError}
+        {industriesLoading && (
+          <div className="mb-6 rounded-2xl border border-slate-800 bg-slate-900 px-4 py-3 text-sm text-slate-400">
+            Loading industries…
           </div>
         )}
-        {!industriesError && industries.length === 0 && (
-          <div className="mb-6 rounded-2xl border border-amber-900 bg-amber-950/50 px-4 py-3 text-sm text-amber-300">
-            No industry engines are enabled for this company yet. Enable at least one from Industries before creating a project.
+        {!industriesLoading && industriesError && (
+          <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-rose-900 bg-rose-950/50 px-4 py-3 text-sm text-rose-300">
+            <span>{industriesError}</span>
+            <button
+              type="button"
+              onClick={loadIndustries}
+              className="shrink-0 rounded-xl border border-rose-800 bg-rose-950 px-3 py-1.5 text-xs font-semibold text-rose-200 hover:bg-rose-900"
+            >
+              Retry
+            </button>
+          </div>
+        )}
+        {!industriesLoading && !industriesError && industries.length === 0 && (
+          <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-amber-900 bg-amber-950/50 px-4 py-3 text-sm text-amber-300">
+            <span>No industry engines are enabled for this company yet. Enable at least one from Industries before creating a project.</span>
+            <button
+              type="button"
+              onClick={loadIndustries}
+              className="shrink-0 rounded-xl border border-amber-800 bg-amber-950 px-3 py-1.5 text-xs font-semibold text-amber-200 hover:bg-amber-900"
+            >
+              Retry
+            </button>
           </div>
         )}
 

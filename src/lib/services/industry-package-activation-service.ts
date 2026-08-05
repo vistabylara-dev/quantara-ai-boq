@@ -3,7 +3,7 @@ import { prisma } from "@/lib/db/prisma";
 import { AppError, NotFoundError, PermissionDeniedError } from "@/lib/errors/app-error";
 import type { PlatformActor } from "@/lib/auth/platform-authorization";
 import { recordPlatformActionAudit } from "@/lib/repositories/platform-action-audit-repository";
-import { requireDatasetDefinition } from "@/lib/services/catalogue-dataset-registry";
+import { listDatasetDefinitions, requireDatasetDefinition, type DatasetDefinition } from "@/lib/services/catalogue-dataset-registry";
 import { createPackage, addItemsToPackage } from "@/lib/repositories/industry-package-repository";
 import {
   registerAndDryRun,
@@ -144,4 +144,61 @@ export async function activateDataset(owner: PlatformActor, datasetId: string) {
     isComplete,
     package: publishResult,
   };
+}
+
+async function isDatasetFullyActive(dataset: DatasetDefinition): Promise<boolean> {
+  const pkg = await prisma.industryDataPackage.findUnique({ where: { key: dataset.targetPackageCode } });
+  if (!pkg || pkg.itemCount === 0 || pkg.status !== "ACTIVE") return false;
+  const completedJob = await prisma.masterCatalogueImportJob.findFirst({
+    where: { datasetId: dataset.datasetId, status: { in: [MasterCatalogueImportJobStatus.COMPLETED, MasterCatalogueImportJobStatus.COMPLETED_WITH_WARNINGS] } },
+  });
+  return Boolean(completedJob);
+}
+
+const DEFAULT_ALL_DATASETS_BUDGET_MS = 240_000;
+
+export type ActivateAllDatasetsOutcome = "ALREADY_ACTIVE" | "COMPLETED_THIS_CALL" | "IN_PROGRESS" | "FAILED" | "TIME_BUDGET_EXCEEDED";
+
+/**
+ * Drives every registered dataset (or a caller-supplied subset) toward
+ * CUSTOMER_ACTIVE in one owner-authenticated call — instead of the owner
+ * opening the admin panel once per dataset. Each dataset is driven via
+ * repeated activateDataset() calls (itself already bounded/resumable)
+ * until it completes or the overall time budget runs out, so a very large
+ * dataset never starves every dataset after it: this call always makes
+ * real, visible progress on whichever dataset it's currently working on,
+ * and picking up where it left off is just calling this again — nothing
+ * here is a new import mechanism, only a loop around already-proven calls.
+ */
+export async function activateAllDatasets(owner: PlatformActor, options?: { datasetIds?: string[]; timeBudgetMs?: number }) {
+  requireOwner(owner);
+  const allDatasets = listDatasetDefinitions();
+  const targets = options?.datasetIds ? allDatasets.filter((d) => options.datasetIds!.includes(d.datasetId)) : allDatasets;
+  const budgetMs = options?.timeBudgetMs ?? DEFAULT_ALL_DATASETS_BUDGET_MS;
+  const start = Date.now();
+  const results: Array<{ datasetId: string; outcome: ActivateAllDatasetsOutcome; detail?: Awaited<ReturnType<typeof activateDataset>>; error?: string }> = [];
+
+  for (const dataset of targets) {
+    if (Date.now() - start > budgetMs) {
+      results.push({ datasetId: dataset.datasetId, outcome: "TIME_BUDGET_EXCEEDED" });
+      continue;
+    }
+
+    if (await isDatasetFullyActive(dataset)) {
+      results.push({ datasetId: dataset.datasetId, outcome: "ALREADY_ACTIVE" });
+      continue;
+    }
+
+    try {
+      let last = await activateDataset(owner, dataset.datasetId);
+      while (!last.isComplete && Date.now() - start <= budgetMs) {
+        last = await activateDataset(owner, dataset.datasetId);
+      }
+      results.push({ datasetId: dataset.datasetId, outcome: last.isComplete ? "COMPLETED_THIS_CALL" : "IN_PROGRESS", detail: last });
+    } catch (error) {
+      results.push({ datasetId: dataset.datasetId, outcome: "FAILED", error: error instanceof Error ? error.message : String(error) });
+    }
+  }
+
+  return { generatedAt: new Date().toISOString(), elapsedMs: Date.now() - start, results };
 }

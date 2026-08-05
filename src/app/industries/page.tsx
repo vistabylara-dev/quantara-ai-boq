@@ -1,42 +1,121 @@
-import { demoIndustries } from "@/config/industries";
-import IndustryEngineCard from "@/components/industries/industry-engine-card";
+import { Metadata } from "next";
 import Link from "next/link";
+import { ArrowRight } from "lucide-react";
+import PublicFooter from "@/components/layout/public-footer";
 
-export default function IndustriesPage() {
+export const metadata: Metadata = {
+  title: "BOQ Software by Industry | Quantara",
+  description: "Explore how Quantara supports structured BOQ and estimating workflows across construction, MEP, fit-out, and consulting industries.",
+  alternates: {
+    canonical: "https://quantara.vistabylara.com/industries",
+  },
+  robots: {
+    index: true,
+    follow: true,
+  }
+};
+
+const industryLinks = [
+  {
+    href: "/boq-software-for-contractors",
+    name: "Contractors",
+    desc: "Organize tender documents, subcontractor packages, and project revisions.",
+    status: "Verified capabilities for standard project records."
+  },
+  {
+    href: "/boq-software-for-quantity-surveyors",
+    name: "Quantity Surveyors",
+    desc: "Manage BOQ preparation, tender documentation, and rigorous revision control.",
+    status: "Assists workflows; does not replace regulated QS practice."
+  },
+  {
+    href: "/boq-software-for-mep-contractors",
+    name: "MEP Contractors",
+    desc: "Structure multi-discipline BOQs, coordinate specs, and manage schedules.",
+    status: "No automated drawing measurement currently active."
+  },
+  {
+    href: "/boq-software-for-hvac-contractors",
+    name: "HVAC Contractors",
+    desc: "Organize equipment, ductwork, and piping schedules efficiently.",
+    status: "No automated duct or pipe takeoff active."
+  },
+  {
+    href: "/boq-software-for-fit-out-companies",
+    name: "Fit-Out Companies",
+    desc: "Manage detailed interior BOQs, frequent client variations, and proposals.",
+    status: "No automatic room detection available."
+  },
+  {
+    href: "/boq-software-for-fire-fighting-contractors",
+    name: "Fire-Fighting Contractors",
+    desc: "Organize technical BOQs, system components, and equipment schedules.",
+    status: "Does not validate engineering compliance."
+  },
+  {
+    href: "/boq-software-for-facilities-management",
+    name: "Facilities Management",
+    desc: "Structure BOQs for refurbishment projects and complex service packages.",
+    status: "Not an asset-management or CMMS platform."
+  },
+  {
+    href: "/boq-software-for-engineering-consultants",
+    name: "Engineering Consultants",
+    desc: "Manage technical schedules, document revisions, and controlled templates.",
+    status: "Does not provide formal design validation."
+  }
+];
+
+export default function IndustriesIndexPage() {
   return (
-    <div className="min-h-screen bg-[#07111F] text-white">
-      <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
-        <div className="mb-6 flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
-          <div>
-            <p className="text-sm uppercase tracking-[0.3em] text-slate-500">Industry Engines</p>
-            <h1 className="mt-2 text-3xl font-semibold text-white">Configurable industry engines</h1>
-          </div>
-          <Link
-            href="/projects/new"
-            className="inline-flex rounded-2xl border border-slate-700 bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-500"
-          >
-            Create new project
+    <div className="flex flex-col min-h-screen bg-white text-slate-900 font-sans">
+      <header className="sticky top-0 z-50 w-full border-b border-slate-200 bg-white/80 backdrop-blur-md">
+        <div className="container mx-auto px-4 h-16 flex items-center justify-between">
+          <Link href="/" className="flex items-center gap-2">
+            <span className="font-bold text-xl tracking-tight text-blue-900">Quantara</span>
           </Link>
-        </div>
-
-        <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-3">
-          {demoIndustries.map((industry) => (
-            <IndustryEngineCard key={industry.id} industry={industry} />
-          ))}
-          <div className="rounded-3xl border border-slate-800 bg-slate-950 p-6">
-            <p className="text-sm font-semibold text-white">Custom Engine</p>
-            <p className="mt-3 text-sm text-slate-400">Coming later. Custom engine creation will be available in a future phase.</p>
-            <div className="mt-6 rounded-2xl border border-slate-800 bg-slate-900 p-4 text-sm text-slate-300">
-              <p className="font-medium text-slate-200">Planned capabilities</p>
-              <ul className="mt-3 space-y-2 text-slate-400">
-                <li>Custom sections</li>
-                <li>Specialized field maps</li>
-                <li>Industry-specific validations</li>
-              </ul>
-            </div>
+          <nav className="hidden md:flex gap-6">
+            <Link href="/features" className="text-sm font-medium text-slate-600 hover:text-blue-600">Features</Link>
+            <Link href="/resources" className="text-sm font-medium text-slate-600 hover:text-blue-600">Resources</Link>
+            <Link href="/industries" className="text-sm font-medium text-slate-900 font-semibold">Industries</Link>
+            <Link href="/contact-sales" className="text-sm font-medium text-slate-600 hover:text-blue-600">Contact Sales</Link>
+          </nav>
+          <div className="flex items-center gap-4">
+            <Link href="/login" className="text-sm font-medium text-slate-600 hover:text-blue-600 hidden sm:block">Log in</Link>
+            <Link href="/register" className="text-sm font-medium bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition-colors">
+              Request Early Access
+            </Link>
           </div>
         </div>
-      </div>
+      </header>
+
+      <main className="flex-1 w-full max-w-6xl mx-auto px-4 py-16 md:py-24">
+        <header className="mb-16 text-center max-w-3xl mx-auto">
+          <h1 className="text-4xl md:text-5xl font-bold text-slate-900 tracking-tight mb-6">BOQ Software by Industry</h1>
+          <p className="text-lg text-slate-600 leading-relaxed">
+            Quantara supports contractors, estimators, and consultants across multiple sectors by providing structured BOQ and document workflows.
+          </p>
+        </header>
+
+        <div className="grid md:grid-cols-2 gap-6">
+          {industryLinks.map((link, idx) => (
+            <Link key={idx} href={link.href} className="group flex flex-col justify-between p-8 bg-slate-50 border border-slate-200 rounded-2xl hover:border-blue-300 hover:bg-blue-50/50 transition-all">
+              <div>
+                <h2 className="text-2xl font-bold text-slate-900 group-hover:text-blue-700 mb-3 flex items-center justify-between">
+                  {link.name}
+                  <ArrowRight className="w-5 h-5 opacity-0 group-hover:opacity-100 transform -translate-x-4 group-hover:translate-x-0 transition-all" />
+                </h2>
+                <p className="text-slate-600 mb-6">{link.desc}</p>
+              </div>
+              <div className="pt-4 border-t border-slate-200">
+                <p className="text-xs font-medium text-slate-500 uppercase tracking-wider">{link.status}</p>
+              </div>
+            </Link>
+          ))}
+        </div>
+      </main>
+
+      <PublicFooter />
     </div>
   );
 }

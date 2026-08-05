@@ -42,6 +42,15 @@ const PUBLIC_ROUTES = new Set([
   "/ocr-for-boq-documents",
   "/how-to-review-ai-extracted-boq",
   "/quantity-takeoff-vs-boq-management",
+  "/industries",
+  "/boq-software-for-contractors",
+  "/boq-software-for-quantity-surveyors",
+  "/boq-software-for-mep-contractors",
+  "/boq-software-for-hvac-contractors",
+  "/boq-software-for-fit-out-companies",
+  "/boq-software-for-fire-fighting-contractors",
+  "/boq-software-for-facilities-management",
+  "/boq-software-for-engineering-consultants",
 ]);
 
 const PUBLIC_PREFIXES = [

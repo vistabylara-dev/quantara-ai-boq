@@ -60,6 +60,8 @@ type DatasetSummary = {
   latestJob: JobDTO | null;
 };
 
+type PublishResult = { packageId: string; packageKey: string; itemCount: number; itemsAssignedThisRun: number };
+
 const TERMINAL: JobStatus[] = ["COMPLETED", "COMPLETED_WITH_WARNINGS", "CANCELLED", "ROLLED_BACK"];
 const RUNNABLE: JobStatus[] = ["PAUSED", "IMPORT_RUNNING"];
 
@@ -80,6 +82,8 @@ function DatasetCard({ dataset, onChanged }: { dataset: DatasetSummary; onChange
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [confirmChecked, setConfirmChecked] = useState(false);
   const [history, setHistory] = useState<JobDTO[] | null>(null);
+  const [publishResult, setPublishResult] = useState<PublishResult | null>(null);
+  const [publishing, setPublishing] = useState(false);
   const pollRef = useRef(false);
 
   useEffect(() => setJob(dataset.latestJob), [dataset.latestJob]);
@@ -169,6 +173,21 @@ function DatasetCard({ dataset, onChanged }: { dataset: DatasetSummary; onChange
     }
   }, [dataset.datasetId]);
 
+  const publishToPackage = useCallback(async () => {
+    if (!job) return;
+    setPublishing(true);
+    setError(null);
+    try {
+      const result = await apiClient.post<PublishResult>(`/api/admin/master-catalogue/datasets/jobs/${job.id}/publish-package`, {});
+      setPublishResult(result);
+      onChanged();
+    } catch (err) {
+      setError(getApiErrorMessage(err));
+    } finally {
+      setPublishing(false);
+    }
+  }, [job, onChanged]);
+
   const progressPct = job && job.totalRows > 0 ? Math.round(((job.processedRows + job.rejectedCount) / job.totalRows) * 100) : 0;
   const currentBatch = job ? Math.ceil(job.processedRows / job.batchSize) : 0;
   const estimatedBatches = job?.dryRunReport?.estimatedBatches ?? 0;
@@ -257,10 +276,22 @@ function DatasetCard({ dataset, onChanged }: { dataset: DatasetSummary; onChange
           </span>
         )}
 
+        {job && (job.status === "COMPLETED" || job.status === "COMPLETED_WITH_WARNINGS") && (
+          <button type="button" disabled={publishing} onClick={() => void publishToPackage()} className="inline-flex items-center gap-1.5 rounded-xl border border-violet-300 bg-violet-50 px-3 py-1.5 text-xs font-semibold text-violet-700 hover:bg-violet-100 disabled:opacity-50 dark:border-violet-800 dark:bg-violet-950 dark:text-violet-300">
+            <Boxes className="h-3.5 w-3.5" aria-hidden="true" /> {publishing ? "Publishing…" : "Publish to package"}
+          </button>
+        )}
+
         <button type="button" onClick={() => void loadHistory()} className="rounded-xl border border-[#D9E2EC] bg-white px-3 py-1.5 text-xs font-semibold text-[#0B1630] hover:bg-[#EEF3F8] dark:border-[#1E2A42] dark:bg-[#0B1426] dark:text-[#F7FAFC]">
           View batch history
         </button>
       </div>
+
+      {publishResult && (
+        <p className="mt-3 text-xs text-violet-700 dark:text-violet-300">
+          Published to package <span className="font-semibold">{publishResult.packageKey}</span> — {publishResult.itemCount.toLocaleString()} item(s) now assigned ({publishResult.itemsAssignedThisRun.toLocaleString()} this run).
+        </p>
+      )}
 
       {history && (
         <div className="mt-3 overflow-x-auto rounded-2xl border border-[#D9E2EC] dark:border-[#1E2A42]">

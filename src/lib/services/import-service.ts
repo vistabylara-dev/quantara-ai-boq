@@ -9,6 +9,7 @@ import { parseXlsx } from "@/lib/imports/xlsx-parser";
 import { createLibraryItem } from "@/lib/repositories/company-library-repository";
 import { createBOQItem, getBOQ, listProjectBOQs } from "@/lib/repositories/boq-repository";
 import { getProjectRecord } from "@/lib/repositories/project-repository";
+import { looksLikePdf, looksLikeZip } from "@/lib/validation/file-signatures";
 
 // Raised from 2,000: real category files are running ~4,000+ rows each, and the old cap rejected
 // the whole upload outright with no way around it. 10,000 leaves headroom above that while still
@@ -163,6 +164,33 @@ export type CreateImportJobInput = {
   mappingTemplateId?: string;
 };
 
+/**
+ * Import is a spreadsheet-only workflow (CSV/XLSX quantity/catalogue data) — it must never hand a
+ * drawing or any other binary document to the XLSX/CSV parser. `sourceType` above is entirely
+ * client-supplied (derived from the filename in the browser, not verified), so a mislabeled or
+ * misrouted upload — e.g. a PDF sent here because a dashboard link pointed at /imports instead of
+ * the project drawing uploader — would otherwise reach the XLSX parser and surface a confusing,
+ * wrong "This XLSX file couldn't be read" error for a file that was never a spreadsheet. Checking
+ * the real byte signature before parsing catches that class of mistake at the source, with an
+ * error message that actually describes what went wrong.
+ */
+function assertLooksLikeSpreadsheet(buffer: Buffer, sourceType: "CSV" | "XLSX"): void {
+  if (looksLikePdf(buffer)) {
+    throw new AppError(
+      "IMPORT_FILE_NOT_SPREADSHEET",
+      "This file is a PDF, not a spreadsheet. Import only accepts CSV/XLSX data files — to upload a drawing, use Upload Drawing on the project's Drawings page instead.",
+      400,
+    );
+  }
+  if (sourceType === "XLSX" && !looksLikeZip(buffer)) {
+    throw new AppError(
+      "IMPORT_FILE_NOT_SPREADSHEET",
+      "This file does not appear to be a valid XLSX spreadsheet. Export/save it as .xlsx or .csv and try again.",
+      400,
+    );
+  }
+}
+
 /** Upload -> parse only. Nothing is imported until mapping, validation, row approval, and an explicit execute call. */
 export async function createImportJob(actor: CurrentActor, input: CreateImportJobInput) {
   requireCapability(actor, "imports:manage");
@@ -170,6 +198,7 @@ export async function createImportJob(actor: CurrentActor, input: CreateImportJo
   if (input.projectId) await getProjectRecord(actor.companyId, input.projectId);
 
   const buffer = input.buffer;
+  assertLooksLikeSpreadsheet(buffer, input.sourceType);
   let rows: string[][];
   if (input.sourceType === "CSV") {
     rows = parseCsv(buffer.toString("utf-8"));

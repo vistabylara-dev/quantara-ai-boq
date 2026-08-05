@@ -5,6 +5,7 @@ import { PermissionDeniedError } from "../src/lib/errors/app-error";
 import type { PlatformActor } from "../src/lib/auth/platform-authorization";
 import { activateDataset, publishJobToPackage } from "../src/lib/services/industry-package-activation-service";
 import { listPackages, listPackageItems } from "../src/lib/repositories/industry-package-repository";
+import { getProductionCatalogueEvidence } from "../src/lib/services/catalogue-production-evidence-service";
 
 const RUN_ID = `${Date.now()}-${process.pid}`;
 const HVAC_DATASET_ID = "quantara-master-hvac-v1";
@@ -124,5 +125,31 @@ describe("CATALOGUE-CREATE-1: industry package activation (integration, real loc
     });
     await expect(publishJobToPackage(ownerActor(), job.id)).rejects.toMatchObject({ code: "JOB_NOT_COMPLETE" });
     await prisma.masterCatalogueImportJob.delete({ where: { id: job.id } });
+  });
+
+  it("production evidence reports HVAC as CUSTOMER_ACTIVE with real, batch-scoped counts (not discipline-wide)", async () => {
+    const evidence = await getProductionCatalogueEvidence(ownerActor());
+    const hvac = evidence.datasets.find((d) => d.datasetId === HVAC_DATASET_ID);
+    expect(hvac).toBeDefined();
+    expect(hvac!.stage).toBe("CUSTOMER_ACTIVE");
+    expect(hvac!.itemCount).toBe(891);
+    expect(hvac!.publishedVersionCount).toBe(891);
+    expect(hvac!.package?.key).toBe(HVAC_PACKAGE_KEY);
+    expect(hvac!.marketplaceVisible).toBe(true);
+    expect(hvac!.job?.status).toMatch(/COMPLETED/);
+
+    // Never-activated datasets must be honestly reported, not silently omitted or fabricated.
+    const untouched = evidence.datasets.find((d) => d.datasetId === "quantara-master-plumbing-v1");
+    expect(untouched).toBeDefined();
+    expect(untouched!.stage).toBe("SOURCE_ONLY");
+    expect(untouched!.itemCount).toBe(0);
+    expect(untouched!.marketplaceVisible).toBe(false);
+
+    expect(evidence.summary.totalDatasets).toBe(15);
+    expect(evidence.summary.datasetsCompleted).toBeGreaterThanOrEqual(1);
+  });
+
+  it("production evidence blocks a non-owner platform actor", async () => {
+    await expect(getProductionCatalogueEvidence(adminActor())).rejects.toThrow(PermissionDeniedError);
   });
 });

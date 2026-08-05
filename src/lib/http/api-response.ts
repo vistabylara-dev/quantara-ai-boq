@@ -95,8 +95,20 @@ export function handleApiError(error: unknown) {
     if (error.code === "P2034") {
       return apiFailure("CONCURRENT_WRITE_CONFLICT", "The record changed during this request. Please retry.", 409);
     }
+    // Every other known Prisma error code (P2021 missing table, P2022 missing
+    // column, P2010 raw query failure, etc.) must never reach the client —
+    // error.message for these routinely embeds table/column/SQL text. Full
+    // detail is logged server-side only; the client gets a generic, safe,
+    // retryable failure. This `return` is unconditional specifically so no
+    // PrismaClientKnownRequestError can ever fall through to the generic
+    // domain-error branch below, which does surface `error.message` verbatim.
+    console.error(`[database] Unhandled Prisma error ${error.code}`, error.message);
+    return apiFailure(
+      "DATABASE_UNAVAILABLE",
+      "The database is temporarily unavailable. Please try again shortly.",
+      503,
+    );
   }
-
 
   if (error instanceof Prisma.PrismaClientValidationError) {
     return apiFailure("INVALID_DATABASE_REQUEST", "The request could not be applied to the data model.", 400);

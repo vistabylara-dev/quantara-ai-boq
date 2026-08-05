@@ -237,16 +237,15 @@ export default function HomePage() {
           
           <ol className="relative border-l border-slate-200 dark:border-slate-700 ml-4 md:ml-0 space-y-12">
             {[
-              { title: "Create a company workspace", desc: "Establish an authenticated, secure environment for your estimators and project teams to collaborate without mixing distinct commercial data." },
-              { title: "Add a client and project", desc: "Organize workflows by associating incoming documents, BOQs, and generating technical records strictly within a unified project context." },
-              { title: "Upload or import supported project documents", desc: "Upload verified formats like text-based PDFs, XLSX, or CSV files to serve as the baseline scope for the project." },
-              { title: "Review AI-assisted extracted information", desc: "Evaluate the data parsed by Quantara, ensuring extracted text, dimensions, and specifications align with the original documents before processing." },
-              { title: "Organize BOQ sections and items", desc: "Structure the verified line items into logical groupings, sub-headings, and sections common to trade or industry standards." },
-              { title: "Confirm quantities, units, descriptions, and specifications", desc: "Apply strict QA checks on all individual records to verify the technical accuracy and completeness of the requirements." },
-              { title: "Apply approved catalogue items, templates, and pricing", desc: "Cross-reference against company-approved standard costs, descriptions, or external catalogue references to apply unified pricing logic." },
-              { title: "Review revisions and project history", desc: "Maintain traceability by comparing updates against original baselines, ensuring changes in scope are actively managed and documented." },
-              { title: "Generate the supported BOQ, proposal, or technical document", desc: "Export to controlled, standardized formats (such as PDF, DOCX, or XLSX) utilizing your approved company branding and layout." },
-              { title: "Complete a professional human review before issuing", desc: "Execute a final manual review by a qualified Quantity Surveyor or responsible professional prior to formal distribution or contractual agreement." }
+              { title: "Create Project", desc: "Create a project once and enter the relevant client, project and workspace information." },
+              { title: "Choose Data Sources", desc: "Select one or more supported data sources for the project, such as local files or authorized external applications." },
+              { title: "Upload Files and/or Connect Authorized Applications", desc: "Manually upload supported project files or authorize Quantara to access permitted source information." },
+              { title: "Import into Project Workspace", desc: "Bring in information from authorized sources into the controlled project environment." },
+              { title: "Normalize and Organize Source Data", desc: "Quantara organizes supported source information into a consistent project structure for review." },
+              { title: "Preview and Review", desc: "Preview available source documents and review imported or extracted information before proceeding." },
+              { title: "Create or Update BOQ", desc: "Use the verified source data to organize BOQ sections, items, descriptions, and quantities." },
+              { title: "Professional Review", desc: "All information must be reviewed by an appropriately qualified professional." },
+              { title: "Generate Supported Outputs", desc: "Generate the supported BOQ, proposal, technical report or export format available." }
             ].map((step, index) => (
               <li key={index} className="ml-10 relative">
                 <span className="absolute flex items-center justify-center w-8 h-8 bg-blue-100 rounded-full -left-[3.35rem] ring-4 ring-white dark:ring-slate-950 dark:bg-blue-900 text-blue-700 dark:text-blue-300 font-bold text-sm">

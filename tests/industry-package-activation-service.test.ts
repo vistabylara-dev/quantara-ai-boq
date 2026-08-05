@@ -3,13 +3,15 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { prisma } from "../src/lib/db/prisma";
 import { PermissionDeniedError } from "../src/lib/errors/app-error";
 import type { PlatformActor } from "../src/lib/auth/platform-authorization";
-import { activateDataset, publishJobToPackage } from "../src/lib/services/industry-package-activation-service";
+import { activateDataset, activateAllDatasets, publishJobToPackage } from "../src/lib/services/industry-package-activation-service";
 import { listPackages, listPackageItems } from "../src/lib/repositories/industry-package-repository";
 import { getProductionCatalogueEvidence } from "../src/lib/services/catalogue-production-evidence-service";
 
 const RUN_ID = `${Date.now()}-${process.pid}`;
 const HVAC_DATASET_ID = "quantara-master-hvac-v1";
 const HVAC_PACKAGE_KEY = "hvac-library";
+const LANDSCAPING_DATASET_ID = "quantara-master-landscaping-v1";
+const LANDSCAPING_PACKAGE_KEY = "landscaping-library";
 
 let ownerUserId = "";
 let companyId = "";
@@ -29,11 +31,10 @@ async function cleanupHvacItemsAndPackage() {
   }
   const mechanical = await prisma.masterDiscipline.findUnique({ where: { key: "mechanical" } });
   if (mechanical) {
-    const items = await prisma.masterItem.findMany({ where: { disciplineId: mechanical.id, itemCode: { startsWith: "HVAC-" } } });
-    for (const item of items) {
-      await prisma.masterItemClassification.deleteMany({ where: { masterItemId: item.id } });
-      await prisma.masterItemVersion.deleteMany({ where: { masterItemId: item.id } });
-    }
+    const items = await prisma.masterItem.findMany({ where: { disciplineId: mechanical.id, itemCode: { startsWith: "HVAC-" } }, select: { id: true } });
+    const itemIds = items.map((i) => i.id);
+    await prisma.masterItemClassification.deleteMany({ where: { masterItemId: { in: itemIds } } });
+    await prisma.masterItemVersion.deleteMany({ where: { masterItemId: { in: itemIds } } });
     await prisma.masterItem.deleteMany({ where: { disciplineId: mechanical.id, itemCode: { startsWith: "HVAC-" } } });
   }
   const jobs = await prisma.masterCatalogueImportJob.findMany({ where: { datasetId: HVAC_DATASET_ID } });
@@ -42,9 +43,30 @@ async function cleanupHvacItemsAndPackage() {
   if (legacyBatchIds.length > 0) await prisma.masterCatalogueImportBatch.deleteMany({ where: { id: { in: legacyBatchIds } } });
 }
 
+async function cleanupLandscapingItemsAndPackage() {
+  const pkg = await prisma.industryDataPackage.findUnique({ where: { key: LANDSCAPING_PACKAGE_KEY } });
+  if (pkg) {
+    await prisma.industryDataPackageItem.deleteMany({ where: { packageId: pkg.id } });
+    await prisma.industryDataPackage.delete({ where: { id: pkg.id } });
+  }
+  const landscaping = await prisma.masterDiscipline.findUnique({ where: { key: "landscaping" } });
+  if (landscaping) {
+    const items = await prisma.masterItem.findMany({ where: { disciplineId: landscaping.id }, select: { id: true } });
+    const itemIds = items.map((i) => i.id);
+    await prisma.masterItemClassification.deleteMany({ where: { masterItemId: { in: itemIds } } });
+    await prisma.masterItemVersion.deleteMany({ where: { masterItemId: { in: itemIds } } });
+    await prisma.masterItem.deleteMany({ where: { disciplineId: landscaping.id } });
+  }
+  const jobs = await prisma.masterCatalogueImportJob.findMany({ where: { datasetId: LANDSCAPING_DATASET_ID } });
+  const legacyBatchIds = jobs.map((j) => j.legacyBatchId).filter((id): id is string => Boolean(id));
+  await prisma.masterCatalogueImportJob.deleteMany({ where: { datasetId: LANDSCAPING_DATASET_ID } });
+  if (legacyBatchIds.length > 0) await prisma.masterCatalogueImportBatch.deleteMany({ where: { id: { in: legacyBatchIds } } });
+}
+
 describe("CATALOGUE-CREATE-1: industry package activation (integration, real local Postgres, real HVAC dataset)", () => {
   beforeAll(async () => {
     await cleanupHvacItemsAndPackage();
+    await cleanupLandscapingItemsAndPackage();
     const company = await prisma.company.create({ data: { legalName: `IPA Co ${RUN_ID}`, tradeName: "IPA Co", email: `ipa-${RUN_ID}@example.com` } });
     companyId = company.id;
     const owner = await prisma.user.create({
@@ -55,10 +77,11 @@ describe("CATALOGUE-CREATE-1: industry package activation (integration, real loc
 
   afterAll(async () => {
     await cleanupHvacItemsAndPackage();
+    await cleanupLandscapingItemsAndPackage();
     await prisma.user.deleteMany({ where: { companyId } });
     await prisma.company.delete({ where: { id: companyId } }).catch(() => undefined);
     await prisma.$disconnect();
-  });
+  }, 30_000);
 
   it("blocks a non-owner platform actor", async () => {
     await expect(activateDataset(adminActor(), HVAC_DATASET_ID)).rejects.toThrow(PermissionDeniedError);
@@ -152,4 +175,27 @@ describe("CATALOGUE-CREATE-1: industry package activation (integration, real loc
   it("production evidence blocks a non-owner platform actor", async () => {
     await expect(getProductionCatalogueEvidence(adminActor())).rejects.toThrow(PermissionDeniedError);
   });
+
+  it("activateAllDatasets skips an already-active dataset and drives a second, untouched real dataset to CUSTOMER_ACTIVE in the same call", async () => {
+    // HVAC is already CUSTOMER_ACTIVE from the earlier tests in this file; Landscaping (2,867 real
+    // rows, its own single-file dataset) has never been touched — proves the loop actually
+    // processes more than one dataset per call, not just the first.
+    const result = await activateAllDatasets(ownerActor(), { datasetIds: [HVAC_DATASET_ID, LANDSCAPING_DATASET_ID] });
+
+    const hvacResult = result.results.find((r) => r.datasetId === HVAC_DATASET_ID);
+    expect(hvacResult?.outcome).toBe("ALREADY_ACTIVE");
+
+    const landscapingResult = result.results.find((r) => r.datasetId === LANDSCAPING_DATASET_ID);
+    expect(landscapingResult?.outcome).toBe("COMPLETED_THIS_CALL");
+    expect(landscapingResult?.detail?.processedRows).toBe(2867);
+
+    const pkg = await prisma.industryDataPackage.findUniqueOrThrow({ where: { key: LANDSCAPING_PACKAGE_KEY } });
+    expect(pkg.status).toBe("ACTIVE");
+    expect(pkg.itemCount).toBeGreaterThan(0);
+
+    const evidence = await getProductionCatalogueEvidence(ownerActor());
+    const landscaping = evidence.datasets.find((d) => d.datasetId === LANDSCAPING_DATASET_ID);
+    expect(landscaping?.stage).toBe("CUSTOMER_ACTIVE");
+    expect(landscaping?.marketplaceVisible).toBe(true);
+  }, 180_000);
 });

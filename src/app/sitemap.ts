@@ -63,7 +63,9 @@ export default function sitemap(): MetadataRoute.Sitemap {
     "/boq-software-vs-document-management",
     "/construction-estimating-software-vs-excel",
     "/when-to-use-boq-software",
-    "/site-map"
+    "/site-map",
+    "/boq-calculation-formulas",
+    "/pricing"
   ];
 
   return routes.map((route) => ({

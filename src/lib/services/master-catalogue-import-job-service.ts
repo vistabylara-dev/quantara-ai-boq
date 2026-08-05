@@ -4,6 +4,9 @@ import { AppError, NotFoundError, PermissionDeniedError } from "@/lib/errors/app
 import type { PlatformActor } from "@/lib/auth/platform-authorization";
 import { recordPlatformActionAudit } from "@/lib/repositories/platform-action-audit-repository";
 import {
+  checkDatasetReadiness,
+  checkDatasetReadinessFast,
+  computeDatasetFingerprint,
   computeDatasetSourceChecksum,
   listDatasetDefinitions,
   loadApprovedDatasetFiles,
@@ -117,9 +120,23 @@ function fileNameForCursor(rowFileBoundaries: { fileName: string; startIndex: nu
   return boundary?.fileName ?? rowFileBoundaries[rowFileBoundaries.length - 1]?.fileName ?? null;
 }
 
+/**
+ * CATALOGUE-ACTIVATE-2 — extended with registry metadata (industry/package
+ * mapping, schema profile, approval/registration state, a stricter
+ * combined fingerprint) and a fast readiness verdict (registry metadata +
+ * a live MasterDiscipline lookup only — no per-file disk I/O, so this
+ * stays cheap regardless of how many datasets or how large their source
+ * files are). Never persisted, never creates an import job/batch row. Safe
+ * fields only: no raw file content, no unrestricted paths (sourceDir is
+ * always a data-imports/* subpath from the registry itself, never client
+ * input), no commercial metadata from the source rows. See
+ * getDatasetReadinessDetail below for the full, file-verifying check.
+ */
 export async function listRegisteredDatasetsSummary(owner: PlatformActor) {
   requireOwner(owner);
   const datasets = listDatasetDefinitions();
+  const knownDisciplines = await prisma.masterDiscipline.findMany({ select: { key: true } });
+  const knownDisciplineKeys = new Set(knownDisciplines.map((d) => d.key));
 
   return Promise.all(
     datasets.map(async (dataset) => {
@@ -128,20 +145,49 @@ export async function listRegisteredDatasetsSummary(owner: PlatformActor) {
         prisma.masterCatalogueImportJob.findFirst({ where: { datasetId: dataset.datasetId }, orderBy: { createdAt: "desc" } }),
         prisma.masterDiscipline.findUnique({ where: { key: dataset.disciplineKey } }).then((d) => (d ? prisma.masterItem.count({ where: { disciplineId: d.id } }) : 0)),
       ]);
+      const readiness = checkDatasetReadinessFast(dataset, knownDisciplineKeys);
       return {
         datasetId: dataset.datasetId,
         datasetVersion: dataset.datasetVersion,
         label: dataset.label,
+        sourceFolder: dataset.sourceDir,
+        industryCode: dataset.industryCode,
         disciplineKey: dataset.disciplineKey,
         disciplineReady: Boolean(discipline),
+        targetPackageCode: dataset.targetPackageCode,
+        schemaProfileId: dataset.schemaProfileId,
+        active: dataset.active,
+        approved: dataset.approved,
+        registrationSource: dataset.registrationSource,
+        validationStatus: dataset.validationStatus,
         fileCount: dataset.files.length,
         expectedRowCount: dataset.files.reduce((sum, f) => sum + f.expectedRowCount, 0),
         sourceChecksum: computeDatasetSourceChecksum(dataset),
+        fingerprint: computeDatasetFingerprint(dataset),
         currentProductionItemCount: itemCount,
         latestJob: latestJob ? toJobDTO(latestJob) : null,
+        readiness: readiness.status,
+        blockReasons: readiness.blockReasons,
+        warnings: readiness.warnings,
       };
     }),
   );
+}
+
+/**
+ * CATALOGUE-ACTIVATE-2 — the full, file-verifying readiness check for one
+ * dataset, on demand. Unlike the fast check baked into
+ * listRegisteredDatasetsSummary, this re-reads every file in the dataset
+ * off disk to verify it still exists, still matches its approved
+ * checksum, and still has the expected row count — real I/O, meant to be
+ * called per-dataset rather than for every dataset on every list request.
+ */
+export async function getDatasetReadinessDetail(owner: PlatformActor, datasetId: string) {
+  requireOwner(owner);
+  const dataset = requireDatasetDefinition(datasetId);
+  const knownDisciplines = await prisma.masterDiscipline.findMany({ select: { key: true } });
+  const knownDisciplineKeys = new Set(knownDisciplines.map((d) => d.key));
+  return checkDatasetReadiness(dataset, knownDisciplineKeys);
 }
 
 /**

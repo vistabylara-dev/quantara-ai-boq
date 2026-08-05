@@ -1,0 +1,17 @@
+import type { Metadata } from "next";
+
+export const metadata: Metadata = {
+  title: "Login | Quantara",
+  description: "Sign in to your Quantara workspace.",
+  alternates: {
+    canonical: "/login"
+  }
+};
+
+export default function LoginLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  return <>{children}</>;
+}

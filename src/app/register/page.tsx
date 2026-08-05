@@ -3,15 +3,6 @@
 import Link from "next/link";
 import { useState, type FormEvent } from "react";
 import { apiClient, getApiErrorMessage } from "@/lib/api/client";
-import type { Metadata } from "next";
-
-export const metadata: Metadata = {
-  title: "Register | Quantara",
-  description: "Request early access to Quantara.",
-  alternates: {
-    canonical: "/register"
-  }
-};
 
 
 export default function RegisterPage() {

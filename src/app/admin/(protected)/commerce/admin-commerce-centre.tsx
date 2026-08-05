@@ -8,6 +8,8 @@ type CommerceProductType = "SUBSCRIPTION" | "ONE_TIME" | "INDUSTRY_ACCESS" | "AI
 type CommercePurchaseMode = "DIRECT" | "QUOTATION_REQUIRED" | "CONTACT_SALES";
 type CommerceBillingInterval = "ONE_TIME" | "MONTH" | "YEAR";
 
+type CommercePriceReviewStatus = "DRAFT" | "REQUIRES_REVIEW" | "APPROVED" | "RETIRED";
+
 type PriceRow = {
   id: string;
   code: string;
@@ -18,6 +20,10 @@ type PriceRow = {
   isActive: boolean;
   validFrom: string;
   validUntil: string | null;
+  reviewStatus: CommercePriceReviewStatus;
+  reviewedByUserId: string | null;
+  reviewedAt: string | null;
+  reviewNote: string | null;
 };
 
 type EntitlementTemplateRow = {
@@ -70,6 +76,20 @@ const PURCHASE_MODE_LABELS: Record<CommercePurchaseMode, string> = {
   DIRECT: "Direct",
   QUOTATION_REQUIRED: "Quotation required",
   CONTACT_SALES: "Contact sales",
+};
+
+const REVIEW_STATUS_LABELS: Record<CommercePriceReviewStatus, string> = {
+  DRAFT: "Draft",
+  REQUIRES_REVIEW: "Requires review",
+  APPROVED: "Approved",
+  RETIRED: "Retired",
+};
+
+const REVIEW_STATUS_TONE: Record<CommercePriceReviewStatus, string> = {
+  DRAFT: "text-[#7B879C] dark:text-[#7F8DA6]",
+  REQUIRES_REVIEW: "text-[#B4841F] dark:text-[#E0B25C]",
+  APPROVED: "text-[#159A6A] dark:text-emerald-300",
+  RETIRED: "text-[#D84A4A] dark:text-rose-300",
 };
 
 const panel = "rounded-[28px] border border-[#D9E2EC] dark:border-[#1E2A42] bg-white dark:bg-[#0B1426] p-6 sm:p-8";
@@ -136,6 +156,21 @@ export default function AdminCommerceCentre() {
     try {
       await apiClient.patch(`/api/admin/commerce/products/${productId}`, patch);
       setActionMessage("Product updated.");
+      await loadList();
+    } catch (error) {
+      setActionError(getApiErrorMessage(error));
+    } finally {
+      setBusy(false);
+    }
+  }, [loadList]);
+
+  const setPriceReview = useCallback(async (priceId: string, reviewStatus: CommercePriceReviewStatus) => {
+    setBusy(true);
+    setActionMessage(null);
+    setActionError(null);
+    try {
+      await apiClient.patch(`/api/admin/commerce/prices/${priceId}/approval`, { reviewStatus });
+      setActionMessage(`Price marked ${REVIEW_STATUS_LABELS[reviewStatus]}.`);
       await loadList();
     } catch (error) {
       setActionError(getApiErrorMessage(error));
@@ -268,11 +303,41 @@ export default function AdminCommerceCentre() {
                 <ul className="mt-2 space-y-1.5">
                   {selected.prices.map((p) => (
                     <li key={p.id} className={`rounded-lg border border-[#D9E2EC] p-2 text-xs dark:border-[#1E2A42] ${!p.isActive ? "opacity-50" : ""}`}>
-                      <span className="font-semibold">{p.isFromPrice ? "from " : ""}{formatAed(p.amountMinor)}</span>
-                      {" "}
-                      <span className="text-[#7B879C] dark:text-[#7F8DA6]">
-                        {p.billingInterval === "ONE_TIME" ? "one-time" : p.billingInterval === "MONTH" ? "per month" : "per year"} · {p.code} · {p.isActive ? "active" : "archived"}
-                      </span>
+                      <div className="flex items-center justify-between gap-2">
+                        <div>
+                          <span className="font-semibold">{p.isFromPrice ? "from " : ""}{formatAed(p.amountMinor)}</span>
+                          {" "}
+                          <span className="text-[#7B879C] dark:text-[#7F8DA6]">
+                            {p.billingInterval === "ONE_TIME" ? "one-time" : p.billingInterval === "MONTH" ? "per month" : "per year"} · {p.code} · {p.isActive ? "active" : "archived"}
+                          </span>
+                        </div>
+                        <span className={`whitespace-nowrap text-[10px] font-semibold uppercase tracking-wide ${REVIEW_STATUS_TONE[p.reviewStatus]}`}>
+                          {REVIEW_STATUS_LABELS[p.reviewStatus]}
+                        </span>
+                      </div>
+                      {p.reviewNote && <p className="mt-1 text-[#7B879C] dark:text-[#7F8DA6]">Note: {p.reviewNote}</p>}
+                      <div className="mt-1.5 flex gap-1.5">
+                        {p.reviewStatus !== "APPROVED" && (
+                          <button
+                            type="button"
+                            disabled={busy}
+                            onClick={() => void setPriceReview(p.id, "APPROVED")}
+                            className="rounded border border-[#159A6A]/40 bg-[#159A6A]/10 px-2 py-0.5 text-[10px] font-semibold text-[#159A6A] hover:bg-[#159A6A]/20 disabled:opacity-50 dark:border-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-300"
+                          >
+                            Approve
+                          </button>
+                        )}
+                        {p.reviewStatus === "APPROVED" && (
+                          <button
+                            type="button"
+                            disabled={busy}
+                            onClick={() => void setPriceReview(p.id, "REQUIRES_REVIEW")}
+                            className="rounded border border-[#D9E2EC] px-2 py-0.5 text-[10px] font-semibold text-[#536078] hover:bg-[#EEF3F8] disabled:opacity-50 dark:border-[#1E2A42] dark:text-[#7F8DA6] dark:hover:bg-[#111D33]"
+                          >
+                            Revert to review
+                          </button>
+                        )}
+                      </div>
                     </li>
                   ))}
                   {selected.prices.length === 0 && <li className="text-xs text-[#7B879C] dark:text-[#7F8DA6]">No prices configured.</li>}
@@ -334,7 +399,265 @@ export default function AdminCommerceCentre() {
           )}
         </section>
       </div>
+
+      <StripeSyncPanel busy={busy} setBusy={setBusy} setActionMessage={setActionMessage} setActionError={setActionError} />
     </div>
+  );
+}
+
+type StripeStatus = {
+  configured: boolean;
+  mode: "test" | "unset" | "invalid";
+  testMode: boolean;
+  accountReachable: boolean;
+  lastVerifiedAt: string | null;
+  synchronizationEnabled: boolean;
+  productMappings: number;
+  priceMappings: number;
+  approvedPriceCount: number;
+  reviewRequiredCount: number;
+};
+
+type SyncPlan = {
+  catalogueFingerprint: string;
+  productCount: number;
+  approvedPriceCount: number;
+  reviewRequiredPriceCount: number;
+  productsToCreate: number;
+  productsToUpdate: number;
+  productsUnchanged: number;
+  productsToArchive: number;
+  pricesToCreate: number;
+  pricesUnchanged: number;
+  pricesToArchive: number;
+  blockedCount: number;
+  prices: Array<{ priceId: string; code: string; productCode: string; action: string; blockedReason?: string }>;
+};
+
+type SyncRun = {
+  id: string;
+  operation: "DRY_RUN" | "SYNCHRONIZE" | "VERIFY";
+  status: string;
+  dryRun: boolean;
+  productsCreated: number;
+  productsUpdated: number;
+  productsArchived: number;
+  pricesCreated: number;
+  pricesArchived: number;
+  blockedCount: number;
+  warningCount: number;
+  startedAt: string;
+  completedAt: string | null;
+};
+
+type DriftEntry = { mappingId: string; providerObjectType: string; code: string; field: string; internalValue: string; providerValue: string };
+
+function StripeSyncPanel({
+  busy,
+  setBusy,
+  setActionMessage,
+  setActionError,
+}: {
+  busy: boolean;
+  setBusy: (v: boolean) => void;
+  setActionMessage: (v: string | null) => void;
+  setActionError: (v: string | null) => void;
+}) {
+  const [status, setStatus] = useState<StripeStatus | null>(null);
+  const [statusError, setStatusError] = useState<string | null>(null);
+  const [plan, setPlan] = useState<SyncPlan | null>(null);
+  const [history, setHistory] = useState<SyncRun[] | null>(null);
+  const [drift, setDrift] = useState<DriftEntry[] | null>(null);
+
+  const loadStatus = useCallback(async () => {
+    setStatusError(null);
+    try {
+      setStatus(await apiClient.get<StripeStatus>("/api/admin/commerce/stripe/status"));
+    } catch (error) {
+      setStatusError(getApiErrorMessage(error));
+    }
+  }, []);
+
+  const loadHistory = useCallback(async () => {
+    try {
+      setHistory(await apiClient.get<SyncRun[]>("/api/admin/commerce/stripe/history"));
+    } catch {
+      // History is supplementary — a failed load here doesn't block the rest of the panel.
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadStatus();
+    void loadHistory();
+  }, [loadStatus, loadHistory]);
+
+  const runDryRun = useCallback(async () => {
+    setBusy(true);
+    setActionMessage(null);
+    setActionError(null);
+    try {
+      const result = await apiClient.post<{ plan: SyncPlan; run: SyncRun }>("/api/admin/commerce/stripe/dry-run", {});
+      setPlan(result.plan);
+      setActionMessage("Dry run complete — review the plan below before synchronizing.");
+      await loadHistory();
+    } catch (error) {
+      setActionError(getApiErrorMessage(error));
+    } finally {
+      setBusy(false);
+    }
+  }, [setBusy, setActionMessage, setActionError, loadHistory]);
+
+  const runSynchronize = useCallback(async () => {
+    if (!plan) return;
+    if (!window.confirm(`Synchronize ${plan.pricesToCreate} price(s) and ${plan.productsToCreate + plan.productsToUpdate} product(s) to Stripe TEST mode? This will make real Stripe API calls (no money is ever collected).`)) return;
+    setBusy(true);
+    setActionMessage(null);
+    setActionError(null);
+    try {
+      const result = await apiClient.post<{ run: SyncRun; errors: string[] }>("/api/admin/commerce/stripe/synchronize", {
+        catalogueFingerprint: plan.catalogueFingerprint,
+        confirm: true,
+      });
+      setActionMessage(result.errors.length > 0 ? `Synchronized with ${result.errors.length} warning(s) — see history.` : "Synchronization complete.");
+      setPlan(null);
+      await Promise.all([loadStatus(), loadHistory()]);
+    } catch (error) {
+      setActionError(getApiErrorMessage(error));
+    } finally {
+      setBusy(false);
+    }
+  }, [plan, setBusy, setActionMessage, setActionError, loadStatus, loadHistory]);
+
+  const runVerify = useCallback(async () => {
+    setBusy(true);
+    setActionMessage(null);
+    setActionError(null);
+    try {
+      const result = await apiClient.post<{ verified: number; errored: number; drift: DriftEntry[] }>("/api/admin/commerce/stripe/verify", {});
+      setDrift(result.drift);
+      setActionMessage(`Verified ${result.verified} mapping(s) — ${result.drift.length} drift warning(s), ${result.errored} unreachable.`);
+      await loadHistory();
+    } catch (error) {
+      setActionError(getApiErrorMessage(error));
+    } finally {
+      setBusy(false);
+    }
+  }, [setBusy, setActionMessage, setActionError, loadHistory]);
+
+  const lastCompleted = history?.find((h) => h.operation === "SYNCHRONIZE" && (h.status === "COMPLETED" || h.status === "COMPLETED_WITH_WARNINGS"));
+  const lastFailed = history?.find((h) => h.operation === "SYNCHRONIZE" && h.status === "FAILED");
+
+  return (
+    <section className={panel}>
+      <div className="flex items-center justify-between">
+        <p className="text-sm font-semibold text-[#0B1630] dark:text-white">Stripe Synchronization</p>
+        {status && (
+          <span className={`rounded-full border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide ${status.testMode ? "border-[#159A6A]/40 bg-[#159A6A]/10 text-[#159A6A] dark:border-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-300" : "border-[#D9E2EC] text-[#7B879C] dark:border-[#1E2A42] dark:text-[#7F8DA6]"}`}>
+            {status.configured ? (status.accountReachable ? "Test Mode Connected" : "Test Mode — Unreachable") : "Not Connected"}
+          </span>
+        )}
+      </div>
+      <p className="mt-2 text-xs text-[#536078] dark:text-[#B8C4D8]">
+        Mode: TEST only. No checkout, no payment collection, no customer or subscription is ever created by this panel.
+      </p>
+
+      {statusError && <p className="mt-3 text-sm text-[#D84A4A] dark:text-rose-300">{statusError}</p>}
+
+      {status && (
+        <div className="mt-4 grid grid-cols-2 gap-4 text-sm sm:grid-cols-4">
+          <Stat label="Mapped products" value={status.productMappings} />
+          <Stat label="Mapped prices" value={status.priceMappings} />
+          <Stat label="Approved prices" value={status.approvedPriceCount} />
+          <Stat label="Review-required" value={status.reviewRequiredCount} />
+        </div>
+      )}
+
+      <div className="mt-4 grid grid-cols-1 gap-2 text-xs text-[#536078] dark:text-[#B8C4D8] sm:grid-cols-2">
+        <p>Last successful sync: {lastCompleted ? new Date(lastCompleted.completedAt ?? lastCompleted.startedAt).toLocaleString() : "never"}</p>
+        <p>Last failed sync: {lastFailed ? new Date(lastFailed.startedAt).toLocaleString() : "none"}</p>
+      </div>
+
+      <div className="mt-4 flex flex-wrap gap-2 border-t border-[#D9E2EC] pt-4 dark:border-[#1E2A42]">
+        <button type="button" disabled={busy} onClick={() => void runDryRun()} className="rounded-lg border border-[#0EA5E9] bg-[#0EA5E9] px-3 py-1.5 text-xs font-semibold text-white hover:opacity-90 disabled:opacity-50 dark:border-[#22D3EE] dark:bg-[#22D3EE] dark:text-[#050B18]">
+          Run dry run
+        </button>
+        <button type="button" disabled={busy || !plan} onClick={() => void runSynchronize()} className="rounded-lg border border-[#159A6A] bg-[#159A6A] px-3 py-1.5 text-xs font-semibold text-white hover:opacity-90 disabled:opacity-50">
+          Synchronize approved items
+        </button>
+        <button type="button" disabled={busy} onClick={() => void runVerify()} className="rounded-lg border border-[#D9E2EC] bg-white px-3 py-1.5 text-xs font-semibold text-[#0B1630] hover:bg-[#EEF3F8] disabled:opacity-50 dark:border-[#1E2A42] dark:bg-[#0B1426] dark:text-white dark:hover:bg-[#111D33]">
+          Verify mappings
+        </button>
+      </div>
+
+      {plan && (
+        <div className="mt-4 rounded-2xl border border-[#D9E2EC] p-4 text-xs dark:border-[#1E2A42]">
+          <p className="font-semibold text-[#0B1630] dark:text-white">Synchronization plan</p>
+          <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3">
+            <p>Products to create: <strong>{plan.productsToCreate}</strong></p>
+            <p>Products to update: <strong>{plan.productsToUpdate}</strong></p>
+            <p>Products unchanged: <strong>{plan.productsUnchanged}</strong></p>
+            <p>Products to archive: <strong>{plan.productsToArchive}</strong></p>
+            <p>Prices to create: <strong>{plan.pricesToCreate}</strong></p>
+            <p>Prices unchanged: <strong>{plan.pricesUnchanged}</strong></p>
+            <p>Prices to archive: <strong>{plan.pricesToArchive}</strong></p>
+            <p>Blocked: <strong>{plan.blockedCount}</strong></p>
+          </div>
+          {plan.prices.some((p) => p.action === "BLOCKED") && (
+            <div className="mt-3">
+              <p className="font-semibold text-[#B4841F] dark:text-[#E0B25C]">Blocked prices</p>
+              <ul className="mt-1 space-y-0.5 text-[#536078] dark:text-[#B8C4D8]">
+                {plan.prices.filter((p) => p.action === "BLOCKED").map((p) => (
+                  <li key={p.priceId}>{p.productCode} / {p.code} — {p.blockedReason}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
+      )}
+
+      {drift && drift.length > 0 && (
+        <div className="mt-4 rounded-2xl border border-[#D84A4A]/40 bg-[#D84A4A]/5 p-4 text-xs dark:border-rose-900 dark:bg-rose-950/20">
+          <p className="font-semibold text-[#D84A4A] dark:text-rose-300">Drift warnings — internal values were NOT changed</p>
+          <ul className="mt-1 space-y-0.5 text-[#536078] dark:text-[#B8C4D8]">
+            {drift.map((d, i) => (
+              <li key={`${d.mappingId}-${d.field}-${i}`}>{d.code} · {d.field}: internal={d.internalValue}, Stripe={d.providerValue}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {history && history.length > 0 && (
+        <div className="mt-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-[#536078] dark:text-[#7F8DA6]">History</p>
+          <div className="mt-2 overflow-x-auto rounded-2xl border border-[#D9E2EC] dark:border-[#1E2A42]">
+            <table className="min-w-full text-left text-xs">
+              <thead className="bg-[#EEF3F8] text-[#536078] dark:bg-[#111D33] dark:text-[#7F8DA6]">
+                <tr>
+                  <th className="px-3 py-2">Operation</th>
+                  <th className="px-3 py-2">Status</th>
+                  <th className="px-3 py-2">Created</th>
+                  <th className="px-3 py-2">Archived</th>
+                  <th className="px-3 py-2">Blocked</th>
+                  <th className="px-3 py-2">When</th>
+                </tr>
+              </thead>
+              <tbody className="text-[#0B1630] dark:text-[#F7FAFC]">
+                {history.slice(0, 10).map((h) => (
+                  <tr key={h.id} className="border-t border-[#D9E2EC] dark:border-[#1E2A42]">
+                    <td className="px-3 py-2">{h.operation}{h.dryRun ? " (dry run)" : ""}</td>
+                    <td className="px-3 py-2">{h.status}</td>
+                    <td className="px-3 py-2">{h.productsCreated + h.pricesCreated}</td>
+                    <td className="px-3 py-2">{h.productsArchived + h.pricesArchived}</td>
+                    <td className="px-3 py-2">{h.blockedCount}</td>
+                    <td className="px-3 py-2">{new Date(h.startedAt).toLocaleString()}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+    </section>
   );
 }
 

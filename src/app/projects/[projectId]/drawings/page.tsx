@@ -1,5 +1,6 @@
 "use client";
 
+import { put as putToBlob } from "@vercel/blob/client";
 import { AlertTriangle, ArrowLeft, Sparkles, Upload, X } from "lucide-react";
 import Link from "next/link";
 import { use, useCallback, useEffect, useRef, useState } from "react";
@@ -12,11 +13,13 @@ import DrawingCard, { type DrawingView } from "@/components/drawings/drawing-car
 import {
   DRAWING_DISCIPLINES,
   DRAWING_EXTENSIONS,
-  DRAWING_MAX_FILE_SIZE_BYTES,
+  DRAWING_UPLOAD_MAX_BYTES_DEFAULT,
   DRAWING_TYPES,
   isDrawingExtensionPreviewable,
   type DrawingMetadataInput,
 } from "@/lib/validation/drawing-schema";
+
+type UploadStage = "preparing" | "uploading" | "finalizing" | "failed";
 
 type ProjectView = { id: string; name: string; reference: string };
 
@@ -36,13 +39,27 @@ function getExtension(fileName: string): string {
   return parts.length > 1 ? parts[parts.length - 1].toLowerCase() : "";
 }
 
-/** fetch() does not reliably expose upload progress across browsers — XHR does, via upload.onprogress. This is the only place in the app that needs real byte-level progress. */
-function uploadDrawingWithProgress(
+type AuthorizeUploadResponse = {
+  sessionId: string;
+  uploadToken: string;
+  pathname: string;
+  maxSizeBytes: number;
+  expiresAt: string;
+};
+
+/** Server-buffered fallback path — only reachable when STORAGE_PROVIDER isn't vercel-blob (local dev without a Blob token). Never used in production, where direct upload is always available. */
+function uploadDrawingViaLegacyRoute(
   url: string,
-  formData: FormData,
+  file: File,
+  metadata: DrawingMetadataInput,
   onProgress: (percent: number) => void,
 ): Promise<{ status: number; body: unknown }> {
   return new Promise((resolve, reject) => {
+    const formData = new FormData();
+    formData.set("file", file);
+    for (const [key, value] of Object.entries(metadata)) {
+      if (value) formData.set(key, value);
+    }
     const xhr = new XMLHttpRequest();
     xhr.open("POST", url);
     xhr.upload.onprogress = (event) => {
@@ -72,6 +89,7 @@ export default function ProjectDrawingsPage(props: { params: Promise<{ projectId
   const [isDragging, setIsDragging] = useState(false);
   const [stagedFile, setStagedFile] = useState<File | null>(null);
   const [metadata, setMetadata] = useState<DrawingMetadataInput>(EMPTY_METADATA);
+  const [uploadStage, setUploadStage] = useState<UploadStage | null>(null);
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [validationError, setValidationError] = useState<string | null>(null);
@@ -112,8 +130,8 @@ export default function ProjectDrawingsPage(props: { params: Promise<{ projectId
       setValidationError(`".${extension || "?"}" is not a supported drawing format. Supported: ${DRAWING_EXTENSIONS.join(", ")}.`);
       return;
     }
-    if (file.size > DRAWING_MAX_FILE_SIZE_BYTES) {
-      setValidationError(`This file is larger than the ${Math.floor(DRAWING_MAX_FILE_SIZE_BYTES / (1024 * 1024))}MB upload limit.`);
+    if (file.size > DRAWING_UPLOAD_MAX_BYTES_DEFAULT) {
+      setValidationError(`This file is larger than the ${Math.floor(DRAWING_UPLOAD_MAX_BYTES_DEFAULT / (1024 * 1024))}MB upload limit.`);
       return;
     }
     if (file.size === 0) {
@@ -133,31 +151,77 @@ export default function ProjectDrawingsPage(props: { params: Promise<{ projectId
 
   async function submitUpload() {
     if (!stagedFile) return;
-    setUploadProgress(0);
     setUploadError(null);
+    setUploadStage("preparing");
+    setUploadProgress(0);
     try {
-      const formData = new FormData();
-      formData.set("file", stagedFile);
-      for (const [key, value] of Object.entries(metadata)) {
-        if (value) formData.set(key, value);
+      const authorization = await apiClient.post<AuthorizeUploadResponse | { directUploadUnsupported: true }>(
+        `/api/projects/${encodeURIComponent(params.projectId)}/drawings/upload-authorization`,
+        {
+          originalName: stagedFile.name,
+          declaredMimeType: stagedFile.type || "application/octet-stream",
+          declaredByteSize: stagedFile.size,
+        },
+      ).catch((error) => {
+        // DIRECT_UPLOAD_NOT_SUPPORTED (local dev without vercel-blob configured) — fall back to the legacy server-buffered path.
+        if (getApiErrorMessage(error).includes("STORAGE_PROVIDER=vercel-blob")) {
+          return { directUploadUnsupported: true as const };
+        }
+        throw error;
+      });
+
+      if ("directUploadUnsupported" in authorization) {
+        setUploadStage("uploading");
+        const response = await uploadDrawingViaLegacyRoute(
+          `/api/projects/${encodeURIComponent(params.projectId)}/drawings`,
+          stagedFile,
+          metadata,
+          setUploadProgress,
+        );
+        const body = response.body as { ok?: boolean; error?: { message?: string } } | null;
+        if (response.status < 200 || response.status >= 300 || !body?.ok) {
+          throw new Error(body?.error?.message ?? "The upload could not be completed.");
+        }
+        setStagedFile(null);
+        setUploadStage(null);
+        setUploadProgress(null);
+        setMetadata(EMPTY_METADATA);
+        await load();
+        return;
       }
-      const response = await uploadDrawingWithProgress(
-        `/api/projects/${encodeURIComponent(params.projectId)}/drawings`,
-        formData,
-        setUploadProgress,
+
+      setUploadStage("uploading");
+      await putToBlob(authorization.pathname, stagedFile, {
+        access: "private",
+        token: authorization.uploadToken,
+        contentType: stagedFile.type || "application/octet-stream",
+        multipart: stagedFile.size > 32 * 1024 * 1024,
+        onUploadProgress: (event) => setUploadProgress(Math.round(event.percentage)),
+      });
+
+      setUploadStage("finalizing");
+      await apiClient.post(
+        `/api/projects/${encodeURIComponent(params.projectId)}/drawings/upload-authorization/${authorization.sessionId}/finalize`,
+        { metadata },
       );
-      const body = response.body as { ok?: boolean; error?: { message?: string } } | null;
-      if (response.status < 200 || response.status >= 300 || !body?.ok) {
-        throw new Error(body?.error?.message ?? "The upload could not be completed.");
-      }
+
       setStagedFile(null);
+      setUploadStage(null);
       setUploadProgress(null);
       setMetadata(EMPTY_METADATA);
       await load();
     } catch (error) {
       setUploadError(getApiErrorMessage(error));
+      setUploadStage("failed");
       setUploadProgress(null);
     }
+  }
+
+  function cancelStagedUpload() {
+    setStagedFile(null);
+    setUploadStage(null);
+    setUploadProgress(null);
+    setUploadError(null);
   }
 
   async function handleDelete(drawingId: string) {
@@ -208,7 +272,7 @@ export default function ProjectDrawingsPage(props: { params: Promise<{ projectId
 
       {/* 2-7. Upload zone, browse action, format/size disclosure, progress, validation feedback, failed-upload recovery */}
       <div className={panel}>
-        <SectionHeader title="Upload a drawing" description={`Supported: ${DRAWING_EXTENSIONS.join(", ")} · Maximum ${Math.floor(DRAWING_MAX_FILE_SIZE_BYTES / (1024 * 1024))}MB per file`} />
+        <SectionHeader title="Upload a drawing" description={`Supported: ${DRAWING_EXTENSIONS.join(", ")} · Maximum ${Math.floor(DRAWING_UPLOAD_MAX_BYTES_DEFAULT / (1024 * 1024))}MB per file`} />
 
         {!stagedFile ? (
           <div
@@ -227,7 +291,7 @@ export default function ProjectDrawingsPage(props: { params: Promise<{ projectId
               <Upload className="h-5 w-5 text-[#0077B6] dark:text-[#21C7F3]" aria-hidden="true" />
             </span>
             <p className="text-sm font-semibold text-[#08152E] dark:text-white">Drag and drop a drawing here, or click to browse</p>
-            <p className="text-xs text-[#7B879C] dark:text-[#8CA0BE]">{DRAWING_EXTENSIONS.join(", ")} · up to {Math.floor(DRAWING_MAX_FILE_SIZE_BYTES / (1024 * 1024))}MB</p>
+            <p className="text-xs text-[#7B879C] dark:text-[#8CA0BE]">{DRAWING_EXTENSIONS.join(", ")} · up to {Math.floor(DRAWING_UPLOAD_MAX_BYTES_DEFAULT / (1024 * 1024))}MB</p>
             <input
               ref={fileInputRef}
               type="file"
@@ -247,7 +311,7 @@ export default function ProjectDrawingsPage(props: { params: Promise<{ projectId
                 <p className="truncate text-sm font-semibold text-[#08152E] dark:text-white">{stagedFile.name}</p>
                 <p className="text-xs text-[#7B879C] dark:text-[#8CA0BE]">{(stagedFile.size / 1024).toFixed(0)} KB</p>
               </div>
-              {uploadProgress === null && (
+              {uploadStage === null && (
                 <button type="button" onClick={() => { setStagedFile(null); setUploadError(null); }} aria-label="Remove staged file" className="flex h-8 w-8 items-center justify-center rounded-lg border border-[#D5E0EC] text-[#536078] hover:bg-white dark:border-[#20304D] dark:text-[#8CA0BE] dark:hover:bg-[#091326]">
                   <X className="h-4 w-4" aria-hidden="true" />
                 </button>
@@ -311,23 +375,38 @@ export default function ProjectDrawingsPage(props: { params: Promise<{ projectId
               </label>
             </div>
 
-            {uploadProgress !== null && (
+            {(uploadStage === "preparing" || uploadStage === "uploading" || uploadStage === "finalizing") && (
               <div className="mt-4">
-                <div className="h-2 w-full overflow-hidden rounded-full bg-[#D5E0EC] dark:bg-[#20304D]" role="img" aria-label={`Upload progress: ${uploadProgress}%`}>
-                  <span className="block h-full rounded-full bg-[#009FE3] transition-[width] dark:bg-[#21C7F3]" style={{ width: `${uploadProgress}%` }} />
-                </div>
-                <p className="mt-1 text-xs text-[#7B879C] dark:text-[#8CA0BE]">Uploading… {uploadProgress}%</p>
+                {uploadStage === "uploading" && uploadProgress !== null ? (
+                  <div className="h-2 w-full overflow-hidden rounded-full bg-[#D5E0EC] dark:bg-[#20304D]" role="img" aria-label={`Upload progress: ${uploadProgress}%`}>
+                    <span className="block h-full rounded-full bg-[#009FE3] transition-[width] dark:bg-[#21C7F3]" style={{ width: `${uploadProgress}%` }} />
+                  </div>
+                ) : (
+                  <div className="h-2 w-full overflow-hidden rounded-full bg-[#D5E0EC] dark:bg-[#20304D]">
+                    <span className="block h-full w-1/3 animate-pulse rounded-full bg-[#009FE3] dark:bg-[#21C7F3]" />
+                  </div>
+                )}
+                <p className="mt-1 text-xs text-[#7B879C] dark:text-[#8CA0BE]">
+                  {uploadStage === "preparing" && "Preparing…"}
+                  {uploadStage === "uploading" && `Uploading… ${uploadProgress ?? 0}%`}
+                  {uploadStage === "finalizing" && "Finalizing…"}
+                </p>
+                <button type="button" onClick={cancelStagedUpload} className="mt-2 text-xs font-semibold text-[#536078] underline dark:text-[#8CA0BE]">Cancel</button>
               </div>
             )}
 
-            {uploadError && (
+            {uploadStage === "failed" && uploadError && (
               <div className="mt-4 rounded-xl border border-[#D84A4A]/30 bg-[#D84A4A]/5 px-4 py-3 text-sm text-[#D84A4A] dark:border-rose-900 dark:bg-rose-950/20 dark:text-rose-300">
-                <p>{uploadError}</p>
-                <button type="button" onClick={() => void submitUpload()} className="mt-2 text-xs font-semibold underline">Try again</button>
+                <p className="font-semibold">Failed</p>
+                <p className="mt-1">{uploadError}</p>
+                <div className="mt-2 flex gap-3">
+                  <button type="button" onClick={() => void submitUpload()} className="text-xs font-semibold underline">Retry</button>
+                  <button type="button" onClick={cancelStagedUpload} className="text-xs font-semibold underline">Cancel</button>
+                </div>
               </div>
             )}
 
-            {uploadProgress === null && (
+            {uploadStage === null && (
               <div className="mt-4 flex gap-2">
                 <button type="button" onClick={() => void submitUpload()} className="rounded-2xl bg-[#009FE3] px-4 py-2 text-sm font-semibold text-white hover:opacity-90 dark:bg-[#21C7F3] dark:text-[#040A16]">
                   Upload drawing
@@ -372,7 +451,7 @@ export default function ProjectDrawingsPage(props: { params: Promise<{ projectId
             </div>
             <p className="mt-4 text-base font-semibold text-[#08152E] dark:text-white">Upload your first drawing</p>
             <p className="mt-1 max-w-md text-sm text-[#536078] dark:text-[#8CA0BE]">
-              PDF, PNG, JPG, TIFF, DWG, DXF, IFC, RVT, or ZIP — up to {Math.floor(DRAWING_MAX_FILE_SIZE_BYTES / (1024 * 1024))}MB. Once uploaded, it flows into the rest of the workspace.
+              PDF, PNG, JPG, TIFF, DWG, DXF, IFC, RVT, or ZIP — up to {Math.floor(DRAWING_UPLOAD_MAX_BYTES_DEFAULT / (1024 * 1024))}MB. Once uploaded, it flows into the rest of the workspace.
             </p>
             <div className="mt-4 flex items-center gap-2 text-xs text-[#7B879C] dark:text-[#7F8DA6]">
               <span className="rounded-full border border-[#D5E0EC] px-2.5 py-1 dark:border-[#20304D]">Upload</span>

@@ -144,6 +144,56 @@ export async function listRegisteredDatasetsSummary(owner: PlatformActor) {
   );
 }
 
+/**
+ * CATALOGUE-COMMERCIAL Checkpoint 1A — read-only inspection only, no
+ * mutation. Production evidence showed a dataset's currentProductionItemCount
+ * above zero with latestJob null (no MasterCatalogueImportJob row for that
+ * datasetId) — meaning those items did not come through this
+ * datasetId-tracked pipeline. This lists their raw provenance
+ * (sourceBatchId, which points at the older, separate
+ * MasterCatalogueImportBatch table; createdAt) so the platform owner can
+ * see where they actually came from before deciding whether to execute the
+ * dataset's own governed import alongside them.
+ */
+export async function inspectDatasetProductionItems(owner: PlatformActor, datasetId: string) {
+  requireOwner(owner);
+  const dataset = requireDatasetDefinition(datasetId);
+  const discipline = await prisma.masterDiscipline.findUnique({ where: { key: dataset.disciplineKey } });
+  if (!discipline) return { disciplineReady: false, items: [] };
+
+  const items = await prisma.masterItem.findMany({
+    where: { disciplineId: discipline.id },
+    select: {
+      id: true,
+      itemCode: true,
+      name: true,
+      status: true,
+      createdAt: true,
+      sourceBatchId: true,
+      sourceBatch: { select: { uploadedFileName: true, status: true, executedAt: true, createdAt: true } },
+    },
+    orderBy: { createdAt: "asc" },
+    take: 200,
+  });
+
+  return {
+    disciplineReady: true,
+    disciplineKey: dataset.disciplineKey,
+    totalCount: items.length,
+    items: items.map((item) => ({
+      id: item.id,
+      itemCode: item.itemCode,
+      name: item.name,
+      status: item.status,
+      createdAt: item.createdAt,
+      sourceBatchId: item.sourceBatchId,
+      sourceBatchFileName: item.sourceBatch?.uploadedFileName ?? null,
+      sourceBatchStatus: item.sourceBatch?.status ?? null,
+      sourceBatchExecutedAt: item.sourceBatch?.executedAt ?? null,
+    })),
+  };
+}
+
 export async function listJobsForDataset(owner: PlatformActor, datasetId: string) {
   requireOwner(owner);
   requireDatasetDefinition(datasetId);

@@ -3,6 +3,16 @@
 import Link from "next/link";
 import { useState, type FormEvent } from "react";
 import { apiClient, getApiErrorMessage } from "@/lib/api/client";
+import type { Metadata } from "next";
+
+export const metadata: Metadata = {
+  title: "Register | Quantara",
+  description: "Request early access to Quantara.",
+  alternates: {
+    canonical: "/register"
+  }
+};
+
 
 export default function RegisterPage() {
   const [companyName, setCompanyName] = useState("");
@@ -21,21 +31,13 @@ export default function RegisterPage() {
   const [error, setError] = useState<string | null>(null);
   const [registered, setRegistered] = useState(false);
 
-  let initialPlan = "starter";
-  if (typeof window !== "undefined") {
-    const searchParams = new URLSearchParams(window.location.search);
-    const p = searchParams.get("plan");
-    if (p) initialPlan = p;
-  }
-  const [interestTier, setInterestTier] = useState(initialPlan);
-
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
     setIsSubmitting(true);
     setError(null);
     try {
       await apiClient.post("/api/auth/register", { 
-        companyName, fullName, email, password, interestTier,
+        companyName, fullName, email, password,
         role, country, primaryIndustry, intendedUse, approximateVolume, consent
       });
       setRegistered(true);
@@ -187,19 +189,6 @@ export default function RegisterPage() {
             </div>
           </div>
 
-          <div>
-            <label className="text-sm text-slate-300" htmlFor="interestTier">Interest Tier</label>
-            <select
-              id="interestTier"
-              value={interestTier}
-              onChange={(event) => setInterestTier(event.target.value)}
-              className="mt-1 w-full rounded-2xl border border-slate-800 bg-slate-900 px-4 py-3 text-sm text-white outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 appearance-none"
-            >
-              <option value="starter">Starter Interest</option>
-              <option value="professional">Professional Interest</option>
-              <option value="business">Business Interest</option>
-            </select>
-          </div>
 
           <div>
             <label className="text-sm text-slate-300" htmlFor="password">Password</label>

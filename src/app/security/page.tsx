@@ -1,8 +1,10 @@
 import React from "react";
 import Link from "next/link";
 import { Metadata } from "next";
+import PublicFooter from "@/components/layout/public-footer";
 
 export const metadata: Metadata = {
+  alternates: { canonical: "/security" },
   title: "Security and Controlled Early Access",
   description: "Security information for Quantara Early Access.",
 };
@@ -75,6 +77,7 @@ export default function SecurityPage() {
           </div>
         </section>
       </div>
+      <PublicFooter />
     </div>
   );
 }

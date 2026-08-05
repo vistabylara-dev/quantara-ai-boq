@@ -26,6 +26,7 @@ export default function PublicFooter() {
               <li><Link href="/about" className="hover:text-slate-900 dark:hover:text-white">About</Link></li>
               <li><Link href="/resources" className="hover:text-slate-900 dark:hover:text-white">Resources</Link></li>
               <li><Link href="/industries" className="hover:text-slate-900 dark:hover:text-white">Industries</Link></li>
+              <li><Link href="/gcc-boq-software" className="hover:text-slate-900 dark:hover:text-white">GCC BOQ Software</Link></li>
               <li><Link href="/register" className="hover:text-slate-900 dark:hover:text-white">Request Early Access</Link></li>
               <li><Link href="/contact-sales" className="hover:text-slate-900 dark:hover:text-white">Contact Sales</Link></li>
             </ul>

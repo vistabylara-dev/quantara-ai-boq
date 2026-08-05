@@ -27,7 +27,10 @@ export default function ConditionalAppShell({ children }: { children: ReactNode 
     "/industries", "/boq-software-for-contractors", "/boq-software-for-quantity-surveyors",
     "/boq-software-for-mep-contractors", "/boq-software-for-hvac-contractors",
     "/boq-software-for-fit-out-companies", "/boq-software-for-fire-fighting-contractors",
-    "/boq-software-for-facilities-management", "/boq-software-for-engineering-consultants"
+    "/boq-software-for-facilities-management", "/boq-software-for-engineering-consultants",
+    "/gcc-boq-software", "/boq-software-uae", "/boq-software-dubai", "/boq-software-abu-dhabi",
+    "/construction-estimating-software-uae", "/mep-estimating-software-uae",
+    "/boq-software-saudi-arabia", "/boq-software-qatar", "/boq-software-oman"
   ];
   
   if (

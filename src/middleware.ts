@@ -51,6 +51,15 @@ const PUBLIC_ROUTES = new Set([
   "/boq-software-for-fire-fighting-contractors",
   "/boq-software-for-facilities-management",
   "/boq-software-for-engineering-consultants",
+  "/gcc-boq-software",
+  "/boq-software-uae",
+  "/boq-software-dubai",
+  "/boq-software-abu-dhabi",
+  "/construction-estimating-software-uae",
+  "/mep-estimating-software-uae",
+  "/boq-software-saudi-arabia",
+  "/boq-software-qatar",
+  "/boq-software-oman",
 ]);
 
 const PUBLIC_PREFIXES = [

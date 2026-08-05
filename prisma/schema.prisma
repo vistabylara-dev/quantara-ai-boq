@@ -1111,26 +1111,30 @@ model MasterItemStandardApplicability {
 }
 
 model IndustryDataPackage {
-  id            String                       @id @default(uuid()) @db.Uuid
-  key           String                       @unique
-  name          String
-  description   String                       @default("")
-  disciplineId  String                       @db.Uuid
-  packageType   IndustryPackageType
-  version       Int                          @default(1)
-  itemCount     Int                          @default(0)
-  monthlyPrice  Decimal                      @default(0) @db.Decimal(12, 2)
-  annualPrice   Decimal                      @default(0) @db.Decimal(12, 2)
-  currency      String                       @default("USD")
-  status        IndustryPackageStatus        @default(ACTIVE)
-  isFeatured    Boolean                      @default(false)
-  metadataJson  Json?
-  createdAt     DateTime                     @default(now())
-  updatedAt     DateTime                     @updatedAt
-  discipline    MasterDiscipline             @relation(fields: [disciplineId], references: [id], onDelete: Restrict)
-  items         IndustryDataPackageItem[]
-  subscriptions CompanyPackageSubscription[]
-  libraryItems  CompanyLibraryItem[]
+  id               String                       @id @default(uuid()) @db.Uuid
+  key              String                       @unique
+  name             String
+  description      String                       @default("")
+  disciplineId     String                       @db.Uuid
+  packageType      IndustryPackageType
+  version          Int                          @default(1)
+  itemCount        Int                          @default(0)
+  monthlyPrice     Decimal                      @default(0) @db.Decimal(12, 2)
+  annualPrice      Decimal                      @default(0) @db.Decimal(12, 2)
+  currency         String                       @default("USD")
+  status           IndustryPackageStatus        @default(ACTIVE)
+  isFeatured       Boolean                      @default(false)
+  metadataJson     Json?
+  createdAt        DateTime                     @default(now())
+  updatedAt        DateTime                     @updatedAt
+  discipline       MasterDiscipline             @relation(fields: [disciplineId], references: [id], onDelete: Restrict)
+  items            IndustryDataPackageItem[]
+  subscriptions    CompanyPackageSubscription[]
+  libraryItems     CompanyLibraryItem[]
+  /// STRIPE-1B — the CommerceProduct(s) (if any) that sell access to this
+  /// package through the new catalogue. Nullable/empty is normal and
+  /// expected for any package not yet productized.
+  commerceProducts CommerceProduct[]
 
   @@index([disciplineId])
   @@index([packageType])
@@ -3487,4 +3491,159 @@ model IntegrationEvent {
   @@index([externalConnectionId])
   @@index([projectIntegrationId])
   @@index([eventType])
+}
+
+// ---------------------------------------------------------------------------
+// STRIPE-1B — internal commerce product catalogue
+// ---------------------------------------------------------------------------
+// The authoritative, server-controlled product/price/entitlement catalogue a
+// later Stripe integration phase will synchronize against and sell. No
+// payment provider is wired to any of this yet — CommercePrice.amountMinor is
+// deliberately an integer minor-unit amount (matching Stripe's own price
+// representation) rather than Decimal, specifically so the eventual Stripe
+// sync never has to translate between two different money representations.
+// Deliberately separate from SoftwarePlan/IndustryDataPackage (STRIPE-1A's
+// audit found those built for an earlier dev-only-activation phase, USD-
+// denominated, with none of the approved AED product codes) rather than
+// repurposing them — this catalogue can be seeded and inspected today with
+// zero risk to the existing trial/subscription paths those models serve.
+
+enum CommerceProductType {
+  SUBSCRIPTION
+  ONE_TIME
+  INDUSTRY_ACCESS
+  AI_CREDIT_PACK
+  ADD_ON
+  ENTERPRISE
+}
+
+/// How a customer is expected to acquire this product. DIRECT is the only
+/// mode any future checkout phase may treat as "add to cart and pay" — every
+/// other mode must route to a human process (contact-sales / quotation),
+/// never a live price the customer can self-checkout with.
+enum CommercePurchaseMode {
+  DIRECT
+  QUOTATION_REQUIRED
+  CONTACT_SALES
+}
+
+enum CommerceBillingInterval {
+  ONE_TIME
+  MONTH
+  YEAR
+}
+
+/// A controlled enum, not a free string, specifically to prevent the
+/// currency-inconsistency STRIPE-1A found across SoftwarePlan/IndustryData-
+/// Package (USD by default) vs Project/RateCatalogueItem (AED by default).
+/// AED is the only launch currency; extend this enum, never widen it to a
+/// free string, when a second currency is genuinely needed.
+enum CommerceCurrency {
+  AED
+}
+
+model CommerceProduct {
+  id                  String               @id @default(uuid()) @db.Uuid
+  code                String               @unique
+  type                CommerceProductType
+  name                String
+  shortDescription    String               @default("")
+  description         String               @default("")
+  purchaseMode        CommercePurchaseMode @default(DIRECT)
+  isActive            Boolean              @default(true)
+  isPublic            Boolean              @default(true)
+  sortOrder           Int                  @default(0)
+  /// Set only for type: INDUSTRY_ACCESS, and only when a real backing
+  /// IndustryDataPackage exists — never set on a product for a dataset that
+  /// doesn't exist yet (the seed script enforces this; see its "skipped"
+  /// count for industries with no backing package).
+  industryPackageId   String?              @db.Uuid
+  metadataJson        Json?
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+  industryPackage     IndustryDataPackage? @relation(fields: [industryPackageId], references: [id], onDelete: SetNull)
+  prices              CommercePrice[]
+  entitlementTemplate EntitlementTemplate?
+
+  @@index([type])
+  @@index([isActive])
+  @@index([isPublic])
+  @@index([industryPackageId])
+}
+
+/// Prices are treated as append-only once a product has ever been used
+/// commercially (no later phase in this codebase may destructively edit a
+/// price's amount/currency/interval after the fact) — a price change is
+/// always a new CommercePrice row with a new code, with the old row's
+/// isActive flipped to false, never an in-place mutation. Nothing enforces
+/// that immutability at the database level in this phase (no purchase can
+/// reference a price yet), but the service layer's update path already
+/// follows this rule so later phases inherit safe behavior by default.
+model CommercePrice {
+  id              String                  @id @default(uuid()) @db.Uuid
+  productId       String                  @db.Uuid
+  code            String                  @unique
+  /// Integer minor units — e.g. AED 149.00 is stored as 14900. Never Float.
+  amountMinor     Int
+  currency        CommerceCurrency        @default(AED)
+  billingInterval CommerceBillingInterval
+  /// True when amountMinor is an indicative "starting from" price rather
+  /// than an exact purchasable amount (e.g. api_access_monthly_from_aed_499,
+  /// white_label_from_aed_5000) — the UI must render "from AED X" and must
+  /// never present this as a fixed-price direct-checkout amount.
+  isFromPrice     Boolean                 @default(false)
+  isActive        Boolean                 @default(true)
+  validFrom       DateTime                @default(now())
+  validUntil      DateTime?
+  createdAt       DateTime                @default(now())
+  updatedAt       DateTime                @updatedAt
+  product         CommerceProduct         @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([productId])
+  @@index([isActive])
+  @@index([billingInterval])
+}
+
+/// The typed commercial grant a product confers. One row per product — kept
+/// 1:1 rather than versioned in this phase (no purchase can consume one yet,
+/// so there is nothing to keep historically pinned to an old version). Every
+/// field here is a real, named column rather than JSON specifically so a
+/// later enforcement pass can query/validate against it directly; metadataJson
+/// exists only for genuinely exceptional future fields, never as a substitute
+/// for a real column.
+model EntitlementTemplate {
+  id                              String          @id @default(uuid()) @db.Uuid
+  productId                       String          @unique @db.Uuid
+  maxUsers                        Int?
+  maxWorkspaces                   Int?
+  maxActiveProjects               Int?
+  maxBoqGenerationsPerMonth       Int?
+  maxTechnicalReportsPerMonth     Int?
+  maxWatermarkFreeExportsPerMonth Int?
+  /// JSON string array, e.g. ["PDF", "DOCX"] — matches this codebase's
+  /// existing convention of *Json fields for list-shaped data (see
+  /// MasterItem.defaultTagsJson/searchKeywordsJson) rather than a native
+  /// Postgres array, for consistency.
+  permittedExportFormatsJson      Json?
+  removesWatermark                Boolean         @default(false)
+  allowsCompanyBranding           Boolean         @default(false)
+  /// STRIPE-1A found assertFeatureAccess("api-access") already exists but is
+  /// dead code with zero call sites — this field records the *commercial
+  /// grant*, not enforcement; the admin UI must say so truthfully (a static
+  /// per-field enforcement-status map lives in entitlement-template-service.ts,
+  /// not the schema, since it's a fact about the app's current code, not data).
+  allowsApiAccess                 Boolean         @default(false)
+  allowsWhiteLabel                Boolean         @default(false)
+  /// JSON string array of IndustryDataPackage.key values this product
+  /// grants access to — deliberately separate from CommerceProduct's own
+  /// single industryPackageId, since an ADD_ON or SUBSCRIPTION product's
+  /// entitlement template can grant more than one package.
+  industryPackageKeysJson         Json?
+  aiCreditsGranted                Int?
+  downloadLimit                   Int?
+  entitlementDurationDays         Int?
+  metadataJson                    Json?
+  createdAt                       DateTime        @default(now())
+  updatedAt                       DateTime        @updatedAt
+  product                         CommerceProduct @relation(fields: [productId], references: [id], onDelete: Cascade)
 }

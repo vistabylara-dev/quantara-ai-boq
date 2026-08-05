@@ -1,5 +1,6 @@
 import React from "react";
 import Link from "next/link";
+import PublicBreadcrumb from "@/components/ui/public-breadcrumb";
 import { Metadata } from "next";
 import { publicNavigation, legalNavigation } from "@/config/public-navigation";
 import PublicHeader from "@/components/layout/public-header";
@@ -37,22 +38,12 @@ export default function SiteMapPage() {
   return (
     <div className="flex flex-col min-h-screen bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100">
       <PublicHeader />
+      <PublicBreadcrumb items={[{ label: "Home", href: "/" }, { label: "Site Map", href: "/site-map" }]} />
       
       <main className="flex-1 w-full max-w-4xl mx-auto px-4 py-12 md:py-16">
-        <script
-          type="application/ld+json"
-          dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbSchema) }}
-        />
         
-        <nav aria-label="Breadcrumb" className="mb-8 text-sm">
-          <ol className="flex items-center gap-2">
-            <li>
-              <Link href="/" className="text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white">Home</Link>
-            </li>
-            <li className="text-slate-400">/</li>
-            <li className="text-slate-900 dark:text-white font-medium" aria-current="page">Sitemap</li>
-          </ol>
-        </nav>
+        
+        
 
         <h1 className="text-4xl md:text-5xl font-bold tracking-tight mb-6">Quantara Sitemap</h1>
         <p className="text-lg text-slate-600 dark:text-slate-300 mb-12 max-w-2xl">

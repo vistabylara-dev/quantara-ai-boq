@@ -60,35 +60,25 @@ const faqs = [
 ];
 
 const governedWorkflow = [
-  { title: "Create a Project", desc: "Start by creating a project and entering the relevant project information. The project becomes the controlled workspace for drawings, BOQ records, revisions and generated documents." },
-  { title: "Open the Project", desc: "Open the required project from the project list. Confirm that you are working inside the correct client and project record before uploading documents or creating BOQ information." },
-  { title: "Open Drawings", desc: "Select the Drawings area inside the project. This is where supported project drawing files are uploaded, previewed and stored." },
-  { title: "Upload the PDF", desc: "Upload the supported PDF drawing or document. File processing and preview availability may depend on the file size, format, scan quality and current Early Access limits." },
-  { title: "Preview and Store the Drawing", desc: "Review the uploaded PDF preview and confirm that the correct drawing and revision have been added to the project. The source document should remain connected to the project record for reference and professional review." },
-  { title: "Create the BOQ", desc: "After the drawing is available within the project, begin creating the BOQ. Organize the required sections and items, then review descriptions, quantities, units, specifications, assumptions and exclusions before generating or issuing any document." }
+  { title: "Create Project", desc: "Start by creating a project and entering the relevant project information. The project becomes the controlled workspace." },
+  { title: "Choose Data Sources", desc: "Select the types of sources that will contribute to this project." },
+  { title: "Upload, Import or Connect", desc: "Bring data in via manual upload, structured import, or an authorized connected application." },
+  { title: "Normalize and Organize Source Data", desc: "Quantara normalizes the incoming data into a structured format." },
+  { title: "Preview and Review", desc: "Review the source data and extracted information for accuracy." },
+  { title: "Speak or Type Instructions", desc: "Where available, users can speak or type instructions.", label: "In Development" },
+  { title: "AI Proposes Structured Changes", desc: "Quantara prepares structured proposed changes for review.", label: "In Development" },
+  { title: "Review Assumptions, Warnings and Affected Records", desc: "Check all proposed changes, assumptions, and potential warnings." },
+  { title: "Approve All, Approve Selected, Edit or Reject", desc: "The user has full control to accept or discard proposed changes." },
+  { title: "Apply Only Approved Operations", desc: "Quantara applies only the operations the user approves." },
+  { title: "Create or Update a Governed Revision", desc: "A formal revision is recorded preserving history." },
+  { title: "Complete Professional Review", desc: "A qualified professional must review all data and decisions." },
+  { title: "Generate a Traceable BOQ or Technical Report", desc: "Generate professional outputs linked directly to their sources." }
 ];
 
 export default function HomePage() {
   return (
     <div className="flex flex-col min-h-screen bg-white dark:bg-slate-950">
-      <header className="sticky top-0 z-50 w-full border-b border-slate-200 dark:border-slate-800 bg-white/80 dark:bg-slate-950/80 backdrop-blur">
-        <div className="container mx-auto px-4 h-16 flex items-center justify-between">
-          <Link href="/" className="font-bold text-xl tracking-tight text-slate-900 dark:text-white flex items-center gap-2" aria-label="Quantara Home">
-            <img src="/logo.png" alt="Quantara Logo" className="w-8 h-8 rounded-lg shadow-sm" />
-            Quantara
-          </Link>
-          <nav className="hidden md:flex items-center gap-6">
-            <Link href="/features" className="text-sm font-medium text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white">Features</Link>
-            <Link href="/contact-sales" className="text-sm font-medium text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white">Contact Sales</Link>
-          </nav>
-          <div className="flex items-center gap-4">
-            <Link href="/login" className="text-sm font-medium text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white">Sign In</Link>
-            <Link href="/register" className="inline-flex items-center justify-center rounded-md text-sm font-medium bg-blue-600 text-white hover:bg-blue-700 h-9 px-4 py-2">
-              Request Early Access
-            </Link>
-          </div>
-        </div>
-      </header>
+      <PublicHeader />
 
       <section className="pt-24 pb-16 px-4">
         <div className="container mx-auto text-center max-w-4xl">
@@ -379,7 +369,7 @@ export default function HomePage() {
         <div className="container mx-auto max-w-4xl">
           <h2 className="text-3xl font-bold text-center text-slate-900 dark:text-white">How to Use Quantara</h2>
           <p className="mx-auto mt-5 mb-12 max-w-2xl text-center text-slate-600 dark:text-slate-400">
-            Quantara follows a project-based workflow. Users first create and open a project, then upload supported PDF files through the Drawings area. The uploaded drawing can be previewed and stored within the project before the user begins creating the BOQ.
+            Quantara follows a project-based workflow. Users create a project, choose data sources, and bring information into the workspace through upload, import, or connected applications. Where available, users can speak or type instructions. Quantara prepares structured proposed changes for review and applies only the operations the user approves.
           </p>
 
           <ol className="grid gap-4 md:grid-cols-2">
@@ -389,8 +379,15 @@ export default function HomePage() {
                   <span className="absolute left-5 top-5 flex h-8 w-8 items-center justify-center rounded-full text-sm font-bold bg-slate-200 text-slate-700 dark:bg-slate-800 dark:text-slate-200" aria-hidden="true">
                     {index + 1}
                   </span>
-                  <h3 className="font-bold text-slate-900 dark:text-slate-100">{step.title}</h3>
-                  <p className="mt-2 text-sm leading-6 text-slate-600 dark:text-slate-400">{step.desc}</p>
+                  <div className="flex items-center justify-between mb-2">
+                    <h3 className="font-bold text-slate-900 dark:text-slate-100">{step.title}</h3>
+                    {step.label && (
+                      <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">
+                        {step.label}
+                      </span>
+                    )}
+                  </div>
+                  <p className="mt-1 text-sm leading-6 text-slate-600 dark:text-slate-400">{step.desc}</p>
                 </li>
               );
             })}
@@ -411,60 +408,25 @@ export default function HomePage() {
           <p className="text-center text-slate-600 dark:text-slate-400 mb-16 max-w-2xl mx-auto">How a Dubai or UAE MEP team can move from supported project data to an approved, professionally reviewed output.</p>
           
           <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4 items-center justify-center text-center">
-            <div className="flex flex-col items-center">
-              <div className="w-12 h-12 rounded-xl bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 flex items-center justify-center mb-3 border border-blue-100 dark:border-blue-900/30">
-                <FileText className="h-5 w-5" />
+            <div className="col-span-2 md:col-span-4 lg:col-span-7 flex flex-col items-center">
+              <div className="w-full max-w-2xl bg-white dark:bg-slate-950 p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm text-left">
+                <div className="mb-4 flex items-center justify-between">
+                  <h3 className="font-bold text-slate-900 dark:text-white">Practical MEP Workflow Example</h3>
+                  <span className="rounded-full bg-slate-100 dark:bg-slate-800 px-3 py-1 text-xs font-semibold text-slate-600 dark:text-slate-400">Hypothetical workflow</span>
+                </div>
+                <ol className="list-decimal list-inside space-y-3 text-sm text-slate-700 dark:text-slate-300">
+                  <li>Create the MEP project workspace.</li>
+                  <li>Upload consultant PDFs and import the supplier spreadsheet.</li>
+                  <li>Connect an authorized external source where available.</li>
+                  <li>Review source identity, revision and extracted information.</li>
+                  <li>Ask Quantara to organize the equipment and valve items.</li>
+                  <li>Review the structured AI proposal and its assumptions.</li>
+                  <li>Approve selected changes.</li>
+                  <li>Create a governed BOQ revision.</li>
+                  <li>Generate PDF and XLSX outputs.</li>
+                  <li>Complete professional sign-off.</li>
+                </ol>
               </div>
-              <span className="text-sm font-semibold text-slate-900 dark:text-white">1. Bring Data</span>
-              <span className="text-xs text-slate-500 mt-1">Upload, import or connect</span>
-            </div>
-            
-            <div className="flex flex-col items-center">
-              <div className="w-12 h-12 rounded-xl bg-slate-50 dark:bg-slate-900 text-slate-600 dark:text-slate-400 flex items-center justify-center mb-3 border border-slate-200 dark:border-slate-800">
-                <ShieldCheck className="h-5 w-5" />
-              </div>
-              <span className="text-sm font-semibold text-slate-900 dark:text-white">2. Review Data</span>
-              <span className="text-xs text-slate-500 mt-1">Check normalized sources</span>
-            </div>
-            
-            <div className="flex flex-col items-center">
-              <div className="w-12 h-12 rounded-xl bg-slate-50 dark:bg-slate-900 text-slate-600 dark:text-slate-400 flex items-center justify-center mb-3 border border-slate-200 dark:border-slate-800">
-                <Mic2 className="h-5 w-5" />
-              </div>
-              <span className="text-sm font-semibold text-slate-900 dark:text-white">3. Instruct</span>
-              <span className="text-xs text-slate-500 mt-1">Speak or type</span>
-            </div>
-            
-            <div className="flex flex-col items-center">
-              <div className="w-12 h-12 rounded-xl bg-slate-50 dark:bg-slate-900 text-slate-600 dark:text-slate-400 flex items-center justify-center mb-3 border border-slate-200 dark:border-slate-800">
-                <GitCompareArrows className="h-5 w-5" />
-              </div>
-              <span className="text-sm font-semibold text-slate-900 dark:text-white">4. Compare</span>
-              <span className="text-xs text-slate-500 mt-1">Review proposed changes</span>
-            </div>
-            
-            <div className="flex flex-col items-center">
-              <div className="w-12 h-12 rounded-xl bg-slate-50 dark:bg-slate-900 text-slate-600 dark:text-slate-400 flex items-center justify-center mb-3 border border-slate-200 dark:border-slate-800">
-                <ClipboardCheck className="h-5 w-5" />
-              </div>
-              <span className="text-sm font-semibold text-slate-900 dark:text-white">5. Approve</span>
-              <span className="text-xs text-slate-500 mt-1">Choose operations</span>
-            </div>
-            
-            <div className="flex flex-col items-center">
-              <div className="w-12 h-12 rounded-xl bg-slate-50 dark:bg-slate-900 text-slate-600 dark:text-slate-400 flex items-center justify-center mb-3 border border-slate-200 dark:border-slate-800">
-                <History className="h-5 w-5" />
-              </div>
-              <span className="text-sm font-semibold text-slate-900 dark:text-white">6. Revise</span>
-              <span className="text-xs text-slate-500 mt-1">Preserve version history</span>
-            </div>
-            
-            <div className="flex flex-col items-center">
-              <div className="w-12 h-12 rounded-xl bg-green-50 dark:bg-green-900/20 text-green-600 dark:text-green-400 flex items-center justify-center mb-3 border border-green-200 dark:border-green-900/30">
-                <CheckCircle2 className="h-5 w-5" />
-              </div>
-              <span className="text-sm font-semibold text-slate-900 dark:text-white">7. Review & Generate</span>
-              <span className="text-xs text-slate-500 mt-1">Professional output</span>
             </div>
           </div>
         </div>

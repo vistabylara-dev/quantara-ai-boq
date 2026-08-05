@@ -35,6 +35,26 @@ const PUBLISHABLE_STATUSES: MasterCatalogueImportJobStatus[] = [
   MasterCatalogueImportJobStatus.COMPLETED_WITH_WARNINGS,
 ];
 
+/**
+ * A dataset's items can be spread across several MasterCatalogueImportBatch
+ * rows over time — evaluate() only rewrites sourceBatchId for rows it
+ * actually inserts or updates on a given run; a row left "unchanged" keeps
+ * whatever batch id it already had. So publishing (or reporting on) "this
+ * dataset's items" by only the latest job's own batch would silently miss
+ * every item that happened to be unchanged on the most recent run. Collect
+ * every batch this datasetId has ever produced instead.
+ */
+export async function getDatasetItemIds(datasetId: string): Promise<string[]> {
+  const jobs = await prisma.masterCatalogueImportJob.findMany({
+    where: { datasetId, legacyBatchId: { not: null } },
+    select: { legacyBatchId: true },
+  });
+  const batchIds = jobs.map((j) => j.legacyBatchId).filter((id): id is string => Boolean(id));
+  if (batchIds.length === 0) return [];
+  const items = await prisma.masterItem.findMany({ where: { sourceBatchId: { in: batchIds } }, select: { id: true } });
+  return items.map((item) => item.id);
+}
+
 export async function publishJobToPackage(owner: PlatformActor, jobId: string) {
   requireOwner(owner);
   const job = await prisma.masterCatalogueImportJob.findUnique({ where: { id: jobId } });
@@ -58,8 +78,8 @@ export async function publishJobToPackage(owner: PlatformActor, jobId: string) {
     packageType: "CORE",
   });
 
-  const items = await prisma.masterItem.findMany({ where: { sourceBatchId: job.legacyBatchId }, select: { id: true } });
-  await addItemsToPackage(pkg.id, items.map((item) => item.id));
+  const itemIds = await getDatasetItemIds(job.datasetId);
+  await addItemsToPackage(pkg.id, itemIds);
 
   const refreshed = await prisma.industryDataPackage.findUniqueOrThrow({ where: { id: pkg.id } });
 
@@ -69,10 +89,10 @@ export async function publishJobToPackage(owner: PlatformActor, jobId: string) {
     action: "CATALOGUE_PACKAGE_ITEMS_PUBLISHED",
     targetType: "IndustryDataPackage",
     targetId: pkg.id,
-    metadata: { datasetId: job.datasetId, jobId, itemsAssigned: items.length, packageKey: pkg.key },
+    metadata: { datasetId: job.datasetId, jobId, itemsAssigned: itemIds.length, packageKey: pkg.key },
   });
 
-  return { packageId: pkg.id, packageKey: pkg.key, itemCount: refreshed.itemCount, itemsAssignedThisRun: items.length };
+  return { packageId: pkg.id, packageKey: pkg.key, itemCount: refreshed.itemCount, itemsAssignedThisRun: itemIds.length };
 }
 
 /**

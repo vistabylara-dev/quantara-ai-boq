@@ -20,6 +20,8 @@ const PUBLIC_ROUTES = new Set([
   "/contact-sales",
   "/features",
   "/about",
+  "/pricing",
+  "/site-map",
   ADMIN_LOGIN_PAGE,
   "/ai-boq-software",
   "/boq-software",

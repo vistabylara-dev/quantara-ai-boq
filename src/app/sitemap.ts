@@ -44,7 +44,25 @@ export default function sitemap(): MetadataRoute.Sitemap {
     "/boq-software-for-fit-out-companies",
     "/boq-software-for-fire-fighting-contractors",
     "/boq-software-for-facilities-management",
-    "/boq-software-for-engineering-consultants"
+    "/boq-software-for-engineering-consultants",
+    "/gcc-boq-software",
+    "/boq-software-uae",
+    "/boq-software-dubai",
+    "/boq-software-abu-dhabi",
+    "/construction-estimating-software-uae",
+    "/mep-estimating-software-uae",
+    "/boq-software-saudi-arabia",
+    "/boq-software-qatar",
+    "/boq-software-oman",
+    "/comparisons",
+    "/quantara-vs-excel-for-boq",
+    "/boq-software-vs-spreadsheets",
+    "/ai-boq-vs-manual-boq-preparation",
+    "/ocr-vs-structured-boq-extraction",
+    "/quantity-takeoff-vs-boq-software",
+    "/boq-software-vs-document-management",
+    "/construction-estimating-software-vs-excel",
+    "/when-to-use-boq-software"
   ];
 
   return routes.map((route) => ({

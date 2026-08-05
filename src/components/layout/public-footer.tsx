@@ -26,6 +26,7 @@ export default function PublicFooter() {
               <li><Link href="/about" className="hover:text-slate-900 dark:hover:text-white">About</Link></li>
               <li><Link href="/resources" className="hover:text-slate-900 dark:hover:text-white">Resources</Link></li>
               <li><Link href="/industries" className="hover:text-slate-900 dark:hover:text-white">Industries</Link></li>
+              <li><Link href="/gcc-boq-software" className="hover:text-slate-900 dark:hover:text-white">GCC BOQ Software</Link></li>
               <li><Link href="/register" className="hover:text-slate-900 dark:hover:text-white">Request Early Access</Link></li>
               <li><Link href="/contact-sales" className="hover:text-slate-900 dark:hover:text-white">Contact Sales</Link></li>
             </ul>
@@ -39,6 +40,7 @@ export default function PublicFooter() {
               <li><Link href="/construction-estimating-software" className="hover:text-slate-900 dark:hover:text-white">Construction Estimating Software</Link></li>
               <li><Link href="/pdf-boq-extraction" className="hover:text-slate-900 dark:hover:text-white">PDF BOQ Extraction</Link></li>
               <li><Link href="/quantity-surveying-software" className="hover:text-slate-900 dark:hover:text-white">Quantity Surveying Software</Link></li>
+              <li><Link href="/comparisons" className="hover:text-slate-900 dark:hover:text-white">Comparisons</Link></li>
             </ul>
           </div>
           

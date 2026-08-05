@@ -61,6 +61,44 @@ top-level discipline. This matches the existing HVAC pattern, where the
 *industry* is always `construction` and the *discipline* (`mechanical`) is
 one level below it.
 
+## Complete registry — CATALOGUE-ACTIVATE-2, 2026-08-05
+
+All 15 datasets are now registered in `src/lib/services/catalogue-dataset-registry.ts`
+(`quantara-master-{folder}-v1`), verified `READY` by both the fast
+metadata-only readiness check and (for a sampled subset — see
+`docs/catalogue-registry-evidence.md`) the full file-verifying deep check.
+**No import has been executed. No MasterItem/MasterItemVersion rows have
+been created. No packages exist yet.** This table only proves the registry
+itself is complete and internally consistent.
+
+| Dataset ID | Folder | Files | Rows | Discipline | Alias | Package | Fingerprint | Status |
+|---|---|---:|---:|---|---|---|---|---|
+| `quantara-master-hvac-v1` | `data-imports/hvac` | 2 | 891 | `mechanical` | hvac→mechanical | `hvac-library` | `0ba5d8f701c97cbc…` | MANUAL |
+| `quantara-master-plumbing-v1` | `data-imports/plumbing` | 13 | 13,111 | `plumbing` | — | `plumbing-library` | `886f3d56118b5eb6…` | MANUAL |
+| `quantara-master-architectural-finishes-v1` | `data-imports/architectural-finishes` | 15 | 80,176 | `interior-fit-out` | — | `architectural-finishes-library` | `7eca6b9bb0edf8bb…` | DISCOVERY_VERIFIED |
+| `quantara-master-bim-digital-deliverables-v1` | `data-imports/bim-digital-deliverables` | 1 | 4,718 | `construction` | — | `bim-digital-deliverables-library` | `49b8db0f23bc0158…` | DISCOVERY_VERIFIED |
+| `quantara-master-civil-works-v1` | `data-imports/civil-works` | 1 | 3,675 | `construction` | — | `civil-works-library` | `f701f22f2af9744f…` | DISCOVERY_VERIFIED |
+| `quantara-master-closeout-v1` | `data-imports/closeout` | 2 | 9,452 | `construction` | — | `closeout-library` | `9b5d30b556b4f8b7…` | DISCOVERY_VERIFIED |
+| `quantara-master-doors-and-windows-v1` | `data-imports/doors-and-windows` | 3 | 11,567 | `construction` | — | `doors-and-windows-library` | `6a181d9a3e333edf…` | DISCOVERY_VERIFIED |
+| `quantara-master-facade-v1` | `data-imports/facade` | 5 | 15,786 | `construction` | — | `facade-library` | `0d455b78e7038815…` | DISCOVERY_VERIFIED |
+| `quantara-master-general-requirements-v1` | `data-imports/general-requirements` | 1 | 4,065 | `construction` | — | `general-requirements-library` | `0896feb484edf791…` | DISCOVERY_VERIFIED |
+| `quantara-master-landscaping-v1` | `data-imports/landscaping` | 1 | 2,867 | `landscaping` | — | `landscaping-library` | `14741838e95f135f…` | DISCOVERY_VERIFIED |
+| `quantara-master-roofing-v1` | `data-imports/roofing` | 1 | 4,162 | `construction` | — | `roofing-library` | `28c824da3d1b3e62…` | DISCOVERY_VERIFIED |
+| `quantara-master-site-infrastructure-v1` | `data-imports/site-infrastructure` | 1 | 4,345 | `construction` | — | `site-infrastructure-library` | `6994366dc5c54b51…` | DISCOVERY_VERIFIED |
+| `quantara-master-structural-v1` | `data-imports/structural` | 2 | 9,047 | `construction` | — | `structural-library` | `622361695cfe8b0c…` | DISCOVERY_VERIFIED |
+| `quantara-master-temporary-works-v1` | `data-imports/temporary-works` | 2 | 7,954 | `construction` | — | `temporary-works-library` | `7fb4472e473c8b7b…` | DISCOVERY_VERIFIED |
+| `quantara-master-uae-authority-regulatory-v1` | `data-imports/uae-authority-regulatory` | 3 | 11,681 | `construction` | — | `uae-authority-regulatory-library` | `0e45a871ddd8de56…` | DISCOVERY_VERIFIED |
+
+**Totals: 15 datasets, 53 files, 183,497 rows** — identical to the
+Checkpoint 1 discovery baseline. Fingerprints are truncated sha256
+(`computeDatasetFingerprint`, `catalogue-dataset-registry.ts`) — they fold
+in dataset ID, version, discipline, package, schema profile, and every
+file's checksum + expected row count, so any future edit to mapping or
+source data changes the fingerprint.
+
+See `docs/catalogue-registry-evidence.md` for the full reconciliation
+detail, schema profile description, and readiness results.
+
 ## What "AUTO_VALIDATED" does and does not mean
 
 `AUTO_VALIDATED` means: the folder/filename classification is confirmed by

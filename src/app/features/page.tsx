@@ -21,10 +21,10 @@ export default function FeaturesPage() {
       <PublicHeader />
       <PublicBreadcrumb 
         items={[
-          { label: "Home", href: "/" },
-          { label: "Platform", href: "/features" },
-          { label: "Features", href: "/features" }
-        ]} 
+          { name: "Home", item: "/" },
+          { name: "Platform", item: "/features" },
+          { name: "Features", item: "/features" }
+        ]}
       />
       
       <main className="flex-1">
@@ -34,7 +34,7 @@ export default function FeaturesPage() {
               Features and Status Matrix
             </h1>
             <p className="text-xl text-slate-600 dark:text-slate-400 mb-10 max-w-3xl mx-auto leading-relaxed">
-              Explore the complete set of capabilities available in Quantara's Controlled Early Access. Quantara provides project-first BOQ workflows with strict governance and professional review requirements.
+              Explore the complete set of capabilities available in Quantara&apos;s Controlled Early Access. Quantara provides project-first BOQ workflows with strict governance and professional review requirements.
             </p>
           </div>
         </section>

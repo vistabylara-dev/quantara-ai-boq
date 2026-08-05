@@ -24,7 +24,7 @@ export const metadata: Metadata = {
 export default function Page() {
   return (
     <>
-      <PublicBreadcrumb items={[{ label: "Home", href: "/" }, { label: "Comparisons", href: "/comparisons" }, { label: "Quantara vs Excel for BOQ", href: "/quantara-vs-excel-for-boq" }]} />
+      <PublicBreadcrumb items={[{ name: "Home", item: "/" }, { name: "Comparisons", item: "/comparisons" }, { name: "Quantara vs Excel for BOQ", item: "/quantara-vs-excel-for-boq" }]} />
     <ComparisonPage 
       slug="quantara-vs-excel-for-boq"
       title="Quantara vs Excel for BOQ Workflows | Structured Comparison"

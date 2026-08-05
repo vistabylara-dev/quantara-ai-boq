@@ -160,9 +160,9 @@ export default function Page() {
     <>
       <PublicBreadcrumb
         items={[
-          { label: "Home", href: "/" },
-          { label: "Resources", href: "/resources" },
-          { label: "What Is a BOQ?", href: "/what-is-a-boq" }
+          { name: "Home", item: "/" },
+          { name: "Resources", item: "/resources" },
+          { name: "What Is a BOQ?", item: "/what-is-a-boq" }
         ]}
       />
       <KnowledgePage content={content} />

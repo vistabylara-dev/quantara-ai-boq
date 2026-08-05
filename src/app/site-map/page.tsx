@@ -38,7 +38,7 @@ export default function SiteMapPage() {
   return (
     <div className="flex flex-col min-h-screen bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100">
       <PublicHeader />
-      <PublicBreadcrumb items={[{ label: "Home", href: "/" }, { label: "Site Map", href: "/site-map" }]} />
+      <PublicBreadcrumb items={[{ name: "Home", item: "/" }, { name: "Site Map", item: "/site-map" }]} />
       
       <main className="flex-1 w-full max-w-4xl mx-auto px-4 py-12 md:py-16">
         

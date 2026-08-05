@@ -237,7 +237,7 @@ export default function Page() {
 
   return (
     <>
-      <PublicBreadcrumb items={[{ label: "Home", href: "/" }, { label: "Industries", href: "/industries" }, { label: "BOQ Software for MEP Contractors", href: "/boq-software-for-mep-contractors" }]} />
+      <PublicBreadcrumb items={[{ name: "Home", item: "/" }, { name: "Industries", item: "/industries" }, { name: "BOQ Software for MEP Contractors", item: "/boq-software-for-mep-contractors" }]} />
       <IndustryLandingPage content={content} />
     </>
   );

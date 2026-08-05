@@ -24,6 +24,7 @@ export default function PublicFooter() {
             <ul className="space-y-3 text-sm text-slate-500 dark:text-slate-400">
               <li><Link href="/features" className="hover:text-slate-900 dark:hover:text-white">Features</Link></li>
               <li><Link href="/about" className="hover:text-slate-900 dark:hover:text-white">About</Link></li>
+              <li><Link href="/resources" className="hover:text-slate-900 dark:hover:text-white">Resources</Link></li>
               <li><Link href="/register" className="hover:text-slate-900 dark:hover:text-white">Request Early Access</Link></li>
               <li><Link href="/contact-sales" className="hover:text-slate-900 dark:hover:text-white">Contact Sales</Link></li>
             </ul>

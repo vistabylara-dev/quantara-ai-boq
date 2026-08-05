@@ -22,7 +22,20 @@ export default function sitemap(): MetadataRoute.Sitemap {
     '/pdf-boq-extraction',
     '/scanned-pdf-boq',
     '/quantity-surveying-software',
-    '/boq-document-generation'
+    '/boq-document-generation',
+    '/resources',
+    '/what-is-a-boq',
+    '/boq-vs-construction-estimate',
+    '/boq-vs-bill-of-materials',
+    '/how-to-prepare-a-boq',
+    '/boq-review-checklist',
+    '/common-boq-errors',
+    '/boq-revision-control',
+    '/how-to-convert-pdf-boq-to-excel',
+    '/text-pdf-vs-scanned-pdf',
+    '/ocr-for-boq-documents',
+    '/how-to-review-ai-extracted-boq',
+    '/quantity-takeoff-vs-boq-management'
   ];
 
   return routes.map((route) => ({

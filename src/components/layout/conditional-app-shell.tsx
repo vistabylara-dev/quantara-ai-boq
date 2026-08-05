@@ -18,7 +18,12 @@ export default function ConditionalAppShell({ children }: { children: ReactNode 
     "/cookie-policy", "/acceptable-use", "/subprocessors", "/data-processing",
     "/ai-boq-software", "/boq-software", "/construction-estimating-software", 
     "/boq-management", "/pdf-boq-extraction", "/scanned-pdf-boq", 
-    "/quantity-surveying-software", "/boq-document-generation"
+    "/quantity-surveying-software", "/boq-document-generation",
+    "/resources", "/what-is-a-boq", "/boq-vs-construction-estimate", 
+    "/boq-vs-bill-of-materials", "/how-to-prepare-a-boq", "/boq-review-checklist", 
+    "/common-boq-errors", "/boq-revision-control", "/how-to-convert-pdf-boq-to-excel", 
+    "/text-pdf-vs-scanned-pdf", "/ocr-for-boq-documents", "/how-to-review-ai-extracted-boq", 
+    "/quantity-takeoff-vs-boq-management"
   ];
   
   if (

@@ -29,6 +29,19 @@ const PUBLIC_ROUTES = new Set([
   "/scanned-pdf-boq",
   "/quantity-surveying-software",
   "/boq-document-generation",
+  "/resources",
+  "/what-is-a-boq",
+  "/boq-vs-construction-estimate",
+  "/boq-vs-bill-of-materials",
+  "/how-to-prepare-a-boq",
+  "/boq-review-checklist",
+  "/common-boq-errors",
+  "/boq-revision-control",
+  "/how-to-convert-pdf-boq-to-excel",
+  "/text-pdf-vs-scanned-pdf",
+  "/ocr-for-boq-documents",
+  "/how-to-review-ai-extracted-boq",
+  "/quantity-takeoff-vs-boq-management",
 ]);
 
 const PUBLIC_PREFIXES = [

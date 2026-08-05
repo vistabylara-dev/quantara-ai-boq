@@ -1,24 +1,21 @@
 import { MetadataRoute } from 'next';
 
 export default function sitemap(): MetadataRoute.Sitemap {
-  return [
-    {
-      url: 'https://quantara.vistabylara.com',
-      lastModified: new Date(),
-      changeFrequency: 'weekly',
-      priority: 1,
-    },
-    {
-      url: 'https://quantara.vistabylara.com/login',
-      lastModified: new Date(),
-      changeFrequency: 'monthly',
-      priority: 0.8,
-    },
-    {
-      url: 'https://quantara.vistabylara.com/register',
-      lastModified: new Date(),
-      changeFrequency: 'monthly',
-      priority: 0.8,
-    }
+  const routes = [
+    '',
+    '/features',
+    '/security',
+    '/terms',
+    '/privacy',
+    '/contact-sales',
+    '/login',
+    '/register'
   ];
+
+  return routes.map((route) => ({
+    url: `https://quantara.vistabylara.com${route}`,
+    lastModified: new Date(),
+    changeFrequency: route === '' ? 'weekly' : 'monthly',
+    priority: route === '' ? 1 : 0.8,
+  }));
 }

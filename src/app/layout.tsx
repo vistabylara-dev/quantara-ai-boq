@@ -5,6 +5,7 @@ import { THEME_MODE_KEY } from "@/lib/theme";
 import "./globals.css";
 
 export const metadata: Metadata = {
+  metadataBase: new URL("https://quantara.vistabylara.com"),
   title: {
     template: "%s | Quantara",
     default: "Quantara: AI BOQ and Construction Estimating Platform",
@@ -29,7 +30,7 @@ export const metadata: Metadata = {
     creator: "@quantara",
   },
   alternates: {
-    canonical: "https://quantara.vistabylara.com",
+    canonical: "/",
   },
 };
 

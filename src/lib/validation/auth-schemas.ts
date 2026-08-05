@@ -13,7 +13,6 @@ export const registerSchema = z
     fullName: z.string().trim().min(1, "Full name is required.").max(255),
     email: z.string().trim().email("A valid email address is required.").max(255),
     password: passwordSchema,
-    interestTier: z.enum(["starter", "professional", "business"]).optional(),
     role: z.string().optional(),
     country: z.string().optional(),
     primaryIndustry: z.string().optional(),

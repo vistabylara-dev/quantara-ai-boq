@@ -4,6 +4,16 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useState, type FormEvent } from "react";
 import { apiClient, getApiErrorMessage } from "@/lib/api/client";
+import type { Metadata } from "next";
+
+export const metadata: Metadata = {
+  title: "Login | Quantara",
+  description: "Sign in to your Quantara workspace.",
+  alternates: {
+    canonical: "/login"
+  }
+};
+
 
 function LoginForm() {
   const router = useRouter();

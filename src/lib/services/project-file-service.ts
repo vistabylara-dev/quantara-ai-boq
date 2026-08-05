@@ -1,4 +1,5 @@
 import { ExtractionEngineType, ProjectFileStatus, type ProjectFileClassification } from "@prisma/client";
+import { AppError } from "@/lib/errors/app-error";
 import type { CurrentActor } from "@/lib/auth/current-actor";
 import { requireCapability } from "@/lib/auth/rbac";
 import { getProjectRecord } from "@/lib/repositories/project-repository";
@@ -103,19 +104,60 @@ export async function getProjectFile(actor: CurrentActor, fileId: string) {
   return toProjectFileDTO(row);
 }
 
-/** The only path that ever reads project-file bytes off storage — tenant-scoped lookup happens before the storage adapter is touched. */
-export async function getProjectFileForDownload(actor: CurrentActor, fileId: string) {
+export type DownloadByteRange = { start: number; end: number };
+
+/**
+ * CORE-FLOW-1 — a tenant-scoped, storage-free lookup of just the file's
+ * size/name/type (all already persisted on the ProjectFile row). Lets the
+ * download route validate an incoming Range header before ever opening a
+ * storage stream, so a single request never needs more than one call to
+ * getProjectFileForStreamingDownload below.
+ */
+export async function getProjectFileDownloadMeta(actor: CurrentActor, fileId: string) {
   const row = await getProjectFileRecord(actor.companyId, fileId);
-  const buffer = await getProjectFileStorageAdapter().getObject(row.storageKey);
+  return { fileName: row.originalName, mimeType: row.mimeType, totalSize: row.fileSize };
+}
 
-  await createAuditLog(actor.companyId, {
-    entityType: "ProjectFile",
-    entityId: fileId,
-    action: "FILE_DOWNLOADED",
-    payload: { projectId: row.projectId, originalName: row.originalName },
-  });
+/**
+ * CORE-FLOW-1 — the only path that ever reads project-file bytes off
+ * storage. Tenant-scoped lookup happens before the storage adapter is ever
+ * touched, so a cross-company fileId 404s before any file access. Streams
+ * the object (optionally one byte range) rather than buffering it — a large
+ * PDF is never held in application memory to serve a preview or a single
+ * range. Every requested range is validated against the file's real,
+ * database-recorded size before being honored; an out-of-bounds range is
+ * rejected here so the route layer can return 416 without ever touching
+ * storage. The audit log fires once per logical download (unranged, or the
+ * first byte of a ranged sequence) rather than once per range request.
+ */
+export async function getProjectFileForStreamingDownload(actor: CurrentActor, fileId: string, range?: DownloadByteRange) {
+  const row = await getProjectFileRecord(actor.companyId, fileId);
 
-  return { buffer, fileName: row.originalName, mimeType: row.mimeType };
+  if (range) {
+    if (range.start < 0 || range.end < range.start || range.start >= row.fileSize) {
+      throw new AppError("RANGE_NOT_SATISFIABLE", "The requested byte range is not satisfiable.", 416);
+    }
+  }
+
+  const clampedRange = range ? { start: range.start, end: Math.min(range.end, row.fileSize - 1) } : undefined;
+  const stream = await getProjectFileStorageAdapter().getObjectStream(row.storageKey, clampedRange);
+
+  if (!range || range.start === 0) {
+    await createAuditLog(actor.companyId, {
+      entityType: "ProjectFile",
+      entityId: fileId,
+      action: "FILE_DOWNLOADED",
+      payload: { projectId: row.projectId, originalName: row.originalName },
+    });
+  }
+
+  return {
+    body: stream.body,
+    totalSize: row.fileSize,
+    servedRange: stream.servedRange,
+    fileName: row.originalName,
+    mimeType: row.mimeType,
+  };
 }
 
 /**

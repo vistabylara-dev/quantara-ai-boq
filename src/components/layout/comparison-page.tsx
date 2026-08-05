@@ -2,6 +2,8 @@
 import React from 'react';
 import Link from 'next/link';
 import PublicFooter from './public-footer';
+import PublicHeader from "@/components/layout/public-header";
+import PublicBreadcrumb, { generateBreadcrumbSchema } from "@/components/ui/public-breadcrumb";
 
 export interface ComparisonCriteria {
   label: string;
@@ -39,6 +41,14 @@ export interface ComparisonPageProps {
 }
 
 export function ComparisonPage(props: ComparisonPageProps) {
+  const breadcrumbItems = [
+    { name: "Home", item: "/" },
+    { name: "Comparisons", item: "/comparisons" },
+    { name: props.breadcrumbCurrent, item: `/${props.slug}` }
+  ];
+
+  const breadcrumbSchema = generateBreadcrumbSchema(breadcrumbItems);
+
   const jsonLd = {
     "@context": "https://schema.org",
     "@graph": [
@@ -49,29 +59,7 @@ export function ComparisonPage(props: ComparisonPageProps) {
         "name": props.title,
         "isPartOf": { "@id": "https://quantara.vistabylara.com/#website" }
       },
-      {
-        "@type": "BreadcrumbList",
-        "itemListElement": [
-          {
-            "@type": "ListItem",
-            "position": 1,
-            "name": "Home",
-            "item": "https://quantara.vistabylara.com/"
-          },
-          {
-            "@type": "ListItem",
-            "position": 2,
-            "name": "Comparisons",
-            "item": "https://quantara.vistabylara.com/comparisons"
-          },
-          {
-            "@type": "ListItem",
-            "position": 3,
-            "name": props.breadcrumbCurrent,
-            "item": `https://quantara.vistabylara.com/${props.slug}`
-          }
-        ]
-      },
+      breadcrumbSchema,
       {
         "@type": "FAQPage",
         "mainEntity": props.faqs.map(faq => ({
@@ -91,24 +79,9 @@ export function ComparisonPage(props: ComparisonPageProps) {
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
 
       <main className="flex-1 max-w-5xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-12 md:py-20 mt-16">
-        <nav aria-label="Breadcrumb" className="mb-8">
-          <ol className="flex items-center space-x-2 text-sm text-slate-500">
-            <li><Link href="/" className="hover:text-blue-600 transition-colors">Home</Link></li>
-            <li><span className="mx-2">/</span></li>
-            <li><Link href="/comparisons" className="hover:text-blue-600 transition-colors">Comparisons</Link></li>
-            <li><span className="mx-2">/</span></li>
-            <li className="text-slate-900 font-medium" aria-current="page">{props.breadcrumbCurrent}</li>
-          </ol>
-        </nav>
+        <PublicBreadcrumb items={breadcrumbItems} />
 
-        <header className="mb-12">
-          <h1 className="text-4xl md:text-5xl font-extrabold text-slate-900 tracking-tight mb-6">
-            {props.h1}
-          </h1>
-          <div className="text-lg text-slate-600 leading-relaxed border-l-4 border-blue-600 pl-4 py-1 bg-slate-50">
-            {props.directAnswer}
-          </div>
-        </header>
+        <PublicHeader />
 
         <section className="mb-16">
           <h2 className="text-2xl font-bold text-slate-900 mb-6">Quick Decision Summary</h2>

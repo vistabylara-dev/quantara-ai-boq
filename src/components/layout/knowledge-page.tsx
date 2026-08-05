@@ -2,6 +2,8 @@ import React, { ReactNode } from "react";
 import Link from "next/link";
 import { ArrowRight, CheckCircle2 } from "lucide-react";
 import PublicFooter from "./public-footer";
+import PublicHeader from "@/components/layout/public-header";
+import PublicBreadcrumb from "@/components/ui/public-breadcrumb";
 
 export interface KnowledgeFaq {
   question: string;
@@ -58,35 +60,14 @@ export default function KnowledgePage({ content }: { content: KnowledgePageConte
       )}
       
       {/* Basic header placeholder that matches the public design (this assumes public header is injected or we just rely on standard navigation styles) */}
-      <header className="sticky top-0 z-50 w-full border-b border-slate-200 bg-white/80 backdrop-blur-md">
-        <div className="container mx-auto px-4 h-16 flex items-center justify-between">
-          <Link href="/" className="flex items-center gap-2">
-            <span className="font-bold text-xl tracking-tight text-blue-900">Quantara</span>
-          </Link>
-          <nav className="hidden md:flex gap-6">
-            <Link href="/features" className="text-sm font-medium text-slate-600 hover:text-blue-600">Features</Link>
-            <Link href="/resources" className="text-sm font-medium text-slate-600 hover:text-blue-600">Resources</Link>
-            <Link href="/contact-sales" className="text-sm font-medium text-slate-600 hover:text-blue-600">Contact Sales</Link>
-          </nav>
-          <div className="flex items-center gap-4">
-            <Link href="/login" className="text-sm font-medium text-slate-600 hover:text-blue-600 hidden sm:block">Log in</Link>
-            <Link href="/register" className="text-sm font-medium bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition-colors">
-              Request Early Access
-            </Link>
-          </div>
-        </div>
-      </header>
+      <PublicHeader />
 
       <main className="flex-1 w-full max-w-4xl mx-auto px-4 py-12 md:py-20">
-        <nav aria-label="Breadcrumb" className="mb-8">
-          <ol className="flex items-center space-x-2 text-sm text-slate-500">
-            <li><Link href="/" className="hover:text-blue-600">Home</Link></li>
-            <li><span className="mx-2">→</span></li>
-            <li><Link href="/resources" className="hover:text-blue-600">BOQ Resources</Link></li>
-            <li><span className="mx-2">→</span></li>
-            <li className="text-slate-900 font-medium" aria-current="page">{content.breadcrumbLabel}</li>
-          </ol>
-        </nav>
+        <PublicBreadcrumb items={[
+          { name: "Home", item: "/" },
+          { name: "Resources", item: "/resources" },
+          { name: content.breadcrumbLabel }
+        ]} />
 
         <article>
           <header className="mb-12">

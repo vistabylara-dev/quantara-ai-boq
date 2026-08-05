@@ -1,5 +1,6 @@
 import React from "react";
 import Link from "next/link";
+import PublicHeader from "@/components/layout/public-header";
 import { ArrowRight, FileText, LayoutTemplate, BoxSelect, FolderKanban, ShieldCheck, Database, FileBox, FileSpreadsheet, CheckCircle2, XCircle, Mic2, Keyboard, GitCompareArrows, ClipboardCheck, History, AlertTriangle, LockKeyhole } from "lucide-react";
 import type { Metadata } from "next";
 import PublicFooter from "@/components/layout/public-footer";

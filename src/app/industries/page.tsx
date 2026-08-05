@@ -2,6 +2,7 @@ import { Metadata } from "next";
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
 import PublicFooter from "@/components/layout/public-footer";
+import PublicHeader from "@/components/layout/public-header";
 
 export const metadata: Metadata = {
   title: "BOQ Software by Industry | Quantara",
@@ -69,25 +70,7 @@ const industryLinks = [
 export default function IndustriesIndexPage() {
   return (
     <div className="flex flex-col min-h-screen bg-white text-slate-900 font-sans">
-      <header className="sticky top-0 z-50 w-full border-b border-slate-200 bg-white/80 backdrop-blur-md">
-        <div className="container mx-auto px-4 h-16 flex items-center justify-between">
-          <Link href="/" className="flex items-center gap-2">
-            <span className="font-bold text-xl tracking-tight text-blue-900">Quantara</span>
-          </Link>
-          <nav className="hidden md:flex gap-6">
-            <Link href="/features" className="text-sm font-medium text-slate-600 hover:text-blue-600">Features</Link>
-            <Link href="/resources" className="text-sm font-medium text-slate-600 hover:text-blue-600">Resources</Link>
-            <Link href="/industries" className="text-sm font-medium text-slate-900 font-semibold">Industries</Link>
-            <Link href="/contact-sales" className="text-sm font-medium text-slate-600 hover:text-blue-600">Contact Sales</Link>
-          </nav>
-          <div className="flex items-center gap-4">
-            <Link href="/login" className="text-sm font-medium text-slate-600 hover:text-blue-600 hidden sm:block">Log in</Link>
-            <Link href="/register" className="text-sm font-medium bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition-colors">
-              Request Early Access
-            </Link>
-          </div>
-        </div>
-      </header>
+      <PublicHeader />
 
       <main className="flex-1 w-full max-w-6xl mx-auto px-4 py-16 md:py-24">
         <header className="mb-16 text-center max-w-3xl mx-auto">

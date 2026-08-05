@@ -21,6 +21,7 @@ const proposalAccessInclude = {
   project: { include: { industryEngine: true } },
   client: true,
   documents: { include: { generatedDocument: true } },
+  technicalReport: { include: { template: { select: { name: true, code: true } } } },
 } satisfies Prisma.ClientProposalInclude;
 
 export type ProposalAccessRecord = Prisma.ClientProposalGetPayload<{ include: typeof proposalAccessInclude }>;

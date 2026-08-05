@@ -46,18 +46,24 @@ export type ProposalViewTotals = {
   grandTotal: number;
 };
 
-export type ProposalViewData = {
-  company: {
-    legalName: string;
-    tradeName: string;
-    logoUrl: string | null;
-    address: string | null;
-    email: string;
-    phone: string | null;
-    website: string | null;
-  };
-  client: { name: string; companyName: string | null };
-  project: { name: string; reference: string; location: string; currency: string; industry: string };
+type ProposalViewCompany = {
+  legalName: string;
+  tradeName: string;
+  logoUrl: string | null;
+  address: string | null;
+  email: string;
+  phone: string | null;
+  website: string | null;
+};
+
+type ProposalViewClient = { name: string; companyName: string | null };
+type ProposalViewProject = { name: string; reference: string; location: string; currency: string; industry: string };
+
+export type BoqProposalViewData = {
+  sourceType: "BOQ_REVISION";
+  company: ProposalViewCompany;
+  client: ProposalViewClient;
+  project: ProposalViewProject;
   boq: {
     title: string;
     revision: string;
@@ -69,6 +75,25 @@ export type ProposalViewData = {
   };
   settings: ClientProposalSettings;
 };
+
+export type TechnicalReportProposalViewData = {
+  sourceType: "TECHNICAL_REPORT_REVISION";
+  company: ProposalViewCompany;
+  client: ProposalViewClient;
+  project: ProposalViewProject;
+  report: {
+    id: string;
+    name: string;
+    templateName: string;
+    documentType: string | null;
+    fileName: string | null;
+    fileSize: number | null;
+    completedAt: string | null;
+  };
+  settings: ClientProposalSettings;
+};
+
+export type ProposalViewData = BoqProposalViewData | TechnicalReportProposalViewData;
 
 export type BuildProposalViewDataInput = {
   company: {
@@ -96,7 +121,7 @@ export type BuildProposalViewDataInput = {
  * "unless explicitly configured for a special internal portal, which is
  * outside this phase").
  */
-export function buildProposalViewData(input: BuildProposalViewDataInput): ProposalViewData {
+export function buildProposalViewData(input: BuildProposalViewDataInput): BoqProposalViewData {
   const { settings } = input;
 
   const sections: ProposalViewSection[] = input.boq.sections
@@ -140,6 +165,7 @@ export function buildProposalViewData(input: BuildProposalViewDataInput): Propos
   const totals = calculateBOQTotals(calculatorItems, input.boq.totals.discountPercentage, input.project.taxRate);
 
   return {
+    sourceType: "BOQ_REVISION",
     company: {
       legalName: input.company.legalName,
       tradeName: input.company.tradeName,
@@ -175,6 +201,56 @@ export function buildProposalViewData(input: BuildProposalViewDataInput): Propos
       exclusionsText: DEFAULT_EXCLUSIONS_TEXT,
     },
     settings,
+  };
+}
+
+export type BuildTechnicalReportProposalViewDataInput = {
+  company: {
+    legalName: string;
+    tradeName: string;
+    address: string | null;
+    email: string;
+    phone: string | null;
+    website: string | null;
+  };
+  client: { name: string; companyName: string | null };
+  project: { name: string; reference: string; location: string; currency: string; industryName: string };
+  report: {
+    id: string;
+    name: string;
+    templateName: string;
+    documentType: string | null;
+    fileName: string | null;
+    fileSize: number | null;
+    completedAt: string | null;
+  };
+  settings: ClientProposalSettings;
+};
+
+/** Technical-report equivalent of buildProposalViewData — no items/sections/totals/options, since a
+ * GeneratedTechnicalReport is a single immutable document, not a priced, option-selectable BOQ. */
+export function buildTechnicalReportProposalViewData(input: BuildTechnicalReportProposalViewDataInput): TechnicalReportProposalViewData {
+  return {
+    sourceType: "TECHNICAL_REPORT_REVISION",
+    company: {
+      legalName: input.company.legalName,
+      tradeName: input.company.tradeName,
+      logoUrl: null,
+      address: input.company.address,
+      email: input.company.email,
+      phone: input.company.phone,
+      website: input.company.website,
+    },
+    client: input.client,
+    project: {
+      name: input.project.name,
+      reference: input.project.reference,
+      location: input.project.location,
+      currency: input.project.currency,
+      industry: input.project.industryName,
+    },
+    report: input.report,
+    settings: input.settings,
   };
 }
 

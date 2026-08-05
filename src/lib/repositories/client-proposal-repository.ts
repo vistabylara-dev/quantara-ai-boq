@@ -8,6 +8,18 @@ import { DEFAULT_PROPOSAL_SETTINGS, mergeProposalSettings, type ClientProposalSe
 const proposalInclude = {
   client: true,
   documents: { include: { generatedDocument: true } },
+  technicalReport: {
+    select: {
+      id: true,
+      name: true,
+      status: true,
+      documentType: true,
+      fileName: true,
+      fileSize: true,
+      mimeType: true,
+      completedAt: true,
+    },
+  },
 } satisfies Prisma.ClientProposalInclude;
 
 type ProposalRecord = Prisma.ClientProposalGetPayload<{ include: typeof proposalInclude }>;
@@ -17,8 +29,22 @@ export function toProposalDTO(row: ProposalRecord) {
     id: row.id,
     companyId: row.companyId,
     projectId: row.projectId,
+    sourceType: row.sourceType,
     boqId: row.boqId,
     revisionNumber: row.revisionNumber,
+    technicalReportId: row.technicalReportId,
+    technicalReport: row.technicalReport
+      ? {
+          id: row.technicalReport.id,
+          name: row.technicalReport.name,
+          status: row.technicalReport.status,
+          documentType: row.technicalReport.documentType,
+          fileName: row.technicalReport.fileName,
+          fileSize: row.technicalReport.fileSize,
+          mimeType: row.technicalReport.mimeType,
+          completedAt: row.technicalReport.completedAt?.toISOString() ?? null,
+        }
+      : null,
     clientId: row.clientId,
     clientName: row.client.companyName ?? row.client.name,
     createdByUserId: row.createdByUserId,
@@ -114,7 +140,7 @@ export async function listProposalsForProject(companyId: string, projectId: stri
   return rows.map(toProposalDTO);
 }
 
-/** Any proposal for this revision that hasn't reached a terminal state — used to warn on duplicate creation. */
+/** Any proposal for this BOQ revision that hasn't reached a terminal state — used to warn on duplicate creation. */
 export async function findActiveProposalForRevision(companyId: string, boqId: string) {
   const row = await prisma.clientProposal.findFirst({
     where: {
@@ -128,19 +154,42 @@ export async function findActiveProposalForRevision(companyId: string, boqId: st
   return row ? toProposalDTO(row) : null;
 }
 
-export type CreateProposalInput = {
+/** Any proposal for this technical report that hasn't reached a terminal state — used to warn on duplicate creation. */
+export async function findActiveProposalForReport(companyId: string, technicalReportId: string) {
+  const row = await prisma.clientProposal.findFirst({
+    where: {
+      companyId,
+      technicalReportId,
+      status: { notIn: [ClientProposalStatus.REJECTED, ClientProposalStatus.REVOKED, ClientProposalStatus.EXPIRED] },
+    },
+    include: proposalInclude,
+    orderBy: { createdAt: "desc" },
+  });
+  return row ? toProposalDTO(row) : null;
+}
+
+type CreateProposalBaseInput = {
   projectId: string;
-  boqId: string;
-  revisionNumber: number;
   clientId: string;
   recipientEmail: string;
   recipientName: string;
   expiresAt: Date;
   settings?: Partial<ClientProposalSettings>;
-  documentIds: string[];
   createdByUserId: string | null;
   createdByName: string;
 };
+
+export type CreateProposalInput =
+  | (CreateProposalBaseInput & {
+      sourceType: "BOQ_REVISION";
+      boqId: string;
+      revisionNumber: number;
+      documentIds: string[];
+    })
+  | (CreateProposalBaseInput & {
+      sourceType: "TECHNICAL_REPORT_REVISION";
+      technicalReportId: string;
+    });
 
 export async function createProposal(companyId: string, input: CreateProposalInput) {
   const rawToken = generateProposalToken();
@@ -151,8 +200,10 @@ export async function createProposal(companyId: string, input: CreateProposalInp
       data: {
         companyId,
         projectId: input.projectId,
-        boqId: input.boqId,
-        revisionNumber: input.revisionNumber,
+        sourceType: input.sourceType,
+        boqId: input.sourceType === "BOQ_REVISION" ? input.boqId : null,
+        revisionNumber: input.sourceType === "BOQ_REVISION" ? input.revisionNumber : null,
+        technicalReportId: input.sourceType === "TECHNICAL_REPORT_REVISION" ? input.technicalReportId : null,
         clientId: input.clientId,
         createdByUserId: input.createdByUserId,
         createdByName: input.createdByName,
@@ -162,9 +213,9 @@ export async function createProposal(companyId: string, input: CreateProposalInp
         status: ClientProposalStatus.DRAFT,
         expiresAt: input.expiresAt,
         settingsJson: mergeProposalSettings({ ...DEFAULT_PROPOSAL_SETTINGS, ...input.settings }) as unknown as Prisma.InputJsonValue,
-        documents: {
-          create: input.documentIds.map((generatedDocumentId) => ({ companyId, generatedDocumentId })),
-        },
+        ...(input.sourceType === "BOQ_REVISION"
+          ? { documents: { create: input.documentIds.map((generatedDocumentId) => ({ companyId, generatedDocumentId })) } }
+          : {}),
       },
       include: proposalInclude,
     });
@@ -182,7 +233,10 @@ export async function createProposal(companyId: string, input: CreateProposalInp
       entityType: "ClientProposal",
       entityId: row.id,
       action: "PROPOSAL_CREATED",
-      payload: { projectId: row.projectId, boqId: row.boqId, revisionNumber: row.revisionNumber, recipientEmail: row.recipientEmail },
+      payload:
+        input.sourceType === "BOQ_REVISION"
+          ? { sourceType: row.sourceType, projectId: row.projectId, boqId: row.boqId, revisionNumber: row.revisionNumber, recipientEmail: row.recipientEmail }
+          : { sourceType: row.sourceType, projectId: row.projectId, technicalReportId: row.technicalReportId, recipientEmail: row.recipientEmail },
     }, tx);
     return row;
   });
@@ -190,10 +244,19 @@ export async function createProposal(companyId: string, input: CreateProposalInp
   return { proposal: toProposalDTO(created), rawToken };
 }
 
+export type UpdateProposalDraftInput = {
+  recipientEmail?: string;
+  recipientName?: string;
+  expiresAt?: Date;
+  settings?: Partial<ClientProposalSettings>;
+  /** Ignored (no-op) for TECHNICAL_REPORT_REVISION proposals — only BOQ proposals have a multi-document set. */
+  documentIds?: string[];
+};
+
 export async function updateProposalDraft(
   companyId: string,
   proposalId: string,
-  input: Partial<Pick<CreateProposalInput, "recipientEmail" | "recipientName" | "expiresAt" | "settings" | "documentIds">>,
+  input: UpdateProposalDraftInput,
 ) {
   const current = await getProposalRecord(companyId, proposalId);
   if (current.status !== ClientProposalStatus.DRAFT && current.status !== ClientProposalStatus.READY) {
@@ -214,7 +277,7 @@ export async function updateProposalDraft(
       },
       include: proposalInclude,
     });
-    if (input.documentIds !== undefined) {
+    if (input.documentIds !== undefined && current.sourceType === "BOQ_REVISION") {
       await tx.clientProposalDocument.deleteMany({ where: { companyId, clientProposalId: row.id } });
       if (input.documentIds.length > 0) {
         await tx.clientProposalDocument.createMany({

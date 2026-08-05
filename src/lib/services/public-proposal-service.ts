@@ -17,7 +17,7 @@ import {
 import { prisma } from "@/lib/db/prisma";
 import { verifyPassword } from "@/lib/auth/password";
 import { accessCookieName, createAccessGrant, verifyAccessGrant } from "@/lib/proposals/access-cookie";
-import { buildProposalViewData, parseSelectedOptions, type ProposalViewData } from "@/lib/proposals/build-proposal-view-data";
+import { buildProposalViewData, buildTechnicalReportProposalViewData, parseSelectedOptions, type ProposalViewData } from "@/lib/proposals/build-proposal-view-data";
 import { mergeProposalSettings, type ClientProposalSettings } from "@/lib/proposals/proposal-settings";
 import { extractRequestSignals } from "@/lib/proposals/request-context";
 import { findProposalByRawToken, validateProposalAccess, type ProposalAccessRecord } from "@/lib/proposals/proposal-token";
@@ -63,8 +63,46 @@ async function assertPasscodeUnlocked(record: ProposalAccessRecord): Promise<voi
 }
 
 async function buildViewData(record: ProposalAccessRecord): Promise<ProposalViewData> {
+  const settings = mergeProposalSettings(record.settingsJson as Partial<ClientProposalSettings> | null);
+  const companyInput = {
+    legalName: record.company.legalName,
+    tradeName: record.company.tradeName,
+    address: record.company.address,
+    email: record.company.email,
+    phone: record.company.phone,
+    website: record.company.website,
+  };
+  const projectInput = {
+    name: record.project.name,
+    reference: record.project.reference,
+    location: record.project.location ?? "",
+    currency: record.project.currency,
+    taxRate: record.project.taxRate.toNumber(),
+    industryName: record.project.industryEngine.name,
+  };
+  const clientInput = { name: record.client.name, companyName: record.client.companyName };
+
+  if (record.sourceType === "TECHNICAL_REPORT_REVISION") {
+    if (!record.technicalReport) throw new AppError("PROPOSAL_SOURCE_REQUIRED", "This proposal has no source report.", 409);
+    return buildTechnicalReportProposalViewData({
+      company: companyInput,
+      client: clientInput,
+      project: projectInput,
+      report: {
+        id: record.technicalReport.id,
+        name: record.technicalReport.name,
+        templateName: record.technicalReport.template.name,
+        documentType: record.technicalReport.documentType,
+        fileName: record.technicalReport.fileName,
+        fileSize: record.technicalReport.fileSize,
+        completedAt: record.technicalReport.completedAt?.toISOString() ?? null,
+      },
+      settings,
+    });
+  }
+
   const boqDto = toBOQDTO(await prisma.bOQ.findFirstOrThrow({
-    where: { id: record.boqId, companyId: record.companyId },
+    where: { id: record.boqId!, companyId: record.companyId },
     include: {
       project: { include: { client: true, industryEngine: true } },
       sections: { orderBy: { sortOrder: "asc" }, include: { items: { orderBy: { sortOrder: "asc" }, include: { options: { orderBy: { createdAt: "asc" } } } } } },
@@ -72,27 +110,12 @@ async function buildViewData(record: ProposalAccessRecord): Promise<ProposalView
     },
   }));
 
-  const settings = mergeProposalSettings(record.settingsJson as Partial<ClientProposalSettings> | null);
   return buildProposalViewData({
-    company: {
-      legalName: record.company.legalName,
-      tradeName: record.company.tradeName,
-      address: record.company.address,
-      email: record.company.email,
-      phone: record.company.phone,
-      website: record.company.website,
-    },
-    client: { name: record.client.name, companyName: record.client.companyName },
-    project: {
-      name: record.project.name,
-      reference: record.project.reference,
-      location: record.project.location ?? "",
-      currency: record.project.currency,
-      taxRate: record.project.taxRate.toNumber(),
-      industryName: record.project.industryEngine.name,
-    },
+    company: companyInput,
+    client: clientInput,
+    project: projectInput,
     boq: boqDto,
-    revisionNumber: record.revisionNumber,
+    revisionNumber: record.revisionNumber!,
     settings,
     selectedOptions: parseSelectedOptions(record.selectedOptionsJson),
   });
@@ -161,13 +184,16 @@ export async function submitProposalPasscode(rawToken: string, passcode: string,
 export async function selectProposalOption(rawToken: string, input: { boqItemId: string; optionId: string | null }, request: Request) {
   const record = await resolveAccessRecord(rawToken);
   await assertPasscodeUnlocked(record);
+  if (record.sourceType !== "BOQ_REVISION") {
+    throw new AppError("OPTIONS_NOT_ALLOWED", "Option selection is only available for BOQ proposals.", 409);
+  }
   const settings = mergeProposalSettings(record.settingsJson as Partial<ClientProposalSettings> | null);
   if (!settings.allowOptionSelection) {
     throw new AppError("OPTIONS_NOT_ALLOWED", "Option selection is not enabled for this proposal.", 409);
   }
 
   const item = await prisma.bOQItem.findFirst({
-    where: { id: input.boqItemId, companyId: record.companyId, section: { boqId: record.boqId } },
+    where: { id: input.boqItemId, companyId: record.companyId, section: { boqId: record.boqId! } },
     include: { options: true },
   });
   if (!item) throw new AppError("ITEM_NOT_FOUND", "This item does not belong to the proposal's revision.", 404);
@@ -311,17 +337,36 @@ export async function downloadProposalDocument(rawToken: string, documentId: str
   const signals = extractRequestSignals(request);
   assertNotRateLimited(documentDownloadLimiter, `${record.id}:${signals.ipHash ?? "unknown"}`);
 
-  const attachment = record.documents.find((doc) => doc.generatedDocumentId === documentId);
-  if (!attachment) throw new AppError("DOCUMENT_NOT_AUTHORIZED", "This document is not part of the proposal.", 404);
-  const document = attachment.generatedDocument;
-  if (document.companyId !== record.companyId || document.projectId !== record.projectId || document.boqId !== record.boqId) {
-    throw new AppError("DOCUMENT_NOT_AUTHORIZED", "This document is not part of the proposal.", 404);
-  }
-  if (document.audience !== "CLIENT" || document.status !== "COMPLETED" || !document.storageKey) {
-    throw new AppError("DOCUMENT_NOT_AUTHORIZED", "This document is not available for download.", 404);
+  let buffer: Buffer;
+  let fileName: string;
+  let mimeType: string;
+
+  if (record.sourceType === "TECHNICAL_REPORT_REVISION") {
+    const report = record.technicalReport;
+    if (!report || report.id !== documentId || report.companyId !== record.companyId || report.projectId !== record.projectId) {
+      throw new AppError("DOCUMENT_NOT_AUTHORIZED", "This document is not part of the proposal.", 404);
+    }
+    if (report.status !== "COMPLETED" || !report.storageKey) {
+      throw new AppError("DOCUMENT_NOT_AUTHORIZED", "This document is not available for download.", 404);
+    }
+    buffer = await localDocumentStorageAdapter.getObject(report.storageKey);
+    fileName = report.fileName ?? `${report.name}.docx`;
+    mimeType = report.mimeType ?? "application/octet-stream";
+  } else {
+    const attachment = record.documents.find((doc) => doc.generatedDocumentId === documentId);
+    if (!attachment) throw new AppError("DOCUMENT_NOT_AUTHORIZED", "This document is not part of the proposal.", 404);
+    const document = attachment.generatedDocument;
+    if (document.companyId !== record.companyId || document.projectId !== record.projectId || document.boqId !== record.boqId) {
+      throw new AppError("DOCUMENT_NOT_AUTHORIZED", "This document is not part of the proposal.", 404);
+    }
+    if (document.audience !== "CLIENT" || document.status !== "COMPLETED" || !document.storageKey) {
+      throw new AppError("DOCUMENT_NOT_AUTHORIZED", "This document is not available for download.", 404);
+    }
+    buffer = await localDocumentStorageAdapter.getObject(document.storageKey);
+    fileName = document.fileName ?? `document.${document.type.toLowerCase()}`;
+    mimeType = document.mimeType ?? "application/octet-stream";
   }
 
-  const buffer = await localDocumentStorageAdapter.getObject(document.storageKey);
   await createProposalEvent(record.companyId, record.id, {
     eventType: ClientProposalEventType.DOCUMENT_DOWNLOADED,
     actorType: ProposalActorType.CLIENT,
@@ -330,5 +375,5 @@ export async function downloadProposalDocument(rawToken: string, documentId: str
   });
   await createAuditLog(record.companyId, { entityType: "ClientProposal", entityId: record.id, action: "PROPOSAL_DOCUMENT_DOWNLOADED", payload: { documentId } });
 
-  return { buffer, fileName: document.fileName ?? `document.${document.type.toLowerCase()}`, mimeType: document.mimeType ?? "application/octet-stream" };
+  return { buffer, fileName, mimeType };
 }

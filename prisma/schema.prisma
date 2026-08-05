@@ -1486,6 +1486,8 @@ model User {
   classificationConfirmedFiles           ProjectFile[]                    @relation("ProjectFileClassificationConfirmedByUser")
   createdExtractionJobs                  ExtractionJob[]
   platformAuditLogs                      PlatformAuditLog[]               @relation("PlatformAuditActor")
+  commercePriceReviews                   CommercePrice[]                  @relation("CommercePriceReviewer")
+  commerceSyncRuns                       CommerceSyncRun[]                @relation("CommerceSyncRunInitiator")
   simulationSession                      PlatformSimulationSession?
   masterCatalogueImportBatches           MasterCatalogueImportBatch[]
   masterCatalogueImportJobs              MasterCatalogueImportJob[]
@@ -3547,27 +3549,28 @@ enum CommerceCurrency {
 }
 
 model CommerceProduct {
-  id                  String               @id @default(uuid()) @db.Uuid
-  code                String               @unique
+  id                  String                    @id @default(uuid()) @db.Uuid
+  code                String                    @unique
   type                CommerceProductType
   name                String
-  shortDescription    String               @default("")
-  description         String               @default("")
-  purchaseMode        CommercePurchaseMode @default(DIRECT)
-  isActive            Boolean              @default(true)
-  isPublic            Boolean              @default(true)
-  sortOrder           Int                  @default(0)
+  shortDescription    String                    @default("")
+  description         String                    @default("")
+  purchaseMode        CommercePurchaseMode      @default(DIRECT)
+  isActive            Boolean                   @default(true)
+  isPublic            Boolean                   @default(true)
+  sortOrder           Int                       @default(0)
   /// Set only for type: INDUSTRY_ACCESS, and only when a real backing
   /// IndustryDataPackage exists — never set on a product for a dataset that
   /// doesn't exist yet (the seed script enforces this; see its "skipped"
   /// count for industries with no backing package).
-  industryPackageId   String?              @db.Uuid
+  industryPackageId   String?                   @db.Uuid
   metadataJson        Json?
-  createdAt           DateTime             @default(now())
-  updatedAt           DateTime             @updatedAt
-  industryPackage     IndustryDataPackage? @relation(fields: [industryPackageId], references: [id], onDelete: SetNull)
+  createdAt           DateTime                  @default(now())
+  updatedAt           DateTime                  @updatedAt
+  industryPackage     IndustryDataPackage?      @relation(fields: [industryPackageId], references: [id], onDelete: SetNull)
   prices              CommercePrice[]
   entitlementTemplate EntitlementTemplate?
+  providerMappings    CommerceProviderMapping[]
 
   @@index([type])
   @@index([isActive])
@@ -3584,28 +3587,50 @@ model CommerceProduct {
 /// reference a price yet), but the service layer's update path already
 /// follows this rule so later phases inherit safe behavior by default.
 model CommercePrice {
-  id              String                  @id @default(uuid()) @db.Uuid
-  productId       String                  @db.Uuid
-  code            String                  @unique
+  id               String                    @id @default(uuid()) @db.Uuid
+  productId        String                    @db.Uuid
+  code             String                    @unique
   /// Integer minor units — e.g. AED 149.00 is stored as 14900. Never Float.
-  amountMinor     Int
-  currency        CommerceCurrency        @default(AED)
-  billingInterval CommerceBillingInterval
+  amountMinor      Int
+  currency         CommerceCurrency          @default(AED)
+  billingInterval  CommerceBillingInterval
   /// True when amountMinor is an indicative "starting from" price rather
   /// than an exact purchasable amount (e.g. api_access_monthly_from_aed_499,
   /// white_label_from_aed_5000) — the UI must render "from AED X" and must
   /// never present this as a fixed-price direct-checkout amount.
-  isFromPrice     Boolean                 @default(false)
-  isActive        Boolean                 @default(true)
-  validFrom       DateTime                @default(now())
-  validUntil      DateTime?
-  createdAt       DateTime                @default(now())
-  updatedAt       DateTime                @updatedAt
-  product         CommerceProduct         @relation(fields: [productId], references: [id], onDelete: Cascade)
+  isFromPrice      Boolean                   @default(false)
+  isActive         Boolean                   @default(true)
+  validFrom        DateTime                  @default(now())
+  validUntil       DateTime?
+  /// STRIPE-1C — commercial review gate. Defaults to REQUIRES_REVIEW for
+  /// every price, including ones that already existed before this column
+  /// was added — never silently APPROVED. Only a small, explicitly
+  /// identified set of anchor prices (matching an independently confirmed
+  /// commercial source) are promoted to APPROVED, and only via a one-time,
+  /// reviewed data step — never as a migration column default.
+  reviewStatus     CommercePriceReviewStatus @default(REQUIRES_REVIEW)
+  reviewedByUserId String?                   @db.Uuid
+  reviewedAt       DateTime?
+  reviewNote       String?
+  createdAt        DateTime                  @default(now())
+  updatedAt        DateTime                  @updatedAt
+  product          CommerceProduct           @relation(fields: [productId], references: [id], onDelete: Cascade)
+  reviewedByUser   User?                     @relation("CommercePriceReviewer", fields: [reviewedByUserId], references: [id], onDelete: SetNull)
+  providerMappings CommerceProviderMapping[]
 
   @@index([productId])
   @@index([isActive])
   @@index([billingInterval])
+  @@index([reviewStatus])
+}
+
+/// STRIPE-1C — commercial review gate for a CommercePrice. A price may only
+/// synchronize to Stripe as an active, purchasable Price once APPROVED.
+enum CommercePriceReviewStatus {
+  DRAFT
+  REQUIRES_REVIEW
+  APPROVED
+  RETIRED
 }
 
 /// The typed commercial grant a product confers. One row per product — kept
@@ -3672,4 +3697,124 @@ model SalesInquiry {
   deliveryStatus          String   @default("stored")
   createdAt               DateTime @default(now())
   updatedAt               DateTime @updatedAt
+}
+
+// ---------------------------------------------------------------------------
+// STRIPE-1C — Stripe test-mode product/price synchronization
+// ---------------------------------------------------------------------------
+// Quantara's CommerceProduct/CommercePrice remain the sole source of truth for
+// amount, currency, interval, and commercial approval — these two models only
+// record which payment-provider objects a given internal record has been
+// synchronized to, and a history of synchronization runs. No payment
+// collection, checkout, customer, subscription, order, invoice, or webhook
+// concept is introduced here. Deliberately provider-agnostic (CommerceProvider
+// is an enum with one member today) so a second provider never requires a
+// schema redesign.
+
+enum CommerceProvider {
+  STRIPE
+}
+
+enum CommerceProviderEnvironment {
+  TEST
+  LIVE
+}
+
+enum CommerceProviderObjectType {
+  PRODUCT
+  PRICE
+}
+
+/// Per-mapping sync health, independent of CommerceSyncRun history — this is
+/// "what is true right now for this one object", not a log entry.
+enum CommerceProviderSyncStatus {
+  SYNCED
+  DRIFTED
+  ARCHIVED
+  ERROR
+}
+
+/// Records that a specific internal CommerceProduct or CommercePrice has been
+/// synchronized to a specific provider object. One row per internal object per
+/// provider per environment — never a full copy of the provider's response
+/// (see providerActive/lastErrorCode below; nothing sensitive or bulky is
+/// stored here). True uniqueness (no duplicate mapping for the same internal
+/// product/price, and no duplicate mapping for the same provider object) is
+/// enforced via partial unique indexes in the migration — Postgres allows
+/// multiple NULLs through a plain unique index, which is wrong here since
+/// commercePriceId/providerPriceId are only meaningful for PRICE-type rows.
+model CommerceProviderMapping {
+  id                    String                      @id @default(uuid()) @db.Uuid
+  provider              CommerceProvider
+  environment           CommerceProviderEnvironment
+  commerceProductId     String                      @db.Uuid
+  /// Null for a PRODUCT-type mapping row; set for a PRICE-type row.
+  commercePriceId       String?                     @db.Uuid
+  providerProductId     String
+  /// Null for a PRODUCT-type mapping row; set for a PRICE-type row.
+  providerPriceId       String?
+  providerObjectType    CommerceProviderObjectType
+  providerActive        Boolean                     @default(true)
+  synchronizationStatus CommerceProviderSyncStatus  @default(SYNCED)
+  lastSynchronizedAt    DateTime?
+  lastVerifiedAt        DateTime?
+  lastErrorCode         String?
+  createdAt             DateTime                    @default(now())
+  updatedAt             DateTime                    @updatedAt
+  commerceProduct       CommerceProduct             @relation(fields: [commerceProductId], references: [id], onDelete: Cascade)
+  commercePrice         CommercePrice?              @relation(fields: [commercePriceId], references: [id], onDelete: Cascade)
+
+  @@index([commerceProductId])
+  @@index([commercePriceId])
+  @@index([provider, environment])
+  @@index([synchronizationStatus])
+}
+
+enum CommerceSyncOperation {
+  DRY_RUN
+  SYNCHRONIZE
+  VERIFY
+}
+
+enum CommerceSyncRunStatus {
+  PLANNED
+  RUNNING
+  COMPLETED
+  COMPLETED_WITH_WARNINGS
+  FAILED
+  CANCELLED
+}
+
+/// One row per synchronization attempt (dry run, execution, or verification
+/// pass) — an audit-friendly summary only. Never stores raw Stripe request/
+/// response bodies; only safe aggregate counts and a safe error code.
+model CommerceSyncRun {
+  id                   String                      @id @default(uuid()) @db.Uuid
+  provider             CommerceProvider
+  environment          CommerceProviderEnvironment
+  operation            CommerceSyncOperation
+  status               CommerceSyncRunStatus       @default(PLANNED)
+  initiatedByUserId    String?                     @db.Uuid
+  dryRun               Boolean
+  /// Hash of the eligible catalogue slice at plan time — execution is
+  /// rejected if the live catalogue no longer matches this fingerprint,
+  /// forcing a fresh dry run instead of acting on a stale plan.
+  catalogueFingerprint String
+  productsCreated      Int                         @default(0)
+  productsUpdated      Int                         @default(0)
+  productsUnchanged    Int                         @default(0)
+  productsArchived     Int                         @default(0)
+  pricesCreated        Int                         @default(0)
+  pricesUnchanged      Int                         @default(0)
+  pricesArchived       Int                         @default(0)
+  blockedCount         Int                         @default(0)
+  warningCount         Int                         @default(0)
+  safeErrorCode        String?
+  startedAt            DateTime                    @default(now())
+  completedAt          DateTime?
+  initiatedByUser      User?                       @relation("CommerceSyncRunInitiator", fields: [initiatedByUserId], references: [id], onDelete: SetNull)
+
+  @@index([provider, environment])
+  @@index([status])
+  @@index([startedAt])
 }

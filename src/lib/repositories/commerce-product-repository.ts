@@ -29,6 +29,10 @@ export function toCommercePriceDTO(row: CommercePrice) {
     isActive: row.isActive,
     validFrom: row.validFrom.toISOString(),
     validUntil: row.validUntil?.toISOString() ?? null,
+    reviewStatus: row.reviewStatus,
+    reviewedByUserId: row.reviewedByUserId,
+    reviewedAt: row.reviewedAt?.toISOString() ?? null,
+    reviewNote: row.reviewNote,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
   };
@@ -296,4 +300,38 @@ export async function upsertEntitlementTemplate(input: UpsertEntitlementTemplate
   }
   const template = await prisma.entitlementTemplate.create({ data: { productId: input.productId, ...data } });
   return { template, wasCreated: true };
+}
+
+export async function getCommercePriceById(priceId: string): Promise<CommercePrice> {
+  const row = await prisma.commercePrice.findUnique({ where: { id: priceId } });
+  if (!row) throw new NotFoundError("Commerce price not found.");
+  return row;
+}
+
+export type SetPriceReviewStatusInput = {
+  reviewStatus: "DRAFT" | "REQUIRES_REVIEW" | "APPROVED" | "RETIRED";
+  reviewedByUserId: string;
+  reviewNote?: string | null;
+};
+
+/** The only mutation surface for a price's commercial review state — never touches amount/currency/interval. */
+export async function setCommercePriceReviewStatus(priceId: string, input: SetPriceReviewStatusInput): Promise<CommercePrice> {
+  await getCommercePriceById(priceId);
+  return prisma.commercePrice.update({
+    where: { id: priceId },
+    data: {
+      reviewStatus: input.reviewStatus,
+      reviewedByUserId: input.reviewedByUserId,
+      reviewedAt: new Date(),
+      reviewNote: input.reviewNote ?? null,
+    },
+  });
+}
+
+/** Every product with its prices — the full catalogue slice the Stripe sync service reasons over. */
+export async function listAllCommerceProductsWithPrices(): Promise<CommerceProductRecord[]> {
+  return prisma.commerceProduct.findMany({
+    include: productInclude,
+    orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
+  });
 }

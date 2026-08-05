@@ -32,3 +32,38 @@ export const commerceProductStateUpdateSchema = z
 export type CommerceProductIdParams = z.output<typeof commerceProductIdParamsSchema>;
 export type CommerceProductListQuery = z.output<typeof commerceProductListQuerySchema>;
 export type CommerceProductStateUpdateInput = z.output<typeof commerceProductStateUpdateSchema>;
+
+// ---------------------------------------------------------------------------
+// STRIPE-1C
+// ---------------------------------------------------------------------------
+
+export const commercePriceIdParamsSchema = z
+  .object({
+    priceId: z.string().uuid("A valid price ID is required."),
+  })
+  .strict();
+
+export const commercePriceReviewUpdateSchema = z
+  .object({
+    reviewStatus: z.enum(["DRAFT", "REQUIRES_REVIEW", "APPROVED", "RETIRED"]),
+    reviewNote: z.string().trim().max(2000).optional(),
+  })
+  .strict();
+
+export const stripeSynchronizeRequestSchema = z
+  .object({
+    catalogueFingerprint: z.string().min(1, "A catalogue fingerprint from a recent dry run is required."),
+    confirm: z.literal(true, { errorMap: () => ({ message: "Synchronization requires confirm: true." }) }),
+  })
+  .strict();
+
+export const stripeHistoryQuerySchema = z
+  .object({
+    limit: z.coerce.number().int().min(1).max(200).optional(),
+  })
+  .strict();
+
+export type CommercePriceIdParams = z.output<typeof commercePriceIdParamsSchema>;
+export type CommercePriceReviewUpdateInput = z.output<typeof commercePriceReviewUpdateSchema>;
+export type StripeSynchronizeRequestInput = z.output<typeof stripeSynchronizeRequestSchema>;
+export type StripeHistoryQuery = z.output<typeof stripeHistoryQuerySchema>;

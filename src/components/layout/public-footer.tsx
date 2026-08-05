@@ -92,6 +92,22 @@ export default function PublicFooter() {
           {/* Company & Legal */}
           <div className="col-span-1 lg:col-span-2 grid grid-cols-2 lg:grid-cols-1 gap-8">
             <div>
+              <h3 className="font-bold text-slate-900 dark:text-white mb-4">Enterprise Software</h3>
+              <p className="text-sm text-slate-500 dark:text-slate-400 mb-2">
+                Custom Quantara software implementation for companies requiring tailored workflows, integrations, branding, deployment, migration, onboarding or advanced operational requirements.
+              </p>
+              <p className="text-xs font-semibold text-slate-400 dark:text-slate-500 mb-2">
+                Starting from AED 15,000
+              </p>
+              <p className="text-xs text-slate-400 dark:text-slate-500 mb-4">
+                Final scope and pricing are provided through a custom quotation following a requirements review.
+              </p>
+              <Link href="/contact-sales" className="text-sm font-medium text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300">
+                Contact Sales &rarr;
+              </Link>
+            </div>
+
+            <div>
               <h3 className="font-bold text-slate-900 dark:text-white mb-4">Company</h3>
               <ul className="space-y-3 text-sm text-slate-500 dark:text-slate-400">
                 {companyItems.map((item, index) => (

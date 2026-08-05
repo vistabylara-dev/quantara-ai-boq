@@ -26,19 +26,25 @@ export const publicNavigation: NavigationSection[] = [
       {
         label: "Core Platform",
         items: [
-          { label: "Features", href: "/features", description: "Explore the core features of Quantara." },
-          { label: "AI BOQ Software", href: "/ai-boq-software", description: "AI-assisted BOQ extraction and structured project workflows." },
+          { label: "Features", href: "/features", description: "Explore Quantara’s project, source, BOQ, revision, document and integration capabilities with clear status labels." },
+          { label: "AI BOQ Software", href: "/ai-boq-software", description: "Bring supported project data into one workspace, review structured AI proposals and create governed BOQ revisions." },
           { label: "BOQ Software", href: "/boq-software", description: "Professional software for modern BOQ preparation." },
           { label: "Construction Estimating Software", href: "/construction-estimating-software", description: "Organize supported documents into structured estimates." },
-          { label: "BOQ Management", href: "/boq-management", description: "Organize sections, items, revisions, source records and professional outputs." }
+          { label: "BOQ Management", href: "/boq-management", description: "Organize sections, items, source records, revisions, approvals and professional outputs." }
         ]
       },
       {
         label: "Extraction and Documents",
         items: [
-          { label: "PDF BOQ Extraction", href: "/pdf-boq-extraction", description: "Extract quantities and items from text-based PDFs." },
+          { label: "PDF BOQ Extraction", href: "/pdf-boq-extraction", description: "Extract and review supported information from text-based and scanned PDF BOQ documents." },
           { label: "Scanned PDF BOQ", href: "/scanned-pdf-boq", description: "Handle scanned drawings with integrated OCR tools." },
           { label: "BOQ Document Generation", href: "/boq-document-generation", description: "Generate professional outputs from verified project data." }
+        ]
+      },
+      {
+        label: "Integrations",
+        items: [
+          { label: "Connected Sources", href: "/integrations", description: "Bring permitted files or records from verified external applications into the appropriate project when the integration is available.", status: "Planned" }
         ]
       },
       {

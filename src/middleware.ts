@@ -3,15 +3,13 @@ import { SESSION_COOKIE_NAME } from "@/lib/auth/session-cookie-name";
 
 const ADMIN_LOGIN_PAGE = "/admin/login";
 
-const PUBLIC_PAGE_PREFIXES = [
+const PUBLIC_ROUTES = new Set([
   "/",
   "/login",
   "/register",
   "/verify-email",
   "/forgot-password",
   "/reset-password",
-  "/proposal",
-  "/technical-report",
   "/privacy",
   "/terms",
   "/data-processing",
@@ -21,18 +19,28 @@ const PUBLIC_PAGE_PREFIXES = [
   "/security",
   "/contact-sales",
   "/features",
+  "/about",
   ADMIN_LOGIN_PAGE,
+  "/ai-boq-software",
+  "/boq-software",
+  "/construction-estimating-software",
+  "/boq-management",
+  "/pdf-boq-extraction",
+  "/scanned-pdf-boq",
+  "/quantity-surveying-software",
+  "/boq-document-generation",
+]);
+
+const PUBLIC_PREFIXES = [
+  "/proposal/",
+  "/technical-report/",
 ];
 
 const AUTH_ENTRY_PAGES = ["/login", "/register"];
 
 function isPublicPage(pathname: string): boolean {
-  if (pathname === "/") {
-    return true;
-  }
-  return PUBLIC_PAGE_PREFIXES.some(
-    (prefix) => prefix !== "/" && (pathname === prefix || pathname.startsWith(`${prefix}/`)),
-  );
+  if (PUBLIC_ROUTES.has(pathname)) return true;
+  return PUBLIC_PREFIXES.some((prefix) => pathname.startsWith(prefix));
 }
 
 /**

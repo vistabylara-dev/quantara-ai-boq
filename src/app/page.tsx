@@ -1,6 +1,6 @@
 import React from "react";
 import Link from "next/link";
-import { ArrowRight, FileText, LayoutTemplate, BoxSelect, FolderKanban, ShieldCheck, Database, FileBox, FileSpreadsheet } from "lucide-react";
+import { ArrowRight, FileText, LayoutTemplate, BoxSelect, FolderKanban, ShieldCheck, Database, FileBox, FileSpreadsheet, CheckCircle2, XCircle } from "lucide-react";
 import type { Metadata } from "next";
 import PublicFooter from "@/components/layout/public-footer";
 import { publicFeatures } from "@/lib/config/features";
@@ -18,6 +18,24 @@ export const metadata: Metadata = {
     siteName: "Quantara",
   },
 };
+
+const faqs = [
+  { q: "What is a Bill of Quantities (BOQ)?", a: "A Bill of Quantities is a structured document that lists project work items, descriptions, quantities, units and related information for estimating, tendering, procurement and commercial review." },
+  { q: "What is BOQ software?", a: "BOQ software replaces manual spreadsheets by organizing project information, standardizing descriptions, structuring sections, and generating consistent, professional documents." },
+  { q: "How do contractors prepare BOQs?", a: "Contractors extract scope from specifications and drawings, structure the items by trade or section, calculate quantities, apply approved rates, and compile the final document for submission." },
+  { q: "What is the difference between an estimate and a BOQ?", a: "An estimate calculates the expected cost of a project, whereas a BOQ is a formalized, itemized list of materials, parts, and labor, often forming part of the contract." },
+  { q: "What is Quantara?", a: "Quantara is an AI-assisted BOQ and construction-estimating platform that helps project teams organize supported documents into structured BOQ workflows, controlled project records and professional outputs." },
+  { q: "Who is Quantara designed for?", a: "Quantara is built for general contractors, estimators, quantity surveyors, MEP contractors, interior fit-out companies, civil contractors, consultants, and developers." },
+  { q: "Can Quantara process construction PDFs?", a: "Quantara supports verified text-based PDF workflows. Results depend on document quality, layout and available content, and all extracted information requires professional review." },
+  { q: "Can Quantara process scanned PDFs?", a: "Scanned PDF support may use OCR. OCR can misread text, numbers, symbols or layouts, so extracted content must be checked carefully." },
+  { q: "Can Quantara work with specification documents?", a: "Yes, text-based specifications can be processed to extract item descriptions and requirements, subject to the document's structure and readability." },
+  { q: "Does Quantara support XLSX and CSV BOQs?", a: "Quantara supports verified XLSX and CSV workflows for structured data import or mapping, subject to file structure and product limits." },
+  { q: "Does Quantara replace a quantity surveyor?", a: "No. Quantara assists with extraction, organization and document preparation. Qualified professionals must review quantities, rates, specifications, assumptions, exclusions and final documents." },
+  { q: "How accurate is AI-assisted extraction?", a: "Extraction accuracy depends entirely on the clarity, formatting, and quality of the source document. The AI acts as an assistant, and human review is mandatory before utilizing the extracted data." },
+  { q: "Can multiple users collaborate?", a: "Yes, Quantara supports project and client workspaces, allowing controlled, authenticated access for team members within a company." },
+  { q: "Does Quantara support CAD, BIM or IFC?", a: "CAD, BIM and IFC workflows are planned. They must not be treated as currently available unless explicitly marked Live." },
+  { q: "What does Controlled Early Access mean?", a: "Controlled Early Access means product access and feature availability may be limited while Quantara is tested, improved and prepared for broader commercial release." }
+];
 
 export default function HomePage() {
   return (
@@ -101,30 +119,72 @@ export default function HomePage() {
       </section>
 
       <section className="py-24 px-4 bg-slate-50 dark:bg-slate-900/30">
-        <div className="container mx-auto max-w-5xl">
-          <h2 className="text-3xl font-bold text-center text-slate-900 dark:text-white mb-16">The Quantara Advantage</h2>
-          <div className="grid md:grid-cols-2 gap-6">
-            {[
-              { t: "Faster preparation", d: "Organize supported project information into one structured BOQ workflow." },
-              { t: "More consistent project data", d: "Use controlled sections, descriptions, units, templates and company resources." },
-              { t: "Better revision visibility", d: "Keep project updates, BOQ revisions and generated records connected." },
-              { t: "Professional outputs", d: "Prepare supported BOQ, proposal and technical-document formats for professional review." }
-            ].map((b, i) => (
-              <div key={i} className="bg-white dark:bg-slate-950 p-8 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
-                <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-2">{b.t}</h3>
-                <p className="text-slate-600 dark:text-slate-400">{b.d}</p>
-              </div>
-            ))}
+        <div className="container mx-auto max-w-6xl">
+          <h2 className="text-3xl font-bold text-center text-slate-900 dark:text-white mb-16">Why Quantara</h2>
+          <div className="grid md:grid-cols-2 gap-8">
+            <div className="bg-white dark:bg-slate-950 p-8 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
+              <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-6">Traditional Methods</h3>
+              <ul className="space-y-4">
+                <li className="flex items-start gap-3">
+                  <XCircle className="h-5 w-5 text-red-500 mt-0.5 shrink-0" />
+                  <div>
+                    <span className="font-semibold text-slate-900 dark:text-white">Manual Spreadsheets:</span>
+                    <p className="text-slate-600 dark:text-slate-400 text-sm mt-1">High risk of formula errors, inconsistent formatting across teams, and time-consuming manual entry from project documents.</p>
+                  </div>
+                </li>
+                <li className="flex items-start gap-3">
+                  <XCircle className="h-5 w-5 text-red-500 mt-0.5 shrink-0" />
+                  <div>
+                    <span className="font-semibold text-slate-900 dark:text-white">Generic OCR Tools:</span>
+                    <p className="text-slate-600 dark:text-slate-400 text-sm mt-1">Struggle with complex construction layouts, missing units, and failing to maintain the hierarchical BOQ section structure.</p>
+                  </div>
+                </li>
+                <li className="flex items-start gap-3">
+                  <XCircle className="h-5 w-5 text-red-500 mt-0.5 shrink-0" />
+                  <div>
+                    <span className="font-semibold text-slate-900 dark:text-white">Traditional Document Management:</span>
+                    <p className="text-slate-600 dark:text-slate-400 text-sm mt-1">Files remain disconnected. Pricing updates require manual cross-referencing against outdated versions.</p>
+                  </div>
+                </li>
+              </ul>
+            </div>
+            
+            <div className="bg-blue-50 dark:bg-blue-900/10 p-8 rounded-2xl border border-blue-200 dark:border-blue-900/30 shadow-sm">
+              <h3 className="text-xl font-bold text-blue-900 dark:text-blue-100 mb-6">Quantara Workflows</h3>
+              <ul className="space-y-4">
+                <li className="flex items-start gap-3">
+                  <CheckCircle2 className="h-5 w-5 text-blue-600 dark:text-blue-400 mt-0.5 shrink-0" />
+                  <div>
+                    <span className="font-semibold text-blue-900 dark:text-blue-100">AI-Assisted Extraction:</span>
+                    <p className="text-blue-800/80 dark:text-blue-200/80 text-sm mt-1">Extract scope, item, quantity, and specification information from supported project documents for structured human review.</p>
+                  </div>
+                </li>
+                <li className="flex items-start gap-3">
+                  <CheckCircle2 className="h-5 w-5 text-blue-600 dark:text-blue-400 mt-0.5 shrink-0" />
+                  <div>
+                    <span className="font-semibold text-blue-900 dark:text-blue-100">Structured BOQ Management:</span>
+                    <p className="text-blue-800/80 dark:text-blue-200/80 text-sm mt-1">Organize BOQs into sections, items, quantities, units, and project-specific hierarchies using controlled environments.</p>
+                  </div>
+                </li>
+                <li className="flex items-start gap-3">
+                  <CheckCircle2 className="h-5 w-5 text-blue-600 dark:text-blue-400 mt-0.5 shrink-0" />
+                  <div>
+                    <span className="font-semibold text-blue-900 dark:text-blue-100">Professional Document Generation:</span>
+                    <p className="text-blue-800/80 dark:text-blue-200/80 text-sm mt-1">Use approved templates to create consistent proposals, BOQ documents, and technical project outputs automatically.</p>
+                  </div>
+                </li>
+              </ul>
+            </div>
           </div>
         </div>
       </section>
 
       <section className="py-24 px-4 bg-white dark:bg-slate-950">
-        <div className="container mx-auto max-w-5xl text-center">
-          <h2 className="text-3xl font-bold text-slate-900 dark:text-white mb-12">Who Quantara is For</h2>
+        <div className="container mx-auto max-w-6xl text-center">
+          <h2 className="text-3xl font-bold text-slate-900 dark:text-white mb-12">Who Should Use Quantara?</h2>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-8">
-            {["General Contracting", "MEP Contracting", "HVAC & Fit-out", "Quantity Surveying"].map((industry, i) => (
-              <div key={i} className="p-6 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-100 dark:border-slate-800 flex items-center justify-center font-medium text-slate-800 dark:text-slate-200">
+            {["Contractors", "Estimators", "Quantity Surveyors", "MEP Contractors", "Interior Fit-Out Companies", "Facilities Management", "Civil Contractors", "Consultants"].map((industry, i) => (
+              <div key={i} className="p-6 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-100 dark:border-slate-800 flex items-center justify-center font-medium text-slate-800 dark:text-slate-200 hover:border-blue-300 transition-colors cursor-default">
                 {industry}
               </div>
             ))}
@@ -175,24 +235,25 @@ export default function HomePage() {
         <div className="container mx-auto max-w-4xl">
           <h2 className="text-3xl font-bold text-center text-slate-900 dark:text-white mb-16">How Quantara Works</h2>
           
-          <ol className="relative border-l border-slate-200 dark:border-slate-700 ml-4 md:ml-0 space-y-10">
+          <ol className="relative border-l border-slate-200 dark:border-slate-700 ml-4 md:ml-0 space-y-12">
             {[
-              "Create a company workspace.",
-              "Add a client and project.",
-              "Upload or import supported project documents.",
-              "Review AI-assisted extracted information.",
-              "Organize BOQ sections and items.",
-              "Confirm quantities, units, descriptions, and specifications.",
-              "Apply approved catalogue items, templates, and pricing information where available.",
-              "Review revisions and project history.",
-              "Generate the supported BOQ, proposal, or technical document.",
-              "Complete a professional human review before issuing the final document."
+              { title: "Create a company workspace", desc: "Establish an authenticated, secure environment for your estimators and project teams to collaborate without mixing distinct commercial data." },
+              { title: "Add a client and project", desc: "Organize workflows by associating incoming documents, BOQs, and generating technical records strictly within a unified project context." },
+              { title: "Upload or import supported project documents", desc: "Upload verified formats like text-based PDFs, XLSX, or CSV files to serve as the baseline scope for the project." },
+              { title: "Review AI-assisted extracted information", desc: "Evaluate the data parsed by Quantara, ensuring extracted text, dimensions, and specifications align with the original documents before processing." },
+              { title: "Organize BOQ sections and items", desc: "Structure the verified line items into logical groupings, sub-headings, and sections common to trade or industry standards." },
+              { title: "Confirm quantities, units, descriptions, and specifications", desc: "Apply strict QA checks on all individual records to verify the technical accuracy and completeness of the requirements." },
+              { title: "Apply approved catalogue items, templates, and pricing", desc: "Cross-reference against company-approved standard costs, descriptions, or external catalogue references to apply unified pricing logic." },
+              { title: "Review revisions and project history", desc: "Maintain traceability by comparing updates against original baselines, ensuring changes in scope are actively managed and documented." },
+              { title: "Generate the supported BOQ, proposal, or technical document", desc: "Export to controlled, standardized formats (such as PDF, DOCX, or XLSX) utilizing your approved company branding and layout." },
+              { title: "Complete a professional human review before issuing", desc: "Execute a final manual review by a qualified Quantity Surveyor or responsible professional prior to formal distribution or contractual agreement." }
             ].map((step, index) => (
-              <li key={index} className="ml-8">
-                <span className="absolute flex items-center justify-center w-8 h-8 bg-blue-100 rounded-full -left-4 ring-4 ring-white dark:ring-slate-950 dark:bg-blue-900 text-blue-700 dark:text-blue-300 font-bold text-sm">
+              <li key={index} className="ml-10 relative">
+                <span className="absolute flex items-center justify-center w-8 h-8 bg-blue-100 rounded-full -left-[3.35rem] ring-4 ring-white dark:ring-slate-950 dark:bg-blue-900 text-blue-700 dark:text-blue-300 font-bold text-sm">
                   {index + 1}
                 </span>
-                <p className="text-lg text-slate-700 dark:text-slate-300 pt-1">{step}</p>
+                <h3 className="text-xl font-bold text-slate-900 dark:text-slate-100 mb-2">{step.title}</h3>
+                <p className="text-slate-600 dark:text-slate-400 leading-relaxed">{step.desc}</p>
               </li>
             ))}
           </ol>
@@ -202,6 +263,71 @@ export default function HomePage() {
             <p className="text-amber-700 dark:text-amber-400/90 text-sm leading-relaxed">
               Quantara assists with extraction, organization, calculation workflows, and document preparation. A qualified estimator, quantity surveyor, engineer, or responsible project professional must review project scope, quantities, specifications, rates, exclusions, and final documents before commercial or contractual use.
             </p>
+          </div>
+        </div>
+      </section>
+
+      <section className="py-24 px-4 bg-white dark:bg-slate-950 border-t border-slate-100 dark:border-slate-900">
+        <div className="container mx-auto max-w-5xl">
+          <h2 className="text-3xl font-bold text-center text-slate-900 dark:text-white mb-6">Practical Workflow Example</h2>
+          <p className="text-center text-slate-600 dark:text-slate-400 mb-16 max-w-2xl mx-auto">How Quantara processes an MEP BOQ from source documents to professional output.</p>
+          
+          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4 items-center justify-center text-center">
+            <div className="flex flex-col items-center">
+              <div className="w-12 h-12 rounded-xl bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 flex items-center justify-center mb-3 border border-blue-100 dark:border-blue-900/30">
+                <FileText className="h-5 w-5" />
+              </div>
+              <span className="text-sm font-semibold text-slate-900 dark:text-white">1. Upload</span>
+              <span className="text-xs text-slate-500 mt-1">MEP drawings & specs</span>
+            </div>
+            
+            <div className="flex flex-col items-center">
+              <div className="w-12 h-12 rounded-xl bg-slate-50 dark:bg-slate-900 text-slate-600 dark:text-slate-400 flex items-center justify-center mb-3 border border-slate-200 dark:border-slate-800">
+                <ShieldCheck className="h-5 w-5" />
+              </div>
+              <span className="text-sm font-semibold text-slate-900 dark:text-white">2. Review</span>
+              <span className="text-xs text-slate-500 mt-1">Extracted scope</span>
+            </div>
+            
+            <div className="flex flex-col items-center">
+              <div className="w-12 h-12 rounded-xl bg-slate-50 dark:bg-slate-900 text-slate-600 dark:text-slate-400 flex items-center justify-center mb-3 border border-slate-200 dark:border-slate-800">
+                <FolderKanban className="h-5 w-5" />
+              </div>
+              <span className="text-sm font-semibold text-slate-900 dark:text-white">3. Organize</span>
+              <span className="text-xs text-slate-500 mt-1">Structure sections</span>
+            </div>
+            
+            <div className="flex flex-col items-center">
+              <div className="w-12 h-12 rounded-xl bg-slate-50 dark:bg-slate-900 text-slate-600 dark:text-slate-400 flex items-center justify-center mb-3 border border-slate-200 dark:border-slate-800">
+                <LayoutTemplate className="h-5 w-5" />
+              </div>
+              <span className="text-sm font-semibold text-slate-900 dark:text-white">4. Template</span>
+              <span className="text-xs text-slate-500 mt-1">Apply MEP format</span>
+            </div>
+            
+            <div className="flex flex-col items-center">
+              <div className="w-12 h-12 rounded-xl bg-slate-50 dark:bg-slate-900 text-slate-600 dark:text-slate-400 flex items-center justify-center mb-3 border border-slate-200 dark:border-slate-800">
+                <Database className="h-5 w-5" />
+              </div>
+              <span className="text-sm font-semibold text-slate-900 dark:text-white">5. Revision</span>
+              <span className="text-xs text-slate-500 mt-1">Track changes</span>
+            </div>
+            
+            <div className="flex flex-col items-center">
+              <div className="w-12 h-12 rounded-xl bg-slate-50 dark:bg-slate-900 text-slate-600 dark:text-slate-400 flex items-center justify-center mb-3 border border-slate-200 dark:border-slate-800">
+                <FileBox className="h-5 w-5" />
+              </div>
+              <span className="text-sm font-semibold text-slate-900 dark:text-white">6. Generate</span>
+              <span className="text-xs text-slate-500 mt-1">PDF & XLSX files</span>
+            </div>
+            
+            <div className="flex flex-col items-center">
+              <div className="w-12 h-12 rounded-xl bg-green-50 dark:bg-green-900/20 text-green-600 dark:text-green-400 flex items-center justify-center mb-3 border border-green-200 dark:border-green-900/30">
+                <CheckCircle2 className="h-5 w-5" />
+              </div>
+              <span className="text-sm font-semibold text-slate-900 dark:text-white">7. Review</span>
+              <span className="text-xs text-slate-500 mt-1">Professional sign-off</span>
+            </div>
           </div>
         </div>
       </section>
@@ -281,48 +407,7 @@ export default function HomePage() {
         <div className="container mx-auto max-w-4xl">
           <h2 className="text-3xl font-bold text-center text-slate-900 dark:text-white mb-16">Frequently Asked Questions</h2>
           <div className="space-y-6 text-left">
-            {[
-              {
-                q: "What is Quantara?",
-                a: "Quantara is an AI-assisted BOQ and construction-estimating platform that helps project teams organize supported documents into structured BOQ workflows, controlled project records and professional outputs."
-              },
-              {
-                q: "Who is Quantara designed for?",
-                a: "Quantara is designed for contractors, estimators, quantity surveyors, MEP teams, fit-out companies, facilities-management teams, consultants and project businesses."
-              },
-              {
-                q: "What is a BOQ?",
-                a: "A Bill of Quantities is a structured document that lists project work items, descriptions, quantities, units and related information for estimating, tendering, procurement and commercial review."
-              },
-              {
-                q: "Can Quantara process construction PDFs?",
-                a: "Quantara supports verified text-based PDF workflows. Results depend on document quality, layout and available content, and all extracted information requires professional review."
-              },
-              {
-                q: "Can Quantara process scanned PDFs?",
-                a: "Scanned PDF support may use OCR. OCR can misread text, numbers, symbols or layouts, so extracted content must be checked carefully."
-              },
-              {
-                q: "Does Quantara support XLSX and CSV BOQs?",
-                a: "Quantara supports verified XLSX and CSV workflows for structured data import or mapping, subject to file structure and product limits."
-              },
-              {
-                q: "Does Quantara support CAD, BIM or IFC?",
-                a: "CAD, BIM and IFC workflows are planned. They must not be treated as currently available unless explicitly marked Live."
-              },
-              {
-                q: "Can Quantara generate BOQ documents and proposals?",
-                a: "Quantara supports verified document and export formats shown on the website. Generated outputs require professional review before commercial or contractual use."
-              },
-              {
-                q: "Does Quantara replace a quantity surveyor or estimator?",
-                a: "No. Quantara assists with extraction, organization and document preparation. Qualified professionals must review quantities, rates, specifications, assumptions, exclusions and final documents."
-              },
-              {
-                q: "What does Controlled Early Access mean?",
-                a: "Controlled Early Access means product access and feature availability may be limited while Quantara is tested, improved and prepared for broader commercial release."
-              }
-            ].map((faq, i) => (
+            {faqs.map((faq, i) => (
               <div key={i} className="pb-6 border-b border-slate-200 dark:border-slate-800 last:border-0">
                 <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-2">{faq.q}</h3>
                 <p className="text-slate-600 dark:text-slate-400">{faq.a}</p>
@@ -340,7 +425,7 @@ export default function HomePage() {
               <li><strong>Product name:</strong> Quantara</li>
               <li><strong>Product category:</strong> AI-assisted BOQ and construction-estimating platform</li>
               <li><strong>Status:</strong> Controlled Early Access</li>
-              <li><strong>Primary users:</strong> Contractors, estimators, quantity surveyors, MEP teams, fit-out teams, consultants and project businesses</li>
+              <li><strong>Primary users:</strong> Contractors, estimators, quantity surveyors, MEP teams, fit-out companies, facilities management, civil contractors, consultants, developers</li>
               <li><strong>Live inputs:</strong> Text-based PDF, scanned PDF, XLSX and CSV, subject to verified implementation limits</li>
               <li><strong>Planned inputs:</strong> CAD, BIM and IFC workflows</li>
               <li><strong>Human review:</strong> Required before commercial, contractual, tender or construction use</li>
@@ -349,6 +434,22 @@ export default function HomePage() {
               <li><strong>Telephone:</strong> <a href="tel:+971507994292" className="text-blue-600 hover:underline">+971 50 799 4292</a></li>
               <li><strong>Last reviewed:</strong> August 5, 2026</li>
             </ul>
+          </div>
+        </div>
+      </section>
+
+      <section className="py-24 px-4 bg-slate-50 dark:bg-slate-900/50">
+        <div className="container mx-auto max-w-4xl text-center">
+          <h2 className="text-3xl font-bold text-slate-900 dark:text-white mb-8">Developed and Operated by Vista By Lara</h2>
+          <p className="text-lg text-slate-600 dark:text-slate-400 mb-10 leading-relaxed max-w-3xl mx-auto">
+            Quantara is developed and operated by Vista By Lara, a technology business focused on AI-assisted tools for construction, project, design and business workflows. Quantara is currently available through Controlled Early Access.
+          </p>
+          <div className="flex flex-wrap items-center justify-center gap-6 text-slate-700 dark:text-slate-300">
+            <a href="https://www.vistabylara.com/" target="_blank" rel="noopener noreferrer" className="hover:text-blue-600 dark:hover:text-blue-400 font-medium">www.vistabylara.com</a>
+            <span className="hidden sm:inline-block w-1.5 h-1.5 rounded-full bg-slate-300 dark:bg-slate-700"></span>
+            <a href="mailto:solution@vistabylara.com" className="hover:text-blue-600 dark:hover:text-blue-400 font-medium">solution@vistabylara.com</a>
+            <span className="hidden sm:inline-block w-1.5 h-1.5 rounded-full bg-slate-300 dark:bg-slate-700"></span>
+            <a href="tel:+971507994292" className="hover:text-blue-600 dark:hover:text-blue-400 font-medium">+971 50 799 4292</a>
           </div>
         </div>
       </section>
@@ -384,6 +485,11 @@ export default function HomePage() {
                   "telephone": "+971507994292",
                   "contactType": "customer support",
                   "email": "solution@vistabylara.com"
+                },
+                "parentOrganization": {
+                  "@type": "Organization",
+                  "name": "Vista By Lara",
+                  "description": "A technology business focused on AI-assisted tools for construction, project, design and business workflows."
                 }
               },
               {
@@ -410,88 +516,14 @@ export default function HomePage() {
               },
               {
                 "@type": "FAQPage",
-                "mainEntity": [
-                  {
-                    "@type": "Question",
-                    "name": "What is Quantara?",
-                    "acceptedAnswer": {
-                      "@type": "Answer",
-                      "text": "Quantara is an AI-assisted BOQ and construction-estimating platform that helps project teams organize supported documents into structured BOQ workflows, controlled project records and professional outputs."
-                    }
-                  },
-                  {
-                    "@type": "Question",
-                    "name": "Who is Quantara designed for?",
-                    "acceptedAnswer": {
-                      "@type": "Answer",
-                      "text": "Quantara is designed for contractors, estimators, quantity surveyors, MEP teams, fit-out companies, facilities-management teams, consultants and project businesses."
-                    }
-                  },
-                  {
-                    "@type": "Question",
-                    "name": "What is a BOQ?",
-                    "acceptedAnswer": {
-                      "@type": "Answer",
-                      "text": "A Bill of Quantities is a structured document that lists project work items, descriptions, quantities, units and related information for estimating, tendering, procurement and commercial review."
-                    }
-                  },
-                  {
-                    "@type": "Question",
-                    "name": "Can Quantara process construction PDFs?",
-                    "acceptedAnswer": {
-                      "@type": "Answer",
-                      "text": "Quantara supports verified text-based PDF workflows. Results depend on document quality, layout and available content, and all extracted information requires professional review."
-                    }
-                  },
-                  {
-                    "@type": "Question",
-                    "name": "Can Quantara process scanned PDFs?",
-                    "acceptedAnswer": {
-                      "@type": "Answer",
-                      "text": "Scanned PDF support may use OCR. OCR can misread text, numbers, symbols or layouts, so extracted content must be checked carefully."
-                    }
-                  },
-                  {
-                    "@type": "Question",
-                    "name": "Does Quantara support XLSX and CSV BOQs?",
-                    "acceptedAnswer": {
-                      "@type": "Answer",
-                      "text": "Quantara supports verified XLSX and CSV workflows for structured data import or mapping, subject to file structure and product limits."
-                    }
-                  },
-                  {
-                    "@type": "Question",
-                    "name": "Does Quantara support CAD, BIM or IFC?",
-                    "acceptedAnswer": {
-                      "@type": "Answer",
-                      "text": "CAD, BIM and IFC workflows are planned. They must not be treated as currently available unless explicitly marked Live."
-                    }
-                  },
-                  {
-                    "@type": "Question",
-                    "name": "Can Quantara generate BOQ documents and proposals?",
-                    "acceptedAnswer": {
-                      "@type": "Answer",
-                      "text": "Quantara supports verified document and export formats shown on the website. Generated outputs require professional review before commercial or contractual use."
-                    }
-                  },
-                  {
-                    "@type": "Question",
-                    "name": "Does Quantara replace a quantity surveyor or estimator?",
-                    "acceptedAnswer": {
-                      "@type": "Answer",
-                      "text": "No. Quantara assists with extraction, organization and document preparation. Qualified professionals must review quantities, rates, specifications, assumptions, exclusions and final documents."
-                    }
-                  },
-                  {
-                    "@type": "Question",
-                    "name": "What does Controlled Early Access mean?",
-                    "acceptedAnswer": {
-                      "@type": "Answer",
-                      "text": "Controlled Early Access means product access and feature availability may be limited while Quantara is tested, improved and prepared for broader commercial release."
-                    }
+                "mainEntity": faqs.map(faq => ({
+                  "@type": "Question",
+                  "name": faq.q,
+                  "acceptedAnswer": {
+                    "@type": "Answer",
+                    "text": faq.a
                   }
-                ]
+                }))
               }
             ]
           })

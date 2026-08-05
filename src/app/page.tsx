@@ -1,21 +1,38 @@
 import React from "react";
 import Link from "next/link";
-import { ArrowRight, FileText, LayoutTemplate, BoxSelect, FolderKanban, ShieldCheck, Database, FileBox, FileSpreadsheet, CheckCircle2, XCircle } from "lucide-react";
+import { ArrowRight, FileText, LayoutTemplate, BoxSelect, FolderKanban, ShieldCheck, Database, FileBox, FileSpreadsheet, CheckCircle2, XCircle, Mic2, Keyboard, GitCompareArrows, ClipboardCheck, History, AlertTriangle, LockKeyhole } from "lucide-react";
 import type { Metadata } from "next";
 import PublicFooter from "@/components/layout/public-footer";
 import { publicFeatures } from "@/lib/config/features";
 
 export const metadata: Metadata = {
-  title: "Quantara BOQ and Construction Estimating Platform",
-  description: "Create structured BOQs, organize project items, manage templates and pricing data, and generate professional construction documents with Quantara.",
+  title: "AI BOQ Software for Dubai & UAE | Quantara",
+  description: "AI BOQ software for Dubai and UAE teams. Review structured changes, approve governed revisions and create traceable outputs. Request Early Access.",
+  keywords: [
+    "AI BOQ software Dubai",
+    "BOQ software UAE",
+    "construction estimating software Dubai",
+    "governed AI BOQ workflow",
+    "برنامج حصر كميات بالذكاء الاصطناعي",
+    "برنامج حصر كميات الإمارات"
+  ],
   alternates: {
     canonical: "/",
+    languages: {
+      "en-AE": "/",
+    },
   },
   openGraph: {
-    title: "Quantara BOQ and Construction Estimating Platform",
-    description: "Create structured BOQs, organize project items, manage templates and pricing data, and generate professional construction documents with Quantara.",
+    title: "AI BOQ Software for Dubai & UAE | Quantara",
+    description: "Review structured AI changes, approve governed revisions and create traceable BOQs and technical reports for Dubai and UAE projects.",
     url: "https://quantara.vistabylara.com",
     siteName: "Quantara",
+    locale: "en_AE",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "AI BOQ Software for Dubai & UAE | Quantara",
+    description: "Review structured AI changes, approve governed revisions and create traceable BOQs and technical reports for Dubai and UAE projects.",
   },
 };
 
@@ -34,7 +51,28 @@ const faqs = [
   { q: "How accurate is AI-assisted extraction?", a: "Extraction accuracy depends entirely on the clarity, formatting, and quality of the source document. The AI acts as an assistant, and human review is mandatory before utilizing the extracted data." },
   { q: "Can multiple users collaborate?", a: "Yes, Quantara supports project and client workspaces, allowing controlled, authenticated access for team members within a company." },
   { q: "Does Quantara support CAD, BIM or IFC?", a: "CAD, BIM and IFC workflows are planned. They must not be treated as currently available unless explicitly marked Live." },
-  { q: "What does Controlled Early Access mean?", a: "Controlled Early Access means product access and feature availability may be limited while Quantara is tested, improved and prepared for broader commercial release." }
+  { q: "What does Controlled Early Access mean?", a: "Controlled Early Access means product access and feature availability may be limited while Quantara is tested, improved and prepared for broader commercial release." },
+  { q: "Can I update a BOQ using voice instructions?", a: "Quantara is designed to accept spoken or typed instructions and convert them into structured change proposals. The user must review and approve the proposed operations before they are applied. Voice instructions do not silently alter the BOQ." },
+  { q: "Can I approve only some AI changes?", a: "Where selective approval is available, users can approve individual proposed operations and reject the remaining changes. Quantara applies only the approved operations." },
+  { q: "Can AI change an approved BOQ?", a: "An approved or locked BOQ should not be overwritten. Approved AI changes must create a new governed revision while preserving the previous version and its history." },
+  { q: "Can the same workflow update a technical report?", a: "Yes, where implemented. Users may request additions, rewrites, observations, corrective actions, recommendations or summaries. Quantara presents the proposed report changes for approval and records the resulting revision." }
+];
+
+const governedWorkflow = [
+  { title: "Create a project", desc: "Start one controlled project record for the work." },
+  { title: "Open the project workspace", desc: "Work inside the authenticated project environment." },
+  { title: "Choose supported data sources", desc: "Select one or more available sources for the project." },
+  { title: "Bring data into the workspace", desc: "Upload files, import schedules or connect an authorized application." },
+  { title: "Normalize source information", desc: "Organize supported information into the project workspace." },
+  { title: "Preview and review", desc: "Check the source data before requesting any change." },
+  { title: "Speak or type an instruction", desc: "Give Quantara a clear drafting or structured-editing request." },
+  { title: "Generate a structured proposal", desc: "Prepare proposed operations without silently changing the source record." },
+  { title: "Inspect the proposed impact", desc: "Review affected records, assumptions, ambiguities and warnings." },
+  { title: "Decide what to approve", desc: "Approve all, approve selected changes, edit, reject or request reinterpretation." },
+  { title: "Apply approved operations only", desc: "Quantara applies only the operations explicitly approved by the user." },
+  { title: "Create a governed revision", desc: "Preserve the previous approved or locked version and record the new revision." },
+  { title: "Complete professional review", desc: "A qualified professional checks quantities, rates, specifications and conclusions." },
+  { title: "Generate a traceable output", desc: "Create the supported BOQ or technical report from the reviewed revision." },
 ];
 
 export default function HomePage() {
@@ -62,10 +100,10 @@ export default function HomePage() {
       <section className="pt-24 pb-16 px-4">
         <div className="container mx-auto text-center max-w-4xl">
           <h1 className="text-5xl md:text-6xl font-extrabold tracking-tight text-slate-900 dark:text-white mb-6">
-            Create professional BOQs faster with AI-assisted extraction, structured estimating, and controlled project data
+            AI BOQ Software for Dubai and UAE Project Teams
           </h1>
           <p className="text-xl text-slate-600 dark:text-slate-400 mb-10 max-w-3xl mx-auto leading-relaxed">
-            Quantara helps construction, fit-out, MEP, facilities-management, and contracting teams turn project documents into organized BOQ workflows. Extract scope information, structure items, manage quantities and pricing, apply approved templates, and generate professional project documents from one controlled workspace.
+            Quantara helps contractors, estimators, quantity surveyors, MEP teams and fit-out companies across Dubai and the UAE turn supported project data into governed BOQs and technical reports. Bring source information into one controlled workspace, review AI-assisted changes, approve only what is correct, and generate professional outputs.
           </p>
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-16">
             <Link href="/register" className="inline-flex items-center justify-center rounded-lg text-base font-medium bg-blue-600 text-white hover:bg-blue-700 h-12 px-8 py-3 w-full sm:w-auto shadow-sm">
@@ -84,7 +122,7 @@ export default function HomePage() {
             <div className="flex items-center gap-2"><ShieldCheck className="h-4 w-4 text-blue-500" /> Project-based access controls</div>
             <div className="flex items-center gap-2"><ShieldCheck className="h-4 w-4 text-blue-500" /> Controlled templates</div>
             <div className="flex items-center gap-2"><ShieldCheck className="h-4 w-4 text-blue-500" /> Professional document generation</div>
-            <div className="flex items-center gap-2"><ShieldCheck className="h-4 w-4 text-blue-500" /> Built for construction and project teams</div>
+            <div className="flex items-center gap-2"><ShieldCheck className="h-4 w-4 text-blue-500" /> Built for Dubai and UAE project teams</div>
           </div>
         </div>
       </section>
@@ -231,101 +269,211 @@ export default function HomePage() {
         </div>
       </section>
 
+      <section id="governed-ai-instructions" aria-labelledby="governed-ai-heading" className="relative overflow-hidden py-24 px-4 bg-slate-950 text-white">
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(37,99,235,0.28),transparent_40%),radial-gradient(circle_at_bottom_right,rgba(14,165,233,0.16),transparent_38%)]" aria-hidden="true"></div>
+        <div className="container relative mx-auto max-w-6xl">
+          <div className="mb-8 flex flex-wrap items-center gap-3">
+            <span role="status" className="inline-flex items-center rounded-full border border-amber-300/30 bg-amber-300/10 px-3 py-1 text-xs font-bold uppercase tracking-[0.16em] text-amber-200">
+              In Development
+            </span>
+            <span className="text-sm font-medium text-blue-200">Governed AI workflow</span>
+          </div>
+
+          <div className="grid items-start gap-12 lg:grid-cols-[1.05fr_0.95fr]">
+            <div>
+              <h2 id="governed-ai-heading" className="max-w-3xl text-3xl font-bold tracking-tight sm:text-4xl lg:text-5xl">
+                Speak or Type Instructions, Then Approve the Changes
+              </h2>
+              <p className="mt-6 max-w-3xl text-lg leading-8 text-slate-300">
+                After project data has been uploaded, imported or connected, users can give Quantara typed or spoken instructions. Quantara interprets the request and prepares a structured change proposal showing the affected BOQ items or report sections, assumptions, warnings and expected changes. The user reviews the proposal and decides which changes to approve before Quantara applies them and records a new revision.
+              </p>
+
+              <div className="mt-8 rounded-2xl border border-blue-400/20 bg-blue-400/10 p-5">
+                <div className="flex items-start gap-4">
+                  <div className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-400/15 text-blue-200">
+                    <LockKeyhole className="h-5 w-5" aria-hidden="true" />
+                  </div>
+                  <p className="text-sm leading-6 text-blue-50">
+                    AI instructions never silently alter a BOQ or technical report. Quantara applies only changes approved by the user and preserves the source instruction, proposal, approval decision and resulting revision.
+                  </p>
+                </div>
+              </div>
+
+              <div className="mt-8 grid gap-4 sm:grid-cols-2">
+                <article className="rounded-2xl border border-white/10 bg-white/[0.06] p-6">
+                  <div className="flex items-center justify-between gap-4">
+                    <div className="flex items-center gap-2 text-blue-200">
+                      <Mic2 className="h-5 w-5" aria-hidden="true" />
+                      <Keyboard className="h-5 w-5" aria-hidden="true" />
+                    </div>
+                    <span className="rounded-full bg-amber-300/10 px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide text-amber-200">In Development</span>
+                  </div>
+                  <h3 className="mt-5 text-lg font-bold">Voice and Typed AI Change Proposals</h3>
+                  <p className="mt-3 text-sm leading-6 text-slate-300">
+                    Give Quantara spoken or typed instructions after bringing project data into the workspace. Quantara prepares structured, reviewable changes for the BOQ or technical report and applies only the operations you approve.
+                  </p>
+                </article>
+
+                <article className="rounded-2xl border border-white/10 bg-white/[0.06] p-6">
+                  <GitCompareArrows className="h-6 w-6 text-blue-200" aria-hidden="true" />
+                  <h3 className="mt-5 text-lg font-bold">Review before anything changes</h3>
+                  <p className="mt-3 text-sm leading-6 text-slate-300">
+                    Proposals are designed to make affected records, before-and-after changes, assumptions, ambiguities and warnings visible before any decision is made.
+                  </p>
+                </article>
+              </div>
+            </div>
+
+            <div className="rounded-3xl border border-white/10 bg-white/[0.07] p-4 shadow-2xl shadow-blue-950/40 sm:p-6" aria-label="Concept preview of a structured AI change proposal">
+              <div className="flex items-center justify-between gap-4 border-b border-white/10 pb-4">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-[0.14em] text-blue-200">Structured change proposal</p>
+                  <p className="mt-1 text-sm text-slate-400">Illustrative review flow</p>
+                </div>
+                <span className="rounded-full border border-white/10 bg-slate-950/50 px-3 py-1 text-xs text-slate-300">Not applied</span>
+              </div>
+
+              <div className="mt-5 space-y-4">
+                <div className="rounded-2xl border border-white/10 bg-slate-950/45 p-4">
+                  <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
+                    <Mic2 className="h-4 w-4" aria-hidden="true" />
+                    Example instruction
+                  </div>
+                  <p className="mt-3 text-sm font-medium leading-6 text-white">“Update the description to include testing and commissioning.”</p>
+                </div>
+
+                <div className="rounded-2xl border border-blue-400/20 bg-blue-400/10 p-4">
+                  <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-blue-200">
+                    <GitCompareArrows className="h-4 w-4" aria-hidden="true" />
+                    Proposed operation
+                  </div>
+                  <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                    <div className="rounded-xl border border-white/10 bg-slate-950/35 p-3">
+                      <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Before</p>
+                      <p className="mt-2 text-sm text-slate-300">Supply and install butterfly valve.</p>
+                    </div>
+                    <div className="rounded-xl border border-emerald-300/20 bg-emerald-300/10 p-3">
+                      <p className="text-[11px] font-semibold uppercase tracking-wide text-emerald-200">Proposed</p>
+                      <p className="mt-2 text-sm text-emerald-50">Supply, install, test and commission butterfly valve.</p>
+                    </div>
+                  </div>
+                  <div className="mt-3 flex items-start gap-2 rounded-xl border border-amber-300/20 bg-amber-300/10 p-3 text-xs leading-5 text-amber-100">
+                    <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+                    Assumptions, ambiguities and warnings remain visible for review.
+                  </div>
+                </div>
+
+                <div className="rounded-2xl border border-white/10 bg-slate-950/45 p-4">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">User decision</p>
+                  <div className="mt-3 flex flex-wrap gap-2" aria-label="Available proposal decisions where implemented">
+                    {['Approve All', 'Approve Selected', 'Edit Proposal', 'Reject', 'Request Reinterpretation'].map((decision) => (
+                      <span key={decision} className="rounded-lg border border-white/10 bg-white/[0.06] px-3 py-2 text-xs font-medium text-slate-200">{decision}</span>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-3 rounded-2xl border border-emerald-300/20 bg-emerald-300/10 p-4 text-sm font-semibold text-emerald-100">
+                  <History className="h-5 w-5 shrink-0" aria-hidden="true" />
+                  Approved operations only → governed revision
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
       <section className="py-24 px-4 bg-white dark:bg-slate-950 border-t border-slate-100 dark:border-slate-900">
         <div className="container mx-auto max-w-4xl">
-          <h2 className="text-3xl font-bold text-center text-slate-900 dark:text-white mb-16">How Quantara Works</h2>
-          
-          <ol className="relative border-l border-slate-200 dark:border-slate-700 ml-4 md:ml-0 space-y-12">
-            {[
-              { title: "Create Project", desc: "Create a project once and enter the relevant client, project and workspace information." },
-              { title: "Choose Data Sources", desc: "Select one or more supported data sources for the project, such as local files or authorized external applications." },
-              { title: "Upload Files and/or Connect Authorized Applications", desc: "Manually upload supported project files or authorize Quantara to access permitted source information." },
-              { title: "Import into Project Workspace", desc: "Bring in information from authorized sources into the controlled project environment." },
-              { title: "Normalize and Organize Source Data", desc: "Quantara organizes supported source information into a consistent project structure for review." },
-              { title: "Preview and Review", desc: "Preview available source documents and review imported or extracted information before proceeding." },
-              { title: "Create or Update BOQ", desc: "Use the verified source data to organize BOQ sections, items, descriptions, and quantities." },
-              { title: "Professional Review", desc: "All information must be reviewed by an appropriately qualified professional." },
-              { title: "Generate Supported Outputs", desc: "Generate the supported BOQ, proposal, technical report or export format available." }
-            ].map((step, index) => (
-              <li key={index} className="ml-10 relative">
-                <span className="absolute flex items-center justify-center w-8 h-8 bg-blue-100 rounded-full -left-[3.35rem] ring-4 ring-white dark:ring-slate-950 dark:bg-blue-900 text-blue-700 dark:text-blue-300 font-bold text-sm">
-                  {index + 1}
-                </span>
-                <h3 className="text-xl font-bold text-slate-900 dark:text-slate-100 mb-2">{step.title}</h3>
-                <p className="text-slate-600 dark:text-slate-400 leading-relaxed">{step.desc}</p>
-              </li>
-            ))}
+          <h2 className="text-3xl font-bold text-center text-slate-900 dark:text-white">How Quantara Works</h2>
+          <p className="mx-auto mt-5 mb-12 max-w-2xl text-center text-slate-600 dark:text-slate-400">
+            One governed journey connects project data, user instructions, visible approval decisions, controlled revisions and reviewed professional outputs.
+          </p>
+
+          <ol className="grid gap-4 md:grid-cols-2">
+            {governedWorkflow.map((step, index) => {
+              const isProposalStage = index >= 6 && index <= 11;
+
+              return (
+                <li key={step.title} className={`relative rounded-2xl border p-5 pl-16 ${isProposalStage ? "border-blue-200 bg-blue-50 dark:border-blue-900/50 dark:bg-blue-950/30" : "border-slate-200 bg-slate-50 dark:border-slate-800 dark:bg-slate-900/60"}`}>
+                  <span className={`absolute left-5 top-5 flex h-8 w-8 items-center justify-center rounded-full text-sm font-bold ${isProposalStage ? "bg-blue-600 text-white" : "bg-slate-200 text-slate-700 dark:bg-slate-800 dark:text-slate-200"}`} aria-hidden="true">
+                    {index + 1}
+                  </span>
+                  <h3 className="font-bold text-slate-900 dark:text-slate-100">{step.title}</h3>
+                  <p className="mt-2 text-sm leading-6 text-slate-600 dark:text-slate-400">{step.desc}</p>
+                </li>
+              );
+            })}
           </ol>
 
-          <div className="mt-16 bg-amber-50 dark:bg-amber-900/20 border-l-4 border-amber-500 p-6 rounded-r-lg">
-            <h3 className="font-semibold text-amber-800 dark:text-amber-300 mb-2">Professional Disclaimer</h3>
+          <aside aria-label="Professional review notice" className="mt-12 bg-amber-50 dark:bg-amber-900/20 border-l-4 border-amber-500 p-6 rounded-r-lg">
+            <h3 className="font-semibold text-amber-800 dark:text-amber-300 mb-2">Professional Review Required</h3>
             <p className="text-amber-700 dark:text-amber-400/90 text-sm leading-relaxed">
-              Quantara assists with extraction, organization, calculation workflows, and document preparation. A qualified estimator, quantity surveyor, engineer, or responsible project professional must review project scope, quantities, specifications, rates, exclusions, and final documents before commercial or contractual use.
+              Voice and typed AI instructions assist with drafting and structured editing. They do not replace professional judgment. All descriptions, quantities, units, specifications, rates, assumptions, exclusions, technical findings and generated outputs must be reviewed by an appropriately qualified professional before tender, procurement, contractual, regulatory or construction use.
             </p>
-          </div>
+          </aside>
         </div>
       </section>
 
       <section className="py-24 px-4 bg-white dark:bg-slate-950 border-t border-slate-100 dark:border-slate-900">
         <div className="container mx-auto max-w-5xl">
           <h2 className="text-3xl font-bold text-center text-slate-900 dark:text-white mb-6">Practical Workflow Example</h2>
-          <p className="text-center text-slate-600 dark:text-slate-400 mb-16 max-w-2xl mx-auto">How Quantara processes an MEP BOQ from source documents to professional output.</p>
+          <p className="text-center text-slate-600 dark:text-slate-400 mb-16 max-w-2xl mx-auto">How a Dubai or UAE MEP team can move from supported project data to an approved, professionally reviewed output.</p>
           
           <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4 items-center justify-center text-center">
             <div className="flex flex-col items-center">
               <div className="w-12 h-12 rounded-xl bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 flex items-center justify-center mb-3 border border-blue-100 dark:border-blue-900/30">
                 <FileText className="h-5 w-5" />
               </div>
-              <span className="text-sm font-semibold text-slate-900 dark:text-white">1. Upload</span>
-              <span className="text-xs text-slate-500 mt-1">MEP drawings & specs</span>
+              <span className="text-sm font-semibold text-slate-900 dark:text-white">1. Bring Data</span>
+              <span className="text-xs text-slate-500 mt-1">Upload, import or connect</span>
             </div>
             
             <div className="flex flex-col items-center">
               <div className="w-12 h-12 rounded-xl bg-slate-50 dark:bg-slate-900 text-slate-600 dark:text-slate-400 flex items-center justify-center mb-3 border border-slate-200 dark:border-slate-800">
                 <ShieldCheck className="h-5 w-5" />
               </div>
-              <span className="text-sm font-semibold text-slate-900 dark:text-white">2. Review</span>
-              <span className="text-xs text-slate-500 mt-1">Extracted scope</span>
+              <span className="text-sm font-semibold text-slate-900 dark:text-white">2. Review Data</span>
+              <span className="text-xs text-slate-500 mt-1">Check normalized sources</span>
             </div>
             
             <div className="flex flex-col items-center">
               <div className="w-12 h-12 rounded-xl bg-slate-50 dark:bg-slate-900 text-slate-600 dark:text-slate-400 flex items-center justify-center mb-3 border border-slate-200 dark:border-slate-800">
-                <FolderKanban className="h-5 w-5" />
+                <Mic2 className="h-5 w-5" />
               </div>
-              <span className="text-sm font-semibold text-slate-900 dark:text-white">3. Organize</span>
-              <span className="text-xs text-slate-500 mt-1">Structure sections</span>
+              <span className="text-sm font-semibold text-slate-900 dark:text-white">3. Instruct</span>
+              <span className="text-xs text-slate-500 mt-1">Speak or type</span>
             </div>
             
             <div className="flex flex-col items-center">
               <div className="w-12 h-12 rounded-xl bg-slate-50 dark:bg-slate-900 text-slate-600 dark:text-slate-400 flex items-center justify-center mb-3 border border-slate-200 dark:border-slate-800">
-                <LayoutTemplate className="h-5 w-5" />
+                <GitCompareArrows className="h-5 w-5" />
               </div>
-              <span className="text-sm font-semibold text-slate-900 dark:text-white">4. Template</span>
-              <span className="text-xs text-slate-500 mt-1">Apply MEP format</span>
+              <span className="text-sm font-semibold text-slate-900 dark:text-white">4. Compare</span>
+              <span className="text-xs text-slate-500 mt-1">Review proposed changes</span>
             </div>
             
             <div className="flex flex-col items-center">
               <div className="w-12 h-12 rounded-xl bg-slate-50 dark:bg-slate-900 text-slate-600 dark:text-slate-400 flex items-center justify-center mb-3 border border-slate-200 dark:border-slate-800">
-                <Database className="h-5 w-5" />
+                <ClipboardCheck className="h-5 w-5" />
               </div>
-              <span className="text-sm font-semibold text-slate-900 dark:text-white">5. Revision</span>
-              <span className="text-xs text-slate-500 mt-1">Track changes</span>
+              <span className="text-sm font-semibold text-slate-900 dark:text-white">5. Approve</span>
+              <span className="text-xs text-slate-500 mt-1">Choose operations</span>
             </div>
             
             <div className="flex flex-col items-center">
               <div className="w-12 h-12 rounded-xl bg-slate-50 dark:bg-slate-900 text-slate-600 dark:text-slate-400 flex items-center justify-center mb-3 border border-slate-200 dark:border-slate-800">
-                <FileBox className="h-5 w-5" />
+                <History className="h-5 w-5" />
               </div>
-              <span className="text-sm font-semibold text-slate-900 dark:text-white">6. Generate</span>
-              <span className="text-xs text-slate-500 mt-1">PDF & XLSX files</span>
+              <span className="text-sm font-semibold text-slate-900 dark:text-white">6. Revise</span>
+              <span className="text-xs text-slate-500 mt-1">Preserve version history</span>
             </div>
             
             <div className="flex flex-col items-center">
               <div className="w-12 h-12 rounded-xl bg-green-50 dark:bg-green-900/20 text-green-600 dark:text-green-400 flex items-center justify-center mb-3 border border-green-200 dark:border-green-900/30">
                 <CheckCircle2 className="h-5 w-5" />
               </div>
-              <span className="text-sm font-semibold text-slate-900 dark:text-white">7. Review</span>
-              <span className="text-xs text-slate-500 mt-1">Professional sign-off</span>
+              <span className="text-sm font-semibold text-slate-900 dark:text-white">7. Review & Generate</span>
+              <span className="text-xs text-slate-500 mt-1">Professional output</span>
             </div>
           </div>
         </div>
@@ -424,6 +572,7 @@ export default function HomePage() {
               <li><strong>Product name:</strong> Quantara</li>
               <li><strong>Product category:</strong> AI-assisted BOQ and construction-estimating platform</li>
               <li><strong>Status:</strong> Controlled Early Access</li>
+              <li><strong>Voice and typed AI change proposals:</strong> In Development</li>
               <li><strong>Primary users:</strong> Contractors, estimators, quantity surveyors, MEP teams, fit-out companies, facilities management, civil contractors, consultants, developers</li>
               <li><strong>Live inputs:</strong> Text-based PDF, scanned PDF, XLSX and CSV, subject to verified implementation limits</li>
               <li><strong>Planned inputs:</strong> CAD, BIM and IFC workflows</li>
@@ -501,7 +650,8 @@ export default function HomePage() {
                 "@type": "WebPage",
                 "@id": "https://quantara.vistabylara.com/#webpage",
                 "url": "https://quantara.vistabylara.com/",
-                "name": "Quantara BOQ and Construction Estimating Platform",
+                "name": "AI BOQ Software for Dubai and UAE Project Teams",
+                "inLanguage": "en-AE",
                 "isPartOf": { "@id": "https://quantara.vistabylara.com/#website" }
               },
               {
@@ -511,9 +661,25 @@ export default function HomePage() {
                 "applicationCategory": "BusinessApplication",
                 "operatingSystem": "Web",
                 "url": "https://quantara.vistabylara.com/",
-                "description": "Quantara is an AI-assisted BOQ and construction-estimating platform that helps contractors, estimators, quantity surveyors and project teams organize supported documents into structured BOQ workflows, controlled project records and professional outputs.",
+                "description": "Quantara is AI BOQ software for Dubai and UAE project teams, with controlled project data, structured review, governed revisions and professional outputs.",
+                "areaServed": [
+                  { "@type": "City", "name": "Dubai" },
+                  { "@type": "Country", "name": "United Arab Emirates" }
+                ],
                 "publisher": { "@id": "https://quantara.vistabylara.com/#organization" },
                 "provider": { "@id": "https://quantara.vistabylara.com/#organization" }
+              },
+              {
+                "@type": "Service",
+                "@id": "https://quantara.vistabylara.com/#governed-ai-change-proposals",
+                "name": "Voice and Typed AI Change Proposals",
+                "serviceType": "Governed AI-assisted BOQ and technical-report change proposals",
+                "description": "In Development — Quantara is designed to prepare structured, reviewable changes from spoken or typed instructions and apply only operations approved by the user.",
+                "provider": { "@id": "https://quantara.vistabylara.com/#organization" },
+                "areaServed": [
+                  { "@type": "City", "name": "Dubai" },
+                  { "@type": "Country", "name": "United Arab Emirates" }
+                ]
               },
               {
                 "@type": "FAQPage",

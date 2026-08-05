@@ -72,10 +72,10 @@ export default async function ProjectLayout({ children, params }: ProjectLayoutP
               Proposals
             </Link>
             <Link
-              href={`${basePath}/files`}
+              href={`${basePath}/drawings`}
               className="rounded-full border border-slate-800 bg-slate-900 px-4 py-2 text-sm text-slate-200 transition hover:bg-slate-800"
             >
-              Files &amp; Drawings
+              Drawings
             </Link>
             <Link
               href={`${basePath}/integrations`}

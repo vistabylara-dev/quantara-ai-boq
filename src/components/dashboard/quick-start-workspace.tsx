@@ -22,8 +22,16 @@ const IMG = {
   generateProposal: `/images/dashboard/${encodeURIComponent("Gemini_Generated_Image_afy5jiafy5jiafy5.png")}`,
 };
 
-export default function QuickStartWorkspace({ currentProjectId }: { currentProjectId: string | null }) {
-  const steps: QuickStartStep[] = [
+/**
+ * Pure step-list builder, kept separate from the component so the hrefs can be unit-tested
+ * without rendering React. "Upload Drawings" must always land on the purpose-built drawing
+ * uploader (/projects/{id}/drawings) — it must never resolve to /imports (the CSV/XLSX
+ * spreadsheet importer) or to the legacy /files extraction-preview page. See
+ * tests/quick-start-workspace-navigation.test.ts, added after a production PDF upload was
+ * misrouted through /imports because this card pointed there when no project was selected yet.
+ */
+export function buildQuickStartSteps(currentProjectId: string | null): QuickStartStep[] {
+  return [
     {
       step: 1,
       title: "Create Project",
@@ -34,8 +42,8 @@ export default function QuickStartWorkspace({ currentProjectId }: { currentProje
     {
       step: 2,
       title: "Upload Drawings",
-      description: "Add drawings and source files for extraction.",
-      href: currentProjectId ? `/projects/${currentProjectId}/files` : "/imports",
+      description: "Add drawings and source files for your project.",
+      href: currentProjectId ? `/projects/${currentProjectId}/drawings` : "/projects/new",
       icon: Upload,
       image: IMG.uploadDrawings,
     },
@@ -63,6 +71,10 @@ export default function QuickStartWorkspace({ currentProjectId }: { currentProje
       icon: FileOutput,
     },
   ];
+}
+
+export default function QuickStartWorkspace({ currentProjectId }: { currentProjectId: string | null }) {
+  const steps: QuickStartStep[] = buildQuickStartSteps(currentProjectId);
 
   return (
     <section className="rounded-[28px] border border-[#D5E0EC] dark:border-[#20304D] bg-white dark:bg-[#091326] p-6 sm:p-8">

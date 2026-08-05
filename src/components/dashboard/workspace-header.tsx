@@ -14,6 +14,22 @@ export type CurrentProject = {
 
 const TODAY_LABEL = new Intl.DateTimeFormat("en-GB", { weekday: "long", day: "numeric", month: "long" }).format(new Date());
 
+/**
+ * Pure href resolvers, exported separately so navigation-target regressions can be unit-tested
+ * without rendering React. "Upload Drawing" must always resolve to the purpose-built drawing
+ * uploader — never /imports (CSV/XLSX spreadsheet importer) or the legacy /files
+ * extraction-preview page. See docs/upload-workflow-contract.md and
+ * tests/workspace-header-navigation.test.ts, added after a production PDF upload was misrouted
+ * through /imports because this exact button pointed there when no project was active.
+ */
+export function resolveUploadDrawingHref(currentProject: CurrentProject | null): string {
+  return currentProject ? `/projects/${currentProject.id}/drawings` : "/projects/new";
+}
+
+export function resolveBoqHref(currentProject: CurrentProject | null): string {
+  return currentProject ? `/projects/${currentProject.id}/boq` : "/projects/new";
+}
+
 export default function WorkspaceHeader({
   companyName,
   userName,
@@ -34,8 +50,8 @@ export default function WorkspaceHeader({
   recentUpdatesCount: number;
 }) {
   const firstName = (userName || userEmail).split(" ")[0];
-  const uploadHref = currentProject ? `/projects/${currentProject.id}/files` : "/imports";
-  const boqHref = currentProject ? `/projects/${currentProject.id}/boq` : "/projects/new";
+  const uploadHref = resolveUploadDrawingHref(currentProject);
+  const boqHref = resolveBoqHref(currentProject);
 
   return (
     <header className="relative overflow-hidden rounded-[32px] border border-[#D5E0EC] dark:border-[#20304D] bg-white dark:bg-[#091326]">

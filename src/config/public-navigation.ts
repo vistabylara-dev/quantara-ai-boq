@@ -166,6 +166,7 @@ export const publicNavigation: NavigationSection[] = [
         label: "Company",
         items: [
           { label: "About", href: "/about" },
+          { label: "Pricing", href: "/pricing" },
           { label: "Contact Sales", href: "/contact-sales" },
           { label: "Request Early Access", href: "/register" },
           { label: "Security", href: "/security" }

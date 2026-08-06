@@ -5,6 +5,7 @@ import { requireCapability } from "@/lib/auth/rbac";
 import { AppError } from "@/lib/errors/app-error";
 import { createAuditLog } from "@/lib/repositories/audit-repository";
 import { getBOQ } from "@/lib/repositories/boq-repository";
+import { getGeneratedTechnicalReport } from "@/lib/repositories/generated-technical-report-repository";
 import { getProposal, createProposalEvent, markProposalSent, verifyProposalToken } from "@/lib/repositories/client-proposal-repository";
 import { resolveEmailTemplate } from "@/lib/services/template-resolution-service";
 import { renderEmailTemplate, type EmailTemplateVariables } from "@/lib/email/render-email-template";
@@ -16,17 +17,13 @@ import { formatDate } from "@/lib/formatting/dates";
 async function buildVariables(companyId: string, proposalId: string, rawToken: string | null, senderName: string): Promise<EmailTemplateVariables> {
   const proposal = await getProposal(companyId, proposalId);
   const project = await prisma.project.findFirstOrThrow({ where: { id: proposal.projectId, companyId } });
-  const boq = await getBOQ(companyId, proposal.boqId);
   const company = await prisma.company.findUniqueOrThrow({ where: { id: companyId } });
-  const documents = await prisma.generatedDocument.findMany({ where: { companyId, id: { in: proposal.documents.map((d) => d.id) } } });
 
-  return {
+  const shared = {
     clientName: proposal.recipientName,
     clientCompany: proposal.clientName,
     projectName: project.name,
     projectReference: project.reference,
-    boqReference: `${project.reference}-${boq.revision}`,
-    revision: boq.revision,
     proposalValidityDate: formatDate(proposal.expiresAt),
     companyName: company.tradeName || company.legalName,
     companyPhone: company.phone ?? "",
@@ -35,9 +32,31 @@ async function buildVariables(companyId: string, proposalId: string, rawToken: s
     senderEmail: company.email,
     senderTitle: company.authorizedSignatoryTitle ?? "",
     secureReviewUrl: rawToken ? buildProposalSecureUrl(rawToken) : "",
+    currency: project.currency,
+  };
+
+  if (proposal.sourceType === "TECHNICAL_REPORT_REVISION") {
+    const report = await getGeneratedTechnicalReport(companyId, proposal.technicalReportId!);
+    return {
+      ...shared,
+      // Technical reports have no revision number or monetary total — these two required
+      // template slots are reused with report-appropriate text rather than inventing a
+      // parallel variable set, per the "reuse existing fields" governance rule for this feature.
+      boqReference: `${project.reference}-${report.name}`,
+      revision: report.templateName,
+      documentList: report.fileName ? `${report.documentType ?? "Document"} — ${report.fileName}` : "",
+      grandTotal: "—",
+    };
+  }
+
+  const boq = await getBOQ(companyId, proposal.boqId!);
+  const documents = await prisma.generatedDocument.findMany({ where: { companyId, id: { in: proposal.documents.map((d) => d.id) } } });
+  return {
+    ...shared,
+    boqReference: `${project.reference}-${boq.revision}`,
+    revision: boq.revision,
     documentList: documents.map((doc) => `${doc.type} — ${doc.fileName ?? "document"}`).join("\n"),
     grandTotal: boq.totals.grandTotal.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
-    currency: project.currency,
   };
 }
 
@@ -61,7 +80,9 @@ async function assertTokenMatchesProposal(companyId: string, proposalId: string,
 export async function previewProposalEmail(actor: CurrentActor, input: PreviewEmailInput) {
   requireCapability(actor, "proposals:manage");
   await assertTokenMatchesProposal(actor.companyId, input.proposalId, input.rawToken);
-  const resolved = await resolveEmailTemplate({ companyId: actor.companyId, category: "BOQ", templateId: input.emailTemplateId });
+  const sourceProposal = await getProposal(actor.companyId, input.proposalId);
+  const category = sourceProposal.sourceType === "TECHNICAL_REPORT_REVISION" ? "TECHNICAL_REPORT" : "BOQ";
+  const resolved = await resolveEmailTemplate({ companyId: actor.companyId, category, templateId: input.emailTemplateId });
 
   const variables = await buildVariables(actor.companyId, input.proposalId, input.rawToken, actor.fullName);
   const rendered = renderEmailTemplate({ subject: resolved.subject, bodyHtml: resolved.bodyHtml, bodyText: resolved.bodyText, variables });
@@ -86,7 +107,9 @@ export async function previewProposalEmail(actor: CurrentActor, input: PreviewEm
 export async function testSendProposalEmail(actor: CurrentActor, input: PreviewEmailInput & { testRecipient: string }) {
   requireCapability(actor, "proposals:manage");
   await assertTokenMatchesProposal(actor.companyId, input.proposalId, input.rawToken);
-  const resolved = await resolveEmailTemplate({ companyId: actor.companyId, category: "BOQ", templateId: input.emailTemplateId });
+  const sourceProposal = await getProposal(actor.companyId, input.proposalId);
+  const category = sourceProposal.sourceType === "TECHNICAL_REPORT_REVISION" ? "TECHNICAL_REPORT" : "BOQ";
+  const resolved = await resolveEmailTemplate({ companyId: actor.companyId, category, templateId: input.emailTemplateId });
 
   const variables = await buildVariables(actor.companyId, input.proposalId, input.rawToken, actor.fullName);
   const rendered = renderEmailTemplate({ subject: `[TEST] ${resolved.subject}`, bodyHtml: resolved.bodyHtml, bodyText: resolved.bodyText, variables });
@@ -121,7 +144,8 @@ export async function sendProposalEmail(actor: CurrentActor, input: SendProposal
   if (proposal.status !== ClientProposalStatus.READY && proposal.status !== ClientProposalStatus.SENT) {
     throw new AppError("PROPOSAL_NOT_READY", "Mark the proposal READY before sending it.", 409);
   }
-  const resolved = await resolveEmailTemplate({ companyId: actor.companyId, category: "BOQ", templateId: input.emailTemplateId });
+  const category = proposal.sourceType === "TECHNICAL_REPORT_REVISION" ? "TECHNICAL_REPORT" : "BOQ";
+  const resolved = await resolveEmailTemplate({ companyId: actor.companyId, category, templateId: input.emailTemplateId });
 
   const variables = await buildVariables(actor.companyId, input.proposalId, input.rawToken, actor.fullName);
   const rendered = renderEmailTemplate({ subject: resolved.subject, bodyHtml: resolved.bodyHtml, bodyText: resolved.bodyText, variables });
@@ -130,7 +154,8 @@ export async function sendProposalEmail(actor: CurrentActor, input: SendProposal
     data: {
       companyId: actor.companyId,
       projectId: proposal.projectId,
-      boqId: proposal.boqId,
+      boqId: proposal.sourceType === "BOQ_REVISION" ? proposal.boqId : null,
+      generatedTechnicalReportId: proposal.sourceType === "TECHNICAL_REPORT_REVISION" ? proposal.technicalReportId : null,
       clientProposalId: proposal.id,
       emailTemplateId: resolved.templateId,
       emailTemplateVersionId: resolved.versionId,

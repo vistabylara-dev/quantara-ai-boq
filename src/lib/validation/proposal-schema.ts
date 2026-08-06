@@ -17,8 +17,9 @@ const proposalSettingsInputSchema = z
   })
   .strict();
 
-export const createProposalSchema = z
+const createBoqProposalSchema = z
   .object({
+    sourceType: z.literal("BOQ_REVISION"),
     boqId: z.string().uuid("A valid BOQ ID is required."),
     recipientEmail: z.string().trim().email("A valid recipient email is required.").max(255),
     recipientName: z.string().trim().min(1, "Recipient name is required.").max(255),
@@ -28,6 +29,23 @@ export const createProposalSchema = z
     forceNew: z.boolean().optional(),
   })
   .strict();
+
+const createTechnicalReportProposalSchema = z
+  .object({
+    sourceType: z.literal("TECHNICAL_REPORT_REVISION"),
+    technicalReportId: z.string().uuid("A valid technical report ID is required."),
+    recipientEmail: z.string().trim().email("A valid recipient email is required.").max(255),
+    recipientName: z.string().trim().min(1, "Recipient name is required.").max(255),
+    expiresInDays: z.coerce.number().int().min(1).max(365).optional(),
+    settings: proposalSettingsInputSchema.optional(),
+    forceNew: z.boolean().optional(),
+  })
+  .strict();
+
+export const createProposalSchema = z.discriminatedUnion("sourceType", [
+  createBoqProposalSchema,
+  createTechnicalReportProposalSchema,
+]);
 
 export const updateProposalSchema = z
   .object({

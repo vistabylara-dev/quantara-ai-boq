@@ -13,6 +13,7 @@ type SearchResultItem = {
   description: string;
   unit: string;
   locked: boolean;
+  packageNames?: string[];
 };
 
 type Tab = "search" | "manual";
@@ -46,6 +47,11 @@ export default function AddItemFromSourceModal({ boqId, sections, nextItemNumber
   const [error, setError] = useState<string | null>(null);
 
   const [manualDraft, setManualDraft] = useState({ itemCode: "", category: "", description: "", specification: "", unit: "", unitCost: "0", marginPercentage: "0" });
+
+  const switchToManualFromLocked = useCallback((item: SearchResultItem) => {
+    setManualDraft((current) => ({ ...current, description: item.name, unit: item.unit }));
+    setTab("manual");
+  }, []);
 
   const search = useCallback(async (signal?: AbortSignal) => {
     setIsSearching(true);
@@ -142,21 +148,48 @@ export default function AddItemFromSourceModal({ boqId, sections, nextItemNumber
             />
             <div className="mt-3 max-h-72 space-y-2 overflow-y-auto">
               {isSearching && <p className="text-xs text-slate-500">Searching…</p>}
-              {results.map((item) => (
-                <button
-                  key={`${item.source}-${item.id}`}
-                  type="button"
-                  onClick={() => setSelected(item)}
-                  disabled={item.locked}
-                  className={`w-full rounded-2xl border px-4 py-3 text-left text-sm ${selected?.id === item.id ? "border-blue-500 bg-blue-950/40" : "border-slate-800 bg-slate-900"} ${item.locked ? "opacity-50" : "hover:border-slate-700"}`}
-                >
-                  <div className="flex items-center justify-between">
-                    <span className="text-white">{item.name}</span>
-                    <span className="text-[0.65rem] uppercase tracking-wide text-slate-500">{item.source.replace(/_/g, " ")}{item.locked ? " · locked" : ""}</span>
+              {results.map((item) =>
+                item.locked ? (
+                  <div key={`${item.source}-${item.id}`} className="w-full rounded-2xl border border-amber-900/60 bg-amber-950/20 px-4 py-3 text-left text-sm">
+                    <div className="flex items-center justify-between">
+                      <span className="text-amber-100">{item.name}</span>
+                      <span className="text-[0.65rem] uppercase tracking-wide text-amber-500">locked</span>
+                    </div>
+                    <p className="mt-1 text-xs text-amber-400">Package: {item.packageNames?.[0] ?? "Industry Library"}</p>
+                    <p className="mt-2 text-xs text-amber-200">
+                      Buy the full {item.packageNames?.[0] ?? "Industry"} Library to add this professional item, or enter it manually.
+                    </p>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <a href="/marketplace" className="rounded-xl border border-amber-700 bg-amber-900/40 px-3 py-1.5 text-xs font-semibold text-amber-200 hover:bg-amber-900/70">
+                        View Library
+                      </a>
+                      <a href="/marketplace" className="rounded-xl border border-amber-700 bg-amber-900/40 px-3 py-1.5 text-xs font-semibold text-amber-200 hover:bg-amber-900/70">
+                        Request Access
+                      </a>
+                      <button
+                        type="button"
+                        onClick={() => switchToManualFromLocked(item)}
+                        className="rounded-xl border border-slate-700 bg-slate-900 px-3 py-1.5 text-xs font-semibold text-slate-200 hover:bg-slate-800"
+                      >
+                        Enter Manually
+                      </button>
+                    </div>
                   </div>
-                  <p className="text-xs text-slate-500">{item.itemCode} · {item.unit}</p>
-                </button>
-              ))}
+                ) : (
+                  <button
+                    key={`${item.source}-${item.id}`}
+                    type="button"
+                    onClick={() => setSelected(item)}
+                    className={`w-full rounded-2xl border px-4 py-3 text-left text-sm ${selected?.id === item.id ? "border-blue-500 bg-blue-950/40" : "border-slate-800 bg-slate-900 hover:border-slate-700"}`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="text-white">{item.name}</span>
+                      <span className="text-[0.65rem] uppercase tracking-wide text-slate-500">{item.source.replace(/_/g, " ")}</span>
+                    </div>
+                    <p className="text-xs text-slate-500">{item.itemCode} · {item.unit}</p>
+                  </button>
+                ),
+              )}
               {!isSearching && results.length === 0 && <p className="text-xs text-slate-500">No results.</p>}
             </div>
 

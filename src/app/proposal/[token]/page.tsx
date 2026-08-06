@@ -4,6 +4,7 @@ import type { Metadata } from "next";
 import { getPublicProposalView } from "@/lib/services/public-proposal-service";
 import { PortalShell } from "../portal-shell";
 import ProposalClientView from "./proposal-client-view";
+import TechnicalReportClientView from "./technical-report-client-view";
 
 export const dynamic = "force-dynamic";
 
@@ -31,7 +32,11 @@ export default async function ProposalPortalPage({ params }: PageProps) {
 
   return (
     <PortalShell companyName={view.company.tradeName || view.company.legalName} dir={view.settings.clientLanguage === "Arabic" ? "rtl" : "ltr"}>
-      <ProposalClientView token={token} initialView={view} initialProposal={proposal} />
+      {view.sourceType === "TECHNICAL_REPORT_REVISION" ? (
+        <TechnicalReportClientView token={token} initialView={view} initialProposal={proposal} />
+      ) : (
+        <ProposalClientView token={token} initialView={view} initialProposal={proposal} />
+      )}
     </PortalShell>
   );
 }

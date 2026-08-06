@@ -60,6 +60,8 @@ type DatasetSummary = {
   latestJob: JobDTO | null;
 };
 
+type PublishResult = { packageId: string; packageKey: string; itemCount: number; itemsAssignedThisRun: number };
+
 const TERMINAL: JobStatus[] = ["COMPLETED", "COMPLETED_WITH_WARNINGS", "CANCELLED", "ROLLED_BACK"];
 const RUNNABLE: JobStatus[] = ["PAUSED", "IMPORT_RUNNING"];
 
@@ -80,6 +82,8 @@ function DatasetCard({ dataset, onChanged }: { dataset: DatasetSummary; onChange
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [confirmChecked, setConfirmChecked] = useState(false);
   const [history, setHistory] = useState<JobDTO[] | null>(null);
+  const [publishResult, setPublishResult] = useState<PublishResult | null>(null);
+  const [publishing, setPublishing] = useState(false);
   const pollRef = useRef(false);
 
   useEffect(() => setJob(dataset.latestJob), [dataset.latestJob]);
@@ -169,6 +173,21 @@ function DatasetCard({ dataset, onChanged }: { dataset: DatasetSummary; onChange
     }
   }, [dataset.datasetId]);
 
+  const publishToPackage = useCallback(async () => {
+    if (!job) return;
+    setPublishing(true);
+    setError(null);
+    try {
+      const result = await apiClient.post<PublishResult>(`/api/admin/master-catalogue/datasets/jobs/${job.id}/publish-package`, {});
+      setPublishResult(result);
+      onChanged();
+    } catch (err) {
+      setError(getApiErrorMessage(err));
+    } finally {
+      setPublishing(false);
+    }
+  }, [job, onChanged]);
+
   const progressPct = job && job.totalRows > 0 ? Math.round(((job.processedRows + job.rejectedCount) / job.totalRows) * 100) : 0;
   const currentBatch = job ? Math.ceil(job.processedRows / job.batchSize) : 0;
   const estimatedBatches = job?.dryRunReport?.estimatedBatches ?? 0;
@@ -257,10 +276,22 @@ function DatasetCard({ dataset, onChanged }: { dataset: DatasetSummary; onChange
           </span>
         )}
 
+        {job && (job.status === "COMPLETED" || job.status === "COMPLETED_WITH_WARNINGS") && (
+          <button type="button" disabled={publishing} onClick={() => void publishToPackage()} className="inline-flex items-center gap-1.5 rounded-xl border border-violet-300 bg-violet-50 px-3 py-1.5 text-xs font-semibold text-violet-700 hover:bg-violet-100 disabled:opacity-50 dark:border-violet-800 dark:bg-violet-950 dark:text-violet-300">
+            <Boxes className="h-3.5 w-3.5" aria-hidden="true" /> {publishing ? "Publishing…" : "Publish to package"}
+          </button>
+        )}
+
         <button type="button" onClick={() => void loadHistory()} className="rounded-xl border border-[#D9E2EC] bg-white px-3 py-1.5 text-xs font-semibold text-[#0B1630] hover:bg-[#EEF3F8] dark:border-[#1E2A42] dark:bg-[#0B1426] dark:text-[#F7FAFC]">
           View batch history
         </button>
       </div>
+
+      {publishResult && (
+        <p className="mt-3 text-xs text-violet-700 dark:text-violet-300">
+          Published to package <span className="font-semibold">{publishResult.packageKey}</span> — {publishResult.itemCount.toLocaleString()} item(s) now assigned ({publishResult.itemsAssignedThisRun.toLocaleString()} this run).
+        </p>
+      )}
 
       {history && (
         <div className="mt-3 overflow-x-auto rounded-2xl border border-[#D9E2EC] dark:border-[#1E2A42]">
@@ -324,9 +355,15 @@ function DatasetCard({ dataset, onChanged }: { dataset: DatasetSummary; onChange
   );
 }
 
+type ActivateAllOutcome = "ALREADY_ACTIVE" | "COMPLETED_THIS_CALL" | "IN_PROGRESS" | "FAILED" | "TIME_BUDGET_EXCEEDED";
+type ActivateAllResult = { datasetId: string; outcome: ActivateAllOutcome; error?: string };
+type ActivateAllResponse = { elapsedMs: number; results: ActivateAllResult[] };
+
 export default function DatasetActivationPanel() {
   const [datasets, setDatasets] = useState<DatasetSummary[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [activatingAll, setActivatingAll] = useState(false);
+  const [allResult, setAllResult] = useState<ActivateAllResponse | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -341,6 +378,22 @@ export default function DatasetActivationPanel() {
     void load();
   }, [load]);
 
+  const activateAll = useCallback(async () => {
+    setActivatingAll(true);
+    setError(null);
+    try {
+      const result = await apiClient.post<ActivateAllResponse>("/api/admin/master-catalogue/datasets/activate-all", {});
+      setAllResult(result);
+      await load();
+    } catch (err) {
+      setError(getApiErrorMessage(err));
+    } finally {
+      setActivatingAll(false);
+    }
+  }, [load]);
+
+  const needsContinue = allResult?.results.some((r) => r.outcome === "IN_PROGRESS" || r.outcome === "TIME_BUDGET_EXCEEDED") ?? false;
+
   return (
     <div className={panel}>
       <p className="flex items-center gap-2 text-sm font-semibold text-[#0B1630] dark:text-white">
@@ -349,6 +402,37 @@ export default function DatasetActivationPanel() {
       <p className="mt-2 text-xs text-[#7B879C] dark:text-[#7F8DA6]">
         Approved, code-registered datasets — the server reads its own validated source files, so activation never requires selecting local files. Execution runs in resumable batches; closing this page pauses safely at the last checkpoint.
       </p>
+
+      <button
+        type="button"
+        disabled={activatingAll}
+        onClick={() => void activateAll()}
+        className="mt-4 inline-flex items-center gap-1.5 rounded-xl border border-[#0EA5E9] bg-[#0EA5E9] px-4 py-2 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-50 dark:border-[#22D3EE] dark:bg-[#22D3EE] dark:text-[#050B18]"
+      >
+        <PlayCircle className="h-4 w-4" aria-hidden="true" />
+        {activatingAll ? "Activating…" : needsContinue ? "Continue activating all datasets" : "Activate all datasets"}
+      </button>
+      <p className="mt-1 text-[0.7rem] text-[#7B879C] dark:text-[#7F8DA6]">
+        Drives dry run → execute → publish for every dataset not yet active, within a time budget per call. Large datasets may need this clicked more than once — already-active datasets are skipped automatically.
+      </p>
+
+      {allResult && (
+        <div className="mt-3 overflow-x-auto rounded-2xl border border-[#D9E2EC] dark:border-[#1E2A42]">
+          <table className="min-w-full text-left text-xs">
+            <thead className="bg-white text-[#536078] dark:bg-[#0B1426] dark:text-[#7F8DA6]">
+              <tr><th className="px-3 py-2">Dataset</th><th className="px-3 py-2">Outcome</th></tr>
+            </thead>
+            <tbody className="text-[#0B1630] dark:text-[#F7FAFC]">
+              {allResult.results.map((r) => (
+                <tr key={r.datasetId} className="border-t border-[#D9E2EC] dark:border-[#1E2A42]">
+                  <td className="px-3 py-2">{r.datasetId}</td>
+                  <td className="px-3 py-2">{r.outcome}{r.error ? ` — ${r.error}` : ""}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
 
       {error && <p className="mt-3 text-sm text-rose-600 dark:text-rose-400">{error}</p>}
       {!datasets && !error && <p className="mt-3 text-xs text-[#7B879C] dark:text-[#7F8DA6]">Loading…</p>}

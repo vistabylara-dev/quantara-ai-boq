@@ -1,4 +1,4 @@
-import { DocumentTemplateType, UserRole } from "@prisma/client";
+import { DocumentTemplateType, GeneratedDocumentType, UserRole } from "@prisma/client";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { prisma } from "../src/lib/db/prisma";
 import { createClient } from "../src/lib/repositories/client-repository";
@@ -8,6 +8,8 @@ import { runBOQVerification } from "../src/lib/repositories/verification-reposit
 import { createTemplate } from "../src/lib/repositories/document-template-repository";
 import { generateDocument } from "../src/lib/services/document-generation-service";
 import { createEmailTemplate } from "../src/lib/repositories/email-template-repository";
+import { createReportTemplate } from "../src/lib/repositories/report-template-repository";
+import { createReportFromTemplate, generateReportDocument } from "../src/lib/services/technical-report-service";
 import {
   createProposalForProject,
   getProposalForCompany,
@@ -61,6 +63,8 @@ describe("client proposal + email delivery (integration, real local Postgres)", 
   let companyBId: string;
   let clientAId: string;
   let templateAId: string;
+  let reportTemplateAId: string;
+  let reportTemplateBId: string;
   const cleanupStorageKeys: string[] = [];
 
   async function fixture(referenceSuffix: string, options: { withOption?: boolean } = {}) {
@@ -113,6 +117,30 @@ describe("client proposal + email delivery (integration, real local Postgres)", 
     return { project, boq, itemId: item.id, itemSellingRate: item.sellingRate.toNumber(), optionId, documentId: document.id };
   }
 
+  async function reportFixture(referenceSuffix: string, options: { skipGenerate?: boolean } = {}) {
+    const { project } = await createProjectWithDefaultBoq(actor(companyAId), {
+      clientId: clientAId,
+      industryEngineId: "construction",
+      reference: `PROP-TR-${referenceSuffix}-${RUN_ID}`,
+      name: `Proposal Report Test Project ${referenceSuffix}`,
+      location: "Dubai",
+      currency: "AED",
+      taxRate: "5",
+      language: "English",
+    });
+    const report = await createReportFromTemplate(actor(companyAId), project.databaseId, {
+      templateId: reportTemplateAId,
+      name: `Report ${referenceSuffix}`,
+    });
+    if (options.skipGenerate) return { project, report };
+    const generated = await generateReportDocument(actor(companyAId), report.id, GeneratedDocumentType.DOCX);
+    if (generated.fileName) {
+      const record = await prisma.generatedTechnicalReport.findUniqueOrThrow({ where: { id: report.id } });
+      if (record.storageKey) cleanupStorageKeys.push(record.storageKey);
+    }
+    return { project, report: generated };
+  }
+
   beforeAll(async () => {
     const companyA = await prisma.company.create({
       data: {
@@ -147,6 +175,23 @@ describe("client proposal + email delivery (integration, real local Postgres)", 
       type: DocumentTemplateType.CORPORATE_TECHNICAL,
     });
     templateAId = templateA.id;
+
+    const reportTemplateA = await createReportTemplate(companyAId, {
+      name: "Proposal Test Report Template",
+      code: `prop-report-template-a-${RUN_ID}`,
+      sectionsJson: {
+        frontMatter: [{ type: "heading", text: "[Insert project name]" }],
+        sections: [{ sectionCode: "obs", title: "Observations", blocks: [{ type: "paragraph", text: "[Insert findings]" }] }],
+      },
+    });
+    reportTemplateAId = reportTemplateA.id;
+
+    const reportTemplateB = await createReportTemplate(companyBId, {
+      name: "Company B Report Template",
+      code: `prop-report-template-b-${RUN_ID}`,
+      sectionsJson: { frontMatter: [], sections: [] },
+    });
+    reportTemplateBId = reportTemplateB.id;
   });
 
   afterAll(async () => {
@@ -161,6 +206,9 @@ describe("client proposal + email delivery (integration, real local Postgres)", 
     await prisma.emailTemplate.deleteMany({ where: { companyId: { in: companyIds } } });
     await prisma.generatedDocument.deleteMany({ where: { companyId: { in: companyIds } } });
     await prisma.documentTemplate.deleteMany({ where: { companyId: { in: companyIds } } });
+    await prisma.generatedTechnicalReport.deleteMany({ where: { companyId: { in: companyIds } } });
+    await prisma.technicalReportTemplateVersion.deleteMany({ where: { technicalReportTemplateId: { in: [reportTemplateAId, reportTemplateBId] } } });
+    await prisma.technicalReportTemplate.deleteMany({ where: { companyId: { in: companyIds } } });
     await prisma.verificationException.deleteMany({ where: { companyId: { in: companyIds } } });
     await prisma.auditLog.deleteMany({ where: { companyId: { in: companyIds } } });
     await prisma.bOQRevisionSnapshot.deleteMany({ where: { companyId: { in: companyIds } } });
@@ -196,6 +244,7 @@ describe("client proposal + email delivery (integration, real local Postgres)", 
     it("rejects DRAFT/READY proposals as INVALID_STATUS (never sent, no client link should work yet)", async () => {
       const { boq, documentId, project } = await fixture("token-draft");
       const { proposal, rawToken } = await createProposalForProject(actor(companyAId), project.databaseId, {
+        sourceType: "BOQ_REVISION" as const,
         boqId: boq.id,
         recipientEmail: "client@example.com",
         recipientName: "Client",
@@ -213,6 +262,7 @@ describe("client proposal + email delivery (integration, real local Postgres)", 
     it("rejects a revoked proposal's token", async () => {
       const { boq, documentId, project } = await fixture("token-revoked");
       const { proposal, rawToken } = await createProposalForProject(actor(companyAId), project.databaseId, {
+        sourceType: "BOQ_REVISION" as const,
         boqId: boq.id,
         recipientEmail: "client@example.com",
         recipientName: "Client",
@@ -231,6 +281,7 @@ describe("client proposal + email delivery (integration, real local Postgres)", 
       const { proposal: created } = await (async () => {
         const p = await createProposal(companyAId, {
           projectId: project.databaseId,
+          sourceType: "BOQ_REVISION" as const,
           boqId: boq.id,
           revisionNumber: 1,
           clientId: client.id,
@@ -253,6 +304,7 @@ describe("client proposal + email delivery (integration, real local Postgres)", 
     it("a link stops resolving to the old token immediately after regeneration", async () => {
       const { boq, documentId, project } = await fixture("token-regen");
       const { proposal, rawToken: oldToken } = await createProposalForProject(actor(companyAId), project.databaseId, {
+        sourceType: "BOQ_REVISION" as const,
         boqId: boq.id,
         recipientEmail: "client@example.com",
         recipientName: "Client",
@@ -280,12 +332,13 @@ describe("client proposal + email delivery (integration, real local Postgres)", 
       });
       await expect(
         createProposalForProject(actor(companyAId), project.databaseId, {
+          sourceType: "BOQ_REVISION" as const,
           boqId: boq.id,
           recipientEmail: "client@example.com",
           recipientName: "Client",
           documentIds: [],
         }),
-      ).rejects.toMatchObject({ code: "LOCKED_REVISION_REQUIRED" });
+      ).rejects.toMatchObject({ code: "BOQ_REVISION_NOT_LOCKED" });
     });
 
     it("blocks creation when unresolved CRITICAL verification exceptions remain", async () => {
@@ -319,6 +372,7 @@ describe("client proposal + email delivery (integration, real local Postgres)", 
 
       await expect(
         createProposalForProject(actor(companyAId), project.databaseId, {
+          sourceType: "BOQ_REVISION" as const,
           boqId: boq.id,
           recipientEmail: "client@example.com",
           recipientName: "Client",
@@ -351,6 +405,7 @@ describe("client proposal + email delivery (integration, real local Postgres)", 
       });
       await expect(
         createProposalForProject(actor(companyAId), project.databaseId, {
+          sourceType: "BOQ_REVISION" as const,
           boqId: boq.id,
           recipientEmail: "client@example.com",
           recipientName: "Client",
@@ -363,6 +418,7 @@ describe("client proposal + email delivery (integration, real local Postgres)", 
     it("returns the existing active proposal instead of duplicating by default", async () => {
       const { boq, documentId, project } = await fixture("duplicate");
       const first = await createProposalForProject(actor(companyAId), project.databaseId, {
+        sourceType: "BOQ_REVISION" as const,
         boqId: boq.id,
         recipientEmail: "client@example.com",
         recipientName: "Client",
@@ -370,6 +426,7 @@ describe("client proposal + email delivery (integration, real local Postgres)", 
       });
 
       const second = await createProposalForProject(actor(companyAId), project.databaseId, {
+        sourceType: "BOQ_REVISION" as const,
         boqId: boq.id,
         recipientEmail: "someone-else@example.com",
         recipientName: "Someone Else",
@@ -384,6 +441,7 @@ describe("client proposal + email delivery (integration, real local Postgres)", 
       const { boq, documentId, project } = await fixture("rbac-create");
       await expect(
         createProposalForProject(actor(companyAId, UserRole.DESIGNER), project.databaseId, {
+          sourceType: "BOQ_REVISION" as const,
           boqId: boq.id,
           recipientEmail: "client@example.com",
           recipientName: "Client",
@@ -397,6 +455,7 @@ describe("client proposal + email delivery (integration, real local Postgres)", 
     it("recalculates the total using the selected option's rate, without mutating the locked BOQItem", async () => {
       const { boq, documentId, itemId, itemSellingRate, optionId, project } = await fixture("options", { withOption: true });
       const { proposal, rawToken } = await createProposalForProject(actor(companyAId), project.databaseId, {
+        sourceType: "BOQ_REVISION" as const,
         boqId: boq.id,
         recipientEmail: "client@example.com",
         recipientName: "Client",
@@ -407,10 +466,12 @@ describe("client proposal + email delivery (integration, real local Postgres)", 
 
       const opened = await getPublicProposalView(rawToken!, req());
       if (!opened.ok || opened.view === null) throw new Error("expected an open view");
+      if (opened.view.sourceType !== "BOQ_REVISION") throw new Error("expected a BOQ view");
       const itemBefore = opened.view.boq.sections[0].items.find((i) => i.id === itemId)!;
       expect(itemBefore.totalAmount).toBeCloseTo(10 * itemSellingRate, 2);
 
       const { view } = await selectProposalOption(rawToken!, { boqItemId: itemId, optionId }, req());
+      if (view.sourceType !== "BOQ_REVISION") throw new Error("expected a BOQ view");
       const itemAfter = view.boq.sections[0].items.find((i) => i.id === itemId)!;
       expect(itemAfter.totalAmount).toBeCloseTo(10 * 999, 2);
       expect(itemAfter.options.find((o) => o.id === optionId)?.isSelected).toBe(true);
@@ -419,6 +480,7 @@ describe("client proposal + email delivery (integration, real local Postgres)", 
       expect(rawItem.sellingRate.toNumber()).not.toBe(999); // the locked BOQItem itself is never mutated
 
       const deselected = await selectProposalOption(rawToken!, { boqItemId: itemId, optionId: null }, req());
+      if (deselected.view.sourceType !== "BOQ_REVISION") throw new Error("expected a BOQ view");
       const itemReverted = deselected.view.boq.sections[0].items.find((i) => i.id === itemId)!;
       expect(itemReverted.totalAmount).toBeCloseTo(itemBefore.totalAmount, 2);
     });
@@ -426,6 +488,7 @@ describe("client proposal + email delivery (integration, real local Postgres)", 
     it("rejects an option that does not belong to the item", async () => {
       const { boq, documentId, itemId, project } = await fixture("options-invalid");
       const { proposal, rawToken } = await createProposalForProject(actor(companyAId), project.databaseId, {
+        sourceType: "BOQ_REVISION" as const,
         boqId: boq.id,
         recipientEmail: "client@example.com",
         recipientName: "Client",
@@ -445,6 +508,7 @@ describe("client proposal + email delivery (integration, real local Postgres)", 
     it("adds a client comment and transitions OPENED -> COMMENTED", async () => {
       const { boq, documentId, project } = await fixture("comment");
       const { proposal, rawToken } = await createProposalForProject(actor(companyAId), project.databaseId, {
+        sourceType: "BOQ_REVISION" as const,
         boqId: boq.id,
         recipientEmail: "client@example.com",
         recipientName: "Client",
@@ -462,6 +526,7 @@ describe("client proposal + email delivery (integration, real local Postgres)", 
     it("requires name, email, and a reason to request a revision, and updates the project status", async () => {
       const { boq, documentId, project } = await fixture("revision");
       const { proposal, rawToken } = await createProposalForProject(actor(companyAId), project.databaseId, {
+        sourceType: "BOQ_REVISION" as const,
         boqId: boq.id,
         recipientEmail: "client@example.com",
         recipientName: "Client",
@@ -492,6 +557,7 @@ describe("client proposal + email delivery (integration, real local Postgres)", 
     it("requires confirmReview and records approval, updating the project status", async () => {
       const { boq, documentId, project } = await fixture("approve");
       const { proposal, rawToken } = await createProposalForProject(actor(companyAId), project.databaseId, {
+        sourceType: "BOQ_REVISION" as const,
         boqId: boq.id,
         recipientEmail: "client@example.com",
         recipientName: "Client",
@@ -516,6 +582,7 @@ describe("client proposal + email delivery (integration, real local Postgres)", 
     it("blocks approval of a revoked proposal", async () => {
       const { boq, documentId, project } = await fixture("approve-revoked");
       const { proposal, rawToken } = await createProposalForProject(actor(companyAId), project.databaseId, {
+        sourceType: "BOQ_REVISION" as const,
         boqId: boq.id,
         recipientEmail: "client@example.com",
         recipientName: "Client",
@@ -533,6 +600,7 @@ describe("client proposal + email delivery (integration, real local Postgres)", 
     it("records a rejection with a reason and updates the project status", async () => {
       const { boq, documentId, project } = await fixture("reject");
       const { proposal, rawToken } = await createProposalForProject(actor(companyAId), project.databaseId, {
+        sourceType: "BOQ_REVISION" as const,
         boqId: boq.id,
         recipientEmail: "client@example.com",
         recipientName: "Client",
@@ -561,6 +629,7 @@ describe("client proposal + email delivery (integration, real local Postgres)", 
         bodyText: "Hello {{clientName}}, view it here: {{secureReviewUrl}}",
       });
       const { proposal, rawToken } = await createProposalForProject(actor(companyAId), project.databaseId, {
+        sourceType: "BOQ_REVISION" as const,
         boqId: boq.id,
         recipientEmail: "client@example.com",
         recipientName: "<b>Client</b>",
@@ -583,6 +652,7 @@ describe("client proposal + email delivery (integration, real local Postgres)", 
         bodyText: "{{secureReviewUrl}}",
       });
       const { proposal, rawToken: oldToken } = await createProposalForProject(actor(companyAId), project.databaseId, {
+        sourceType: "BOQ_REVISION" as const,
         boqId: boq.id,
         recipientEmail: "client@example.com",
         recipientName: "Client",
@@ -605,6 +675,7 @@ describe("client proposal + email delivery (integration, real local Postgres)", 
         bodyText: "Body",
       });
       const { proposal, rawToken } = await createProposalForProject(actor(companyAId), project.databaseId, {
+        sourceType: "BOQ_REVISION" as const,
         boqId: boq.id,
         recipientEmail: "client@example.com",
         recipientName: "Client",
@@ -636,6 +707,7 @@ describe("client proposal + email delivery (integration, real local Postgres)", 
         bodyText: "Body {{secureReviewUrl}}",
       });
       const { proposal, rawToken } = await createProposalForProject(actor(companyAId), project.databaseId, {
+        sourceType: "BOQ_REVISION" as const,
         boqId: boq.id,
         recipientEmail: "client@example.com",
         recipientName: "Client",
@@ -663,6 +735,7 @@ describe("client proposal + email delivery (integration, real local Postgres)", 
     it("blocks a different company from reading a proposal by its internal id", async () => {
       const { boq, documentId, project } = await fixture("isolation-read");
       const { proposal } = await createProposalForProject(actor(companyAId), project.databaseId, {
+        sourceType: "BOQ_REVISION" as const,
         boqId: boq.id,
         recipientEmail: "client@example.com",
         recipientName: "Client",
@@ -682,6 +755,7 @@ describe("client proposal + email delivery (integration, real local Postgres)", 
         bodyText: "Body",
       });
       const { proposal, rawToken } = await createProposalForProject(actor(companyAId), project.databaseId, {
+        sourceType: "BOQ_REVISION" as const,
         boqId: boq.id,
         recipientEmail: "client@example.com",
         recipientName: "Client",
@@ -691,6 +765,169 @@ describe("client proposal + email delivery (integration, real local Postgres)", 
       await expect(
         previewProposalEmail(actor(companyAId), { proposalId: proposal.id, rawToken: rawToken!, emailTemplateId: otherTemplate.id }),
       ).rejects.toThrow(NotFoundError);
+    });
+  });
+
+  describe("technical report proposals", () => {
+    it("creates, sends, and serves a technical-report-sourced proposal end to end", async () => {
+      const { project, report } = await reportFixture("full-flow");
+      const { proposal, rawToken } = await createProposalForProject(actor(companyAId), project.databaseId, {
+        sourceType: "TECHNICAL_REPORT_REVISION",
+        technicalReportId: report.id,
+        recipientEmail: "client@example.com",
+        recipientName: "Client",
+      });
+      expect(proposal.sourceType).toBe("TECHNICAL_REPORT_REVISION");
+      expect(proposal.boqId).toBeNull();
+      expect(proposal.technicalReportId).toBe(report.id);
+
+      await markProposalReadyForCompany(actor(companyAId), proposal.id);
+      await markProposalSent(companyAId, proposal.id);
+
+      const opened = await getPublicProposalView(rawToken!, req());
+      if (!opened.ok || opened.view === null) throw new Error("expected an open view");
+      if (opened.view.sourceType !== "TECHNICAL_REPORT_REVISION") throw new Error("expected a technical report view");
+      expect(opened.view.report.id).toBe(report.id);
+      expect(opened.view.report.fileName).toBe(report.fileName);
+    });
+
+    it("blocks creation from a report that has not finished generating", async () => {
+      const { project, report } = await reportFixture("not-final", { skipGenerate: true });
+      await expect(
+        createProposalForProject(actor(companyAId), project.databaseId, {
+          sourceType: "TECHNICAL_REPORT_REVISION",
+          technicalReportId: report.id,
+          recipientEmail: "client@example.com",
+          recipientName: "Client",
+        }),
+      ).rejects.toMatchObject({ code: "REPORT_REVISION_NOT_FINAL" });
+    });
+
+    it("blocks creation when a completed report is somehow missing its generated document (defense in depth)", async () => {
+      const { project, report } = await reportFixture("missing-doc");
+      // COMPLETED always sets storageKey together in markReportCompleted — force an inconsistent
+      // row directly to prove the service-layer guard, mirroring the CRITICAL_VERIFICATION_EXCEPTIONS
+      // defense-in-depth test above for the BOQ path.
+      await prisma.generatedTechnicalReport.update({ where: { id: report.id }, data: { storageKey: null } });
+      await expect(
+        createProposalForProject(actor(companyAId), project.databaseId, {
+          sourceType: "TECHNICAL_REPORT_REVISION",
+          technicalReportId: report.id,
+          recipientEmail: "client@example.com",
+          recipientName: "Client",
+        }),
+      ).rejects.toMatchObject({ code: "GENERATED_DOCUMENT_REQUIRED" });
+    });
+
+    it("rejects a technical report belonging to a different company (tenant isolation)", async () => {
+      const { project: otherProject } = await createProjectWithDefaultBoq(actor(companyBId), {
+        clientId: (await createClient(companyBId, { name: "Co B Client", email: `co-b-client-${RUN_ID}@example.com` })).id,
+        industryEngineId: "construction",
+        reference: `PROP-TR-CROSS-${RUN_ID}`,
+        name: "Cross tenant report project",
+        location: "Dubai",
+        currency: "AED",
+        taxRate: "5",
+        language: "English",
+      });
+      const otherReport = await createReportFromTemplate(actor(companyBId), otherProject.databaseId, {
+        templateId: reportTemplateBId,
+        name: "Company B report",
+      });
+      const { project } = await createProjectWithDefaultBoq(actor(companyAId), {
+        clientId: clientAId,
+        industryEngineId: "construction",
+        reference: `PROP-TR-CROSS-A-${RUN_ID}`,
+        name: "Cross tenant attempt project",
+        location: "Dubai",
+        currency: "AED",
+        taxRate: "5",
+        language: "English",
+      });
+      await expect(
+        createProposalForProject(actor(companyAId), project.databaseId, {
+          sourceType: "TECHNICAL_REPORT_REVISION",
+          technicalReportId: otherReport.id,
+          recipientEmail: "client@example.com",
+          recipientName: "Client",
+        }),
+      ).rejects.toThrow(NotFoundError);
+    });
+
+    it("blocks a role without proposals:manage from creating a technical report proposal", async () => {
+      const { project, report } = await reportFixture("rbac");
+      await expect(
+        createProposalForProject(actor(companyAId, UserRole.DESIGNER), project.databaseId, {
+          sourceType: "TECHNICAL_REPORT_REVISION",
+          technicalReportId: report.id,
+          recipientEmail: "client@example.com",
+          recipientName: "Client",
+        }),
+      ).rejects.toThrow(PermissionDeniedError);
+    });
+
+    it("rejects option selection on a technical-report-sourced proposal (BOQ-only feature)", async () => {
+      const { project, report } = await reportFixture("options-blocked");
+      const { proposal, rawToken } = await createProposalForProject(actor(companyAId), project.databaseId, {
+        sourceType: "TECHNICAL_REPORT_REVISION",
+        technicalReportId: report.id,
+        recipientEmail: "client@example.com",
+        recipientName: "Client",
+      });
+      await markProposalReadyForCompany(actor(companyAId), proposal.id);
+      await markProposalSent(companyAId, proposal.id);
+      await getPublicProposalView(rawToken!, req());
+
+      await expect(
+        selectProposalOption(rawToken!, { boqItemId: "00000000-0000-0000-0000-000000000000", optionId: null }, req()),
+      ).rejects.toMatchObject({ code: "OPTIONS_NOT_ALLOWED" });
+    });
+  });
+
+  describe("source type contract", () => {
+    it("requires an explicit proposal type", async () => {
+      const { project, boq } = await createProjectWithDefaultBoq(actor(companyAId), {
+        clientId: clientAId,
+        industryEngineId: "construction",
+        reference: `PROP-TYPE-REQUIRED-${RUN_ID}`,
+        name: "Type Required Project",
+        location: "Dubai",
+        currency: "AED",
+        taxRate: "5",
+        language: "English",
+      });
+      await expect(
+        createProposalForProject(actor(companyAId), project.databaseId, {
+          boqId: boq.id,
+          recipientEmail: "client@example.com",
+          recipientName: "Client",
+          documentIds: [],
+        } as unknown as Parameters<typeof createProposalForProject>[2]),
+      ).rejects.toMatchObject({ code: "PROPOSAL_TYPE_REQUIRED" });
+    });
+
+    it("the database CHECK constraint rejects a row with both a boqId and a technicalReportId set (defense in depth behind the service guard)", async () => {
+      const { boq, documentId, project } = await fixture("check-constraint-both");
+      const { report } = await reportFixture("check-constraint-both");
+      const client = await prisma.client.findFirstOrThrow({ where: { id: clientAId, companyId: companyAId } });
+      const { proposal } = await createProposal(companyAId, {
+        sourceType: "BOQ_REVISION",
+        projectId: project.databaseId,
+        boqId: boq.id,
+        revisionNumber: 1,
+        clientId: client.id,
+        recipientEmail: "client@example.com",
+        recipientName: "Client",
+        expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+        documentIds: [documentId],
+        createdByUserId: actor(companyAId).userId,
+        createdByName: "Test Actor",
+      });
+      // Points at a real report row (not a random UUID) so this specifically exercises the CHECK
+      // constraint, not an incidental foreign-key failure on a nonexistent id.
+      await expect(
+        prisma.$executeRawUnsafe(`UPDATE "ClientProposal" SET "technicalReportId" = '${report.id}' WHERE id = '${proposal.id}'`),
+      ).rejects.toThrow(/source_consistency_check/);
     });
   });
 });

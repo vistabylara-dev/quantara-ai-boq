@@ -25,6 +25,7 @@ type BoqEditorProps = {
   onCreateRevision: (boq: BOQ) => Promise<void> | void;
   onLock: (boq: BOQ) => Promise<void> | void;
   onApplyCatalogueRate?: (itemId: string, catalogueItemId: string, confirmReplaceOverrides?: boolean) => Promise<void>;
+  onAddItem?: () => void;
 };
 
 function isPersistedItemId(itemId: string): boolean {
@@ -71,6 +72,7 @@ export default function BoqEditor({
   onCreateRevision,
   onLock,
   onApplyCatalogueRate,
+  onAddItem,
 }: BoqEditorProps) {
   const [isSaving, setIsSaving] = useState(false);
   const [rateDrawerItemId, setRateDrawerItemId] = useState<string | null>(null);
@@ -205,49 +207,119 @@ export default function BoqEditor({
     }
   };
 
+  const isLegacyEmpty = isReadOnly && activeBoq.sections.every(s => s.items.length === 0);
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-4 rounded-[32px] border border-slate-800 bg-slate-950 p-6 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <p className="text-sm uppercase tracking-[0.28em] text-slate-500">BOQ editor</p>
+          <p className="text-sm uppercase tracking-[0.28em] text-slate-500">
+            {isLegacyEmpty ? "Empty legacy revision" : "BOQ editor"}
+          </p>
           <h2 className="mt-2 text-3xl font-semibold text-white">{activeBoq.title}</h2>
           <p className="mt-2 text-sm text-slate-400">
-            {isReadOnly
-              ? activeBoq.status === "approved"
-                ? "This revision is approved and read-only."
-                : "This revision is locked and read-only."
-              : "Edit BOQ items, recalculate totals, and manage revision status."}
+            {isLegacyEmpty 
+              ? "This legacy revision contains no items. Create a new editable revision to continue."
+              : isReadOnly
+                ? activeBoq.status === "approved"
+                  ? "This revision is approved and read-only."
+                  : "This revision is locked and read-only."
+                : "Edit BOQ items, recalculate totals, and manage revision status."}
           </p>
         </div>
         <div className="flex flex-wrap gap-3">
-          <button
-            type="button"
-            onClick={() => void save()}
-            disabled={isReadOnly || isSaving || actionPending}
-            className="rounded-2xl border border-slate-700 bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {isSaving ? "Saving…" : "Save draft"}
-          </button>
-          <button
-            type="button"
-            onClick={() => void onCreateRevision(currentPayload())}
-            disabled={isSaving || actionPending}
-            className="rounded-2xl border border-slate-700 bg-slate-900 px-4 py-2 text-sm font-semibold text-slate-200 hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            Create revision
-          </button>
-          <button
-            type="button"
-            onClick={() => void onLock(currentPayload())}
-            disabled={isReadOnly || isSaving || actionPending}
-            className="rounded-2xl border border-slate-700 bg-[#1F2937] px-4 py-2 text-sm font-semibold text-slate-200 hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            Lock revision
-          </button>
+          {isLegacyEmpty ? (
+            <>
+              <button
+                type="button"
+                className="rounded-2xl border border-slate-700 bg-slate-900 px-4 py-2 text-sm font-semibold text-slate-200 hover:bg-slate-800"
+              >
+                View Audit History
+              </button>
+              <button
+                type="button"
+                onClick={() => void onCreateRevision(currentPayload())}
+                disabled={actionPending}
+                className="rounded-2xl border border-slate-700 bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Create Editable Revision
+              </button>
+            </>
+          ) : (
+            <>
+              <button
+                type="button"
+                onClick={() => void save()}
+                disabled={isReadOnly || isSaving || actionPending}
+                className="rounded-2xl border border-slate-700 bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {isSaving ? "Saving…" : "Save draft"}
+              </button>
+              <button
+                type="button"
+                onClick={() => void onCreateRevision(currentPayload())}
+                disabled={isSaving || actionPending}
+                className="rounded-2xl border border-slate-700 bg-slate-900 px-4 py-2 text-sm font-semibold text-slate-200 hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Create revision
+              </button>
+              <button
+                type="button"
+                title={activeBoq.sections.every(s => s.items.length === 0) ? "Add at least one valid item before locking this revision." : ""}
+                onClick={() => void onLock(currentPayload())}
+                disabled={isReadOnly || isSaving || actionPending || activeBoq.sections.every(s => s.items.length === 0)}
+                className="rounded-2xl border border-slate-700 bg-[#1F2937] px-4 py-2 text-sm font-semibold text-slate-200 hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Lock revision
+              </button>
+            </>
+          )}
         </div>
       </div>
 
-      {activeBoq.sections.map((section) => (
+      {activeBoq.sections.every(s => s.items.length === 0) ? (
+        <div className="rounded-[32px] border border-slate-800 bg-slate-950 p-12 text-center">
+          <p className="text-xl font-semibold text-white">No items have been added to this BOQ yet.</p>
+          <p className="mt-2 text-slate-400">Start building your Bill of Quantities to calculate totals.</p>
+          
+          {!isReadOnly && (
+            <div className="mt-8 flex flex-wrap justify-center gap-4">
+              <button
+                type="button"
+                onClick={() => {
+                  const firstSection = activeBoq.sections[0];
+                  if (firstSection) {
+                    onAddItem ? onAddItem() : addItem(firstSection.id);
+                  }
+                }}
+                disabled={actionPending}
+                className="rounded-2xl bg-blue-600 px-6 py-3 font-semibold text-white hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Add First Item
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const firstSection = activeBoq.sections[0];
+                  if (firstSection) addItem(firstSection.id);
+                }}
+                disabled={actionPending}
+                className="rounded-2xl border border-slate-700 bg-slate-900 px-6 py-3 font-semibold text-slate-200 hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Enter Item Manually
+              </button>
+              <button
+                type="button"
+                disabled={true}
+                className="rounded-2xl border border-slate-700 bg-slate-900 px-6 py-3 font-semibold text-slate-200 opacity-50 cursor-not-allowed"
+                title="Coming soon"
+              >
+                Import Measurements
+              </button>
+            </div>
+          )}
+        </div>
+      ) : activeBoq.sections.map((section) => (
         <section key={section.id} className="overflow-hidden rounded-[32px] border border-slate-800 bg-slate-950">
           <div className="flex items-center justify-between gap-4 border-b border-slate-800 bg-slate-900 px-6 py-4">
             <div>
@@ -407,7 +479,17 @@ export default function BoqEditor({
                   {section.items.length === 0 && (
                     <tr>
                       <td colSpan={10} className="px-4 py-10 text-center text-slate-400">
-                        No items yet. Use Add item to begin building this BOQ section.
+                        <p className="mb-4">No items have been added to this section.</p>
+                        {!isReadOnly && (
+                          <button
+                            type="button"
+                            onClick={() => onAddItem ? onAddItem() : addItem(section.id)}
+                            disabled={actionPending}
+                            className="inline-flex items-center gap-2 rounded-2xl border border-slate-700 bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+                          >
+                            Add First Item
+                          </button>
+                        )}
                       </td>
                     </tr>
                   )}

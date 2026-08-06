@@ -5,6 +5,7 @@ import type {
   CommerceProviderObjectType,
   CommerceProviderSyncStatus,
 } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db/prisma";
 
 /**
@@ -78,21 +79,147 @@ export type CreateMappingInput = {
   providerActive?: boolean;
 };
 
-export async function createMapping(input: CreateMappingInput): Promise<CommerceProviderMapping> {
-  return prisma.commerceProviderMapping.create({
-    data: {
+export class CommerceProviderMappingConflictError extends Error {
+  readonly code = "COMMERCE_PROVIDER_MAPPING_CONFLICT" as const;
+  readonly provider: CommerceProvider;
+  readonly environment: CommerceProviderEnvironment;
+  readonly mappingType: CommerceProviderObjectType;
+  readonly conflictingProviderObjectType: CommerceProviderObjectType;
+  readonly safeConflictCode:
+    | "PROVIDER_PRODUCT_ALREADY_MAPPED_TO_DIFFERENT_INTERNAL_PRODUCT"
+    | "PROVIDER_PRICE_ALREADY_MAPPED_TO_DIFFERENT_INTERNAL_PRICE";
+
+  constructor(input: {
+    provider: CommerceProvider;
+    environment: CommerceProviderEnvironment;
+    mappingType: CommerceProviderObjectType;
+    conflictingProviderObjectType: CommerceProviderObjectType;
+    safeConflictCode:
+      | "PROVIDER_PRODUCT_ALREADY_MAPPED_TO_DIFFERENT_INTERNAL_PRODUCT"
+      | "PROVIDER_PRICE_ALREADY_MAPPED_TO_DIFFERENT_INTERNAL_PRICE";
+  }) {
+    super("Provider object is already mapped to a different internal record.");
+    this.name = "CommerceProviderMappingConflictError";
+    this.provider = input.provider;
+    this.environment = input.environment;
+    this.mappingType = input.mappingType;
+    this.conflictingProviderObjectType = input.conflictingProviderObjectType;
+    this.safeConflictCode = input.safeConflictCode;
+  }
+}
+
+function isKnownUniqueViolation(error: unknown): error is Prisma.PrismaClientKnownRequestError {
+  return error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002";
+}
+
+function isConsistentMapping(existing: CommerceProviderMapping, input: CreateMappingInput): boolean {
+  if (existing.provider !== input.provider || existing.environment !== input.environment) return false;
+  if (existing.providerObjectType !== input.providerObjectType) return false;
+
+  if (input.providerObjectType === "PRODUCT") {
+    return existing.commerceProductId === input.commerceProductId;
+  }
+
+  const expectedPriceId = input.commercePriceId ?? null;
+  const existingPriceId = existing.commercePriceId ?? null;
+  return existingPriceId === expectedPriceId;
+}
+
+function buildConflictForExisting(existing: CommerceProviderMapping, input: CreateMappingInput): CommerceProviderMappingConflictError {
+  if (input.providerObjectType === "PRICE") {
+    return new CommerceProviderMappingConflictError({
       provider: input.provider,
       environment: input.environment,
-      commerceProductId: input.commerceProductId,
-      commercePriceId: input.commercePriceId ?? null,
-      providerProductId: input.providerProductId,
-      providerPriceId: input.providerPriceId ?? null,
-      providerObjectType: input.providerObjectType,
-      providerActive: input.providerActive ?? true,
-      synchronizationStatus: "SYNCED",
-      lastSynchronizedAt: new Date(),
-    },
+      mappingType: input.providerObjectType,
+      conflictingProviderObjectType: existing.providerObjectType,
+      safeConflictCode: "PROVIDER_PRICE_ALREADY_MAPPED_TO_DIFFERENT_INTERNAL_PRICE",
+    });
+  }
+
+  return new CommerceProviderMappingConflictError({
+    provider: input.provider,
+    environment: input.environment,
+    mappingType: input.providerObjectType,
+    conflictingProviderObjectType: existing.providerObjectType,
+    safeConflictCode: "PROVIDER_PRODUCT_ALREADY_MAPPED_TO_DIFFERENT_INTERNAL_PRODUCT",
   });
+}
+
+export async function createMapping(input: CreateMappingInput): Promise<CommerceProviderMapping> {
+  const data = {
+    provider: input.provider,
+    environment: input.environment,
+    commerceProductId: input.commerceProductId,
+    commercePriceId: input.commercePriceId ?? null,
+    providerProductId: input.providerProductId,
+    providerPriceId: input.providerPriceId ?? null,
+    providerObjectType: input.providerObjectType,
+    providerActive: input.providerActive ?? true,
+    synchronizationStatus: "SYNCED" as const,
+    lastSynchronizedAt: new Date(),
+  };
+
+  const existingByInternal =
+    input.providerObjectType === "PRODUCT"
+      ? await prisma.commerceProviderMapping.findFirst({
+          where: {
+            provider: input.provider,
+            environment: input.environment,
+            providerObjectType: "PRODUCT",
+            commerceProductId: input.commerceProductId,
+          },
+        })
+      : await prisma.commerceProviderMapping.findFirst({
+          where: {
+            provider: input.provider,
+            environment: input.environment,
+            providerObjectType: "PRICE",
+            commercePriceId: input.commercePriceId ?? null,
+          },
+        });
+
+  if (existingByInternal) {
+    if (isConsistentMapping(existingByInternal, input)) return existingByInternal;
+    throw buildConflictForExisting(existingByInternal, input);
+  }
+
+  try {
+    return await prisma.commerceProviderMapping.create({ data });
+  } catch (error) {
+    if (!isKnownUniqueViolation(error)) throw error;
+
+    const collisions: CommerceProviderMapping[] = [];
+    const byProviderProductId = await prisma.commerceProviderMapping.findFirst({
+      where: {
+        provider: input.provider,
+        environment: input.environment,
+        providerProductId: input.providerProductId,
+      },
+    });
+    if (byProviderProductId) collisions.push(byProviderProductId);
+
+    if (input.providerObjectType === "PRICE" && input.providerPriceId) {
+      const byProviderPriceId = await prisma.commerceProviderMapping.findFirst({
+        where: {
+          provider: input.provider,
+          environment: input.environment,
+          providerPriceId: input.providerPriceId,
+        },
+      });
+      if (byProviderPriceId && !collisions.some((row) => row.id === byProviderPriceId.id)) {
+        collisions.push(byProviderPriceId);
+      }
+    }
+
+    const consistent = collisions.find((existing) => isConsistentMapping(existing, input));
+    if (consistent) return consistent;
+
+    if (collisions.length > 0) {
+      throw buildConflictForExisting(collisions[0], input);
+    }
+
+    throw error;
+  }
 }
 
 export type UpdateMappingStateInput = {
@@ -104,8 +231,17 @@ export type UpdateMappingStateInput = {
 };
 
 export async function updateMappingState(mappingId: string, input: UpdateMappingStateInput): Promise<CommerceProviderMapping> {
-  return prisma.commerceProviderMapping.update({
-    where: { id: mappingId },
-    data: input,
-  });
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      return await prisma.commerceProviderMapping.update({
+        where: { id: mappingId },
+        data: input,
+      });
+    } catch (error) {
+      if (attempt === 2) throw error;
+      await new Promise((resolve) => setTimeout(resolve, 25 * (attempt + 1)));
+    }
+  }
+
+  throw new Error("UNREACHABLE_UPDATE_MAPPING_STATE_RETRY_EXHAUSTED");
 }

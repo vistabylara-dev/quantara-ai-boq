@@ -141,6 +141,12 @@ describe("Stripe sync service (integration, real local Postgres, mocked Stripe)"
   });
 
   afterAll(async () => {
+    // Every CommerceProduct fixture in this file is created with a code containing
+    // this process run's unique RUN_ID (timestamp+pid) — deleting by that exact
+    // substring removes only this run's own rows, cascading to their CommercePrice
+    // and CommerceProviderMapping rows via the FK, and never touches fixtures from
+    // any other run or any non-test data.
+    await prisma.commerceProduct.deleteMany({ where: { code: { contains: RUN_ID } } });
     await prisma.commerceSyncRun.deleteMany({ where: { initiatedByUserId: { in: [ownerUserId, adminUserId, supportUserId] } } });
     await prisma.platformAuditLog.deleteMany({ where: { actorUserId: { in: [ownerUserId, adminUserId, supportUserId] } } });
     await prisma.user.deleteMany({ where: { id: { in: [ownerUserId, adminUserId, supportUserId] } } });

@@ -77,7 +77,7 @@ export default function FeaturesPage() {
                   <h3 className="font-bold text-slate-900 dark:text-white">Hybrid-source projects</h3>
                   <span className="px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400">Live</span>
                 </div>
-                <p className="text-sm text-slate-600 dark:text-slate-400">Combine PDF, spreadsheet, and connected data sources into one project workspace.</p>
+                <p className="text-sm text-slate-600 dark:text-slate-400">Combine supported PDFs, spreadsheets and manually imported project data in one workspace. Connected application integrations are planned.</p>
               </div>
 
               <div className="bg-white dark:bg-slate-950 p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm relative">

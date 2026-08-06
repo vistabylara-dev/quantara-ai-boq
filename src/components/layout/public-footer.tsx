@@ -97,7 +97,7 @@ export default function PublicFooter() {
                 Custom Quantara software implementation for companies requiring tailored workflows, integrations, branding, deployment, migration, onboarding or advanced operational requirements.
               </p>
               <p className="text-xs font-semibold text-slate-400 dark:text-slate-500 mb-2">
-                Starting from AED 15,000
+                Custom implementation and onboarding starting from AED 15,000
               </p>
               <p className="text-xs text-slate-400 dark:text-slate-500 mb-4">
                 Final scope and pricing are provided through a custom quotation following a requirements review.

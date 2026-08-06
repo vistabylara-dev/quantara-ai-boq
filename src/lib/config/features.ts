@@ -12,8 +12,8 @@ export const publicFeatures: PublicFeature[] = [
   {
     slug: "multi-source",
     name: "Hybrid-Source Projects",
-    shortDescription: "Combine supported PDFs, XLSX and CSV imports within one project workspace.",
-    longDescription: "Create a project workspace to manage manual uploads and structured imports in one controlled location.",
+    shortDescription: "Combine supported PDFs, spreadsheets and manually imported project data in one workspace.",
+    longDescription: "Create a project workspace to manage manual uploads and structured imports in one controlled location. Connected application integrations are planned.",
     status: "live"
   },
   {

@@ -69,7 +69,9 @@ export default function RegisterPage() {
       <div className="rounded-[32px] border border-slate-800 bg-slate-950 p-8">
         <p className="text-sm uppercase tracking-[0.28em] text-slate-500">Quantara</p>
         <h1 className="mt-2 text-2xl font-semibold text-white">Request Early Access</h1>
-        <p className="mt-2 text-sm text-slate-400">Creating an Early Access account does not begin a paid subscription or automatic billing.</p>
+        <p className="mt-2 text-sm text-slate-400">
+          Creating an Early Access account does not begin a paid subscription or automatic billing. After submitting your request, our team reviews your company requirements. Approved applicants receive onboarding instructions and access details by business email.
+        </p>
 
         <form onSubmit={handleSubmit} className="mt-6 space-y-4">
           

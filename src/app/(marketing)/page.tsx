@@ -106,6 +106,26 @@ export default function HomePage() {
         </div>
       </section>
 
+      <section className="py-16 px-4 bg-slate-50 dark:bg-slate-900/30 border-y border-slate-200 dark:border-slate-800">
+        <div className="container mx-auto max-w-4xl text-center">
+          <h2 className="text-3xl font-bold text-slate-900 dark:text-white mb-6">See Quantara Working</h2>
+          <p className="text-lg text-slate-600 dark:text-slate-400 mb-8 max-w-2xl mx-auto leading-relaxed">
+            Upload a supported PDF, XLSX or CSV file. Quantara organizes the source information into a structured BOQ workspace for professional review, revision control and document generation.
+          </p>
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
+            <Link href="/register" className="inline-flex items-center justify-center rounded-lg text-sm font-semibold border border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100 dark:border-blue-900/50 dark:bg-blue-900/20 dark:text-blue-300 dark:hover:bg-blue-900/40 px-6 py-2.5 transition-colors">
+              Watch 90-second demo
+            </Link>
+            <Link href="/register" className="inline-flex items-center justify-center rounded-lg text-sm font-semibold border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-300 dark:hover:bg-slate-900 px-6 py-2.5 transition-colors">
+              Download sample BOQ
+            </Link>
+            <Link href="/register" className="inline-flex items-center justify-center rounded-lg text-sm font-semibold bg-blue-600 text-white hover:bg-blue-700 px-6 py-2.5 transition-colors">
+              Request access
+            </Link>
+          </div>
+        </div>
+      </section>
+
       <section className="py-12 px-4 bg-slate-50 dark:bg-slate-900/50">
         <div className="container mx-auto max-w-6xl">
           <div className="rounded-2xl border border-slate-200 dark:border-slate-800 overflow-hidden shadow-2xl bg-white dark:bg-slate-950 p-2 md:p-4">
@@ -476,7 +496,7 @@ export default function HomePage() {
         <div className="container mx-auto max-w-5xl">
           <h2 className="text-3xl font-bold text-center text-slate-900 dark:text-white mb-12">Supported Outputs</h2>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
-            {["PDF", "DOCX", "XLSX", "CSV", "Client Proposal", "Technical Report", "BOQ Document", "Revision Snapshot"].map((fmt, i) => (
+            {["PDF", "XLSX", "CSV", "Client Proposal", "Technical Report", "BOQ Document", "Revision Snapshot"].map((fmt, i) => (
               <div key={i} className="p-6 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col items-center justify-center text-center hover:border-blue-500 transition-colors">
                 <FileText className="h-8 w-8 text-slate-400 mb-3" />
                 <h3 className="text-base font-semibold text-slate-900 dark:text-slate-200">{fmt}</h3>

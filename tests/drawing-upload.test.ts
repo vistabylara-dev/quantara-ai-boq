@@ -75,6 +75,7 @@ describe("Drawing upload & intake pipeline (integration, real local Postgres)", 
   let companyAId: string;
   let companyBId: string;
   let projectAId: string;
+  let projectASlug: string;
   let ownerActorA: CurrentActor;
   let designerActorA: CurrentActor;
   let reviewerActorA: CurrentActor;
@@ -116,6 +117,7 @@ describe("Drawing upload & intake pipeline (integration, real local Postgres)", 
       language: "English",
     });
     projectAId = project.databaseId;
+    projectASlug = project.id;
 
     const companyB = await prisma.company.create({
       data: { legalName: `Drawing Test Co B ${RUN_ID}`, tradeName: "Drawing Co B", email: `drawing-b-${RUN_ID}@example.com` },
@@ -489,6 +491,81 @@ describe("Drawing upload & intake pipeline (integration, real local Postgres)", 
 
       const deleteResponse = await drawingDELETE(new Request("http://localhost/api/drawings/x"), { params: Promise.resolve({ fileId: uploaded.drawing.id }) });
       expect(deleteResponse.status).toBe(404);
+    });
+  });
+
+  // Regression coverage for the production failure: the browser's project URL
+  // segment is the project's slug (e.g. "project-00"), never the database
+  // UUID. ProjectFile.projectId is a native Postgres `uuid` column, so a slug
+  // reaching a repository call unresolved throws "invalid input syntax for
+  // type uuid" — a 500, not a clean NotFoundError. These tests exercise the
+  // real route handlers with the slug, exactly like production traffic.
+  describe("slug-based production routes", () => {
+    it("lists drawings through the real GET route using the project slug and returns 200 with a truthful empty array for a project with none", async () => {
+      // Created directly via Prisma (not the project-creation service) so this
+      // doesn't consume the trial plan's one-draft-project entitlement limit —
+      // the point of this fixture is an empty project, not a billable one.
+      const client = await createClient(companyAId, { name: "Slug Client", email: `slug-client-${RUN_ID}@example.com` });
+      const industryEngine = await prisma.industryEngine.findFirstOrThrow({ where: { key: "construction" }, select: { id: true } });
+      const emptyProject = await prisma.project.create({
+        data: {
+          companyId: companyAId,
+          clientId: client.id,
+          industryEngineId: industryEngine.id,
+          slug: `empty-slug-${RUN_ID}`,
+          reference: `DRAW-EMPTY-${RUN_ID}`,
+          name: "Empty Slug Project",
+        },
+      });
+
+      currentActorMock.mockResolvedValue(ownerActorA);
+      const response = await drawingsListGET(new Request("http://localhost/api/projects/x/drawings"), { params: Promise.resolve({ projectId: emptyProject.slug }) });
+      expect(response.status).toBe(200);
+      const body = (await response.json()) as { ok: boolean; data: unknown[] };
+      expect(body.ok).toBe(true);
+      expect(body.data).toEqual([]);
+    });
+
+    it("uploads through the real POST route using the slug, and persists the canonical database UUID (not the slug) in ProjectFile.projectId and the storage key", async () => {
+      currentActorMock.mockResolvedValue(ownerActorA);
+
+      const formData = new FormData();
+      formData.set("file", new File([pdfBuffer("slug upload content")], "slug-upload.pdf", { type: "application/pdf" }));
+
+      const uploadResponse = await drawingsPOST(
+        new Request("http://localhost/api/projects/x/drawings", { method: "POST", body: formData }),
+        { params: Promise.resolve({ projectId: projectASlug }) },
+      );
+      expect(uploadResponse.status).toBe(201);
+      const uploadBody = (await uploadResponse.json()) as { ok: boolean; data: { drawing: { id: string } } };
+      expect(uploadBody.ok).toBe(true);
+
+      const row = await prisma.projectFile.findUniqueOrThrow({ where: { id: uploadBody.data.drawing.id } });
+      expect(row.projectId).toBe(projectAId);
+      expect(row.storageKey).toContain(`/projects/${projectAId}/`);
+      expect(row.storageKey).not.toContain(`/projects/${projectASlug}/`);
+    });
+
+    it("lists a drawing uploaded via the UUID back through a slug-based GET request — both identifiers resolve to the same project", async () => {
+      currentActorMock.mockResolvedValue(ownerActorA);
+      const uploaded = await uploadProjectDrawing(ownerActorA, projectAId, { originalName: "uuid-then-slug.pdf", mimeType: "application/pdf", buffer: pdfBuffer("uuid then slug"), metadata: {} });
+
+      const response = await drawingsListGET(new Request("http://localhost/api/projects/x/drawings"), { params: Promise.resolve({ projectId: projectASlug }) });
+      expect(response.status).toBe(200);
+      const body = (await response.json()) as { ok: boolean; data: Array<{ id: string }> };
+      expect(body.data.some((d) => d.id === uploaded.drawing.id)).toBe(true);
+    });
+
+    it("returns 404 (not 500) when a slug is used for a project belonging to a different tenant", async () => {
+      currentActorMock.mockResolvedValue(ownerActorB);
+      const response = await drawingsListGET(new Request("http://localhost/api/projects/x/drawings"), { params: Promise.resolve({ projectId: projectASlug }) });
+      expect(response.status).toBe(404);
+    });
+
+    it("still accepts the database UUID directly (both identifier forms remain supported)", async () => {
+      currentActorMock.mockResolvedValue(ownerActorA);
+      const response = await drawingsListGET(new Request("http://localhost/api/projects/x/drawings"), { params: Promise.resolve({ projectId: projectAId }) });
+      expect(response.status).toBe(200);
     });
   });
 });

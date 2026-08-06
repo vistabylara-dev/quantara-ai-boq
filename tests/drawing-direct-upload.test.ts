@@ -100,6 +100,7 @@ describe("Direct-to-Blob drawing upload (integration, real local Postgres, fake 
   let companyAId: string;
   let companyBId: string;
   let projectAId: string;
+  let projectASlug: string;
   let ownerActorA: CurrentActor;
   let ownerActorB: CurrentActor;
 
@@ -126,6 +127,7 @@ describe("Direct-to-Blob drawing upload (integration, real local Postgres, fake 
       language: "English",
     });
     projectAId = project.databaseId;
+    projectASlug = project.id;
 
     const companyB = await prisma.company.create({ data: { legalName: `Direct Upload Co B ${RUN_ID}`, tradeName: "Direct B", email: `direct-b-${RUN_ID}@example.com` } });
     companyBId = companyB.id;
@@ -330,6 +332,52 @@ describe("Direct-to-Blob drawing upload (integration, real local Postgres, fake 
         where: { companyId: companyAId, entityType: "ProjectFile", entityId: result.drawing.id, action: "DRAWING_UPLOADED" },
       });
       expect(auditEntry).not.toBeNull();
+    });
+  });
+
+  // Same production regression as tests/drawing-upload.test.ts: the browser
+  // always sends the project slug, not the UUID. authorizeDrawingUpload and
+  // finalizeDrawingUpload must resolve it once and use the canonical UUID
+  // for storage keys, the upload session's projectId column, and the
+  // finalized ProjectFile row — not the slug string itself.
+  describe("slug-based direct-upload workflow", () => {
+    it("authorizes using the slug and still builds a storage pathname keyed by the canonical database UUID", async () => {
+      const result = await authorizeDrawingUpload(ownerActorA, projectASlug, {
+        originalName: "slug-authorized.pdf",
+        declaredMimeType: "application/pdf",
+        declaredByteSize: 1024,
+      });
+      expect(result.pathname).toContain(`companies/${companyAId}/projects/${projectAId}/drawings/`);
+      expect(result.pathname).not.toContain(`/projects/${projectASlug}/`);
+
+      const session = await prisma.projectFileUploadSession.findUniqueOrThrow({ where: { id: result.sessionId } });
+      expect(session.projectId).toBe(projectAId);
+    });
+
+    it("finalizes an authorize-by-slug session using the slug again, and persists the canonical UUID on the ProjectFile row", async () => {
+      const body = pdfBuffer("slug finalize content");
+      const auth = await authorizeDrawingUpload(ownerActorA, projectASlug, {
+        originalName: "slug-finalize.pdf",
+        declaredMimeType: "application/pdf",
+        declaredByteSize: body.byteLength,
+      });
+      fakeAdapter.seed(auth.pathname, body, "application/pdf");
+
+      const result = await finalizeDrawingUpload(ownerActorA, projectASlug, { sessionId: auth.sessionId, metadata: {} });
+      expect(result.alreadyFinalized).toBe(false);
+
+      const row = await prisma.projectFile.findUniqueOrThrow({ where: { id: result.drawing.id } });
+      expect(row.projectId).toBe(projectAId);
+    });
+
+    it("rejects a cross-tenant slug at authorization with the same NotFoundError as an unknown project (no existence leak)", async () => {
+      await expect(
+        authorizeDrawingUpload(ownerActorB, projectASlug, {
+          originalName: "cross-tenant-slug.pdf",
+          declaredMimeType: "application/pdf",
+          declaredByteSize: 1024,
+        }),
+      ).rejects.toThrow(NotFoundError);
     });
   });
 });

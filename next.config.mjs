@@ -4,6 +4,36 @@ import path from "node:path";
 
 const projectRoot = path.dirname(fileURLToPath(import.meta.url));
 
+// CATALOGUE-PROD-ACTIVATE — every data-imports/ subdirectory backing a
+// registered dataset in catalogue-dataset-registry.ts (src/lib/services/
+// catalogue-dataset-registry.ts's DATASETS/GENERATED_DATASETS). Originally
+// this list only had hvac/plumbing — the 13 datasets added later
+// (architectural-finishes, bim-digital-deliverables, civil-works, closeout,
+// doors-and-windows, facade, general-requirements, landscaping, roofing,
+// site-infrastructure, structural, temporary-works, uae-authority-regulatory)
+// were never added here, so their CSVs were silently absent from the
+// deployed Vercel function bundle: readFileSync in loadApprovedDatasetFiles
+// threw SOURCE_FILE_MISSING for all 13, which is why only the HVAC and
+// Plumbing marketplace categories could ever be activated in production —
+// every other category's admin activation call failed outright.
+const CATALOGUE_DATASET_CSV_GLOBS = [
+  "./data-imports/hvac/*.csv",
+  "./data-imports/plumbing/*.csv",
+  "./data-imports/architectural-finishes/*.csv",
+  "./data-imports/bim-digital-deliverables/*.csv",
+  "./data-imports/civil-works/*.csv",
+  "./data-imports/closeout/*.csv",
+  "./data-imports/doors-and-windows/*.csv",
+  "./data-imports/facade/*.csv",
+  "./data-imports/general-requirements/*.csv",
+  "./data-imports/landscaping/*.csv",
+  "./data-imports/roofing/*.csv",
+  "./data-imports/site-infrastructure/*.csv",
+  "./data-imports/structural/*.csv",
+  "./data-imports/temporary-works/*.csv",
+  "./data-imports/uae-authority-regulatory/*.csv",
+];
+
 const nextConfig = {
   reactStrictMode: true,
   typescript: { ignoreBuildErrors: true },
@@ -15,16 +45,23 @@ const nextConfig = {
   // compilation and page generation succeed. Pinning it explicitly avoids
   // that machine-dependent misdetection entirely.
   outputFileTracingRoot: projectRoot,
-  // CATALOGUE-PROD-ACTIVATE — the approved HVAC/plumbing dataset CSVs are
-  // read server-side at runtime (catalogue-dataset-registry.ts) via a path
+  // CATALOGUE-PROD-ACTIVATE — the approved dataset CSVs are read
+  // server-side at runtime (catalogue-dataset-registry.ts) via a path
   // built from a config-controlled directory + registry filename, not a
   // statically analyzable literal `fs.readFileSync("...")` call, so
   // Vercel's build-time output tracing (@vercel/nft) can't be trusted to
   // discover and include them on its own. Declaring them here guarantees
-  // they ship in the deployed function bundle regardless.
+  // they ship in the deployed function bundle regardless. Every route below
+  // transitively reaches loadApprovedDatasetFiles or checkDatasetReadiness
+  // (both real, per-dataset disk reads) — see master-catalogue-import-job-
+  // service.ts and industry-package-activation-service.ts.
   outputFileTracingIncludes: {
-    "/api/admin/master-catalogue/datasets/[datasetId]/dry-run": ["./data-imports/hvac/*.csv", "./data-imports/plumbing/*.csv"],
-    "/api/admin/master-catalogue/datasets/jobs/[jobId]/continue": ["./data-imports/hvac/*.csv", "./data-imports/plumbing/*.csv"],
+    "/api/admin/master-catalogue/datasets/[datasetId]/dry-run": CATALOGUE_DATASET_CSV_GLOBS,
+    "/api/admin/master-catalogue/datasets/[datasetId]/execute": CATALOGUE_DATASET_CSV_GLOBS,
+    "/api/admin/master-catalogue/datasets/[datasetId]/readiness": CATALOGUE_DATASET_CSV_GLOBS,
+    "/api/admin/master-catalogue/datasets/jobs/[jobId]/continue": CATALOGUE_DATASET_CSV_GLOBS,
+    "/api/admin/master-catalogue/datasets/activate-all": CATALOGUE_DATASET_CSV_GLOBS,
+    "/api/admin/master-catalogue/activate-next": CATALOGUE_DATASET_CSV_GLOBS,
     // CORE-FLOW-1 — every route below transitively imports the extraction
     // pipeline (project-file-service/drawing-service -> register-handlers ->
     // preprocessing-handler -> pdfjs-dist's legacy Node build), which tries

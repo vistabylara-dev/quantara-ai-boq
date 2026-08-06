@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState, use } from "react";
+import { useCallback, useEffect, useMemo, useState, use, useRef } from "react";
+import { useSearchParams, useRouter } from "next/navigation";
 import type { BOQ } from "@/types/boq";
 import type { Project } from "@/types/project";
 import { apiClient, getApiErrorMessage } from "@/lib/api/client";
@@ -32,14 +33,17 @@ function isReadOnlyBOQ(boq: BOQ | null): boolean {
 
 export default function ProjectBOQPage(props: PageProps) {
   const params = use(props.params);
+  const searchParams = useSearchParams();
+  const router = useRouter();
   const [project, setProject] = useState<Project | null>(null);
   const [revisions, setRevisions] = useState<BOQ[]>([]);
   const [activeBoq, setActiveBoq] = useState<BOQ | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [actionError, setActionError] = useState<string | null>(null);
   const [pendingAction, setPendingAction] = useState<PendingAction>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
   const [showAddItem, setShowAddItem] = useState(false);
+  const hasTriggeredAction = useRef(false);
 
   const loadWorkspace = useCallback(async (signal?: AbortSignal) => {
     setIsLoading(true);
@@ -140,6 +144,24 @@ export default function ProjectBOQPage(props: PageProps) {
     }
   }, [pendingAction, persistDraft, replaceRevision]);
 
+  useEffect(() => {
+    if (isLoading || hasTriggeredAction.current) return;
+    const action = searchParams.get("action");
+    if (!action) return;
+
+    hasTriggeredAction.current = true;
+    if (action === "create-initial" && revisions.length === 0) {
+      void createInitialBOQ();
+    } else if (action === "new-revision" && activeBoq && isReadOnlyBOQ(activeBoq)) {
+      void createRevision(activeBoq);
+    }
+    
+    // Clean up URL
+    const url = new URL(window.location.href);
+    url.searchParams.delete("action");
+    router.replace(url.pathname + url.search);
+  }, [isLoading, searchParams, revisions.length, activeBoq, createInitialBOQ, createRevision, router]);
+
   const lockRevision = useCallback(async (draft: BOQ) => {
     if (isReadOnlyBOQ(draft) || pendingAction) return;
     setPendingAction("lock");
@@ -232,8 +254,9 @@ export default function ProjectBOQPage(props: PageProps) {
             </button>
             <button
               type="button"
+              title={activeRevision?.sections.every(s => s.items.length === 0) ? "Add at least one valid item before locking this revision." : ""}
               onClick={() => activeRevision && void lockRevision(activeRevision)}
-              disabled={!activeRevision || isReadOnly || actionInProgress}
+              disabled={!activeRevision || isReadOnly || actionInProgress || activeRevision.sections.every(s => s.items.length === 0)}
               className="rounded-2xl border border-slate-700 bg-slate-900 px-4 py-2 text-sm font-semibold text-slate-200 hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
             >
               {pendingAction === "lock"
@@ -277,6 +300,7 @@ export default function ProjectBOQPage(props: PageProps) {
               onCreateRevision={createRevision}
               onLock={lockRevision}
               onApplyCatalogueRate={applyCatalogueRate}
+              onAddItem={() => setShowAddItem(true)}
             />
           ) : (
             <div className="rounded-[32px] border border-slate-800 bg-slate-950 p-8 text-slate-300">

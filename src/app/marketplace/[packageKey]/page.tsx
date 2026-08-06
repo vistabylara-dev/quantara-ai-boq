@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState, use } from "react";
 import Link from "next/link";
 import { apiClient, getApiErrorMessage } from "@/lib/api/client";
+import { getLibraryConfigByCode } from "@/config/libraries";
 
 type PackageDetail = {
   id: string;
@@ -87,22 +88,35 @@ export default function MarketplacePackagePage(props: PageProps) {
     );
   }
 
+  const libConfig = getLibraryConfigByCode(pkg.key);
+  const Icon = libConfig?.icon;
+  const displayName = libConfig?.displayName ?? pkg.name;
+
   return (
     <div className="space-y-6">
       <div className="rounded-[32px] border border-slate-800 bg-slate-950 p-8">
         <Link href="/marketplace" className="text-xs text-slate-500 hover:text-slate-300">← Back to marketplace</Link>
         <div className="mt-3 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
-            <p className="text-sm uppercase tracking-[0.28em] text-slate-500">{pkg.packageType}</p>
-            <h1 className="mt-2 text-3xl font-semibold text-white">{pkg.name}</h1>
-            <p className="mt-2 max-w-2xl text-sm text-slate-400">{pkg.description}</p>
-            <p className="mt-2 text-xs text-slate-500">{pkg.itemCount} items</p>
+            <div className="flex items-center gap-3">
+              {Icon && (
+                <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-slate-800 text-blue-400 border border-slate-700 shadow-inner">
+                  <Icon className="w-5 h-5" />
+                </div>
+              )}
+              <div>
+                <p className="text-sm uppercase tracking-[0.28em] text-slate-500">{pkg.packageType}</p>
+                <h1 className="mt-1 text-3xl font-semibold text-white">{displayName}</h1>
+              </div>
+            </div>
+            <p className="mt-4 max-w-2xl text-sm text-slate-400">{pkg.description}</p>
+            <p className="mt-2 text-xs text-slate-500">{pkg.itemCount} published items in this library</p>
           </div>
           {pkg.hasAccess ? (
-            <span className="inline-flex rounded-2xl border border-emerald-900 bg-emerald-950/30 px-4 py-2 text-sm font-semibold text-emerald-300">Active</span>
+            <span className="inline-flex rounded-2xl border border-emerald-900 bg-emerald-950/30 px-4 py-2 text-sm font-semibold text-emerald-300">Access Granted</span>
           ) : (
             <button type="button" onClick={() => void activate()} disabled={busy} className="inline-flex rounded-2xl border border-slate-700 bg-blue-600 px-5 py-3 text-sm font-semibold text-white hover:bg-blue-500 disabled:opacity-50">
-              {busy ? "Activating…" : "Activate (development)"}
+              {busy ? "Activating…" : "Activate"}
             </button>
           )}
         </div>
@@ -114,7 +128,7 @@ export default function MarketplacePackagePage(props: PageProps) {
       </div>
 
       <div className="rounded-[32px] border border-slate-800 bg-slate-950 p-8">
-        <h2 className="text-xl font-semibold text-white">Items</h2>
+        <h2 className="text-xl font-semibold text-white">Sample Items</h2>
         <p className="mt-1 text-sm text-slate-400">{pkg.hasAccess ? "Full technical detail is available for each item." : "Preview only — activate the package to unlock full technical specifications and copying."}</p>
         <div className="mt-4 grid gap-2 sm:grid-cols-2">
           {items.map((item) => (

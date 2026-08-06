@@ -31,6 +31,7 @@ export default function ProjectOverviewPage(props: PageProps) {
   const params = use(props.params);
   const [project, setProject] = useState<Project | null>(null);
   const [latestProposal, setLatestProposal] = useState<ProposalSummary | null>(null);
+  const [boqs, setBoqs] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [notFound, setNotFound] = useState(false);
@@ -40,12 +41,14 @@ export default function ProjectOverviewPage(props: PageProps) {
     setError(null);
     setNotFound(false);
     try {
-      const [data, proposals] = await Promise.all([
+      const [data, proposals, boqData] = await Promise.all([
         apiClient.get<Project>(`/api/projects/${encodeURIComponent(params.projectId)}`, signal),
         apiClient.get<ProposalSummary[]>(`/api/projects/${encodeURIComponent(params.projectId)}/proposals`, signal).catch(() => []),
+        apiClient.get<any[]>(`/api/projects/${encodeURIComponent(params.projectId)}/boqs`, signal).catch(() => []),
       ]);
       setProject(data);
       setLatestProposal(proposals[0] ?? null);
+      setBoqs([...boqData].sort((left, right) => (Number(right.revision?.replace(/^R/i, "")) || 0) - (Number(left.revision?.replace(/^R/i, "")) || 0)));
     } catch (loadError) {
       if (loadError instanceof DOMException && loadError.name === "AbortError") return;
       if (loadError instanceof ApiClientError && loadError.status === 404) {
@@ -64,6 +67,9 @@ export default function ProjectOverviewPage(props: PageProps) {
     void loadProject(controller.signal);
     return () => controller.abort();
   }, [loadProject]);
+
+  const activeBoq = boqs[0] ?? null;
+  const isBoqLocked = activeBoq && (activeBoq.isLocked || activeBoq.status === "locked" || activeBoq.status === "approved");
 
   if (isLoading) {
     return (
@@ -141,6 +147,51 @@ export default function ProjectOverviewPage(props: PageProps) {
           <div className="rounded-3xl border border-slate-800 bg-slate-900 p-5 text-slate-300">
             <p className="text-sm uppercase tracking-[0.28em] text-slate-500">Revision</p>
             <p className="mt-3 text-lg font-semibold text-white">{project.currentRevision}</p>
+          </div>
+        </div>
+      </div>
+
+      <div className="rounded-[32px] border border-slate-800 bg-slate-950 p-8">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h3 className="text-xl font-semibold text-white">Bill of Quantities</h3>
+            <p className="mt-1 text-sm text-slate-400">
+              {activeBoq ? `Current revision: ${activeBoq.revision} · ${activeBoq.status}` : "No BOQ has been created yet."}
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {!activeBoq && (
+              <Link
+                href={`/projects/${project.id}/boq?action=create-initial`}
+                className="inline-flex rounded-2xl border border-slate-700 bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-500"
+              >
+                Create Initial BOQ
+              </Link>
+            )}
+            {activeBoq && !isBoqLocked && (
+              <Link
+                href={`/projects/${project.id}/boq`}
+                className="inline-flex rounded-2xl border border-slate-700 bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-500"
+              >
+                Continue BOQ
+              </Link>
+            )}
+            {activeBoq && isBoqLocked && (
+              <>
+                <Link
+                  href={`/projects/${project.id}/boq`}
+                  className="inline-flex rounded-2xl border border-slate-700 bg-slate-900 px-4 py-2 text-sm font-semibold text-slate-200 hover:bg-slate-800"
+                >
+                  View BOQ
+                </Link>
+                <Link
+                  href={`/projects/${project.id}/boq?action=new-revision`}
+                  className="inline-flex rounded-2xl border border-slate-700 bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-500"
+                >
+                  Create New Revision
+                </Link>
+              </>
+            )}
           </div>
         </div>
       </div>

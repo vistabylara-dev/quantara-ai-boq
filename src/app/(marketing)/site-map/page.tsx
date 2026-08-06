@@ -4,7 +4,7 @@ import PublicBreadcrumb from "@/components/ui/public-breadcrumb";
 import { Metadata } from "next";
 import { publicNavigation, legalNavigation } from "@/config/public-navigation";
 export const metadata: Metadata = {
-  title: "HTML Sitemap | Quantara",
+  title: "HTML Sitemap",
   description: "Navigate all public pages, tools, and resources for the Quantara BOQ software platform.",
   robots: { index: true, follow: true },
   alternates: {

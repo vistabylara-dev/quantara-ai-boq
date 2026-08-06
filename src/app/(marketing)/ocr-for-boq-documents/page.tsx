@@ -2,7 +2,7 @@ import { Metadata } from "next";
 import KnowledgePage, { KnowledgePageContent } from "@/components/layout/knowledge-page";
 
 export const metadata: Metadata = {
-  title: "OCR for BOQ Documents: Capabilities and Limitations | Quantara",
+  title: "OCR for BOQ Documents: Capabilities and Limitations",
   description: "Learn how OCR can assist with scanned BOQ documents, which errors may occur, and what professionals should review before using extracted content.",
   alternates: {
     canonical: "https://quantara.vistabylara.com/ocr-for-boq-documents",

@@ -2,7 +2,7 @@ import { Metadata } from "next";
 import KnowledgePage, { KnowledgePageContent } from "@/components/layout/knowledge-page";
 
 export const metadata: Metadata = {
-  title: "Text PDF vs Scanned PDF for BOQ Extraction | Quantara",
+  title: "Text PDF vs Scanned PDF for BOQ Extraction",
   description: "Understand how text-based and scanned PDFs differ, how OCR affects extraction, and why document quality matters when processing BOQ files.",
   alternates: {
     canonical: "https://quantara.vistabylara.com/text-pdf-vs-scanned-pdf",

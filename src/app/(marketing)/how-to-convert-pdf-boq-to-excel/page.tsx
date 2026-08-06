@@ -2,7 +2,7 @@ import { Metadata } from "next";
 import KnowledgePage, { KnowledgePageContent } from "@/components/layout/knowledge-page";
 
 export const metadata: Metadata = {
-  title: "How to Convert a PDF BOQ to Excel Safely | Quantara",
+  title: "How to Convert a PDF BOQ to Excel Safely",
   description: "Learn how to convert a BOQ from PDF to Excel while reviewing tables, quantities, units, merged cells, OCR issues and document structure.",
   alternates: {
     canonical: "https://quantara.vistabylara.com/how-to-convert-pdf-boq-to-excel",

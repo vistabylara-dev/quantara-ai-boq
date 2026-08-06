@@ -2,7 +2,7 @@ import { Metadata } from "next";
 import IndustryLandingPage, { IndustryLandingPageContent } from "@/components/layout/industry-landing-page";
 import PublicBreadcrumb from "@/components/ui/public-breadcrumb";
 export const metadata: Metadata = {
-  title: "BOQ Software for MEP Contractors and Estimators | Quantara",
+  title: "BOQ Software for MEP Contractors and Estimators",
   description: "Organize mechanical, electrical and plumbing BOQ workflows, project documents, revisions, templates and outputs using Quantara.",
   alternates: {
     canonical: "https://quantara.vistabylara.com/boq-software-for-mep-contractors",

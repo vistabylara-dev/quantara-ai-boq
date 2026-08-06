@@ -5,7 +5,7 @@ import PublicBreadcrumb from "@/components/ui/public-breadcrumb";
 import { Calculator, ArrowRight, BookOpen } from "lucide-react";
 
 export const metadata: Metadata = {
-  title: "BOQ Calculation Formulas and Quantity Guide | Quantara",
+  title: "BOQ Calculation Formulas and Quantity Guide",
   description: "Review practical formulas for earthworks, concrete, blockwork, finishes, reinforcement, roofing, asphalt and BOQ pricing, then use the free Vista By Lara BOQ Calculator.",
   alternates: {
     canonical: "https://quantara.vistabylara.com/boq-calculation-formulas",

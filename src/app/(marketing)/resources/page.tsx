@@ -2,7 +2,7 @@ import { Metadata } from "next";
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
 export const metadata: Metadata = {
-  title: "BOQ Resources and Educational Guides | Quantara",
+  title: "BOQ Resources and Educational Guides",
   description: "Explore our knowledge base on Bill of Quantities fundamentals, extraction workflows, document review, and estimating best practices.",
   alternates: {
     canonical: "https://quantara.vistabylara.com/resources",

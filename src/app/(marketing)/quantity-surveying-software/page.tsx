@@ -4,7 +4,7 @@ import Link from "next/link";
 import SeoLandingPage, { SeoLandingPageContent } from "@/components/layout/seo-landing-page";
 
 export const metadata: Metadata = {
-  title: "Quantity Surveying Software for BOQ and Document Workflows | Quantara",
+  title: "Quantity Surveying Software for BOQ and Document Workflows",
   description: "Support quantity-surveying workflows with structured BOQs, project records, revisions, templates and professionally reviewed document outputs using Quantara.",
   alternates: {
     canonical: "https://quantara.vistabylara.com/quantity-surveying-software",

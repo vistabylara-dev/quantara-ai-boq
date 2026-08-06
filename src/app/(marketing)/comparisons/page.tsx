@@ -1,7 +1,7 @@
 import { Metadata } from 'next';
 import Link from 'next/link';
 export const metadata: Metadata = {
-  title: 'BOQ and Construction Workflow Comparisons | Quantara',
+  title: 'BOQ and Construction Workflow Comparisons',
   description: 'Compare BOQ software, spreadsheets, Excel, OCR, manual preparation, document management and quantity takeoff workflows.',
   alternates: {
     canonical: 'https://quantara.vistabylara.com/comparisons'

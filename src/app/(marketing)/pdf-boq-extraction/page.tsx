@@ -3,7 +3,7 @@ import { Metadata } from "next";
 import SeoLandingPage, { SeoLandingPageContent } from "@/components/layout/seo-landing-page";
 
 export const metadata: Metadata = {
-  title: "PDF BOQ Extraction for Construction Documents | Quantara",
+  title: "PDF BOQ Extraction for Construction Documents",
   description: "Extract and organize supported BOQ information from text-based PDF documents using Quantara’s AI-assisted, professionally reviewed workflow.",
   alternates: {
     canonical: "https://quantara.vistabylara.com/pdf-boq-extraction",

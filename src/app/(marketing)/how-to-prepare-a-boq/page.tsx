@@ -3,7 +3,7 @@ import Link from "next/link";
 import KnowledgePage, { KnowledgePageContent } from "@/components/layout/knowledge-page";
 
 export const metadata: Metadata = {
-  title: "How to Prepare a BOQ: Step-by-Step Construction Workflow | Quantara",
+  title: "How to Prepare a BOQ: Step-by-Step Construction Workflow",
   description: "Follow a practical workflow for preparing a Bill of Quantities from project documents, including scope review, item structure, quantities and professional validation.",
   alternates: {
     canonical: "https://quantara.vistabylara.com/how-to-prepare-a-boq",

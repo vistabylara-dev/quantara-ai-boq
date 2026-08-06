@@ -2,7 +2,7 @@ import { Metadata } from "next";
 import IndustryLandingPage, { IndustryLandingPageContent } from "@/components/layout/industry-landing-page";
 
 export const metadata: Metadata = {
-  title: "HVAC BOQ Software for Contractors and Estimators | Quantara",
+  title: "HVAC BOQ Software for Contractors and Estimators",
   description: "Structure HVAC BOQ items, equipment, ductwork, piping, insulation, controls and project revisions using Quantara’s document-focused workflow.",
   alternates: {
     canonical: "https://quantara.vistabylara.com/boq-software-for-hvac-contractors",

@@ -2,7 +2,7 @@ import { Metadata } from "next";
 import Link from "next/link";
 import { ArrowRight, Globe } from "lucide-react";
 export const metadata: Metadata = {
-  title: "GCC BOQ Software for Construction and Estimating Teams | Quantara",
+  title: "GCC BOQ Software for Construction and Estimating Teams",
   description: "Explore how Quantara supports structured BOQ, document, revision and professional-review workflows for construction teams across the GCC.",
   alternates: {
     canonical: "https://quantara.vistabylara.com/gcc-boq-software",

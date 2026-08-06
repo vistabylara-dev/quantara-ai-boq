@@ -2,7 +2,7 @@ import { Metadata } from "next";
 import SeoLandingPage, { SeoLandingPageContent } from "@/components/layout/seo-landing-page";
 
 export const metadata: Metadata = {
-  title: "BOQ Software for Qatar MEP and Consultant Workflows | Quantara",
+  title: "BOQ Software for Qatar MEP and Consultant Workflows",
   description: "Organize consultant-issued BOQs, manage MEP packages, and track tender revisions with structured software for Qatar projects.",
   alternates: {
     canonical: "https://quantara.vistabylara.com/boq-software-qatar",

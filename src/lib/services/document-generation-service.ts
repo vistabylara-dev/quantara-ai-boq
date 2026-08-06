@@ -178,6 +178,15 @@ export async function generateDocument(actor: CurrentActor, projectIdentifier: s
     );
   }
 
+  const allItems = boqRecord.sections.flatMap(s => s.items);
+  if (isLocked && allItems.length === 0) {
+    throw new AppError(
+      "BOQ_REVISION_EMPTY",
+      "This locked revision contains no BOQ items and cannot be used to generate documents.",
+      400,
+    );
+  }
+
   // Verification: locked revisions are immutable and were already required
   // to be free of unresolved critical exceptions before they could be
   // locked (see assertBOQCanBeLocked in boq-guards.ts), so their frozen

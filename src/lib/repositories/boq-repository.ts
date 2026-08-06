@@ -6,7 +6,7 @@ import {
   VerificationSeverity,
 } from "@prisma/client";
 import { prisma } from "@/lib/db/prisma";
-import { ConflictError, NotFoundError } from "@/lib/errors/app-error";
+import { AppError, ConflictError, NotFoundError } from "@/lib/errors/app-error";
 import { assertBOQCanBeLocked, assertBOQEditable } from "@/lib/domain/boq-guards";
 import { calculateBOQItem, calculateBOQTotals } from "@/lib/calculations/boq-calculator";
 import { createAuditLog } from "@/lib/repositories/audit-repository";
@@ -190,11 +190,11 @@ export async function createProjectBOQ(
   const project = await getProjectRecord(companyId, projectIdentifier, db);
   const existing = await db.bOQ.findFirst({
     where: { companyId, projectId: project.id },
-    orderBy: { revisionNumber: "desc" },
-    select: { revisionNumber: true },
+    orderBy: { revisionNumber: "asc" },
+    select: { id: true },
   });
   if (existing) {
-    throw new ConflictError("BOQ_ALREADY_EXISTS", "Create a revision from the existing BOQ instead.");
+    return getBOQ(companyId, existing.id, db);
   }
 
   const templates = input?.sections ?? engineSectionTemplates(project.industryEngine.configJson);
@@ -573,15 +573,46 @@ export async function lockBOQ(companyId: string, boqId: string, actorName = "Dev
     if (current.isLocked) return current.id;
 
     if (current.verifiedVersion === null || current.verifiedAt === null) {
-      throw new ConflictError("VERIFICATION_REQUIRED", "Run verification before locking this BOQ.");
+      throw new AppError("VERIFICATION_REQUIRED", "Run verification before locking this BOQ.", 400);
     }
     if (current.verifiedVersion !== current.version) {
-      throw new ConflictError(
-        "VERIFICATION_STALE",
-        "The BOQ changed after verification. Re-run verification before locking.",
-      );
+      throw new AppError("VERIFICATION_STALE", "The BOQ changed after verification. Re-run verification before locking.", 400);
     }
-    assertBOQCanBeLocked(current.verificationExceptions);
+
+    const allItems = current.sections.flatMap((s) => s.items);
+    if (allItems.length === 0) {
+      throw new AppError("BOQ_REVISION_EMPTY", "This revision contains no BOQ items. Add at least one item before locking.", 400);
+    }
+
+    let hasInvalidTotals = false;
+    for (const item of allItems) {
+      const displayId = item.itemCode || `Item ${item.itemNumber}`;
+      if (!item.description || item.description.trim() === "") {
+        throw new AppError("BOQ_ITEM_INVALID_DESCRIPTION", `${displayId} is missing a description.`, 400);
+      }
+      if (!item.unit || item.unit.trim() === "") {
+        throw new AppError("BOQ_ITEM_INVALID_UNIT", `${displayId} is missing a unit.`, 400);
+      }
+      if (item.quantity.toNumber() <= 0) {
+        throw new AppError("BOQ_ITEM_INVALID_QUANTITY", `${displayId} has a quantity less than or equal to zero.`, 400);
+      }
+      if (item.unitCost.toNumber() < 0) {
+        throw new AppError("BOQ_ITEM_INVALID_RATE", `${displayId} has an invalid rate.`, 400);
+      }
+      if (item.totalAmount.toNumber() < 0) {
+        hasInvalidTotals = true;
+      }
+    }
+
+    if (hasInvalidTotals || current.taxRate.toNumber() < 0 || current.discountPercentage.toNumber() < 0) {
+      throw new AppError("BOQ_INVALID_TOTALS", "The BOQ contains invalid calculated totals.", 400);
+    }
+
+    // Check critical unresolved issues explicitly, mapping them to 400
+    const unresolvedCriticals = current.verificationExceptions.filter(e => e.severity.toUpperCase() === "CRITICAL" && e.resolved !== true);
+    if (unresolvedCriticals.length > 0) {
+      throw new AppError("BOQ_LOCK_BLOCKED", `BOQ cannot be locked while ${unresolvedCriticals.length} critical verification exception(s) remain unresolved.`, 400);
+    }
 
     await tx.bOQRevisionSnapshot.create({
       data: {
@@ -605,13 +636,15 @@ export async function lockBOQ(companyId: string, boqId: string, actorName = "Dev
       data: { isLocked: true, lockedAt, status: BOQStatus.LOCKED },
     });
     if (updated.count !== 1) throw new ConflictError("BOQ_LOCK_CONFLICT", "The BOQ was locked by another request.");
-    const itemIds = current.sections.flatMap((section) => section.items.map((item) => item.id));
-    if (itemIds.length) {
+    
+    const itemIds = allItems.map((item) => item.id);
+    if (itemIds.length > 0) {
       await tx.bOQItem.updateMany({
         where: { companyId, id: { in: itemIds } },
         data: { status: BOQItemStatus.LOCKED },
       });
     }
+    
     await createAuditLog(companyId, {
       entityType: "BOQ",
       entityId: current.id,

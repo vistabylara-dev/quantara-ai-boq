@@ -158,7 +158,7 @@ export default function AddItemFromSourceModal({ boqId, sections, nextItemNumber
                     </div>
                     <p className="mt-1 text-xs text-amber-400">Package: {item.packageNames?.[0] ?? "Industry Library"}</p>
                     <p className="mt-2 text-xs text-amber-200">
-                      Buy the full {item.packageNames?.[0] ?? "Industry"} Library to add this professional item, or enter it manually.
+                      Request access to the full {item.packageNames?.[0] ?? "Industry"} Library, or enter this item manually.
                     </p>
                     <div className="mt-3 flex flex-wrap gap-2">
                       <Link href="/marketplace" className="rounded-xl border border-amber-700 bg-amber-900/40 px-3 py-1.5 text-xs font-semibold text-amber-200 hover:bg-amber-900/70">

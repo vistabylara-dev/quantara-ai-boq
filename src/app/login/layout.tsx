@@ -13,5 +13,9 @@ export default function LoginLayout({
 }: {
   children: React.ReactNode;
 }) {
-  return <>{children}</>;
+  return (
+    <div data-theme="dark" className="min-h-screen bg-[#030508] text-white">
+      {children}
+    </div>
+  );
 }

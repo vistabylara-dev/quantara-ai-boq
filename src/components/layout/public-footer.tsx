@@ -26,7 +26,7 @@ export default function PublicFooter() {
           {/* Brand Column */}
           <div className="col-span-2 md:col-span-4 lg:col-span-2">
             <Link href="/" className="font-bold text-xl tracking-tight text-slate-900 dark:text-white flex items-center gap-2 mb-6" aria-label="Quantara Home">
-              <img src="/logo.png" alt="Quantara Logo" className="w-8 h-8 rounded-lg shadow-sm object-contain" />
+              <img src="/logo.png" alt="Quantara Logo" className="h-12 w-12 shrink-0 object-contain" />
               Quantara
             </Link>
             <p className="text-sm text-slate-500 dark:text-slate-400 mb-4 font-medium max-w-sm">

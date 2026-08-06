@@ -32,7 +32,7 @@ const regionalLinks = [
 
 export default function GCCIndexPage() {
   return (
-    <div className="flex flex-col min-h-screen bg-slate-50 text-slate-900 font-sans">
+    <div className="container mx-auto px-4 py-16 md:py-24 max-w-7xl">
       
         <header className="mb-16 text-center max-w-4xl mx-auto">
           <div className="inline-flex items-center gap-2 px-3 py-1 bg-blue-50 text-blue-700 rounded-full text-xs font-semibold mb-6 uppercase tracking-wider">

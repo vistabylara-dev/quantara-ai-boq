@@ -77,7 +77,7 @@ export default function ComparisonsHubPage() {
   };
 
   return (
-    <div className="min-h-screen flex flex-col bg-white font-sans text-slate-900">
+    <div className="container mx-auto px-4 py-16 md:py-24 max-w-7xl">
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
 
       

@@ -66,7 +66,7 @@ const industryLinks = [
 
 export default function IndustriesIndexPage() {
   return (
-    <div className="flex flex-col min-h-screen bg-white text-slate-900 font-sans">
+    <div className="container mx-auto px-4 py-16 md:py-24 max-w-7xl">
       
         <header className="mb-16 text-center max-w-3xl mx-auto">
           <h1 className="text-4xl md:text-5xl font-bold text-slate-900 tracking-tight mb-6">BOQ Software by Industry</h1>

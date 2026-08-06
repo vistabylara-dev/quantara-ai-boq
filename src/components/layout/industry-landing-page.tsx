@@ -1,8 +1,6 @@
 import React from "react";
 import Link from "next/link";
 import { ArrowRight, CheckCircle2, AlertCircle } from "lucide-react";
-import PublicFooter from "@/components/layout/public-footer";
-import PublicHeader from "@/components/layout/public-header";
 import PublicBreadcrumb from "@/components/ui/public-breadcrumb";
 
 export interface IndustryFAQ {
@@ -33,10 +31,8 @@ export interface IndustryLandingPageContent {
 
 export default function IndustryLandingPage({ content }: { content: IndustryLandingPageContent }) {
   return (
-    <div className="flex flex-col min-h-screen bg-white text-slate-900 font-sans">
-      <PublicHeader />
-
-      <main className="flex-1 w-full max-w-5xl mx-auto px-4 py-12 md:py-16">
+    <div className="w-full bg-white text-slate-900 font-sans">
+      <div className="flex-1 w-full max-w-5xl mx-auto px-4 py-12 md:py-16">
         <PublicBreadcrumb items={[
           { name: "Home", item: "/" },
           { name: "Industries", item: "/industries" },
@@ -186,9 +182,7 @@ export default function IndustryLandingPage({ content }: { content: IndustryLand
             </Link>
           </div>
         </section>
-      </main>
-
-      <PublicFooter />
+      </div>
 
       <script
         type="application/ld+json"

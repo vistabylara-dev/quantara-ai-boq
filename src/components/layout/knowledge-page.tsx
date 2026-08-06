@@ -1,8 +1,6 @@
 import React, { ReactNode } from "react";
 import Link from "next/link";
 import { ArrowRight, CheckCircle2 } from "lucide-react";
-import PublicFooter from "./public-footer";
-import PublicHeader from "@/components/layout/public-header";
 import PublicBreadcrumb from "@/components/ui/public-breadcrumb";
 
 export interface KnowledgeFaq {
@@ -51,7 +49,7 @@ export default function KnowledgePage({ content }: { content: KnowledgePageConte
   const schemaString = content.schema ? JSON.stringify(content.schema) : null;
 
   return (
-    <div className="flex flex-col min-h-screen bg-white text-slate-900 font-sans">
+    <div className="w-full bg-white text-slate-900 font-sans">
       {schemaString && (
         <script
           type="application/ld+json"
@@ -60,9 +58,7 @@ export default function KnowledgePage({ content }: { content: KnowledgePageConte
       )}
       
       {/* Basic header placeholder that matches the public design (this assumes public header is injected or we just rely on standard navigation styles) */}
-      <PublicHeader />
-
-      <main className="flex-1 w-full max-w-4xl mx-auto px-4 py-12 md:py-20">
+      <div className="flex-1 w-full max-w-4xl mx-auto px-4 py-12 md:py-20">
         <PublicBreadcrumb items={[
           { name: "Home", item: "/" },
           { name: "Resources", item: "/resources" },
@@ -249,9 +245,8 @@ export default function KnowledgePage({ content }: { content: KnowledgePageConte
           </section>
 
         </article>
-      </main>
+      </div>
 
-      <PublicFooter />
-    </div>
+      </div>
   );
 }

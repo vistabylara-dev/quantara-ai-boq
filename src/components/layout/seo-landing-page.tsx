@@ -3,8 +3,6 @@
 import React, { useState, type ReactNode } from "react";
 import Link from "next/link";
 import { ChevronRight, ChevronDown, CheckCircle2, FileText, Settings, ShieldCheck, ArrowRight, Zap, FolderKanban } from "lucide-react";
-import PublicFooter from "@/components/layout/public-footer";
-import PublicHeader from "@/components/layout/public-header";
 import PublicBreadcrumb, { generateBreadcrumbSchema } from "@/components/ui/public-breadcrumb";
 
 export type FeatureStatus = "Live" | "Preview UI" | "In Development" | "Planned";
@@ -76,9 +74,7 @@ export default function SeoLandingPage({ content, currentPath }: { content: SeoL
 
   return (
     <div className="flex flex-col min-h-screen bg-white dark:bg-[#030508] text-slate-900 dark:text-slate-100">
-      <PublicHeader />
-
-      <main className="flex-1 pb-24">
+      <div className="flex-1 pb-24">
         {/* Breadcrumb */}
         <div className="bg-slate-50 dark:bg-slate-900/30 border-b border-slate-100 dark:border-slate-800/50 py-4 px-4">
           <div className="container mx-auto max-w-4xl text-sm font-medium flex items-center gap-2 text-slate-500 dark:text-slate-400">
@@ -294,7 +290,7 @@ export default function SeoLandingPage({ content, currentPath }: { content: SeoL
             </section>
           </div>
         </div>
-      </main>
+      </div>
 
       {/* CTA Section */}
       <section className="py-24 px-4 bg-blue-600 mt-auto">
@@ -311,7 +307,6 @@ export default function SeoLandingPage({ content, currentPath }: { content: SeoL
         </div>
       </section>
 
-      <PublicFooter />
-    </div>
+      </div>
   );
 }

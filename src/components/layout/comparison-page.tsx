@@ -1,8 +1,6 @@
 "use client";
 import React from 'react';
 import Link from 'next/link';
-import PublicFooter from './public-footer';
-import PublicHeader from "@/components/layout/public-header";
 import PublicBreadcrumb, { generateBreadcrumbSchema } from "@/components/ui/public-breadcrumb";
 
 export interface ComparisonCriteria {
@@ -78,10 +76,8 @@ export function ComparisonPage(props: ComparisonPageProps) {
     <div className="min-h-screen flex flex-col bg-white font-sans text-slate-900">
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
 
-      <main className="flex-1 max-w-5xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-12 md:py-20 mt-16">
+      <div className="flex-1 max-w-5xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-12 md:py-20 mt-16">
         <PublicBreadcrumb items={breadcrumbItems} />
-
-        <PublicHeader />
 
         <section className="mb-16">
           <h2 className="text-2xl font-bold text-slate-900 mb-6">Quick Decision Summary</h2>
@@ -256,9 +252,8 @@ export function ComparisonPage(props: ComparisonPageProps) {
             This comparison is provided for general workflow guidance. The appropriate process depends on project requirements, contractual obligations, available documents, internal controls and professional responsibilities. All quantities, units, descriptions, specifications, rates, assumptions, exclusions and generated outputs must be reviewed by appropriately qualified construction professionals before tender, procurement, contractual or construction use.
           </p>
         </section>
-      </main>
+      </div>
 
-      <PublicFooter />
-    </div>
+      </div>
   );
 }

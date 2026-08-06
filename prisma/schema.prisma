@@ -1490,6 +1490,7 @@ model User {
   importMappingTemplates                 ImportMappingTemplate[]
   importJobs                             ImportJob[]
   copiedBoqItems                         BOQItem[]                        @relation("BoqItemCopiedByUser")
+  lockedBOQs                             BOQ[]                            @relation("BOQLockedByUser")
   uploadedProjectFiles                   ProjectFile[]                    @relation("ProjectFileUploadedByUser")
   classificationConfirmedFiles           ProjectFile[]                    @relation("ProjectFileClassificationConfirmedByUser")
   projectFileUploadSessions              ProjectFileUploadSession[]
@@ -1660,6 +1661,7 @@ model BOQ {
   status                 BOQStatus               @default(DRAFT)
   isLocked               Boolean                 @default(false)
   lockedAt               DateTime?
+  lockedByUserId         String?                 @db.Uuid
   approvedByName         String?
   discountPercentage     Decimal                 @default(0) @db.Decimal(7, 4)
   taxRate                Decimal                 @default(5) @db.Decimal(7, 4)
@@ -1670,6 +1672,7 @@ model BOQ {
   updatedAt              DateTime                @updatedAt
   company                Company                 @relation(fields: [companyId], references: [id], onDelete: Cascade)
   project                Project                 @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  lockedByUser           User?                   @relation("BOQLockedByUser", fields: [lockedByUserId], references: [id], onDelete: SetNull)
   sections               BOQSection[]
   verificationExceptions VerificationException[]
   revisionSnapshots      BOQRevisionSnapshot[]

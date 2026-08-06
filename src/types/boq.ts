@@ -89,5 +89,6 @@ export type BOQ = {
   isLocked?: boolean;
   createdAt: string;
   lockedAt?: string;
+  lockedByUserId?: string;
   approvedBy?: string;
 };

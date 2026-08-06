@@ -19,7 +19,7 @@ export async function POST(_request: Request, context: { params: Promise<{ boqId
     if (!current.isLocked) {
       await runBOQVerification(actor.companyId, boqId);
     }
-    const data = await lockBOQ(actor.companyId, boqId, actor.fullName);
+    const data = await lockBOQ(actor.companyId, boqId, actor.fullName, actor.userId);
     return apiSuccess(data);
   } catch (error) {
     return handleApiError(error);

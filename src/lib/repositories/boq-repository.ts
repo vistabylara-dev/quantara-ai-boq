@@ -121,6 +121,7 @@ export function toBOQDTO(boq: BOQRecord): BOQ & { databaseId: string; taxRate: n
     },
     createdAt: boq.createdAt.toISOString(),
     lockedAt: boq.lockedAt?.toISOString(),
+    lockedByUserId: boq.lockedByUserId ?? undefined,
     approvedBy: boq.approvedByName ?? undefined,
   };
 }
@@ -554,7 +555,7 @@ function snapshotValue(record: BOQRecord): Prisma.InputJsonValue {
   return JSON.parse(JSON.stringify(record)) as Prisma.InputJsonValue;
 }
 
-export async function lockBOQ(companyId: string, boqId: string, actorName = "Development User") {
+export async function lockBOQ(companyId: string, boqId: string, actorName = "Development User", lockedByUserId?: string) {
   const existing = await getBOQRecord(companyId, boqId);
   if (existing.isLocked) return toBOQDTO(existing);
 
@@ -633,7 +634,7 @@ export async function lockBOQ(companyId: string, boqId: string, actorName = "Dev
         version: current.version,
         verifiedVersion: current.version,
       },
-      data: { isLocked: true, lockedAt, status: BOQStatus.LOCKED },
+      data: { isLocked: true, lockedAt, status: BOQStatus.LOCKED, lockedByUserId: lockedByUserId ?? null },
     });
     if (updated.count !== 1) throw new ConflictError("BOQ_LOCK_CONFLICT", "The BOQ was locked by another request.");
     
@@ -803,7 +804,17 @@ async function getItemRecord(companyId: string, itemId: string) {
   return item;
 }
 
-export async function createBOQItem(companyId: string, sectionId: string, input: BOQItemWriteInput) {
+/**
+ * Accepts an optional externally-managed transaction (matching
+ * createProject's pattern in project-repository.ts) so callers that need to
+ * persist item creation atomically alongside further writes — e.g.
+ * addBoqItemFromSource's source-attribution stamp — can do so in one
+ * transaction instead of two separate commits. Without one, this opens and
+ * commits its own transaction, unchanged standalone behavior for existing
+ * callers (the direct "/api/sections/[sectionId]/items" route, extraction/
+ * finding-to-BOQ imports).
+ */
+export async function createBOQItem(companyId: string, sectionId: string, input: BOQItemWriteInput, externalTx?: Prisma.TransactionClient) {
   const section = await getSectionRecord(companyId, sectionId);
   assertBOQEditable(section.boq, "edit");
   const marginMode = input.marginMode ?? MarginMode.MARKUP;
@@ -816,7 +827,7 @@ export async function createBOQItem(companyId: string, sectionId: string, input:
     marginMode,
     marginPercentage: input.marginPercentage,
   });
-  const created = await prisma.$transaction(async (tx) => {
+  const run = async (tx: Prisma.TransactionClient) => {
     await claimEditableBOQ(tx, companyId, section.boqId, section.boq.version);
     const item = await tx.bOQItem.create({
       data: {
@@ -867,7 +878,12 @@ export async function createBOQItem(companyId: string, sectionId: string, input:
       payload: { boqId: section.boqId, sectionId: section.id, itemCode: item.itemCode },
     }, tx);
     return item;
-  });
+  };
+  const created = externalTx ? await run(externalTx) : await prisma.$transaction(run);
+  // When called with an externally-managed transaction, the caller reads the
+  // final BOQ state itself after that transaction commits — reading it here
+  // via the top-level `prisma` client would see pre-commit state.
+  if (externalTx) return { item: created };
   return { item: created, boq: await getBOQ(companyId, section.boqId) };
 }
 

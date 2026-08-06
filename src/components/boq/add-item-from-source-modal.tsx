@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
 import { apiClient, getApiErrorMessage } from "@/lib/api/client";
 
 type Section = { id: string; title: string };
@@ -160,12 +161,12 @@ export default function AddItemFromSourceModal({ boqId, sections, nextItemNumber
                       Buy the full {item.packageNames?.[0] ?? "Industry"} Library to add this professional item, or enter it manually.
                     </p>
                     <div className="mt-3 flex flex-wrap gap-2">
-                      <a href="/marketplace" className="rounded-xl border border-amber-700 bg-amber-900/40 px-3 py-1.5 text-xs font-semibold text-amber-200 hover:bg-amber-900/70">
+                      <Link href="/marketplace" className="rounded-xl border border-amber-700 bg-amber-900/40 px-3 py-1.5 text-xs font-semibold text-amber-200 hover:bg-amber-900/70">
                         View Library
-                      </a>
-                      <a href="/marketplace" className="rounded-xl border border-amber-700 bg-amber-900/40 px-3 py-1.5 text-xs font-semibold text-amber-200 hover:bg-amber-900/70">
+                      </Link>
+                      <Link href="/marketplace" className="rounded-xl border border-amber-700 bg-amber-900/40 px-3 py-1.5 text-xs font-semibold text-amber-200 hover:bg-amber-900/70">
                         Request Access
-                      </a>
+                      </Link>
                       <button
                         type="button"
                         onClick={() => switchToManualFromLocked(item)}

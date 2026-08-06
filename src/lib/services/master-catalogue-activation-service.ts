@@ -27,14 +27,9 @@ async function resolveDatasetScope(datasetId: string): Promise<DatasetScope> {
 }
 
 async function getMasterItemsForDataset(dataset: DatasetDefinition, disciplineId: string) {
-  const categoryPrefix = `construction.${dataset.targetPackageCode.replace(/-library$/i, "")}`;
   return prisma.masterItem.findMany({
     where: {
       disciplineId,
-      OR: [
-        { category: { path: { startsWith: categoryPrefix } } },
-        { itemCode: { startsWith: dataset.targetPackageCode.replace(/-library$/i, "").slice(0, 8).toUpperCase() } },
-      ],
     },
     select: { id: true, itemCode: true, status: true, isPremium: true },
   });

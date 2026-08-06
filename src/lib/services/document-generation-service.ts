@@ -20,7 +20,8 @@ import {
   markDocumentFailed,
   recordDownload,
 } from "@/lib/repositories/generated-document-repository";
-import { localDocumentStorageAdapter } from "@/lib/storage/local-document-storage-adapter";
+import { createStorageAdapter, resolveStorageProvider } from "@/lib/storage/storage-factory";
+import type { DocumentStorageAdapter } from "@/lib/storage/document-storage-adapter";
 import { buildDocumentData } from "@/lib/documents/build-document-data";
 import { generateCsv } from "@/lib/documents/generators/csv-generator";
 import { generateXlsx } from "@/lib/documents/generators/xlsx-generator";
@@ -32,6 +33,22 @@ import { recordDocumentGenerated } from "@/lib/entitlements/entitlement-service"
 import { canGenerateDocumentEffective } from "@/lib/entitlements/effective-entitlement-service";
 
 export const TRIAL_WATERMARK_TEXT = "Generated with Quantara — Trial Version";
+
+/**
+ * Was previously hardcoded to the local-filesystem storage adapter, which
+ * writes to disk — fine in dev/test, but Vercel's serverless function
+ * bundle is read-only outside /tmp, so every generation attempt in
+ * production failed with ENOENT on mkdir. Routed through the same factory
+ * project-file-service already uses, so production correctly gets
+ * VercelBlobStorageAdapter via STORAGE_PROVIDER=vercel-blob.
+ */
+let cachedDocumentStorageAdapter: DocumentStorageAdapter | null = null;
+function getDocumentStorageAdapter(): DocumentStorageAdapter {
+  if (!cachedDocumentStorageAdapter) {
+    cachedDocumentStorageAdapter = createStorageAdapter({ provider: resolveStorageProvider(), purpose: "generated-documents" });
+  }
+  return cachedDocumentStorageAdapter;
+}
 
 const FINAL_ONLY_TYPES: GeneratedDocumentType[] = [
   GeneratedDocumentType.PDF,
@@ -307,7 +324,7 @@ export async function generateDocument(actor: CurrentActor, projectIdentifier: s
     const fileName = `${safeProjectRef}-${boqDto.revision}-${input.documentType}-${queued.id.slice(0, 8)}.${extension}`;
     const storageKey = `${actor.companyId}/${project.id}/${boqDto.revision}/${queued.id}.${extension}`;
 
-    await localDocumentStorageAdapter.putObject({
+    await getDocumentStorageAdapter().putObject({
       key: storageKey,
       body: fileBuffer,
       contentType: MIME_TYPES[input.documentType],
@@ -351,7 +368,7 @@ export async function getDocumentForDownload(actor: CurrentActor, documentId: st
   if (record.status !== "COMPLETED" || !record.storageKey) {
     throw new AppError("DOCUMENT_NOT_READY", "This document has not finished generating.", 409);
   }
-  const buffer = await localDocumentStorageAdapter.getObject(record.storageKey);
+  const buffer = await getDocumentStorageAdapter().getObject(record.storageKey);
   await recordDownload(actor.companyId, documentId);
   return {
     buffer,
@@ -364,7 +381,7 @@ export async function deleteGeneratedDocument(actor: CurrentActor, documentId: s
   requireCapability(actor, "documents:delete");
   const result = await deleteGeneratedDocumentRow(actor.companyId, documentId);
   if (result.storageKey) {
-    await localDocumentStorageAdapter.deleteObject(result.storageKey).catch(() => undefined);
+    await getDocumentStorageAdapter().deleteObject(result.storageKey).catch(() => undefined);
   }
   return result;
 }

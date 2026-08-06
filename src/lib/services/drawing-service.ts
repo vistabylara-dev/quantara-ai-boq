@@ -31,7 +31,6 @@ import {
   type DrawingMetadataInput,
 } from "@/lib/validation/drawing-schema";
 import { randomUUID } from "node:crypto";
-import { PDFParse } from "pdf-parse";
 
 /**
  * Deterministic, real page count via pdf-parse's document-info reader (no
@@ -39,8 +38,17 @@ import { PDFParse } from "pdf-parse";
  * rather than throwing: a page count is a nice-to-have enrichment, never a
  * reason to fail an otherwise-valid upload. This is genuinely CONFIRMED data
  * (parsed straight from the PDF's own page tree), never inferred or guessed.
+ *
+ * pdf-parse is lazy-loaded here rather than imported at module scope: its
+ * pdfjs-dist dependency chain tries to require("@napi-rs/canvas") at load
+ * time to polyfill DOMMatrix, and that require is invisible to Vercel's
+ * static output-file trace, so the package can be absent from the deployed
+ * bundle. A module-scope import meant every consumer of drawing-service.ts —
+ * including a plain drawings LIST request that never touches a PDF — paid
+ * that load and crashed with "DOMMatrix is not defined" in production.
  */
 async function extractPdfPageCount(buffer: Buffer): Promise<number | null> {
+  const { PDFParse } = await import("pdf-parse");
   const parser = new PDFParse({ data: buffer });
   try {
     const info = await parser.getInfo();
@@ -203,17 +211,23 @@ export type UploadProjectDrawingInput = {
  */
 export async function uploadProjectDrawing(actor: CurrentActor, projectId: string, input: UploadProjectDrawingInput) {
   requireCapability(actor, "files:manage");
-  await getProjectRecord(actor.companyId, projectId);
+  // The route param may be the project's slug (e.g. "project-00") or its
+  // database UUID. getProjectRecord resolves either, but every operation
+  // after this point must use the canonical UUID it returns — ProjectFile.
+  // projectId is a native Postgres `uuid` column, and handing it a slug
+  // throws "invalid input syntax for type uuid" instead of a clean result.
+  const project = await getProjectRecord(actor.companyId, projectId);
+  const canonicalProjectId = project.id;
 
   const { extension, safeFileName } = validateDrawingUpload(input.originalName, input.mimeType, input.buffer.byteLength);
   const checksum = computeChecksum(input.buffer);
   const [duplicate, pageCount] = await Promise.all([
-    findDuplicateByChecksum(actor.companyId, projectId, checksum),
+    findDuplicateByChecksum(actor.companyId, canonicalProjectId, checksum),
     extension === "pdf" ? extractPdfPageCount(input.buffer) : Promise.resolve(null),
   ]);
 
   const drawingId = randomUUID();
-  const storageKey = buildDrawingStorageKey(actor.companyId, projectId, drawingId, safeFileName);
+  const storageKey = buildDrawingStorageKey(actor.companyId, canonicalProjectId, drawingId, safeFileName);
   const storage = getDrawingStorageAdapter();
 
   try {
@@ -223,7 +237,7 @@ export async function uploadProjectDrawing(actor: CurrentActor, projectId: strin
       entityType: "ProjectFile",
       entityId: drawingId,
       action: "DRAWING_UPLOAD_FAILED",
-      payload: { projectId, originalName: input.originalName, stage: "blob_put" },
+      payload: { projectId: canonicalProjectId, originalName: input.originalName, stage: "blob_put" },
     });
     throw error;
   }
@@ -237,7 +251,7 @@ export async function uploadProjectDrawing(actor: CurrentActor, projectId: strin
     // window where a database row exists without its drawing metadata, and
     // exactly one rollback path (below) covers every DB failure mode.
     row = await createProjectFile(actor.companyId, {
-      projectId,
+      projectId: canonicalProjectId,
       uploadedByUserId: actor.userId,
       originalName: input.originalName,
       safeFileName,
@@ -262,7 +276,7 @@ export async function uploadProjectDrawing(actor: CurrentActor, projectId: strin
       entityType: "ProjectFile",
       entityId: drawingId,
       action: "DRAWING_UPLOAD_FAILED",
-      payload: { projectId, originalName: input.originalName, stage: "db_write" },
+      payload: { projectId: canonicalProjectId, originalName: input.originalName, stage: "db_write" },
     });
     throw error;
   }
@@ -271,15 +285,15 @@ export async function uploadProjectDrawing(actor: CurrentActor, projectId: strin
     entityType: "ProjectFile",
     entityId: row.id,
     action: "DRAWING_UPLOADED",
-    payload: { projectId, originalName: input.originalName, fileSize: input.buffer.byteLength, checksum, discipline: discipline ?? null, drawingType: drawingType ?? null },
+    payload: { projectId: canonicalProjectId, originalName: input.originalName, fileSize: input.buffer.byteLength, checksum, discipline: discipline ?? null, drawingType: drawingType ?? null },
   });
 
   return { drawing: toDrawingDTO(row), duplicateOfFileId: duplicate && isDrawingRecord(duplicate) ? duplicate.id : null };
 }
 
 export async function listProjectDrawings(actor: CurrentActor, projectId: string) {
-  await getProjectRecord(actor.companyId, projectId);
-  const rows = await listProjectFiles(actor.companyId, projectId);
+  const project = await getProjectRecord(actor.companyId, projectId);
+  const rows = await listProjectFiles(actor.companyId, project.id);
   return rows.filter(isDrawingRecord).map(toDrawingDTO);
 }
 
@@ -411,7 +425,8 @@ export async function authorizeDrawingUpload(
   input: AuthorizeDrawingUploadInput,
 ): Promise<AuthorizeDrawingUploadResult> {
   requireCapability(actor, "files:manage");
-  await getProjectRecord(actor.companyId, projectId);
+  const project = await getProjectRecord(actor.companyId, projectId);
+  const canonicalProjectId = project.id;
 
   if (resolveStorageProvider() !== "vercel-blob") {
     throw new AppError(
@@ -425,12 +440,12 @@ export async function authorizeDrawingUpload(
   const { extension, safeFileName } = validateDrawingUpload(input.originalName, input.declaredMimeType, input.declaredByteSize, maxSizeBytes);
 
   const fileId = randomUUID();
-  const storageKey = buildDrawingStorageKey(actor.companyId, projectId, fileId, safeFileName);
+  const storageKey = buildDrawingStorageKey(actor.companyId, canonicalProjectId, fileId, safeFileName);
   const expiresAt = new Date(Date.now() + UPLOAD_SESSION_TTL_MS);
 
   const session = await createUploadSession({
     companyId: actor.companyId,
-    projectId,
+    projectId: canonicalProjectId,
     actorUserId: actor.userId,
     fileId,
     storageKey,
@@ -452,7 +467,7 @@ export async function authorizeDrawingUpload(
     entityType: "ProjectFile",
     entityId: fileId,
     action: "DRAWING_UPLOAD_AUTHORIZED",
-    payload: { projectId, originalName: input.originalName, declaredByteSize: input.declaredByteSize },
+    payload: { projectId: canonicalProjectId, originalName: input.originalName, declaredByteSize: input.declaredByteSize },
   });
 
   return {
@@ -481,10 +496,11 @@ export type FinalizeDrawingUploadInput = {
  */
 export async function finalizeDrawingUpload(actor: CurrentActor, projectId: string, input: FinalizeDrawingUploadInput) {
   requireCapability(actor, "files:manage");
-  await getProjectRecord(actor.companyId, projectId);
+  const project = await getProjectRecord(actor.companyId, projectId);
+  const canonicalProjectId = project.id;
 
   const session = await getUploadSession(actor.companyId, input.sessionId);
-  if (session.projectId !== projectId) {
+  if (session.projectId !== canonicalProjectId) {
     // Looks identical to "session not found" — never confirms/denies existence in another project.
     throw new NotFoundError("Upload session not found.");
   }
@@ -530,7 +546,7 @@ export async function finalizeDrawingUpload(actor: CurrentActor, projectId: stri
   }
 
   const checksum = await computeStreamedChecksum(storage, session.storageKey);
-  const duplicate = await findDuplicateByChecksum(actor.companyId, projectId, checksum);
+  const duplicate = await findDuplicateByChecksum(actor.companyId, canonicalProjectId, checksum);
   const pageCount = session.extension === "pdf" ? await extractPdfPageCount(await storage.getObject(session.storageKey)).catch(() => null) : null;
 
   const { discipline, drawingType, issueDate, sheetNumber, preparedBy, checkedBy, approvedBy, notes, drawingNumber, title, revision, scale } = input.metadata;
@@ -539,7 +555,7 @@ export async function finalizeDrawingUpload(actor: CurrentActor, projectId: stri
   try {
     row = await createProjectFile(actor.companyId, {
       id: session.fileId,
-      projectId,
+      projectId: canonicalProjectId,
       uploadedByUserId: actor.userId,
       originalName: session.originalName,
       safeFileName: session.storageKey.split("/").pop() ?? session.originalName,
@@ -560,7 +576,7 @@ export async function finalizeDrawingUpload(actor: CurrentActor, projectId: stri
       entityType: "ProjectFile",
       entityId: session.fileId,
       action: "DRAWING_UPLOAD_FAILED",
-      payload: { projectId, originalName: session.originalName, stage: "finalize_db_write" },
+      payload: { projectId: canonicalProjectId, originalName: session.originalName, stage: "finalize_db_write" },
     });
     throw error;
   }
@@ -571,7 +587,7 @@ export async function finalizeDrawingUpload(actor: CurrentActor, projectId: stri
     entityType: "ProjectFile",
     entityId: row.id,
     action: "DRAWING_UPLOADED",
-    payload: { projectId, originalName: session.originalName, fileSize: metadata.size, checksum, discipline: discipline ?? null, drawingType: drawingType ?? null, path: "direct_upload" },
+    payload: { projectId: canonicalProjectId, originalName: session.originalName, fileSize: metadata.size, checksum, discipline: discipline ?? null, drawingType: drawingType ?? null, path: "direct_upload" },
   });
 
   return { drawing: toDrawingDTO(row), duplicateOfFileId: duplicate && isDrawingRecord(duplicate) ? duplicate.id : null, alreadyFinalized: false };

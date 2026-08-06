@@ -5,6 +5,8 @@ import { triggerFileClassification } from "@/lib/services/project-file-service";
 import { projectFileIdParamsSchema } from "@/lib/validation/route-params";
 
 export const dynamic = "force-dynamic";
+/** Document classification is a lightweight heuristic pass, not a heavy operation; 60s leaves generous headroom. */
+export const maxDuration = 60;
 
 type RouteContext = { params: Promise<{ fileId: string }> };
 

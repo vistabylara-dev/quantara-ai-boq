@@ -5,6 +5,8 @@ import { triggerFilePreprocessing } from "@/lib/services/drawing-page-service";
 import { projectFileIdParamsSchema } from "@/lib/validation/route-params";
 
 export const dynamic = "force-dynamic";
+/** Page rasterization + text extraction for a small QA-sized PDF completes in well under a second; 60s leaves generous headroom for larger real-world drawings without requesting more than this route needs. */
+export const maxDuration = 60;
 
 type RouteContext = { params: Promise<{ fileId: string }> };
 

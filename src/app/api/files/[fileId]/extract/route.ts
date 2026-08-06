@@ -5,6 +5,8 @@ import { triggerFileExtraction } from "@/lib/services/table-extraction-service";
 import { projectFileIdParamsSchema } from "@/lib/validation/route-params";
 
 export const dynamic = "force-dynamic";
+/** Table extraction over a single already-stored file; 60s leaves generous headroom over observed local runtimes. */
+export const maxDuration = 60;
 
 type RouteContext = { params: Promise<{ fileId: string }> };
 

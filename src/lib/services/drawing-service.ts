@@ -201,19 +201,19 @@ export type UploadProjectDrawingInput = {
  * key, checksum, upload, persist, audit — with a Blob rollback if the
  * database write fails after a successful upload.
  */
-export async function uploadProjectDrawing(actor: CurrentActor, projectId: string, input: UploadProjectDrawingInput) {
+export async function uploadProjectDrawing(actor: CurrentActor, projectIdOrSlug: string, input: UploadProjectDrawingInput) {
   requireCapability(actor, "files:manage");
-  await getProjectRecord(actor.companyId, projectId);
+  const project = await getProjectRecord(actor.companyId, projectIdOrSlug);
 
   const { extension, safeFileName } = validateDrawingUpload(input.originalName, input.mimeType, input.buffer.byteLength);
   const checksum = computeChecksum(input.buffer);
   const [duplicate, pageCount] = await Promise.all([
-    findDuplicateByChecksum(actor.companyId, projectId, checksum),
+    findDuplicateByChecksum(actor.companyId, project.id, checksum),
     extension === "pdf" ? extractPdfPageCount(input.buffer) : Promise.resolve(null),
   ]);
 
   const drawingId = randomUUID();
-  const storageKey = buildDrawingStorageKey(actor.companyId, projectId, drawingId, safeFileName);
+  const storageKey = buildDrawingStorageKey(actor.companyId, project.id, drawingId, safeFileName);
   const storage = getDrawingStorageAdapter();
 
   try {
@@ -223,7 +223,7 @@ export async function uploadProjectDrawing(actor: CurrentActor, projectId: strin
       entityType: "ProjectFile",
       entityId: drawingId,
       action: "DRAWING_UPLOAD_FAILED",
-      payload: { projectId, originalName: input.originalName, stage: "blob_put" },
+      payload: { projectId: project.id, originalName: input.originalName, stage: "blob_put" },
     });
     throw error;
   }
@@ -237,7 +237,7 @@ export async function uploadProjectDrawing(actor: CurrentActor, projectId: strin
     // window where a database row exists without its drawing metadata, and
     // exactly one rollback path (below) covers every DB failure mode.
     row = await createProjectFile(actor.companyId, {
-      projectId,
+      projectId: project.id,
       uploadedByUserId: actor.userId,
       originalName: input.originalName,
       safeFileName,
@@ -262,7 +262,7 @@ export async function uploadProjectDrawing(actor: CurrentActor, projectId: strin
       entityType: "ProjectFile",
       entityId: drawingId,
       action: "DRAWING_UPLOAD_FAILED",
-      payload: { projectId, originalName: input.originalName, stage: "db_write" },
+      payload: { projectId: project.id, originalName: input.originalName, stage: "db_write" },
     });
     throw error;
   }
@@ -271,15 +271,15 @@ export async function uploadProjectDrawing(actor: CurrentActor, projectId: strin
     entityType: "ProjectFile",
     entityId: row.id,
     action: "DRAWING_UPLOADED",
-    payload: { projectId, originalName: input.originalName, fileSize: input.buffer.byteLength, checksum, discipline: discipline ?? null, drawingType: drawingType ?? null },
+    payload: { projectId: project.id, originalName: input.originalName, fileSize: input.buffer.byteLength, checksum, discipline: discipline ?? null, drawingType: drawingType ?? null },
   });
 
   return { drawing: toDrawingDTO(row), duplicateOfFileId: duplicate && isDrawingRecord(duplicate) ? duplicate.id : null };
 }
 
-export async function listProjectDrawings(actor: CurrentActor, projectId: string) {
-  await getProjectRecord(actor.companyId, projectId);
-  const rows = await listProjectFiles(actor.companyId, projectId);
+export async function listProjectDrawings(actor: CurrentActor, projectIdOrSlug: string) {
+  const project = await getProjectRecord(actor.companyId, projectIdOrSlug);
+  const rows = await listProjectFiles(actor.companyId, project.id);
   return rows.filter(isDrawingRecord).map(toDrawingDTO);
 }
 
@@ -407,11 +407,11 @@ export type AuthorizeDrawingUploadResult = {
  */
 export async function authorizeDrawingUpload(
   actor: CurrentActor,
-  projectId: string,
+  projectIdOrSlug: string,
   input: AuthorizeDrawingUploadInput,
 ): Promise<AuthorizeDrawingUploadResult> {
   requireCapability(actor, "files:manage");
-  await getProjectRecord(actor.companyId, projectId);
+  const project = await getProjectRecord(actor.companyId, projectIdOrSlug);
 
   if (resolveStorageProvider() !== "vercel-blob") {
     throw new AppError(
@@ -425,12 +425,12 @@ export async function authorizeDrawingUpload(
   const { extension, safeFileName } = validateDrawingUpload(input.originalName, input.declaredMimeType, input.declaredByteSize, maxSizeBytes);
 
   const fileId = randomUUID();
-  const storageKey = buildDrawingStorageKey(actor.companyId, projectId, fileId, safeFileName);
+  const storageKey = buildDrawingStorageKey(actor.companyId, project.id, fileId, safeFileName);
   const expiresAt = new Date(Date.now() + UPLOAD_SESSION_TTL_MS);
 
   const session = await createUploadSession({
     companyId: actor.companyId,
-    projectId,
+    projectId: project.id,
     actorUserId: actor.userId,
     fileId,
     storageKey,
@@ -452,7 +452,7 @@ export async function authorizeDrawingUpload(
     entityType: "ProjectFile",
     entityId: fileId,
     action: "DRAWING_UPLOAD_AUTHORIZED",
-    payload: { projectId, originalName: input.originalName, declaredByteSize: input.declaredByteSize },
+    payload: { projectId: project.id, originalName: input.originalName, declaredByteSize: input.declaredByteSize },
   });
 
   return {
@@ -479,12 +479,12 @@ export type FinalizeDrawingUploadInput = {
  * already-finalized session returns the same result rather than erroring
  * or duplicating the row.
  */
-export async function finalizeDrawingUpload(actor: CurrentActor, projectId: string, input: FinalizeDrawingUploadInput) {
+export async function finalizeDrawingUpload(actor: CurrentActor, projectIdOrSlug: string, input: FinalizeDrawingUploadInput) {
   requireCapability(actor, "files:manage");
-  await getProjectRecord(actor.companyId, projectId);
+  const project = await getProjectRecord(actor.companyId, projectIdOrSlug);
 
   const session = await getUploadSession(actor.companyId, input.sessionId);
-  if (session.projectId !== projectId) {
+  if (session.projectId !== project.id) {
     // Looks identical to "session not found" — never confirms/denies existence in another project.
     throw new NotFoundError("Upload session not found.");
   }
@@ -530,7 +530,7 @@ export async function finalizeDrawingUpload(actor: CurrentActor, projectId: stri
   }
 
   const checksum = await computeStreamedChecksum(storage, session.storageKey);
-  const duplicate = await findDuplicateByChecksum(actor.companyId, projectId, checksum);
+  const duplicate = await findDuplicateByChecksum(actor.companyId, project.id, checksum);
   const pageCount = session.extension === "pdf" ? await extractPdfPageCount(await storage.getObject(session.storageKey)).catch(() => null) : null;
 
   const { discipline, drawingType, issueDate, sheetNumber, preparedBy, checkedBy, approvedBy, notes, drawingNumber, title, revision, scale } = input.metadata;
@@ -539,7 +539,7 @@ export async function finalizeDrawingUpload(actor: CurrentActor, projectId: stri
   try {
     row = await createProjectFile(actor.companyId, {
       id: session.fileId,
-      projectId,
+      projectId: project.id,
       uploadedByUserId: actor.userId,
       originalName: session.originalName,
       safeFileName: session.storageKey.split("/").pop() ?? session.originalName,
@@ -560,7 +560,7 @@ export async function finalizeDrawingUpload(actor: CurrentActor, projectId: stri
       entityType: "ProjectFile",
       entityId: session.fileId,
       action: "DRAWING_UPLOAD_FAILED",
-      payload: { projectId, originalName: session.originalName, stage: "finalize_db_write" },
+      payload: { projectId: project.id, originalName: session.originalName, stage: "finalize_db_write" },
     });
     throw error;
   }
@@ -571,7 +571,7 @@ export async function finalizeDrawingUpload(actor: CurrentActor, projectId: stri
     entityType: "ProjectFile",
     entityId: row.id,
     action: "DRAWING_UPLOADED",
-    payload: { projectId, originalName: session.originalName, fileSize: metadata.size, checksum, discipline: discipline ?? null, drawingType: drawingType ?? null, path: "direct_upload" },
+    payload: { projectId: project.id, originalName: session.originalName, fileSize: metadata.size, checksum, discipline: discipline ?? null, drawingType: drawingType ?? null, path: "direct_upload" },
   });
 
   return { drawing: toDrawingDTO(row), duplicateOfFileId: duplicate && isDrawingRecord(duplicate) ? duplicate.id : null, alreadyFinalized: false };

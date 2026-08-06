@@ -62,8 +62,11 @@ export function saveThemeMode(mode: ThemeMode): void {
 
 export function resolveTheme(mode: ThemeMode): "light" | "dark" {
   if (mode === "system") {
+    // Matches getSavedThemeMode()'s and THEME_INIT_SCRIPT's own default —
+    // light is the policy for a visitor with no resolvable preference
+    // (including no window to read prefers-color-scheme from), not dark.
     if (typeof window === "undefined") {
-      return "dark";
+      return "light";
     }
     return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
   }

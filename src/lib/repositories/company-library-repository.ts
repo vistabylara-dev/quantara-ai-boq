@@ -263,12 +263,14 @@ export async function listLibraryItemVersions(companyId: string, itemId: string)
   }));
 }
 
+/** Accepts an optional externally-managed transaction so callers can persist usage tracking atomically alongside other writes (see createBOQItem's externalTx doc comment for the same pattern). */
 export async function recordItemUsage(
   companyId: string,
   itemId: string,
   usage: { projectId?: string | null; boqId?: string | null; boqItemId?: string | null; usedByUserId?: string | null },
+  externalTx?: Prisma.TransactionClient,
 ) {
-  await prisma.$transaction(async (tx) => {
+  const run = async (tx: Prisma.TransactionClient) => {
     await tx.companyItemUsage.create({
       data: {
         companyId,
@@ -283,7 +285,12 @@ export async function recordItemUsage(
       where: { id: itemId, companyId },
       data: { usageCount: { increment: 1 }, lastUsedAt: new Date() },
     });
-  });
+  };
+  if (externalTx) {
+    await run(externalTx);
+  } else {
+    await prisma.$transaction(run);
+  }
 }
 
 export async function listItemUsageHistory(companyId: string, itemId: string, limit = 20) {

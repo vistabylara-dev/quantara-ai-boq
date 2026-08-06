@@ -184,45 +184,55 @@ export async function addBoqItemFromSource(actor: CurrentActor, boqId: string, i
   }
 
   const merged = { ...defaults, ...input.overrides };
-  const result = await createBOQItem(actor.companyId, section.id, {
-    itemNumber: input.itemNumber,
-    itemCode: merged.itemCode,
-    category: merged.category,
-    description: merged.description,
-    specification: merged.specification,
-    quantity: input.quantity,
-    unit: merged.unit,
-    unitCost: merged.unitCost,
-    marginMode: merged.marginMode,
-    marginPercentage: merged.marginPercentage,
-    drawingReference: input.drawingReference,
-    roomOrZone: input.roomOrZone,
-    sortOrder: input.sortOrder,
-  });
 
-  const updated = await prisma.bOQItem.update({
-    where: { id: result.item.id, companyId: actor.companyId },
-    data: {
-      sourceType: input.sourceType,
-      sourceMasterItemId: input.sourceType === BoqItemSourceType.MASTER_ITEM ? input.sourceId : null,
-      sourceMasterItemVersionId: input.sourceType === BoqItemSourceType.MASTER_ITEM ? merged.masterItemVersionId ?? null : null,
-      masterItemSnapshotJson: input.sourceType === BoqItemSourceType.MASTER_ITEM ? (merged.masterItemSnapshotJson as never) : undefined,
-      sourceCompanyLibraryItemId: input.sourceType === BoqItemSourceType.COMPANY_LIBRARY ? input.sourceId : null,
-      sourceCatalogueItemId: input.sourceType === BoqItemSourceType.RATE_CATALOGUE ? input.sourceId : null,
-      sourcePreviousBoqItemId: input.sourceType === BoqItemSourceType.PREVIOUS_BOQ ? input.sourceId : null,
-      copiedAt: new Date(),
-      copiedByUserId: actor.userId,
-    },
-  });
+  // Item creation, source-attribution stamping, and library-usage recording
+  // are one logical write (a mid-flow crash used to leave a fully-priced
+  // BOQItem silently mis-tagged sourceType: MANUAL with no source id/
+  // snapshot — provenance lost even though the item and its price persisted)
+  // — now one transaction, all-or-nothing.
+  const updated = await prisma.$transaction(async (tx) => {
+    const result = await createBOQItem(actor.companyId, section.id, {
+      itemNumber: input.itemNumber,
+      itemCode: merged.itemCode,
+      category: merged.category,
+      description: merged.description,
+      specification: merged.specification,
+      quantity: input.quantity,
+      unit: merged.unit,
+      unitCost: merged.unitCost,
+      marginMode: merged.marginMode,
+      marginPercentage: merged.marginPercentage,
+      drawingReference: input.drawingReference,
+      roomOrZone: input.roomOrZone,
+      sortOrder: input.sortOrder,
+    }, tx);
 
-  if (input.sourceType === BoqItemSourceType.COMPANY_LIBRARY && input.sourceId) {
-    await recordItemUsage(actor.companyId, input.sourceId, {
-      projectId: boqRecord.projectId,
-      boqId,
-      boqItemId: updated.id,
-      usedByUserId: actor.userId,
+    const item = await tx.bOQItem.update({
+      where: { id: result.item.id, companyId: actor.companyId },
+      data: {
+        sourceType: input.sourceType,
+        sourceMasterItemId: input.sourceType === BoqItemSourceType.MASTER_ITEM ? input.sourceId : null,
+        sourceMasterItemVersionId: input.sourceType === BoqItemSourceType.MASTER_ITEM ? merged.masterItemVersionId ?? null : null,
+        masterItemSnapshotJson: input.sourceType === BoqItemSourceType.MASTER_ITEM ? (merged.masterItemSnapshotJson as never) : undefined,
+        sourceCompanyLibraryItemId: input.sourceType === BoqItemSourceType.COMPANY_LIBRARY ? input.sourceId : null,
+        sourceCatalogueItemId: input.sourceType === BoqItemSourceType.RATE_CATALOGUE ? input.sourceId : null,
+        sourcePreviousBoqItemId: input.sourceType === BoqItemSourceType.PREVIOUS_BOQ ? input.sourceId : null,
+        copiedAt: new Date(),
+        copiedByUserId: actor.userId,
+      },
     });
-  }
+
+    if (input.sourceType === BoqItemSourceType.COMPANY_LIBRARY && input.sourceId) {
+      await recordItemUsage(actor.companyId, input.sourceId, {
+        projectId: boqRecord.projectId,
+        boqId,
+        boqItemId: item.id,
+        usedByUserId: actor.userId,
+      }, tx);
+    }
+
+    return item;
+  });
 
   return { item: updated, boq: await getBOQ(actor.companyId, boqId) };
 }

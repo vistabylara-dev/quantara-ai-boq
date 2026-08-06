@@ -2,7 +2,7 @@ import { Metadata } from "next";
 import KnowledgePage, { KnowledgePageContent } from "@/components/layout/knowledge-page";
 
 export const metadata: Metadata = {
-  title: "BOQ Review Checklist for Contractors and Estimators | Quantara",
+  title: "BOQ Review Checklist for Contractors and Estimators",
   description: "Use this practical BOQ review checklist to examine scope, quantities, units, descriptions, revisions, assumptions, exclusions and document consistency.",
   alternates: {
     canonical: "https://quantara.vistabylara.com/boq-review-checklist",

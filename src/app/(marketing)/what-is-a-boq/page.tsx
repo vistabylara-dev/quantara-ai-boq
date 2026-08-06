@@ -4,7 +4,7 @@ import KnowledgePage, { KnowledgePageContent } from "@/components/layout/knowled
 import PublicBreadcrumb from "@/components/ui/public-breadcrumb";
 
 export const metadata: Metadata = {
-  title: "What Is a BOQ? Bill of Quantities Explained | Quantara",
+  title: "What Is a BOQ? Bill of Quantities Explained",
   description: "Learn what a Bill of Quantities is, what it contains, who prepares it, how it supports estimating and tendering, and why professional review matters.",
   alternates: {
     canonical: "https://quantara.vistabylara.com/what-is-a-boq",

@@ -67,7 +67,12 @@ const THEME_INIT_SCRIPT = `
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
-    <html lang="en">
+    // THEME_INIT_SCRIPT deliberately sets data-theme on this element before
+    // React hydrates (see its own comment above) — the server can never
+    // render that attribute since it depends on the client's localStorage,
+    // so the mismatch is expected and intentional, not a real bug for React
+    // to warn about on every single page load.
+    <html lang="en" suppressHydrationWarning>
       <body>
         <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
         <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify({

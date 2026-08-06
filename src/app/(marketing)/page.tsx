@@ -5,7 +5,7 @@ import type { Metadata } from "next";
 import { publicFeatures } from "@/lib/config/features";
 
 export const metadata: Metadata = {
-  title: "AI BOQ Software for Dubai & UAE | Quantara",
+  title: "AI BOQ Software for Dubai & UAE",
   description: "AI BOQ software for Dubai and UAE teams. Review structured changes, approve governed revisions and create traceable outputs. Request Early Access.",
   keywords: [
     "AI BOQ software Dubai",

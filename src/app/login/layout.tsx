@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "Login | Quantara",
+  title: "Login",
   description: "Sign in to your Quantara workspace.",
   alternates: {
     canonical: "/login"

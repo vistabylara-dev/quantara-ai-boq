@@ -2,7 +2,7 @@ import { Metadata } from "next";
 import KnowledgePage, { KnowledgePageContent } from "@/components/layout/knowledge-page";
 
 export const metadata: Metadata = {
-  title: "Common BOQ Errors and How to Review Them | Quantara",
+  title: "Common BOQ Errors and How to Review Them",
   description: "Learn common Bill of Quantities errors involving scope, descriptions, units, quantities, duplicates, omissions, revisions and document formatting.",
   alternates: {
     canonical: "https://quantara.vistabylara.com/common-boq-errors",

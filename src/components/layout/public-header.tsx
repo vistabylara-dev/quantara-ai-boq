@@ -107,7 +107,7 @@ export default function PublicHeader() {
       <div className="container mx-auto px-4 h-16 flex items-center justify-between">
         {/* Logo */}
         <Link href="/" className="font-bold text-xl tracking-tight text-slate-900 dark:text-white flex items-center gap-2" aria-label="Quantara Home">
-          <img src="/logo.png" alt="Quantara Logo" className="w-8 h-8 rounded-lg shadow-sm" />
+          <img src="/logo.png" alt="Quantara Logo" className="w-8 h-8 rounded-lg shadow-sm object-contain" />
           Quantara
         </Link>
 

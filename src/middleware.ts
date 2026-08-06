@@ -118,5 +118,13 @@ export function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico|robots.txt|sitemap.xml|manifest.webmanifest|.*\\\\.png|.*\\\\.jpg).*)"],
+  // \\.png / \\.jpg here is one escaped literal dot each (JS string ->
+  // regex source `\.png` / `\.jpg`). The previous `\\\\.png`/`\\\\.jpg`
+  // produced the regex source `\\.png`/`\\.jpg` — "a literal backslash
+  // followed by any character, then png/jpg" — which no real image URL
+  // ever matches, so this exclusion never actually excluded anything.
+  // Every unauthenticated request for a .png/.jpg (the logo, on every
+  // public page including /login itself) fell through to the auth check
+  // and got redirected to /login instead of serving the image.
+  matcher: ["/((?!_next/static|_next/image|favicon.ico|robots.txt|sitemap.xml|manifest.webmanifest|.*\\.png|.*\\.jpg).*)"],
 };

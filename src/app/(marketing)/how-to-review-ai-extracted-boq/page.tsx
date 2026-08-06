@@ -2,7 +2,7 @@ import { Metadata } from "next";
 import KnowledgePage, { KnowledgePageContent } from "@/components/layout/knowledge-page";
 
 export const metadata: Metadata = {
-  title: "How to Review an AI-Extracted BOQ | Quantara",
+  title: "How to Review an AI-Extracted BOQ",
   description: "Follow a structured review process for AI-extracted BOQ content, including scope, quantities, units, descriptions, revisions and source-document checks.",
   alternates: {
     canonical: "https://quantara.vistabylara.com/how-to-review-ai-extracted-boq",

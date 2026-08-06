@@ -2,7 +2,7 @@ import { Metadata } from "next";
 import KnowledgePage, { KnowledgePageContent } from "@/components/layout/knowledge-page";
 
 export const metadata: Metadata = {
-  title: "Quantity Takeoff vs BOQ Management Software | Quantara",
+  title: "Quantity Takeoff vs BOQ Management Software",
   description: "Compare quantity takeoff with BOQ management, including measurement, document structure, revisions, templates and professional project workflows.",
   alternates: {
     canonical: "https://quantara.vistabylara.com/quantity-takeoff-vs-boq-management",

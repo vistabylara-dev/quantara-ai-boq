@@ -2,7 +2,7 @@ import { Metadata } from "next";
 import IndustryLandingPage, { IndustryLandingPageContent } from "@/components/layout/industry-landing-page";
 
 export const metadata: Metadata = {
-  title: "Fire-Fighting BOQ Software for Contractors and Estimators | Quantara",
+  title: "Fire-Fighting BOQ Software for Contractors and Estimators",
   description: "Organize fire-fighting BOQ items, system components, project documents, revisions and professional outputs with Quantara.",
   alternates: {
     canonical: "https://quantara.vistabylara.com/boq-software-for-fire-fighting-contractors",

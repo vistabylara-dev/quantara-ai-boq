@@ -2,7 +2,7 @@ import { Metadata } from "next";
 import RegionalLandingPage, { RegionalLandingPageContent } from "@/components/layout/regional-landing-page";
 
 export const metadata: Metadata = {
-  title: "BOQ Software UAE for Contractors and Quantity Surveyors | Quantara",
+  title: "BOQ Software UAE for Contractors and Quantity Surveyors",
   description: "Organize UAE construction BOQ workflows, supported project documents, revisions, templates and professional outputs using Quantara.",
   alternates: {
     canonical: "https://quantara.vistabylara.com/boq-software-uae",

@@ -2,7 +2,7 @@ import { Metadata } from "next";
 import KnowledgePage, { KnowledgePageContent } from "@/components/layout/knowledge-page";
 
 export const metadata: Metadata = {
-  title: "BOQ Revision Control and Version Management | Quantara",
+  title: "BOQ Revision Control and Version Management",
   description: "Learn how to manage BOQ revisions, document versions, change records, approvals and controlled project outputs.",
   alternates: {
     canonical: "https://quantara.vistabylara.com/boq-revision-control",

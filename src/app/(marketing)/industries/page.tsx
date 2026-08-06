@@ -2,7 +2,7 @@ import { Metadata } from "next";
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
 export const metadata: Metadata = {
-  title: "BOQ Software by Industry | Quantara",
+  title: "BOQ Software by Industry",
   description: "Explore how Quantara supports structured BOQ and estimating workflows across construction, MEP, fit-out, and consulting industries.",
   alternates: {
     canonical: "https://quantara.vistabylara.com/industries",

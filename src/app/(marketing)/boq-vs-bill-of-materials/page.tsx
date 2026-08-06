@@ -2,7 +2,7 @@ import { Metadata } from "next";
 import KnowledgePage, { KnowledgePageContent } from "@/components/layout/knowledge-page";
 
 export const metadata: Metadata = {
-  title: "BOQ vs Bill of Materials: Construction Workflow Differences | Quantara",
+  title: "BOQ vs Bill of Materials: Construction Workflow Differences",
   description: "Compare a Bill of Quantities with a Bill of Materials, including their structure, purpose, users, quantities and role in construction projects.",
   alternates: {
     canonical: "https://quantara.vistabylara.com/boq-vs-bill-of-materials",

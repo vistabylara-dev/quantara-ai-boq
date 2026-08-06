@@ -2,7 +2,7 @@ import { Metadata } from "next";
 import KnowledgePage, { KnowledgePageContent } from "@/components/layout/knowledge-page";
 
 export const metadata: Metadata = {
-  title: "BOQ vs Construction Estimate: Key Differences Explained | Quantara",
+  title: "BOQ vs Construction Estimate: Key Differences Explained",
   description: "Understand the difference between a Bill of Quantities and a construction estimate, including scope, quantities, rates, assumptions and project use.",
   alternates: {
     canonical: "https://quantara.vistabylara.com/boq-vs-construction-estimate",

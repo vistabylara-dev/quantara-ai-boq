@@ -4,10 +4,21 @@ import { requireCapability } from "@/lib/auth/rbac";
 import { getProjectFileRecord } from "@/lib/repositories/project-file-repository";
 import { getDrawingPageRecord, listDrawingPages, toDrawingPageDTO } from "@/lib/repositories/drawing-page-repository";
 import { toExtractionJobDTO } from "@/lib/repositories/extraction-job-repository";
-import { localProjectFileStorageAdapter } from "@/lib/storage/local-project-file-storage-adapter";
+import { createStorageAdapter, resolveStorageProvider } from "@/lib/storage/storage-factory";
+import type { DocumentStorageAdapter } from "@/lib/storage/document-storage-adapter";
 import { createAuditLog } from "@/lib/repositories/audit-repository";
+import { classifyPdfContent, OCR_IMPLEMENTATION_STATUS } from "@/lib/files/pdf-text-extraction";
 import "@/lib/jobs/register-handlers";
 import { extractionJobQueue } from "@/lib/jobs/extraction-worker";
+
+/** Was hardcoded to the local-filesystem adapter — see preprocessing-handler.ts for the same production fix. */
+let cachedStorageAdapter: DocumentStorageAdapter | null = null;
+function getProjectFileStorageAdapter(): DocumentStorageAdapter {
+  if (!cachedStorageAdapter) {
+    cachedStorageAdapter = createStorageAdapter({ provider: resolveStorageProvider(), purpose: "project-files" });
+  }
+  return cachedStorageAdapter;
+}
 
 export async function triggerFilePreprocessing(actor: CurrentActor, fileId: string) {
   requireCapability(actor, "files:manage");
@@ -28,12 +39,17 @@ export async function triggerFilePreprocessing(actor: CurrentActor, fileId: stri
 export async function listPagesForFile(actor: CurrentActor, fileId: string) {
   await getProjectFileRecord(actor.companyId, fileId);
   const rows = await listDrawingPages(actor.companyId, fileId);
-  return rows.map(toDrawingPageDTO);
+  const pages = rows.map(toDrawingPageDTO);
+  return {
+    pages,
+    classification: classifyPdfContent(pages),
+    ocrStatus: OCR_IMPLEMENTATION_STATUS,
+  };
 }
 
 export async function getDrawingPageImage(actor: CurrentActor, pageId: string) {
   const page = await getDrawingPageRecord(actor.companyId, pageId);
   if (!page.imageStorageKey) throw new Error("This page has no rendered image yet.");
-  const buffer = await localProjectFileStorageAdapter.getObject(page.imageStorageKey);
+  const buffer = await getProjectFileStorageAdapter().getObject(page.imageStorageKey);
   return { buffer, mimeType: "image/png" };
 }

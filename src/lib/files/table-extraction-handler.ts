@@ -1,7 +1,8 @@
 import { ExtractionEngineType, ExtractionJobStatus } from "@prisma/client";
 import { prisma } from "@/lib/db/prisma";
 import { extractionJobQueue } from "@/lib/jobs/extraction-worker";
-import { localProjectFileStorageAdapter } from "@/lib/storage/local-project-file-storage-adapter";
+import { createStorageAdapter, resolveStorageProvider } from "@/lib/storage/storage-factory";
+import type { DocumentStorageAdapter } from "@/lib/storage/document-storage-adapter";
 import { hasReviewedRows, replaceExtractedTablesForFile } from "@/lib/repositories/extracted-table-repository";
 import { parseCsvTables } from "./table-extraction/csv-table-parser";
 import { parseXlsxTables } from "./table-extraction/xlsx-table-parser";
@@ -12,6 +13,15 @@ import type { ParsedTable } from "./table-extraction/types";
 /** File types this engine can actually parse today — kept in sync with the routes that enqueue it. */
 export const TABLE_EXTRACTABLE_EXTENSIONS = ["csv", "xlsx", "pdf"] as const;
 
+/** Was hardcoded to the local-filesystem adapter — see preprocessing-handler.ts for the same production fix. */
+let cachedStorageAdapter: DocumentStorageAdapter | null = null;
+function getProjectFileStorageAdapter(): DocumentStorageAdapter {
+  if (!cachedStorageAdapter) {
+    cachedStorageAdapter = createStorageAdapter({ provider: resolveStorageProvider(), purpose: "project-files" });
+  }
+  return cachedStorageAdapter;
+}
+
 extractionJobQueue.registerHandler(ExtractionEngineType.TABLE_EXTRACTION, async (job, ctx) => {
   const file = await prisma.projectFile.findUniqueOrThrow({ where: { id: job.projectFileId } });
 
@@ -20,7 +30,7 @@ extractionJobQueue.registerHandler(ExtractionEngineType.TABLE_EXTRACTION, async 
   }
 
   await ctx.updateProgress(20, "reading file");
-  const buffer = await localProjectFileStorageAdapter.getObject(file.storageKey);
+  const buffer = await getProjectFileStorageAdapter().getObject(file.storageKey);
 
   let parsedTables: ParsedTable[];
   let noTextLayerMessage: string | null = null;

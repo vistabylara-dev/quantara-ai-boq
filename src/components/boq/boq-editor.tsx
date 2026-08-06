@@ -288,8 +288,8 @@ export default function BoqEditor({
                 type="button"
                 onClick={() => {
                   const firstSection = activeBoq.sections[0];
-                  if (firstSection) {
-                    onAddItem ? onAddItem() : addItem(firstSection.id);
+                  if (firstSection && onAddItem) {
+                    onAddItem();
                   }
                 }}
                 disabled={actionPending}
@@ -301,7 +301,9 @@ export default function BoqEditor({
                 type="button"
                 onClick={() => {
                   const firstSection = activeBoq.sections[0];
-                  if (firstSection) addItem(firstSection.id);
+                  if (firstSection && onAddItem) {
+                    onAddItem();
+                  }
                 }}
                 disabled={actionPending}
                 className="rounded-2xl border border-slate-700 bg-slate-900 px-6 py-3 font-semibold text-slate-200 hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
@@ -336,7 +338,7 @@ export default function BoqEditor({
               </button>
               <button
                 type="button"
-                onClick={() => addItem(section.id)}
+                onClick={() => onAddItem && onAddItem()}
                 disabled={isReadOnly || actionPending}
                 className="rounded-2xl border border-slate-700 bg-blue-600 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-50"
               >
@@ -483,7 +485,7 @@ export default function BoqEditor({
                         {!isReadOnly && (
                           <button
                             type="button"
-                            onClick={() => onAddItem ? onAddItem() : addItem(section.id)}
+                            onClick={() => onAddItem && onAddItem()}
                             disabled={actionPending}
                             className="inline-flex items-center gap-2 rounded-2xl border border-slate-700 bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
                           >

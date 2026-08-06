@@ -125,10 +125,10 @@ export default function AddItemFromSourceModal({ boqId, sections, nextItemNumber
 
         <div className="mt-4 flex gap-2">
           <button type="button" onClick={() => setTab("search")} className={`rounded-full px-4 py-2 text-sm ${tab === "search" ? "bg-blue-600 text-white" : "border border-slate-800 bg-slate-900 text-slate-300"}`}>
-            Search all sources
+            Search Catalogue / My Library
           </button>
           <button type="button" onClick={() => setTab("manual")} className={`rounded-full px-4 py-2 text-sm ${tab === "manual" ? "bg-blue-600 text-white" : "border border-slate-800 bg-slate-900 text-slate-300"}`}>
-            Create manually
+            Enter Item Manually
           </button>
         </div>
 

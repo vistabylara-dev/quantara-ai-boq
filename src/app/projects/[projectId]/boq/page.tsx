@@ -10,6 +10,7 @@ import { formatDate } from "@/lib/formatting/dates";
 import { withCalculatedBOQTotals } from "@/lib/calculations/boq-totals";
 import BoqEditor from "@/components/boq/boq-editor";
 import AddItemFromSourceModal from "@/components/boq/add-item-from-source-modal";
+import { BoqCreationMethodSelector, type BoqCreationMethod } from "@/components/boq/boq-creation-method-selector";
 
 type PageProps = {
   params: Promise<{
@@ -43,6 +44,7 @@ export default function ProjectBOQPage(props: PageProps) {
   const [pendingAction, setPendingAction] = useState<PendingAction>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [showAddItem, setShowAddItem] = useState(false);
+  const [showCreationSelector, setShowCreationSelector] = useState(false);
   const hasTriggeredAction = useRef(false);
 
   const loadWorkspace = useCallback(async (signal?: AbortSignal) => {
@@ -111,7 +113,7 @@ export default function ProjectBOQPage(props: PageProps) {
     return saved;
   }, [project?.taxRate, replaceRevision]);
 
-  const createInitialBOQ = useCallback(async () => {
+  const createInitialBOQ = useCallback(async (openAddModal = false) => {
     if (pendingAction || revisions.length > 0) return;
     setPendingAction("create");
     setActionError(null);
@@ -120,6 +122,9 @@ export default function ProjectBOQPage(props: PageProps) {
         `/api/projects/${encodeURIComponent(params.projectId)}/boqs`,
       );
       replaceRevision(created);
+      if (openAddModal) {
+        setShowAddItem(true);
+      }
     } catch (error) {
       setActionError(getApiErrorMessage(error));
     } finally {
@@ -192,6 +197,22 @@ export default function ProjectBOQPage(props: PageProps) {
     replaceRevision(boq);
   }, [activeRevision, persistDraft, replaceRevision]);
 
+  const handleCreationMethodSelect = useCallback((method: BoqCreationMethod) => {
+    if (method === "start_manually") {
+      void createInitialBOQ(true); // Open modal immediately
+      setShowCreationSelector(false);
+    } else if (method === "continue_draft") {
+      const draft = revisions.find(r => !isReadOnlyBOQ(r));
+      if (draft) {
+        setActiveBoq(draft);
+      }
+      setShowCreationSelector(false);
+    } else {
+      // Feature not implemented yet (Phases 8+)
+      alert("This creation method is coming soon.");
+    }
+  }, [createInitialBOQ, revisions]);
+
   if (isLoading) {
     return (
       <div className="rounded-[32px] border border-slate-800 bg-slate-950 p-8 text-slate-300">
@@ -240,9 +261,13 @@ export default function ProjectBOQPage(props: PageProps) {
             </button>
             <button
               type="button"
-              onClick={() => void (
-                activeRevision ? createRevision(activeRevision) : createInitialBOQ()
-              )}
+              onClick={() => {
+                if (activeRevision) {
+                  void createRevision(activeRevision);
+                } else {
+                  setShowCreationSelector(true);
+                }
+              }}
               disabled={actionInProgress}
               className="rounded-2xl border border-slate-700 bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-50"
             >
@@ -288,7 +313,12 @@ export default function ProjectBOQPage(props: PageProps) {
 
       <div className="grid gap-6 xl:grid-cols-[1fr_360px]">
         <div className="space-y-6">
-          {activeRevision ? (
+          {showCreationSelector || (!activeRevision && revisions.length === 0) ? (
+            <BoqCreationMethodSelector 
+              hasDrafts={revisions.some(r => !isReadOnlyBOQ(r))}
+              onSelectMethod={handleCreationMethodSelect}
+            />
+          ) : activeRevision ? (
             <BoqEditor
               boq={activeRevision}
               currency={project.currency}
@@ -305,15 +335,7 @@ export default function ProjectBOQPage(props: PageProps) {
           ) : (
             <div className="rounded-[32px] border border-slate-800 bg-slate-950 p-8 text-slate-300">
               <p className="text-lg font-semibold text-white">No active BOQ revision</p>
-              <p className="mt-2 text-sm text-slate-400">No BOQ has been created for this project yet.</p>
-              <button
-                type="button"
-                onClick={() => void createInitialBOQ()}
-                disabled={actionInProgress}
-                className="mt-6 rounded-2xl border border-slate-700 bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                {pendingAction === "create" ? "Creating…" : "Create initial BOQ"}
-              </button>
+              <p className="mt-2 text-sm text-slate-400">Please select a revision from the history panel.</p>
             </div>
           )}
         </div>

@@ -2,6 +2,8 @@
 
 import React, { useState } from "react";
 import Link from "next/link";
+import { siteConfig } from "@/config/site";
+
 export default function ContactSalesPage() {
   const [formData, setFormData] = useState({
     fullName: "",
@@ -83,9 +85,9 @@ export default function ContactSalesPage() {
             <div className="bg-blue-50 dark:bg-blue-900/20 p-6 rounded-2xl border border-blue-100 dark:border-blue-800/50 mb-8">
               <h3 className="font-bold text-slate-900 dark:text-white mb-4">Talk to the Quantara Team</h3>
               <ul className="space-y-3 text-slate-700 dark:text-slate-300">
-                <li className="flex gap-2"><strong>Email:</strong> <a href="mailto:solution@vistabylara.com" className="text-blue-600 hover:underline">solution@vistabylara.com</a></li>
-                <li className="flex gap-2"><strong>Telephone:</strong> <a href="tel:+971507994292" className="text-blue-600 hover:underline">+971 50 799 4292</a></li>
-                <li className="flex gap-2"><strong>WhatsApp:</strong> <a href="https://wa.me/971507994292" className="text-blue-600 hover:underline">+971 50 799 4292</a></li>
+                <li className="flex gap-2"><strong>Email:</strong> <a href={`mailto:${siteConfig.contact.email}`} className="text-blue-600 hover:underline">{siteConfig.contact.email}</a></li>
+                <li className="flex gap-2"><strong>Telephone:</strong> <a href={`tel:${siteConfig.contact.telephone.replace(/\s+/g, '')}`} className="text-blue-600 hover:underline">{siteConfig.contact.telephone}</a></li>
+                <li className="flex gap-2"><strong>WhatsApp:</strong> <a href={siteConfig.contact.whatsappLink} className="text-blue-600 hover:underline">{siteConfig.contact.whatsapp}</a></li>
               </ul>
               <p className="mt-4 text-sm text-slate-600 dark:text-slate-400">
                 Sales and support requests can be submitted 24 hours a day. Response times may vary during Controlled Early Access.

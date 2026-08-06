@@ -1,6 +1,7 @@
 import React from "react";
 import Link from "next/link";
 import { publicNavigation, legalNavigation } from "@/config/public-navigation";
+import { siteConfig } from "@/config/site";
 
 export default function PublicFooter() {
   const getSectionItems = (sectionLabel: string) => {
@@ -36,9 +37,9 @@ export default function PublicFooter() {
             </p>
             
             <div className="mt-8 space-y-2 text-sm text-slate-500 dark:text-slate-400">
-              <p>Email: <a href="mailto:solution@vistabylara.com" className="hover:text-slate-900 dark:hover:text-white">solution@vistabylara.com</a></p>
-              <p>Telephone: <a href="tel:+971507994292" className="hover:text-slate-900 dark:hover:text-white">+971 50 799 4292</a></p>
-              <p>WhatsApp: <a href="https://wa.me/971507994292" className="hover:text-slate-900 dark:hover:text-white">+971 50 799 4292</a></p>
+              <p>Email: <a href={`mailto:${siteConfig.contact.email}`} className="hover:text-slate-900 dark:hover:text-white">{siteConfig.contact.email}</a></p>
+              <p>Telephone: <a href={`tel:${siteConfig.contact.telephone.replace(/\s+/g, '')}`} className="hover:text-slate-900 dark:hover:text-white">{siteConfig.contact.telephone}</a></p>
+              <p>WhatsApp: <a href={siteConfig.contact.whatsappLink} className="hover:text-slate-900 dark:hover:text-white">{siteConfig.contact.whatsapp}</a></p>
             </div>
           </div>
           

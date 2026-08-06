@@ -1,6 +1,7 @@
 import React from "react";
 import Link from "next/link";
 import { Metadata } from "next";
+import { siteConfig } from "@/config/site";
 
 export const metadata: Metadata = {
   title: "About Quantara | Vista By Lara",
@@ -68,9 +69,9 @@ export default function AboutPage() {
             <h2 className="text-2xl font-bold text-slate-900 dark:text-white mb-4">Contact Us</h2>
             <div className="bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6 rounded-xl">
               <ul className="space-y-2 text-slate-700 dark:text-slate-300">
-                <li><strong>Email:</strong> <a href="mailto:solution@vistabylara.com" className="text-blue-600 hover:underline">solution@vistabylara.com</a></li>
-                <li><strong>Telephone:</strong> <a href="tel:+971507994292" className="text-blue-600 hover:underline">+971 50 799 4292</a></li>
-                <li><strong>WhatsApp:</strong> <a href="https://wa.me/971507994292" className="text-blue-600 hover:underline">+971 50 799 4292</a></li>
+                <li><strong>Email:</strong> <a href={`mailto:${siteConfig.contact.email}`} className="text-blue-600 hover:underline">{siteConfig.contact.email}</a></li>
+                <li><strong>Telephone:</strong> <a href={`tel:${siteConfig.contact.telephone.replace(/\s+/g, '')}`} className="text-blue-600 hover:underline">{siteConfig.contact.telephone}</a></li>
+                <li><strong>WhatsApp:</strong> <a href={siteConfig.contact.whatsappLink} className="text-blue-600 hover:underline">{siteConfig.contact.whatsapp}</a></li>
               </ul>
             </div>
           </section>

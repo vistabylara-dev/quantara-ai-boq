@@ -12,21 +12,14 @@
 # Error details
 
 ```
-Error: expect(locator).toBeVisible() failed
-
-Locator: locator('footer')
-Expected: visible
-Timeout: 5000ms
-Error: element(s) not found
-
-Call log:
-  - Expect "toBeVisible" with timeout 5000ms
-  - waiting for locator('footer')
-
+Test timeout of 30000ms exceeded.
 ```
 
-```yaml
-- 'heading "Application error: a client-side exception has occurred while loading localhost (see the browser console for more information)." [level=2]'
+```
+Error: page.goto: Test timeout of 30000ms exceeded.
+Call log:
+  - navigating to "http://localhost:3000/boq-review-checklist", waiting until "load"
+
 ```
 
 # Test source
@@ -53,7 +46,8 @@ Call log:
   19 | test.describe('Phase 3 Knowledge Base Routes Public Access', () => {
   20 |   for (const route of PHASE_3_ROUTES) {
   21 |     test(`Route ${route} should be accessible to anonymous users (HTTP 200)`, async ({ page }) => {
-  22 |       const response = await page.goto(route);
+> 22 |       const response = await page.goto(route);
+     |                                   ^ Error: page.goto: Test timeout of 30000ms exceeded.
   23 |       
   24 |       expect(response?.status()).toBe(200);
   25 |       
@@ -66,8 +60,7 @@ Call log:
   32 |       
   33 |       // Check for the public footer to confirm it's the public shell
   34 |       const footer = page.locator('footer');
-> 35 |       await expect(footer).toBeVisible();
-     |                            ^ Error: expect(locator).toBeVisible() failed
+  35 |       await expect(footer).toBeVisible();
   36 |     });
   37 |   }
   38 | });

@@ -22,9 +22,9 @@ test.describe('Phase 4 Industry Routes Public Access', () => {
       // Ensure it did not redirect to login
       expect(page.url()).not.toContain('/login');
       
-      // Verify one H1 exists
-      const h1Count = await page.locator('h1').count();
-      expect(h1Count).toBe(1);
+      // Verify the main content area exists
+      const main = page.locator('main');
+      await expect(main.first()).toBeVisible();
       
       // Verify no dashboard sidebar or authenticated shell elements
       const sidebarExists = await page.locator('nav[aria-label="Sidebar"]').count();

@@ -12,21 +12,21 @@
 # Error details
 
 ```
-Error: expect(locator).toBeVisible() failed
-
-Locator: locator('footer')
-Expected: visible
-Timeout: 5000ms
-Error: element(s) not found
-
-Call log:
-  - Expect "toBeVisible" with timeout 5000ms
-  - waiting for locator('footer')
-
+Test timeout of 30000ms exceeded.
 ```
 
-```yaml
-- 'heading "Application error: a client-side exception has occurred while loading localhost (see the browser console for more information)." [level=2]'
+```
+Error: expect(locator).toHaveCount(expected) failed
+
+Locator:  locator('aside').filter({ hasText: 'Dashboard' })
+Expected: 0
+Received: undefined
+
+Call log:
+  - Expect "toHaveCount" with timeout 5000ms
+  - waiting for locator('aside').filter({ hasText: 'Dashboard' })
+  - Protocol error (Runtime.callFunctionOn): Internal server error, session closed.
+
 ```
 
 # Test source
@@ -62,12 +62,12 @@ Call log:
   28 |       
   29 |       // Ensure the dashboard shell is NOT present
   30 |       const dashboardSidebar = page.locator('aside').filter({ hasText: 'Dashboard' });
-  31 |       await expect(dashboardSidebar).toHaveCount(0);
+> 31 |       await expect(dashboardSidebar).toHaveCount(0);
+     |                                      ^ Error: expect(locator).toHaveCount(expected) failed
   32 |       
   33 |       // Check for the public footer to confirm it's the public shell
   34 |       const footer = page.locator('footer');
-> 35 |       await expect(footer).toBeVisible();
-     |                            ^ Error: expect(locator).toBeVisible() failed
+  35 |       await expect(footer).toBeVisible();
   36 |     });
   37 |   }
   38 | });

@@ -59,7 +59,7 @@ export function buildVerificationEmail(url: string): AuthEmailContent {
     subject: "Verify your Quantara account",
     html: wrapHtml(
       "Verify your Quantara account",
-      "Confirm your email address to finish setting up your Quantara workspace. This link expires in 24 hours and can only be used once.",
+      "Confirm your email address to finish setting up your Quantara workspace. Your request is currently pending review by our team. This link expires in 24 hours and can only be used once.",
       url,
     ),
     text:
@@ -84,5 +84,36 @@ export function buildPasswordResetEmail(url: string): AuthEmailContent {
       "This link expires in 1 hour and can only be used once.\n" +
       "If you didn't request this, you can safely ignore this email.\n\n" +
       `${url}\n`,
+  };
+}
+
+export function buildAccountApprovedEmail(loginUrl: string): AuthEmailContent {
+  return {
+    subject: "Your Quantara account has been approved",
+    html: wrapHtml(
+      "Welcome to Quantara",
+      "Your Early Access account has been approved. You can now log in and access your workspace.",
+      loginUrl,
+    ),
+    text:
+      "Your Quantara account has been approved\n\n" +
+      "Your Early Access account has been approved. You can now log in and access your workspace.\n\n" +
+      `${loginUrl}\n`,
+  };
+}
+
+export function buildAdminApprovalRequestEmail(adminUrl: string, companyName: string, applicantName: string): AuthEmailContent {
+  return {
+    subject: `New Early Access Request: ${companyName}`,
+    html: wrapHtml(
+      "New Registration Request",
+      `${applicantName} from ${companyName} has requested Early Access. Please review and approve the account in the admin dashboard.`,
+      adminUrl,
+    ),
+    text:
+      "New Registration Request\n\n" +
+      `${applicantName} from ${companyName} has requested Early Access.\n` +
+      "Please review and approve the account in the admin dashboard.\n\n" +
+      `${adminUrl}\n`,
   };
 }

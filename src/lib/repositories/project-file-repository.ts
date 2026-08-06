@@ -40,7 +40,7 @@ export function toProjectFileDTO(row: ProjectFileRecord) {
     safeFileName: row.safeFileName,
     mimeType: row.mimeType,
     extension: row.extension,
-    fileSize: row.fileSize,
+    fileSize: Number(row.fileSize),
     checksum: row.checksum,
     classification: row.classification,
     classificationConfidence: row.classificationConfidence?.toNumber() ?? null,

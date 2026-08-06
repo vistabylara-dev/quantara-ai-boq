@@ -5,7 +5,7 @@ import { appBaseUrl } from "@/lib/auth/dev-mailer";
 import { hashPassword, verifyPassword } from "@/lib/auth/password";
 import { createSession, destroyCurrentSession } from "@/lib/auth/session";
 import { generateRawToken, hashToken } from "@/lib/auth/tokens";
-import { buildPasswordResetEmail, buildVerificationEmail } from "@/lib/email/auth-email-templates";
+import { buildPasswordResetEmail, buildVerificationEmail, buildAdminApprovalRequestEmail, buildAccountApprovedEmail } from "@/lib/email/auth-email-templates";
 import { getEmailProvider } from "@/lib/email/get-email-provider";
 import { createCompany } from "@/lib/repositories/company-repository";
 import { findUserByEmail, findUserById } from "@/lib/repositories/user-repository";
@@ -43,7 +43,7 @@ export async function registerCompanyOwner(input: RegisterInput) {
 
   const passwordHash = await hashPassword(input.password);
 
-  const { user } = await prisma.$transaction(async (tx) => {
+  const { user, company } = await prisma.$transaction(async (tx) => {
     const company = await createCompany(
       {
         legalName: input.companyName,
@@ -63,6 +63,7 @@ export async function registerCompanyOwner(input: RegisterInput) {
         role: UserRole.COMPANY_OWNER,
         jobTitle: input.role, // role maps to jobTitle in our UI
         marketingConsent: input.consent,
+        isActive: false, // Wait for admin approval
       },
     });
 
@@ -84,6 +85,11 @@ export async function registerCompanyOwner(input: RegisterInput) {
   });
 
   await issueEmailVerificationToken(user.id, user.email);
+
+  const adminEmail = process.env.DEV_OWNER_EMAIL || "admin@quantara.ai";
+  const adminUrl = `${appBaseUrl()}/admin/users/${user.id}`;
+  const approvalEmail = buildAdminApprovalRequestEmail(adminUrl, company.legalName, user.fullName);
+  await sendAuthEmail({ to: adminEmail, subject: approvalEmail.subject, html: approvalEmail.html, text: approvalEmail.text });
 
   return { userId: user.id, companyId: user.companyId, email: user.email };
 }
@@ -134,7 +140,7 @@ export async function loginWithPassword(input: LoginInput): Promise<void> {
   }
 
   if (!user.isActive) {
-    throw new AppError("ACCOUNT_INACTIVE", "This account has been deactivated.", 403);
+    throw new AppError("ACCOUNT_PENDING_APPROVAL", "Your account is pending admin approval or has been deactivated.", 403);
   }
 
   if (!user.emailVerifiedAt) {
@@ -212,4 +218,15 @@ export async function resetPassword(rawToken: string, newPassword: string): Prom
 
 export async function getUserById(userId: string) {
   return findUserById(userId);
+}
+
+export async function approveAccount(userId: string): Promise<void> {
+  const user = await prisma.user.update({
+    where: { id: userId },
+    data: { isActive: true },
+  });
+  
+  const loginUrl = `${appBaseUrl()}/login`;
+  const { subject, html, text } = buildAccountApprovedEmail(loginUrl);
+  await sendAuthEmail({ to: user.email, subject, html, text });
 }

@@ -12,207 +12,280 @@
 # Error details
 
 ```
-Error: expect(received).toEqual(expected) // deep equality
+Test timeout of 30000ms exceeded.
+```
 
-- Expected  -   1
-+ Received  + 189
+```
+Error: page.screenshot: Test timeout of 30000ms exceeded.
+Call log:
+  - taking page screenshot
+  - waiting for fonts to load...
+  - fonts loaded
 
-- Array []
-+ Array [
-+   Object {
-+     "description": "Ensure each HTML document contains a non-empty <title> element",
-+     "help": "Documents must have <title> element to aid in navigation",
-+     "helpUrl": "https://dequeuniversity.com/rules/axe/4.12/document-title?application=playwright",
-+     "id": "document-title",
-+     "impact": "serious",
-+     "nodes": Array [
-+       Object {
-+         "all": Array [],
-+         "any": Array [
-+           Object {
-+             "data": null,
-+             "id": "doc-has-title",
-+             "impact": "serious",
-+             "message": "Document does not have a non-empty <title> element",
-+             "relatedNodes": Array [],
-+           },
-+         ],
-+         "failureSummary": "Fix any of the following:
-+   Document does not have a non-empty <title> element",
-+         "html": "<html id=\"__next_error__\">",
-+         "impact": "serious",
-+         "none": Array [],
-+         "target": Array [
-+           "#__next_error__",
-+         ],
-+       },
-+     ],
-+     "tags": Array [
-+       "cat.text-alternatives",
-+       "wcag2a",
-+       "wcag242",
-+       "TTv5",
-+       "TT12.a",
-+       "EN-301-549",
-+       "EN-9.2.4.2",
-+       "ACT",
-+       "RGAAv4",
-+       "RGAA-8.5.1",
-+     ],
-+   },
-+   Object {
-+     "description": "Ensure every HTML document has a lang attribute",
-+     "help": "<html> element must have a lang attribute",
-+     "helpUrl": "https://dequeuniversity.com/rules/axe/4.12/html-has-lang?application=playwright",
-+     "id": "html-has-lang",
-+     "impact": "serious",
-+     "nodes": Array [
-+       Object {
-+         "all": Array [],
-+         "any": Array [
-+           Object {
-+             "data": Object {
-+               "messageKey": "noLang",
-+             },
-+             "id": "has-lang",
-+             "impact": "serious",
-+             "message": "The <html> element does not have a lang attribute",
-+             "relatedNodes": Array [],
-+           },
-+         ],
-+         "failureSummary": "Fix any of the following:
-+   The <html> element does not have a lang attribute",
-+         "html": "<html id=\"__next_error__\">",
-+         "impact": "serious",
-+         "none": Array [],
-+         "target": Array [
-+           "#__next_error__",
-+         ],
-+       },
-+     ],
-+     "tags": Array [
-+       "cat.language",
-+       "wcag2a",
-+       "wcag311",
-+       "TTv5",
-+       "TT11.a",
-+       "EN-301-549",
-+       "EN-9.3.1.1",
-+       "ACT",
-+       "RGAAv4",
-+       "RGAA-8.3.1",
-+     ],
-+   },
-+   Object {
-+     "description": "Ensure the document has a main landmark",
-+     "help": "Document should have one main landmark",
-+     "helpUrl": "https://dequeuniversity.com/rules/axe/4.12/landmark-one-main?application=playwright",
-+     "id": "landmark-one-main",
-+     "impact": "moderate",
-+     "nodes": Array [
-+       Object {
-+         "all": Array [
-+           Object {
-+             "data": null,
-+             "id": "page-has-main",
-+             "impact": "moderate",
-+             "message": "Document does not have a main landmark",
-+             "relatedNodes": Array [],
-+           },
-+         ],
-+         "any": Array [],
-+         "failureSummary": "Fix all of the following:
-+   Document does not have a main landmark",
-+         "html": "<html id=\"__next_error__\">",
-+         "impact": "moderate",
-+         "none": Array [],
-+         "target": Array [
-+           "#__next_error__",
-+         ],
-+       },
-+     ],
-+     "tags": Array [
-+       "cat.semantics",
-+       "best-practice",
-+     ],
-+   },
-+   Object {
-+     "description": "Ensure that the page, or at least one of its frames contains a level-one heading",
-+     "help": "Page should contain a level-one heading",
-+     "helpUrl": "https://dequeuniversity.com/rules/axe/4.12/page-has-heading-one?application=playwright",
-+     "id": "page-has-heading-one",
-+     "impact": "moderate",
-+     "nodes": Array [
-+       Object {
-+         "all": Array [
-+           Object {
-+             "data": null,
-+             "id": "page-has-heading-one",
-+             "impact": "moderate",
-+             "message": "Page must have a level-one heading",
-+             "relatedNodes": Array [],
-+           },
-+         ],
-+         "any": Array [],
-+         "failureSummary": "Fix all of the following:
-+   Page must have a level-one heading",
-+         "html": "<html id=\"__next_error__\">",
-+         "impact": "moderate",
-+         "none": Array [],
-+         "target": Array [
-+           "#__next_error__",
-+         ],
-+       },
-+     ],
-+     "tags": Array [
-+       "cat.semantics",
-+       "best-practice",
-+     ],
-+   },
-+   Object {
-+     "description": "Ensure all page content is contained by landmarks",
-+     "help": "All page content should be contained by landmarks",
-+     "helpUrl": "https://dequeuniversity.com/rules/axe/4.12/region?application=playwright",
-+     "id": "region",
-+     "impact": "moderate",
-+     "nodes": Array [
-+       Object {
-+         "all": Array [],
-+         "any": Array [
-+           Object {
-+             "data": Object {
-+               "isIframe": false,
-+             },
-+             "id": "region",
-+             "impact": "moderate",
-+             "message": "Some page content is not contained by landmarks",
-+             "relatedNodes": Array [],
-+           },
-+         ],
-+         "failureSummary": "Fix any of the following:
-+   Some page content is not contained by landmarks",
-+         "html": "<div style=\"font-family: system-ui, \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif, \"Apple Color Emoji\", \"Segoe UI Emoji\"; height: 100vh; text-align: center; display: flex; flex-direction: column; align-items: center; justify-content: center;\">",
-+         "impact": "moderate",
-+         "none": Array [],
-+         "target": Array [
-+           "body > div",
-+         ],
-+       },
-+     ],
-+     "tags": Array [
-+       "cat.keyboard",
-+       "best-practice",
-+       "RGAAv4",
-+       "RGAA-9.2.1",
-+     ],
-+   },
-+ ]
 ```
 
 # Page snapshot
 
 ```yaml
-- 'heading "Application error: a client-side exception has occurred while loading localhost (see the browser console for more information)." [level=2] [ref=e4]'
+- generic [active] [ref=e1]:
+  - main [ref=e2]:
+    - banner [ref=e3]:
+      - generic [ref=e4]:
+        - link "Quantara Home" [ref=e5] [cursor=pointer]:
+          - /url: /
+          - img "Quantara Logo" [ref=e6]
+          - text: Quantara
+        - generic [ref=e7]:
+          - button "Platform" [ref=e9] [cursor=pointer]
+          - button "Solutions" [ref=e13] [cursor=pointer]
+          - button "Resources" [ref=e17] [cursor=pointer]
+          - button "Comparisons" [ref=e21] [cursor=pointer]
+          - button "Regional" [ref=e25] [cursor=pointer]
+          - button "Company" [ref=e29] [cursor=pointer]
+        - generic [ref=e32]:
+          - link "Sign In" [ref=e33] [cursor=pointer]:
+            - /url: /login
+          - link "Request Early Access" [ref=e34] [cursor=pointer]:
+            - /url: /register
+    - main [ref=e35]:
+      - generic [ref=e36]:
+        - link "← Back to Home" [ref=e38] [cursor=pointer]:
+          - /url: /
+        - generic [ref=e39]:
+          - heading "Security and Controlled Early Access" [level=1] [ref=e40]
+          - paragraph [ref=e41]: "Last updated: August 5, 2026"
+          - paragraph [ref=e42]: Quantara is currently available through Controlled Early Access.
+        - generic [ref=e43]:
+          - generic [ref=e44]:
+            - heading "Current security position" [level=2] [ref=e45]
+            - generic [ref=e46]:
+              - paragraph [ref=e47]: Access to authenticated product areas requires user authentication.
+              - paragraph [ref=e48]: Quantara uses controlled company, project and user workspaces.
+              - paragraph [ref=e49]: Public marketing and legal-information pages do not require authentication.
+              - paragraph [ref=e50]: Product access and feature availability may be limited during Controlled Early Access.
+              - paragraph [ref=e51]: Security, retention and data-processing documentation is being finalized before broader commercial onboarding.
+              - paragraph [ref=e52]: Professional users remain responsible for reviewing information before commercial, contractual, tender or construction use.
+          - generic [ref=e53]:
+            - heading "Important limitation" [level=2] [ref=e54]
+            - generic [ref=e55]:
+              - paragraph [ref=e56]: No internet service, software platform or electronic-storage method can guarantee absolute security.
+              - paragraph [ref=e57]: Do not upload confidential drawings, restricted specifications, commercially sensitive pricing, private client information or third-party personal data until your organisation has reviewed and accepted the applicable final legal and data-processing terms.
+          - generic [ref=e58]:
+            - heading "Report a security concern" [level=2] [ref=e59]
+            - generic [ref=e60]:
+              - list [ref=e61]:
+                - listitem [ref=e62]:
+                  - strong [ref=e63]: "Email:"
+                  - link "solution@vistabylara.com" [ref=e64] [cursor=pointer]:
+                    - /url: mailto:solution@vistabylara.com
+                - listitem [ref=e65]:
+                  - strong [ref=e66]: "Telephone:"
+                  - link "+971 50 799 4292" [ref=e67] [cursor=pointer]:
+                    - /url: tel:+971507994292
+                - listitem [ref=e68]:
+                  - strong [ref=e69]: "WhatsApp:"
+                  - link "+971 50 799 4292" [ref=e70] [cursor=pointer]:
+                    - /url: https://wa.me/971507994292
+              - paragraph [ref=e71]: Support and security reports can be submitted 24 hours a day. Response times may vary during Controlled Early Access.
+            - generic [ref=e72]:
+              - paragraph [ref=e73]: "When reporting an issue, include:"
+              - list [ref=e74]:
+                - listitem [ref=e75]: the affected page or feature;
+                - listitem [ref=e76]: a clear description;
+                - listitem [ref=e77]: reproduction steps;
+                - listitem [ref=e78]: the date and time observed;
+                - listitem [ref=e79]: screenshots where appropriate.
+              - paragraph [ref=e80]: Do not send passwords, private keys, access tokens or other authentication secrets.
+    - generic [ref=e82]:
+      - generic [ref=e83]:
+        - generic [ref=e84]:
+          - link "Quantara Home" [ref=e85] [cursor=pointer]:
+            - /url: /
+            - img "Quantara Logo" [ref=e86]
+            - text: Quantara
+          - paragraph [ref=e87]: Quantara is developed and operated by Vista By Lara, a technology business focused on AI-assisted tools for construction, project, design and business workflows.
+          - paragraph [ref=e88]: Quantara is an AI-assisted BOQ and construction-estimating platform in Controlled Early Access.
+          - generic [ref=e89]:
+            - paragraph [ref=e90]:
+              - text: "Email:"
+              - link "solution@vistabylara.com" [ref=e91] [cursor=pointer]:
+                - /url: mailto:solution@vistabylara.com
+            - paragraph [ref=e92]:
+              - text: "Telephone:"
+              - link "+971 50 799 4292" [ref=e93] [cursor=pointer]:
+                - /url: tel:+971507994292
+            - paragraph [ref=e94]:
+              - text: "WhatsApp:"
+              - link "+971 50 799 4292" [ref=e95] [cursor=pointer]:
+                - /url: https://wa.me/971507994292
+        - generic [ref=e96]:
+          - heading "Platform" [level=3] [ref=e97]
+          - list [ref=e98]:
+            - listitem [ref=e99]:
+              - link "Features" [ref=e100] [cursor=pointer]:
+                - /url: /features
+            - listitem [ref=e101]:
+              - link "AI BOQ Software" [ref=e102] [cursor=pointer]:
+                - /url: /ai-boq-software
+            - listitem [ref=e103]:
+              - link "BOQ Software" [ref=e104] [cursor=pointer]:
+                - /url: /boq-software
+            - listitem [ref=e105]:
+              - link "Construction Estimating Software" [ref=e106] [cursor=pointer]:
+                - /url: /construction-estimating-software
+            - listitem [ref=e107]:
+              - link "BOQ Management" [ref=e108] [cursor=pointer]:
+                - /url: /boq-management
+            - listitem [ref=e109]:
+              - link "PDF BOQ Extraction" [ref=e110] [cursor=pointer]:
+                - /url: /pdf-boq-extraction
+            - listitem [ref=e111]:
+              - link "Scanned PDF BOQ" [ref=e112] [cursor=pointer]:
+                - /url: /scanned-pdf-boq
+        - generic [ref=e113]:
+          - heading "Solutions" [level=3] [ref=e114]
+          - list [ref=e115]:
+            - listitem [ref=e116]:
+              - link "All Industries" [ref=e117] [cursor=pointer]:
+                - /url: /industries
+            - listitem [ref=e118]:
+              - link "Contractors" [ref=e119] [cursor=pointer]:
+                - /url: /boq-software-for-contractors
+            - listitem [ref=e120]:
+              - link "Quantity Surveyors" [ref=e121] [cursor=pointer]:
+                - /url: /boq-software-for-quantity-surveyors
+            - listitem [ref=e122]:
+              - link "MEP Contractors" [ref=e123] [cursor=pointer]:
+                - /url: /boq-software-for-mep-contractors
+            - listitem [ref=e124]:
+              - link "HVAC Contractors" [ref=e125] [cursor=pointer]:
+                - /url: /boq-software-for-hvac-contractors
+          - heading "Comparisons" [level=3] [ref=e126]
+          - list [ref=e127]:
+            - listitem [ref=e128]:
+              - link "Comparison Hub" [ref=e129] [cursor=pointer]:
+                - /url: /comparisons
+            - listitem [ref=e130]:
+              - link "Quantara vs Excel for BOQ" [ref=e131] [cursor=pointer]:
+                - /url: /quantara-vs-excel-for-boq
+            - listitem [ref=e132]:
+              - link "BOQ Software vs Spreadsheets" [ref=e133] [cursor=pointer]:
+                - /url: /boq-software-vs-spreadsheets
+            - listitem [ref=e134]:
+              - link "AI BOQ vs Manual BOQ Preparation" [ref=e135] [cursor=pointer]:
+                - /url: /ai-boq-vs-manual-boq-preparation
+            - listitem [ref=e136]:
+              - link "OCR vs Structured BOQ Extraction" [ref=e137] [cursor=pointer]:
+                - /url: /ocr-vs-structured-boq-extraction
+        - generic [ref=e138]:
+          - heading "Resources" [level=3] [ref=e139]
+          - list [ref=e140]:
+            - listitem [ref=e141]:
+              - link "Resource Centre" [ref=e142] [cursor=pointer]:
+                - /url: /resources
+            - listitem [ref=e143]:
+              - link "BOQ Calculation Formulas" [ref=e144] [cursor=pointer]:
+                - /url: /boq-calculation-formulas
+            - listitem [ref=e145]:
+              - link "Free BOQ Calculator — External Vista By Lara Tool" [ref=e146] [cursor=pointer]:
+                - /url: https://www.vistabylara.com/ai-tools/boq-calculator-uae
+            - listitem [ref=e147]:
+              - link "What Is a BOQ?" [ref=e148] [cursor=pointer]:
+                - /url: /what-is-a-boq
+            - listitem [ref=e149]:
+              - link "How to Prepare a BOQ" [ref=e150] [cursor=pointer]:
+                - /url: /how-to-prepare-a-boq
+            - listitem [ref=e151]:
+              - link "BOQ vs Construction Estimate" [ref=e152] [cursor=pointer]:
+                - /url: /boq-vs-construction-estimate
+            - listitem [ref=e153]:
+              - link "BOQ vs Bill of Materials" [ref=e154] [cursor=pointer]:
+                - /url: /boq-vs-bill-of-materials
+            - listitem [ref=e155]:
+              - link "BOQ Review Checklist" [ref=e156] [cursor=pointer]:
+                - /url: /boq-review-checklist
+        - generic [ref=e157]:
+          - heading "Regional" [level=3] [ref=e158]
+          - list [ref=e159]:
+            - listitem [ref=e160]:
+              - link "GCC BOQ Software" [ref=e161] [cursor=pointer]:
+                - /url: /gcc-boq-software
+            - listitem [ref=e162]:
+              - link "UAE" [ref=e163] [cursor=pointer]:
+                - /url: /boq-software-uae
+            - listitem [ref=e164]:
+              - link "Dubai" [ref=e165] [cursor=pointer]:
+                - /url: /boq-software-dubai
+            - listitem [ref=e166]:
+              - link "Abu Dhabi" [ref=e167] [cursor=pointer]:
+                - /url: /boq-software-abu-dhabi
+            - listitem [ref=e168]:
+              - link "UAE Construction Estimating" [ref=e169] [cursor=pointer]:
+                - /url: /construction-estimating-software-uae
+            - listitem [ref=e170]:
+              - link "UAE MEP Estimating" [ref=e171] [cursor=pointer]:
+                - /url: /mep-estimating-software-uae
+            - listitem [ref=e172]:
+              - link "Saudi Arabia" [ref=e173] [cursor=pointer]:
+                - /url: /boq-software-saudi-arabia
+        - generic [ref=e174]:
+          - generic [ref=e175]:
+            - heading "Enterprise Software" [level=3] [ref=e176]
+            - paragraph [ref=e177]: Custom Quantara software implementation for companies requiring tailored workflows, integrations, branding, deployment, migration, onboarding or advanced operational requirements.
+            - paragraph [ref=e178]: Custom implementation and onboarding starting from AED 15,000
+            - paragraph [ref=e179]: Final scope and pricing are provided through a custom quotation following a requirements review.
+            - link "Contact Sales →" [ref=e180] [cursor=pointer]:
+              - /url: /contact-sales
+          - generic [ref=e181]:
+            - heading "Company" [level=3] [ref=e182]
+            - list [ref=e183]:
+              - listitem [ref=e184]:
+                - link "About" [ref=e185] [cursor=pointer]:
+                  - /url: /about
+              - listitem [ref=e186]:
+                - link "Contact Sales" [ref=e187] [cursor=pointer]:
+                  - /url: /contact-sales
+              - listitem [ref=e188]:
+                - link "Request Early Access" [ref=e189] [cursor=pointer]:
+                  - /url: /register
+              - listitem [ref=e190]:
+                - link "Security" [ref=e191] [cursor=pointer]:
+                  - /url: /security
+              - listitem [ref=e192]:
+                - link "HTML Sitemap" [ref=e193] [cursor=pointer]:
+                  - /url: /site-map
+          - generic [ref=e194]:
+            - heading "Legal" [level=3] [ref=e195]
+            - list [ref=e196]:
+              - listitem [ref=e197]:
+                - link "Privacy" [ref=e198] [cursor=pointer]:
+                  - /url: /privacy
+              - listitem [ref=e199]:
+                - link "Terms" [ref=e200] [cursor=pointer]:
+                  - /url: /terms
+              - listitem [ref=e201]:
+                - link "Cookie Policy" [ref=e202] [cursor=pointer]:
+                  - /url: /cookie-policy
+              - listitem [ref=e203]:
+                - link "Data Processing" [ref=e204] [cursor=pointer]:
+                  - /url: /data-processing
+              - listitem [ref=e205]:
+                - link "Acceptable Use" [ref=e206] [cursor=pointer]:
+                  - /url: /acceptable-use
+              - listitem [ref=e207]:
+                - link "Subprocessors" [ref=e208] [cursor=pointer]:
+                  - /url: /subprocessors
+      - generic [ref=e209]: © 2026 Quantara. Operated by Vista By Lara. All rights reserved.
+  - generic [ref=e215] [cursor=pointer]:
+    - button "Open Next.js Dev Tools" [ref=e216]
+    - generic [ref=e220]:
+      - button "Open issues overlay" [ref=e221]:
+        - generic [ref=e222]:
+          - generic [ref=e223]: "0"
+          - generic [ref=e224]: "1"
+        - generic [ref=e225]: Issue
+      - button "Collapse issues badge" [ref=e226]
+  - alert [ref=e229]
 ```
 
 # Test source
@@ -246,12 +319,12 @@ Error: expect(received).toEqual(expected) // deep equality
   26 |       }
   27 |       
   28 |       // 3. Take screenshot
-  29 |       await page.screenshot({ path: `screenshots/${route === '/' ? 'home' : route.replace('/', '')}.png`, fullPage: true });
+> 29 |       await page.screenshot({ path: `screenshots/${route === '/' ? 'home' : route.replace('/', '')}.png`, fullPage: true });
+     |                  ^ Error: page.screenshot: Test timeout of 30000ms exceeded.
   30 |       
   31 |       // 4. Verify Accessibility
   32 |       const accessibilityScanResults = await new AxeBuilder({ page }).analyze();
-> 33 |       expect(accessibilityScanResults.violations).toEqual([]);
-     |                                                   ^ Error: expect(received).toEqual(expected) // deep equality
+  33 |       expect(accessibilityScanResults.violations).toEqual([]);
   34 |     });
   35 |   }
   36 | });

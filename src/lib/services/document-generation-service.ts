@@ -323,6 +323,7 @@ export async function generateDocument(actor: CurrentActor, projectIdentifier: s
     await recordDocumentGenerated(actor.companyId, isDraft);
     return completed;
   } catch (error) {
+    console.error('Generation error:', error);
     const message = error instanceof Error ? error.message : "Document generation failed.";
     await markDocumentFailed(actor.companyId, queued.id, message.slice(0, 500));
     if (error instanceof AppError) throw error;

@@ -1,4 +1,9 @@
 import { defineConfig, devices } from '@playwright/test';
+import dotenv from 'dotenv';
+import path from 'path';
+
+// Read from default ".env.test" file.
+dotenv.config({ path: path.resolve(__dirname, '.env.test') });
 
 export default defineConfig({
   testDir: './tests/e2e',
@@ -16,11 +21,22 @@ export default defineConfig({
       name: 'chromium',
       use: { ...devices['Desktop Chrome'] },
     },
+    {
+      name: 'Mobile Chrome',
+      use: { ...devices['Pixel 5'] },
+    },
+    {
+      name: 'Mobile Safari',
+      use: { ...devices['iPhone 12'] },
+    },
   ],
   webServer: {
-    command: 'npm run start -- -p 3000',
+    command: 'npm run dev -- -p 3000',
     url: 'http://localhost:3000',
     reuseExistingServer: !process.env.CI,
     timeout: 120000,
+    env: {
+      DATABASE_URL: process.env.DATABASE_URL || 'postgresql://quantara:quantara_local_password@localhost:5432/quantara_e2e_boq?schema=public'
+    }
   },
 });

@@ -1,8 +1,10 @@
 import type { DrawingPage, Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db/prisma";
 import { NotFoundError } from "@/lib/errors/app-error";
+import type { PageTextExtraction } from "@/lib/files/pdf-text-extraction";
 
 export function toDrawingPageDTO(page: DrawingPage) {
+  const textLayer = (page.textLayerJson as PageTextExtraction | null) ?? null;
   return {
     id: page.id,
     projectFileId: page.projectFileId,
@@ -17,6 +19,12 @@ export function toDrawingPageDTO(page: DrawingPage) {
     scaleConfidence: page.scaleConfidence?.toNumber() ?? null,
     processingStatus: page.processingStatus,
     createdAt: page.createdAt.toISOString(),
+    hasText: textLayer?.hasText ?? null,
+    text: textLayer?.text ?? null,
+    normalizedText: textLayer?.normalizedText ?? null,
+    characterCount: textLayer?.characterCount ?? null,
+    extractionMethod: textLayer?.extractionMethod ?? null,
+    ocrStatus: textLayer?.ocrStatus ?? null,
   };
 }
 
@@ -38,6 +46,7 @@ export type CreateDrawingPageInput = {
   dpi?: number;
   imageStorageKey?: string;
   processingStatus: string;
+  textLayerJson?: PageTextExtraction;
 };
 
 export async function replaceDrawingPagesForFile(companyId: string, projectFileId: string, pages: CreateDrawingPageInput[]): Promise<void> {
@@ -54,6 +63,7 @@ export async function replaceDrawingPagesForFile(companyId: string, projectFileI
           dpi: page.dpi,
           imageStorageKey: page.imageStorageKey,
           processingStatus: page.processingStatus,
+          textLayerJson: page.textLayerJson ?? undefined,
         },
       });
     }

@@ -7,6 +7,7 @@ import { createClient } from "../src/lib/repositories/client-repository";
 import { createProjectWithDefaultBoq } from "../src/lib/services/project-service";
 import { uploadProjectFile } from "../src/lib/services/project-file-service";
 import { triggerFilePreprocessing, listPagesForFile, getDrawingPageImage } from "../src/lib/services/drawing-page-service";
+import { replaceDrawingPagesForFile } from "../src/lib/repositories/drawing-page-repository";
 import { classifyPdfContent, buildPageTextExtraction, normalizeExtractedText, OCR_IMPLEMENTATION_STATUS } from "../src/lib/files/pdf-text-extraction";
 import "../src/lib/jobs/register-handlers";
 import type { CurrentActor } from "../src/lib/auth/current-actor";
@@ -157,6 +158,16 @@ describe("PDF drawing page rasterization + text extraction (unit, pure functions
     expect(classifyPdfContent([{ hasText: true }, { hasText: false }])).toBe("MIXED");
   });
 
+  it("classifyPdfContent never fabricates a classification when extraction metadata is absent", () => {
+    // Unknown-only pages (e.g. legacy rows with no textLayerJson at all).
+    expect(classifyPdfContent([{ hasText: null }, { hasText: null }])).toBe("UNKNOWN");
+    expect(classifyPdfContent([{ hasText: undefined }])).toBe("UNKNOWN");
+    // A single unknown page must force UNKNOWN even when every other page is confidently classified.
+    expect(classifyPdfContent([{ hasText: true }, { hasText: null }])).toBe("UNKNOWN");
+    expect(classifyPdfContent([{ hasText: false }, { hasText: undefined }])).toBe("UNKNOWN");
+    expect(classifyPdfContent([{ hasText: true }, { hasText: false }, { hasText: null }])).toBe("UNKNOWN");
+  });
+
   it("asserts, as a real code fact (not a claim), that OCR is not implemented in this codebase", () => {
     expect(OCR_IMPLEMENTATION_STATUS).toBe("NOT_IMPLEMENTED");
   });
@@ -301,5 +312,23 @@ describe("PDF drawing page rasterization + text extraction (integration, real Po
     expect(page2.hasText).toBe(false);
     expect(page2.text).toBe("");
     expect(page2.ocrStatus).toBe("OCR_REQUIRED");
+  });
+
+  it("Test D — legacy pages with no textLayerJson metadata classify as UNKNOWN, never SCANNED_IMAGE", async () => {
+    const buffer = await buildTextVectorPdf();
+    const fileId = await runPreprocessing(buffer, "legacy-drawing.pdf");
+
+    // Simulate rows written before per-page text extraction existed: no textLayerJson at all,
+    // the same shape a pre-migration production row would have.
+    await replaceDrawingPagesForFile(ownerActor.companyId, fileId, [
+      { projectFileId: fileId, pageNumber: 1, processingStatus: "READY" },
+      { projectFileId: fileId, pageNumber: 2, processingStatus: "READY" },
+    ]);
+
+    const result = await listPagesForFile(ownerActor, fileId);
+    expect(result.pages).toHaveLength(2);
+    expect(result.pages[0].hasText).toBeNull();
+    expect(result.pages[1].hasText).toBeNull();
+    expect(result.classification).toBe("UNKNOWN");
   });
 });

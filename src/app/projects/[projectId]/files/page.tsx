@@ -53,11 +53,13 @@ export default function ProjectFilesPage(props: { params: Promise<{ projectId: s
   const loadDetail = useCallback(async (fileId: string) => {
     setSelectedFileId(fileId);
     try {
-      const [pagesData, tablesData] = await Promise.all([
-        apiClient.get<PageView[]>(`/api/files/${fileId}/pages`).catch(() => []),
+      const [pagesResult, tablesData] = await Promise.all([
+        apiClient
+          .get<{ pages: PageView[]; classification: string; ocrStatus: string }>(`/api/files/${fileId}/pages`)
+          .catch(() => ({ pages: [], classification: "UNKNOWN", ocrStatus: "NOT_IMPLEMENTED" })),
         apiClient.get<TableView[]>(`/api/files/${fileId}/tables`).catch(() => []),
       ]);
-      setPages(pagesData);
+      setPages(pagesResult.pages);
       setTables(tablesData);
     } catch (err) {
       setError(getApiErrorMessage(err));

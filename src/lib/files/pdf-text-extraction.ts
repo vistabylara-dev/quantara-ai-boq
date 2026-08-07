@@ -51,7 +51,7 @@ export function buildPageTextExtraction(rawText: string, sourceProjectFileId: st
  * so it can never drift out of sync with them.
  */
 export function classifyPdfContent(pages: Array<{ hasText: boolean | null | undefined }>): PdfContentClassification {
-  if (pages.length === 0) return "UNKNOWN";
+  if (pages.length === 0 || pages.some((page) => page.hasText == null)) return "UNKNOWN";
   const withText = pages.filter((page) => page.hasText === true).length;
   if (withText === 0) return "SCANNED_IMAGE";
   if (withText === pages.length) return "TEXT_LAYER";

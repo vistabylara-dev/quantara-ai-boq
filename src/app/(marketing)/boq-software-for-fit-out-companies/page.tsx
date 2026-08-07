@@ -41,7 +41,7 @@ export default function Page() {
   }
 ],
     workflowDescription: "Quantara allows fit-out teams to organize finishes, partitions, ceilings, flooring, joinery, doors, and fixtures. It simplifies MEP coordination, helps track variations, and streamlines the creation of client proposals by keeping all revision-heavy documentation in a controlled environment.",
-    workflowExample: "A fit-out company receives a tender for a commercial office. The package includes a PDF scope of works, scanned finishes schedules, and an Excel BOQ. They use Quantara to consolidate these inputs into a single structured BOQ, ensuring no joinery items are missed before submitting their proposal.",
+    workflowExample: "A fit-out company receives a tender for a commercial office. The package includes a text-based PDF scope of works and an Excel BOQ. They use Quantara to consolidate these inputs into a single structured BOQ, ensuring no joinery items are missed before submitting their proposal. Any scanned finishes schedules in the package are detected and flagged for manual transcription, since OCR is planned but not yet available.",
     typicalCategories: [
   "Demolition",
   "Partitions and Drylining",
@@ -95,7 +95,7 @@ export default function Page() {
   },
   {
     "question": "How do I handle FF&E schedules?",
-    "answer": "FF&E schedules can be extracted from PDFs or Excel and structured as a distinct section within the BOQ."
+    "answer": "FF&E schedules can be extracted from text-based PDFs or Excel and structured as a distinct section within the BOQ today. Scanned schedules are detected and flagged for manual transcription; OCR is planned but not yet available."
   },
   {
     "question": "Can I use templates for common fit-out types?",
@@ -209,7 +209,7 @@ export default function Page() {
     "name": "How do I handle FF&E schedules?",
     "acceptedAnswer": {
       "@type": "Answer",
-      "text": "FF&E schedules can be extracted from PDFs or Excel and structured as a distinct section within the BOQ."
+      "text": "FF&E schedules can be extracted from text-based PDFs or Excel and structured as a distinct section within the BOQ today. Scanned schedules are detected and flagged for manual transcription; OCR is planned but not yet available."
     }
   },
   {

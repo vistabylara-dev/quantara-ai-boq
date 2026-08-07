@@ -42,7 +42,7 @@ export default function Page() {
   }
 ],
     workflowDescription: "Quantara clarifies the BOQ-to-estimate relationship by allowing teams to structure quantities, units, rates, and explicit assumptions. Users can apply company templates to supported project documents, ensuring a clean baseline for professional pricing review.",
-    workflowExample: "A UAE estimator imports a scanned PDF BOQ into Quantara. They structure the items, add specific notes for their commercial exclusions, and export the clean, organized list to Excel for final rate application.",
+    workflowExample: "A UAE estimator imports a text-based PDF BOQ into Quantara. They structure the items, add specific notes for their commercial exclusions, and export the clean, organized list to Excel for final rate application. A scanned version of the same document would be detected and flagged for manual transcription, since OCR is planned but not yet available.",
     typicalCategories: [
   "Site Preparation",
   "Concrete Works",

@@ -41,7 +41,7 @@ export default function Page() {
   }
 ],
     workflowDescription: "Quantara assists quantity surveyors by structuring project records. It provides tools to manage BOQ preparation, review quantities, track item descriptions, and explicitly record assumptions and exclusions. This ensures a clear audit trail for commercial review and professional responsibility.",
-    workflowExample: "A quantity surveyor receives a revised consultant BOQ in PDF format. Before issuing it for tender, they use Quantara to extract the document, structure the items, and formally lock it as Revision 2, ensuring a clean, verifiable record for all bidders.",
+    workflowExample: "A quantity surveyor receives a revised consultant BOQ as a text-based PDF. Before issuing it for tender, they use Quantara to extract the document, structure the items, and formally lock it as Revision 2, ensuring a clean, verifiable record for all bidders. A scanned version of the same document would be detected and flagged for manual transcription, since OCR is planned but not yet available.",
     typicalCategories: [
   "Substructure",
   "Superstructure",

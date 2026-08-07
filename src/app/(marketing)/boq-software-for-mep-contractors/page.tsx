@@ -84,7 +84,7 @@ export default function Page() {
   },
   {
     "question": "Can I manage equipment schedules?",
-    "answer": "Yes, equipment schedules can be extracted from PDFs or Excel and structured as specific items within the BOQ."
+    "answer": "Yes, equipment schedules can be extracted from text-based PDFs or Excel and structured as specific items within the BOQ today. Scanned schedules are detected and flagged for manual transcription; OCR is planned but not yet available."
   },
   {
     "question": "Does it validate MEP engineering compliance?",
@@ -186,7 +186,7 @@ export default function Page() {
     "name": "Can I manage equipment schedules?",
     "acceptedAnswer": {
       "@type": "Answer",
-      "text": "Yes, equipment schedules can be extracted from PDFs or Excel and structured as specific items within the BOQ."
+      "text": "Yes, equipment schedules can be extracted from text-based PDFs or Excel and structured as specific items within the BOQ today. Scanned schedules are detected and flagged for manual transcription; OCR is planned but not yet available."
     }
   },
   {

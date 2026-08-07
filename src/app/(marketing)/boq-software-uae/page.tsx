@@ -42,7 +42,7 @@ export default function Page() {
   }
 ],
     workflowDescription: "Quantara supports teams in structuring BOQs from supported documents. It provides version control for revisions, centralizes project templates, and generates professional outputs. While multilingual documents may occur on UAE projects, users manage their own descriptions and records.",
-    workflowExample: "A UAE main contractor receives a complex PDF BOQ from a project consultant. They use Quantara to extract the document, structure the items, and apply their company’s controlled template before issuing distinct packages to local subcontractors for pricing.",
+    workflowExample: "A UAE main contractor receives a complex text-based PDF BOQ from a project consultant. They use Quantara to extract the document, structure the items, and apply their company’s controlled template before issuing distinct packages to local subcontractors for pricing. A scanned version of the same document would be detected and flagged for manual transcription, since OCR is planned but not yet available.",
     typicalCategories: [
   "Preliminaries",
   "Civil and Structural",
@@ -106,7 +106,7 @@ export default function Page() {
   },
   {
     "question": "Which file formats are currently supported?",
-    "answer": "Quantara supports Text-based PDF, Scanned PDF, XLSX, and CSV imports."
+    "answer": "Quantara extracts data from Text-based PDF, XLSX, and CSV files today. Scanned/image-only PDFs can be uploaded and are automatically detected and flagged for manual transcription; OCR is planned and not yet available."
   },
   {
     "question": "Does Quantara replace a local quantity surveyor?",
@@ -240,7 +240,7 @@ export default function Page() {
     "name": "Which file formats are currently supported?",
     "acceptedAnswer": {
       "@type": "Answer",
-      "text": "Quantara supports Text-based PDF, Scanned PDF, XLSX, and CSV imports."
+      "text": "Quantara extracts data from Text-based PDF, XLSX, and CSV files today. Scanned/image-only PDFs can be uploaded and are automatically detected and flagged for manual transcription; OCR is planned and not yet available."
     }
   },
   {

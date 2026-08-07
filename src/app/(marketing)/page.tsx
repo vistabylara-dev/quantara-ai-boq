@@ -469,10 +469,16 @@ export default function HomePage() {
                   <td className="p-4"><span className="px-2 py-1 bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 rounded-md text-xs font-medium">Live</span></td>
                 </tr>
                 <tr>
-                  <td className="p-4 text-slate-900 dark:text-slate-200 font-medium">PDF (Scanned)</td>
-                  <td className="p-4 text-slate-600 dark:text-slate-400">OCR</td>
+                  <td className="p-4 text-slate-900 dark:text-slate-200 font-medium">PDF (Scanned/Image-only) — Detection</td>
+                  <td className="p-4 text-slate-600 dark:text-slate-400">Rasterization, classification & OCR_REQUIRED flagging</td>
                   <td className="p-4 text-slate-600 dark:text-slate-400">20 MB</td>
                   <td className="p-4"><span className="px-2 py-1 bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 rounded-md text-xs font-medium">Live</span></td>
+                </tr>
+                <tr>
+                  <td className="p-4 text-slate-900 dark:text-slate-200 font-medium">PDF (Scanned/Image-only) — OCR</td>
+                  <td className="p-4 text-slate-600 dark:text-slate-400">Automated text recognition</td>
+                  <td className="p-4 text-slate-600 dark:text-slate-400">20 MB</td>
+                  <td className="p-4"><span className="px-2 py-1 bg-slate-200 text-slate-600 dark:bg-slate-800 dark:text-slate-400 rounded-md text-xs font-medium">Planned</span></td>
                 </tr>
                 <tr>
                   <td className="p-4 text-slate-900 dark:text-slate-200 font-medium">XLSX / CSV</td>

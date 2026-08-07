@@ -42,7 +42,7 @@ export default function Page() {
   }
 ],
     workflowDescription: "Quantara provides the structure to manage distinct MEP scopes, including HVAC, fire fighting, controls, and testing & commissioning. Users can organize revisions and technical schedules into a unified BOQ, preparing the data for professional review.",
-    workflowExample: "An MEP estimator in the UAE uses Quantara to extract equipment schedules from a consultant’s PDF, organizing the AHUs and FCUs into a structured HVAC section while keeping the lighting fixtures in a separate Electrical section.",
+    workflowExample: "An MEP estimator in the UAE uses Quantara to extract equipment schedules from a consultant's text-based PDF, organizing the AHUs and FCUs into a structured HVAC section while keeping the lighting fixtures in a separate Electrical section. A scanned version of the same schedule would be detected and flagged for manual transcription, since OCR is planned but not yet available.",
     typicalCategories: [
   "HVAC",
   "Plumbing and Drainage",
@@ -82,7 +82,7 @@ export default function Page() {
   },
   {
     "question": "Can I extract HVAC equipment schedules?",
-    "answer": "Yes, you can extract technical schedules from PDFs and structure them, though manual verification is required."
+    "answer": "Yes, you can extract technical schedules from text-based PDFs and structure them today, though manual verification is required. Scanned schedules are detected and flagged for manual transcription; OCR is planned but not yet available."
   },
   {
     "question": "Does it validate MEP engineering compliance?",
@@ -184,7 +184,7 @@ export default function Page() {
     "name": "Can I extract HVAC equipment schedules?",
     "acceptedAnswer": {
       "@type": "Answer",
-      "text": "Yes, you can extract technical schedules from PDFs and structure them, though manual verification is required."
+      "text": "Yes, you can extract technical schedules from text-based PDFs and structure them today, though manual verification is required. Scanned schedules are detected and flagged for manual transcription; OCR is planned but not yet available."
     }
   },
   {

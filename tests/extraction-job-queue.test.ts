@@ -28,11 +28,13 @@ function deferred<T = void>() {
   return { promise, resolve };
 }
 
-const originalNodeEnv = process.env.NODE_ENV;
+// @types/node marks NODE_ENV readonly; Object.assign mutates the same underlying object
+// without tripping that check.
 function setNodeEnv(value: string) {
-  // @types/node marks NODE_ENV readonly; Object.assign mutates the same underlying object without
-  // tripping that check, and is restored via the same path in afterEach/beforeEach below.
   Object.assign(process.env, { NODE_ENV: value });
+}
+function deleteNodeEnv() {
+  delete (process.env as Record<string, string | undefined>).NODE_ENV;
 }
 
 describe("LocalJobQueue — request-lifecycle-aware scheduling", () => {
@@ -41,6 +43,8 @@ describe("LocalJobQueue — request-lifecycle-aware scheduling", () => {
   let userId: string;
   let fileCounter = 0;
   const cleanupCompanyIds: string[] = [];
+  // Captured once, outside any test's control, so restoration is exact regardless of test order.
+  const originalNodeEnv = process.env.NODE_ENV;
 
   beforeAll(async () => {
     const construction = await prisma.industryEngine.findUniqueOrThrow({ where: { key: "construction" } });
@@ -78,10 +82,18 @@ describe("LocalJobQueue — request-lifecycle-aware scheduling", () => {
 
   beforeEach(() => {
     afterMock.mockReset();
-    setNodeEnv(originalNodeEnv ?? "test");
+    // Deterministic starting point for every test, regardless of what NODE_ENV the test
+    // runner process itself started with — most tests rely on the non-production
+    // (setImmediate) scheduling path, which silently wouldn't run at all if NODE_ENV
+    // happened to already be "production" when a test began.
+    setNodeEnv("test");
   });
   afterEach(() => {
-    setNodeEnv(originalNodeEnv ?? "test");
+    if (originalNodeEnv === undefined) {
+      deleteNodeEnv();
+    } else {
+      setNodeEnv(originalNodeEnv);
+    }
   });
 
   async function makeFile() {
@@ -205,7 +217,7 @@ describe("LocalJobQueue — request-lifecycle-aware scheduling", () => {
     expect(allJobs).toHaveLength(1);
   });
 
-  it("H. cancellation prevents an in-flight handler's result from overwriting CANCELLED", async () => {
+  it("H. cancellation prevents an in-flight handler's result from overwriting CANCELLED, and leaves no state that affects a later, unrelated job", async () => {
     const queue = newQueue();
     const gate = deferred<void>();
     queue.registerHandler(ExtractionEngineType.TABLE_EXTRACTION, async () => {
@@ -222,6 +234,66 @@ describe("LocalJobQueue — request-lifecycle-aware scheduling", () => {
     await new Promise((resolve) => setTimeout(resolve, 200));
     const final = await prisma.extractionJob.findUniqueOrThrow({ where: { id: job.id } });
     expect(final.status).toBe(ExtractionJobStatus.CANCELLED);
+
+    // Cancellation state lives entirely in the database row (there is no separate
+    // in-memory marker to leak) — a brand new, unrelated job on the same queue instance
+    // must run to completion completely unaffected.
+    const otherFile = await makeFile();
+    const otherJob = await queue.enqueue({ companyId, projectId, projectFileId: otherFile.id, engineType: ExtractionEngineType.TABLE_EXTRACTION, createdByUserId: userId });
+    await waitFor(async () => (await prisma.extractionJob.findUniqueOrThrow({ where: { id: otherJob.id } })).status === ExtractionJobStatus.COMPLETED);
+  });
+
+  it("recent RUNNING job is left untouched by recoverStaleJobs() — a still-live invocation must never be stolen", async () => {
+    const queue = newQueue();
+    const file = await makeFile();
+    const recent = await prisma.extractionJob.create({
+      data: { companyId, projectId, projectFileId: file.id, engineType: ExtractionEngineType.FILE_PREPROCESSING, createdByUserId: userId, status: ExtractionJobStatus.RUNNING, startedAt: new Date(), attempts: 1 },
+    });
+    // updatedAt defaults to "now" on create — well inside the staleness cutoff.
+
+    await queue.recoverStaleJobs();
+
+    const stillRunning = await prisma.extractionJob.findUniqueOrThrow({ where: { id: recent.id } });
+    expect(stillRunning.status).toBe(ExtractionJobStatus.RUNNING);
+  });
+
+  it("genuinely stale RUNNING job (no update in well over the cutoff) is reset to QUEUED by recoverStaleJobs()", async () => {
+    const queue = newQueue();
+    const file = await makeFile();
+    const stale = await prisma.extractionJob.create({
+      data: { companyId, projectId, projectFileId: file.id, engineType: ExtractionEngineType.FILE_PREPROCESSING, createdByUserId: userId, status: ExtractionJobStatus.RUNNING, startedAt: new Date(), attempts: 1 },
+    });
+    // Backdate updatedAt well past the 5-minute cutoff, simulating an invocation that died
+    // without ever reporting progress/completion again.
+    await prisma.extractionJob.update({ where: { id: stale.id }, data: { updatedAt: new Date(Date.now() - 10 * 60 * 1000) } });
+
+    await queue.recoverStaleJobs();
+
+    const reset = await prisma.extractionJob.findUniqueOrThrow({ where: { id: stale.id } });
+    expect(reset.status).toBe(ExtractionJobStatus.QUEUED);
+  });
+
+  it("concurrent processQueuedJob() calls for the same job claim exactly once — the handler runs a single time", async () => {
+    const queue = newQueue();
+    let invocationCount = 0;
+    queue.registerHandler(ExtractionEngineType.DOCUMENT_CLASSIFICATION, async () => {
+      invocationCount += 1;
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      return { status: ExtractionJobStatus.COMPLETED };
+    });
+    const file = await makeFile();
+    const job = await prisma.extractionJob.create({
+      data: { companyId, projectId, projectFileId: file.id, engineType: ExtractionEngineType.DOCUMENT_CLASSIFICATION, createdByUserId: userId, status: ExtractionJobStatus.QUEUED },
+    });
+
+    // Two "simultaneous" processors racing the same QUEUED job — simulates a stale-recovery
+    // re-trigger racing the still-live original, or duplicate scheduling of any kind.
+    await Promise.all([queue.processQueuedJob(job.id), queue.processQueuedJob(job.id)]);
+
+    expect(invocationCount).toBe(1);
+    const final = await prisma.extractionJob.findUniqueOrThrow({ where: { id: job.id } });
+    expect(final.status).toBe(ExtractionJobStatus.COMPLETED);
+    expect(final.attempts).toBe(1);
   });
 
   it("I. recoverStaleJobs() in production does not call after() and does not throw with no request context", async () => {
@@ -232,6 +304,7 @@ describe("LocalJobQueue — request-lifecycle-aware scheduling", () => {
     const created = await prisma.extractionJob.create({
       data: { companyId, projectId, projectFileId: file.id, engineType: ExtractionEngineType.FILE_PREPROCESSING, createdByUserId: userId, status: ExtractionJobStatus.RUNNING, startedAt: new Date(), attempts: 1 },
     });
+    await prisma.extractionJob.update({ where: { id: created.id }, data: { updatedAt: new Date(Date.now() - 10 * 60 * 1000) } });
 
     afterMock.mockImplementation(() => {
       throw new Error("after() must never be called from recoverStaleJobs()");
@@ -255,6 +328,7 @@ describe("LocalJobQueue — request-lifecycle-aware scheduling", () => {
     const stale = await prisma.extractionJob.create({
       data: { companyId, projectId, projectFileId: file.id, engineType: ExtractionEngineType.FILE_PREPROCESSING, createdByUserId: userId, status: ExtractionJobStatus.RUNNING, startedAt: new Date(), attempts: 1 },
     });
+    await prisma.extractionJob.update({ where: { id: stale.id }, data: { updatedAt: new Date(Date.now() - 10 * 60 * 1000) } });
 
     // Simulate module-init recovery finding this RUNNING job stale (no request context, non-prod so no after() involved here).
     await queue.recoverStaleJobs();

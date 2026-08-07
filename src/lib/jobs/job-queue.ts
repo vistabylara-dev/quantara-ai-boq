@@ -53,7 +53,7 @@ export interface JobQueue {
    * Runs a single QUEUED job to a terminal (or retry-pending) state,
    * including its own bounded retry loop. Public so a request-scoped
    * caller can hand it to Next.js `after()` — see local-job-queue.ts. A
-   * no-op if the job is not (or no longer) QUEUED.
+   * no-op if the job is not (or no longer) QUEUED for this companyId.
    */
-  processQueuedJob(jobId: string): Promise<void>;
+  processQueuedJob(companyId: string, jobId: string): Promise<void>;
 }

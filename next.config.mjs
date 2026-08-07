@@ -34,6 +34,19 @@ const CATALOGUE_DATASET_CSV_GLOBS = [
   "./data-imports/uae-authority-regulatory/*.csv",
 ];
 
+// PDF-WORKER-VERCEL — pdfjs-dist's legacy Node build lazily sets up a
+// same-thread "fake worker" the first time any PDFParse method triggers a
+// document load (getInfo/getText/getTable/getScreenshot all go through it,
+// not just rendering). That setup dynamically imports its own worker
+// script by a real node_modules-relative path — @vercel/nft's static trace
+// doesn't see that dynamic import, so the file is absent from the deployed
+// function bundle: confirmed in staged testing via the exact runtime error
+// `Cannot find module '/var/task/node_modules/pdfjs-dist/legacy/build/
+// pdf.worker.mjs' imported from .../pdf.mjs`. Same tracing-gap class as the
+// @napi-rs/canvas entries below; same fix — declare the one file actually
+// missing, nothing broader.
+const PDFJS_WORKER_GLOB = ["./node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs"];
+
 const nextConfig = {
   reactStrictMode: true,
   typescript: { ignoreBuildErrors: true },
@@ -79,10 +92,25 @@ const nextConfig = {
     "/api/files/[fileId]/classification": ["./node_modules/@napi-rs/canvas/**", "./node_modules/@napi-rs/canvas-linux-x64-gnu/**"],
     "/api/files/[fileId]/classify": ["./node_modules/@napi-rs/canvas/**", "./node_modules/@napi-rs/canvas-linux-x64-gnu/**"],
     "/api/files/[fileId]/download": ["./node_modules/@napi-rs/canvas/**", "./node_modules/@napi-rs/canvas-linux-x64-gnu/**"],
-    "/api/projects/[projectId]/drawings": ["./node_modules/@napi-rs/canvas/**", "./node_modules/@napi-rs/canvas-linux-x64-gnu/**"],
     "/api/projects/[projectId]/drawings/upload-authorization": ["./node_modules/@napi-rs/canvas/**", "./node_modules/@napi-rs/canvas-linux-x64-gnu/**"],
-    "/api/projects/[projectId]/drawings/upload-authorization/[sessionId]/finalize": ["./node_modules/@napi-rs/canvas/**", "./node_modules/@napi-rs/canvas-linux-x64-gnu/**"],
     "/api/projects/[projectId]/files": ["./node_modules/@napi-rs/canvas/**", "./node_modules/@napi-rs/canvas-linux-x64-gnu/**"],
+    // PDF-WORKER-VERCEL — every route that actually calls a PDFParse method
+    // requiring pdfjs-dist's lazy same-thread worker setup
+    // (getScreenshot/getText/getTable in preprocessing-handler.ts and
+    // pdf-table-parser.ts; getInfo() via extractPdfPageCount() in
+    // drawing-service.ts for both the normal upload and the direct-to-Blob
+    // finalize path) gets the exact missing worker file traced. Confirmed:
+    // extractPdfPageCount() already swallows any parsing error and returns
+    // null for pageCount rather than failing the upload, so without this
+    // the upload itself would appear to succeed while silently losing page
+    // count on every single PDF drawing in production — not a crash, a
+    // silent data loss. upload-authorization (step 1 of the direct-upload
+    // flow) is deliberately NOT included: it only validates metadata and
+    // issues a Blob token before any bytes exist, it never touches PDFParse.
+    "/api/files/[fileId]/preprocess": ["./node_modules/@napi-rs/canvas/**", "./node_modules/@napi-rs/canvas-linux-x64-gnu/**", ...PDFJS_WORKER_GLOB],
+    "/api/files/[fileId]/extract": [...PDFJS_WORKER_GLOB],
+    "/api/projects/[projectId]/drawings": ["./node_modules/@napi-rs/canvas/**", "./node_modules/@napi-rs/canvas-linux-x64-gnu/**", ...PDFJS_WORKER_GLOB],
+    "/api/projects/[projectId]/drawings/upload-authorization/[sessionId]/finalize": ["./node_modules/@napi-rs/canvas/**", "./node_modules/@napi-rs/canvas-linux-x64-gnu/**", ...PDFJS_WORKER_GLOB],
   },
   // pdfkit reads its standard-14 font metrics (data/*.afm) from disk via a
   // path relative to its own package directory at runtime. Letting webpack

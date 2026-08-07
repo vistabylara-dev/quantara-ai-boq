@@ -185,13 +185,19 @@ describe("LocalJobQueue — request-lifecycle-aware scheduling", () => {
     expect(final.completedAt).not.toBeNull();
   });
 
-  it("D. NEEDS_REVIEW remains a supported terminal handler result", async () => {
+  it("D. NEEDS_REVIEW remains a supported terminal handler result, without being misreported as COMPLETED/100%", async () => {
     const queue = newQueue();
     queue.registerHandler(ExtractionEngineType.TABLE_EXTRACTION, async () => ({ status: ExtractionJobStatus.NEEDS_REVIEW, resultSummary: { reason: "low confidence" } }));
     const file = await makeFile();
     const job = await queue.enqueue({ companyId, projectId, projectFileId: file.id, engineType: ExtractionEngineType.TABLE_EXTRACTION, createdByUserId: userId });
 
     await waitFor(async () => (await prisma.extractionJob.findUniqueOrThrow({ where: { id: job.id } })).status === ExtractionJobStatus.NEEDS_REVIEW);
+    // NEEDS_REVIEW is still a member of QUEUE_NON_TERMINAL_STATUSES (a human can act on it, and
+    // it can be re-triggered) — it must not be stamped with a completion timestamp or 100%
+    // progress the way a genuinely COMPLETED job is.
+    const final = await prisma.extractionJob.findUniqueOrThrow({ where: { id: job.id } });
+    expect(final.completedAt).toBeNull();
+    expect(final.progressPercentage).not.toBe(100);
   });
 
   it("E/F. a handler that always fails retries up to maximumAttempts, then becomes FAILED", async () => {
@@ -261,13 +267,20 @@ describe("LocalJobQueue — request-lifecycle-aware scheduling", () => {
       return { status: ExtractionJobStatus.COMPLETED };
     });
     const file = await makeFile();
-    const job = await queue.enqueue({ companyId, projectId, projectFileId: file.id, engineType: ExtractionEngineType.TABLE_EXTRACTION, createdByUserId: userId });
+    const job = await prisma.extractionJob.create({
+      data: { companyId, projectId, projectFileId: file.id, engineType: ExtractionEngineType.TABLE_EXTRACTION, createdByUserId: userId, status: ExtractionJobStatus.QUEUED },
+    });
+
+    // Drive processing directly and hold the promise, rather than relying on enqueue()'s internal
+    // fire-and-forget scheduling + a fixed sleep — awaiting this promise after resolving the gate
+    // is what makes "the losing write was actually attempted" deterministic, not timing-dependent.
+    const processing = queue.processQueuedJob(companyId, job.id);
     await waitFor(async () => (await prisma.extractionJob.findUniqueOrThrow({ where: { id: job.id } })).status === ExtractionJobStatus.RUNNING);
 
     await queue.cancel(companyId, job.id);
     gate.resolve();
+    await processing;
 
-    await new Promise((resolve) => setTimeout(resolve, 200));
     const final = await prisma.extractionJob.findUniqueOrThrow({ where: { id: job.id } });
     expect(final.status).toBe(ExtractionJobStatus.CANCELLED);
 
@@ -287,13 +300,17 @@ describe("LocalJobQueue — request-lifecycle-aware scheduling", () => {
       throw new Error("simulated retryable failure");
     });
     const file = await makeFile();
-    const job = await queue.enqueue({ companyId, projectId, projectFileId: file.id, engineType: ExtractionEngineType.FILE_PREPROCESSING, createdByUserId: userId, maximumAttempts: 3 });
+    const job = await prisma.extractionJob.create({
+      data: { companyId, projectId, projectFileId: file.id, engineType: ExtractionEngineType.FILE_PREPROCESSING, createdByUserId: userId, status: ExtractionJobStatus.QUEUED, maximumAttempts: 3 },
+    });
+
+    const processing = queue.processQueuedJob(companyId, job.id);
     await waitFor(async () => (await prisma.extractionJob.findUniqueOrThrow({ where: { id: job.id } })).status === ExtractionJobStatus.RUNNING);
 
     await queue.cancel(companyId, job.id);
     gate.resolve();
+    await processing;
 
-    await new Promise((resolve) => setTimeout(resolve, 200));
     const final = await prisma.extractionJob.findUniqueOrThrow({ where: { id: job.id } });
     expect(final.status).toBe(ExtractionJobStatus.CANCELLED);
     expect(final.errorCode).not.toBe("RETRY_PENDING");
@@ -307,13 +324,17 @@ describe("LocalJobQueue — request-lifecycle-aware scheduling", () => {
       throw new Error("simulated final failure");
     });
     const file = await makeFile();
-    const job = await queue.enqueue({ companyId, projectId, projectFileId: file.id, engineType: ExtractionEngineType.FILE_PREPROCESSING, createdByUserId: userId, maximumAttempts: 1 });
+    const job = await prisma.extractionJob.create({
+      data: { companyId, projectId, projectFileId: file.id, engineType: ExtractionEngineType.FILE_PREPROCESSING, createdByUserId: userId, status: ExtractionJobStatus.QUEUED, maximumAttempts: 1 },
+    });
+
+    const processing = queue.processQueuedJob(companyId, job.id);
     await waitFor(async () => (await prisma.extractionJob.findUniqueOrThrow({ where: { id: job.id } })).status === ExtractionJobStatus.RUNNING);
 
     await queue.cancel(companyId, job.id);
     gate.resolve();
+    await processing;
 
-    await new Promise((resolve) => setTimeout(resolve, 200));
     const final = await prisma.extractionJob.findUniqueOrThrow({ where: { id: job.id } });
     expect(final.status).toBe(ExtractionJobStatus.CANCELLED);
     expect(final.errorCode).not.toBe("HANDLER_ERROR");

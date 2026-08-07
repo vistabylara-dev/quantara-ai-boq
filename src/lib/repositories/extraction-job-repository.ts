@@ -201,15 +201,21 @@ export type CompleteExtractionJobInput = {
  * overwritten). Clears errorCode/errorMessage/failedAt unconditionally on
  * success: a job that failed once, retried, and then succeeded must not
  * keep reporting the earlier attempt's error alongside a COMPLETED status.
- * Returns whether it actually applied.
+ * `completedAt`/100% progress are only ever written for the genuinely
+ * terminal COMPLETED status — NEEDS_INPUT/NEEDS_REVIEW are both still
+ * members of QUEUE_NON_TERMINAL_STATUSES (a human can act on them and the
+ * job can be re-triggered), so marking them "completed" or "100% done"
+ * would misrepresent a job that is, in fact, still open. Returns whether
+ * it actually applied.
  */
 export async function completeExtractionJob(companyId: string, jobId: string, input: CompleteExtractionJobInput): Promise<boolean> {
+  const isTerminal = input.status === ExtractionJobStatus.COMPLETED;
   const result = await prisma.extractionJob.updateMany({
     where: { id: jobId, companyId, status: ExtractionJobStatus.RUNNING },
     data: {
       status: input.status,
-      completedAt: new Date(),
-      progressPercentage: 100,
+      completedAt: isTerminal ? new Date() : null,
+      progressPercentage: isTerminal ? 100 : undefined,
       resultSummaryJson: (input.resultSummary as Prisma.InputJsonValue | undefined) ?? undefined,
       usageMetadataJson: (input.usageMetadata as Prisma.InputJsonValue | undefined) ?? undefined,
       errorCode: null,

@@ -43,7 +43,7 @@ const faqs = [
   { q: "What is Quantara?", a: "Quantara is an AI-assisted BOQ and construction-estimating platform that helps project teams organize supported documents into structured BOQ workflows, controlled project records and professional outputs." },
   { q: "Who is Quantara designed for?", a: "Quantara is built for general contractors, estimators, quantity surveyors, MEP contractors, interior fit-out companies, civil contractors, consultants, and developers." },
   { q: "Can Quantara process construction PDFs?", a: "Quantara supports verified text-based PDF workflows. Results depend on document quality, layout and available content, and all extracted information requires professional review." },
-  { q: "Can Quantara process scanned PDFs?", a: "Scanned PDF support may use OCR. OCR can misread text, numbers, symbols or layouts, so extracted content must be checked carefully." },
+  { q: "Can Quantara process scanned PDFs?", a: "Scanned and image-only PDFs can be uploaded and are automatically detected and flagged as requiring OCR today. Automated OCR text extraction is planned and not yet available, so scanned content currently requires manual transcription and careful professional review." },
   { q: "Can Quantara work with specification documents?", a: "Yes, text-based specifications can be processed to extract item descriptions and requirements, subject to the document's structure and readability." },
   { q: "Does Quantara support XLSX and CSV BOQs?", a: "Quantara supports verified XLSX and CSV workflows for structured data import or mapping, subject to file structure and product limits." },
   { q: "Does Quantara replace a quantity surveyor?", a: "No. Quantara assists with extraction, organization and document preparation. Qualified professionals must review quantities, rates, specifications, assumptions, exclusions and final documents." },
@@ -543,7 +543,8 @@ export default function HomePage() {
               <li><strong>Status:</strong> Controlled Early Access</li>
               <li><strong>Voice and typed AI change proposals:</strong> In Development</li>
               <li><strong>Primary users:</strong> Contractors, estimators, quantity surveyors, MEP teams, fit-out companies, facilities management, civil contractors, consultants, developers</li>
-              <li><strong>Live inputs:</strong> Text-based PDF, scanned PDF, XLSX and CSV, subject to verified implementation limits</li>
+              <li><strong>Live inputs:</strong> Text-based PDF, XLSX and CSV, subject to verified implementation limits</li>
+              <li><strong>Scanned/image-only PDF:</strong> Detection Live · OCR Planned (not yet available)</li>
               <li><strong>Planned inputs:</strong> CAD, BIM and IFC workflows</li>
               <li><strong>Human review:</strong> Required before commercial, contractual, tender or construction use</li>
               <li><strong>Operator:</strong> Vista By Lara</li>

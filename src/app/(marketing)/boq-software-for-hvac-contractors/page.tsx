@@ -41,7 +41,7 @@ export default function Page() {
   }
 ],
     workflowDescription: "With Quantara, HVAC teams can organize equipment schedules, ductwork, piping, insulation, controls, and accessories into a manageable format. The platform supports structured tracking of quantities, units, and testing requirements, ensuring that project revisions are cleanly version-controlled.",
-    workflowExample: "An HVAC estimator is reviewing a scanned consultant BOQ alongside an Excel pricing sheet. They use Quantara to extract the scanned ductwork items, clean the OCR data, and structure it into a master BOQ, linking it directly to their internal pricing workflow.",
+    workflowExample: "An HVAC estimator is reviewing a text-based consultant BOQ alongside an Excel pricing sheet. They use Quantara to extract the ductwork items and structure them into a master BOQ, linking it directly to their internal pricing workflow. A scanned version of the same document would be detected and flagged as requiring OCR, which is planned but not yet available.",
     typicalCategories: [
   "Chillers and AHUs",
   "FCUs and Terminals",
@@ -53,7 +53,7 @@ export default function Page() {
 ],
     supportedInputs: [
   "Text-based PDF",
-  "Scanned PDF",
+  "Scanned PDF (detection only — OCR planned)",
   "XLSX",
   "CSV"
 ],
@@ -87,7 +87,7 @@ export default function Page() {
   },
   {
     "question": "How do you handle scanned equipment schedules?",
-    "answer": "Scanned schedules can be processed via OCR, but all extracted technical data must be carefully reviewed by an HVAC professional."
+    "answer": "Scanned equipment schedules are detected and flagged as requiring OCR today; automated OCR text extraction is planned and not yet available, so scanned schedules currently require manual transcription and careful review by an HVAC professional."
   },
   {
     "question": "Does Quantara validate HVAC design?",
@@ -193,7 +193,7 @@ export default function Page() {
     "name": "How do you handle scanned equipment schedules?",
     "acceptedAnswer": {
       "@type": "Answer",
-      "text": "Scanned schedules can be processed via OCR, but all extracted technical data must be carefully reviewed by an HVAC professional."
+      "text": "Scanned equipment schedules are detected and flagged as requiring OCR today; automated OCR text extraction is planned and not yet available, so scanned schedules currently require manual transcription and careful review by an HVAC professional."
     }
   },
   {

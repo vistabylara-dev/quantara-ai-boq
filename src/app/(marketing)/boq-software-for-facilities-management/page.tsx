@@ -53,7 +53,7 @@ export default function Page() {
 ],
     supportedInputs: [
   "Text-based PDF",
-  "Scanned PDF",
+  "Scanned PDF (detection only — OCR planned)",
   "XLSX",
   "CSV"
 ],

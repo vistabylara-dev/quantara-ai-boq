@@ -54,7 +54,7 @@ export default function Page() {
 ],
     supportedInputs: [
   "Text-based PDF",
-  "Scanned PDF",
+  "Scanned PDF (detection only — OCR planned)",
   "XLSX",
   "CSV"
 ],
@@ -92,7 +92,7 @@ export default function Page() {
   },
   {
     "question": "Does it support scanned tender documents?",
-    "answer": "Yes, Quantara utilizes OCR to process scanned PDFs, though professional review of the extracted text is always required."
+    "answer": "Scanned tender documents can be uploaded and are automatically detected and flagged as requiring OCR. Automated OCR text extraction is planned and not yet available, so scanned content currently requires manual transcription and professional review."
   },
   {
     "question": "Is there a pre-built category structure?",
@@ -202,7 +202,7 @@ export default function Page() {
     "name": "Does it support scanned tender documents?",
     "acceptedAnswer": {
       "@type": "Answer",
-      "text": "Yes, Quantara utilizes OCR to process scanned PDFs, though professional review of the extracted text is always required."
+      "text": "Scanned tender documents can be uploaded and are automatically detected and flagged as requiring OCR. Automated OCR text extraction is planned and not yet available, so scanned content currently requires manual transcription and professional review."
     }
   },
   {

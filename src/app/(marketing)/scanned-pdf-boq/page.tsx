@@ -3,30 +3,30 @@ import { Metadata } from "next";
 import SeoLandingPage, { SeoLandingPageContent } from "@/components/layout/seo-landing-page";
 
 export const metadata: Metadata = {
-  title: "Scanned PDF BOQ Extraction and OCR Review",
-  description: "Process supported scanned BOQ PDFs using OCR-assisted extraction, structured review and professional validation with Quantara.",
+  title: "Scanned PDF BOQ Detection | OCR Planned",
+  description: "Quantara detects scanned and image-only PDF BOQs and flags them for review today. Automated OCR text extraction is planned and not yet available.",
   alternates: {
     canonical: "https://quantara.vistabylara.com/scanned-pdf-boq",
   },
   openGraph: {
-    title: "Scanned PDF BOQ Extraction and OCR Review | Quantara",
-    description: "Process supported scanned BOQ PDFs using OCR-assisted extraction, structured review and professional validation with Quantara.",
+    title: "Scanned PDF BOQ Detection | OCR Planned | Quantara",
+    description: "Quantara detects scanned and image-only PDF BOQs and flags them for review today. Automated OCR text extraction is planned and not yet available.",
     url: "https://quantara.vistabylara.com/scanned-pdf-boq",
     siteName: "Quantara",
   },
   twitter: {
-    title: "Scanned PDF BOQ Extraction and OCR Review | Quantara",
-    description: "Process supported scanned BOQ PDFs using OCR-assisted extraction, structured review and professional validation with Quantara.",
+    title: "Scanned PDF BOQ Detection | OCR Planned | Quantara",
+    description: "Quantara detects scanned and image-only PDF BOQs and flags them for review today. Automated OCR text extraction is planned and not yet available.",
   }
 };
 
 const content: SeoLandingPageContent = {
   breadcrumbLabel: "Scanned PDF Processing",
-  h1: "Scanned PDF BOQ Processing with OCR-Assisted Review",
-  directDefinition: "Scanned PDF processing utilizes Optical Character Recognition (OCR) to identify and extract text and tabular data from image-based documents, converting physical or flattened records into workable digital data.",
+  h1: "Scanned & Image-Only PDF BOQ Handling",
+  directDefinition: "A scanned or image-only PDF is a photograph of a document rather than digital text a computer can read directly. Quantara automatically detects these files and their page-level content type today. Automated Optical Character Recognition (OCR) to extract their text is planned and not yet implemented.",
   audience: {
-    heading: "Who Uses OCR Processing?",
-    content: "OCR is vital for teams dealing with legacy documents or physical tender packages.",
+    heading: "Who Encounters Scanned BOQs?",
+    content: "Teams working with legacy documents or physical tender packages regularly receive scanned or image-only PDFs.",
     items: ["Estimators receiving physical printouts","Contractors archiving legacy project data","Consultants processing third-party hardcopies","Subcontractors dealing with faxed or low-quality scans"]
   },
   workflowProblem: {
@@ -34,19 +34,19 @@ const content: SeoLandingPageContent = {
     paragraphs: ["Unlike text-based PDFs where the digital characters are stored in the file, a scanned PDF is essentially just a photograph of a document. Computers cannot natively \"read\" photographs, making standard copy-pasting impossible.","When dealing with scanned BOQs, teams face issues like page skew (crooked scanning), blurred text, coffee stains, and handwritten annotations. Converting this back into a structured spreadsheet manually can take weeks for a large project."]
   },
   quantaraSupport: {
-    heading: "OCR-Assisted Data Recovery",
-    paragraphs: ["Quantara applies advanced OCR technology specifically tuned for tabular data. It attempts to reconstruct the grid of the BOQ, identifying columns and rows even when the scan is slightly skewed.","Because OCR is inherently less accurate than text-based extraction—especially with numbers (e.g., misreading a \"0\" as an \"O\", or a \"5\" as an \"S\")—Quantara enforces a strict, item-by-item human review workflow."]
+    heading: "What Quantara Does With Scanned PDFs Today",
+    paragraphs: ["Quantara rasterizes every PDF page and automatically classifies it as text-based, scanned/image-only, or mixed. Scanned and image-only pages are clearly flagged as requiring OCR — no text is invented or guessed for them.","Automated OCR text recognition is planned but not yet implemented. Until it ships, scanned BOQ content must be transcribed manually by your team; the original rendered page image remains available so nothing is lost or misrepresented."]
   },
-  relevantFeatures: [{"name":"OCR Processing","status":"Live","description":"Convert image-based text into selectable digital data."},{"name":"Skew Correction","status":"Live","description":"Automatically adjust slightly crooked scans."},{"name":"Validation Workflow","status":"Preview UI","description":"Mandatory human review step for OCR results."}],
+  relevantFeatures: [{"name":"Scanned/Image-Only Detection","status":"Live","description":"Automatically identifies scanned and image-only PDF pages and flags them as requiring OCR."},{"name":"OCR Text Recognition","status":"Planned","description":"Automated conversion of image-based text into selectable digital data is not yet available."},{"name":"Manual Review Requirement","status":"Live","description":"All extracted and manually entered data requires professional human review before commercial use."}],
   workflowExample: {
-    heading: "Recovering a Legacy BOQ",
-    introduction: "How a team digitizes a physical tender package:",
-    steps: [{"title":"Scan & Upload","description":"The physical 50-page document is scanned to PDF and uploaded."},{"title":"OCR Processing","description":"Quantara runs OCR to identify text and table structures."},{"title":"Intensive Review","description":"The estimator carefully checks every quantity, knowing OCR is prone to number confusion."},{"title":"Correction","description":"Misread characters (e.g., 'O' instead of '0') are manually corrected."},{"title":"Data Structuring","description":"The clean data is organized into the digital BOQ hierarchy."}]
+    heading: "Handling a Legacy Scanned BOQ Today",
+    introduction: "How a team currently works with a physical tender package before OCR ships:",
+    steps: [{"title":"Scan & Upload","description":"The physical document is scanned to PDF and uploaded."},{"title":"Automatic Detection","description":"Quantara rasterizes the pages and flags them as scanned/image-only, requiring OCR."},{"title":"Manual Transcription","description":"Since automated OCR is not yet available, the team manually transcribes quantities and descriptions from the page images."},{"title":"Data Structuring","description":"The transcribed data is organized into the digital BOQ hierarchy."},{"title":"Professional Review","description":"A qualified professional verifies every transcribed item before commercial use."}]
   },
-  supportedInputs: [{"name":"Scanned PDF","status":"Live","description":"Image-based documents processed via OCR."},{"name":"Text-based PDF","status":"Live","description":"Digital PDFs (processed without OCR for higher accuracy)."}],
+  supportedInputs: [{"name":"Scanned/Image-Only PDF — Detection","status":"Live","description":"Identifies scanned pages and flags them as requiring OCR; no text is extracted from them yet."},{"name":"Scanned/Image-Only PDF — OCR","status":"Planned","description":"Automated text recognition for scanned pages is not yet implemented.","limitation":"Scanned content currently requires manual transcription."},{"name":"Text-based PDF","status":"Live","description":"Digital PDFs with a real, extractable text layer."}],
   supportedOutputs: [{"name":"Structured Database","status":"Live","description":"Centralized project storage."},{"name":"XLSX Export","status":"Live","description":"Exporting clean, tabular data to Excel."}],
-  limitations: ["OCR accuracy drops significantly with low-resolution scans (under 300 DPI).","Heavily skewed, blurred, or crumpled documents may fail extraction entirely.","Handwritten annotations are generally not supported and will require manual entry."],
-  faqs: [{"question":"What is a scanned PDF?","answer":"A scanned PDF is an image-based file (like a photograph) where the text cannot be highlighted or selected by a computer natively."},{"question":"How does OCR read BOQ documents?","answer":"OCR (Optical Character Recognition) analyzes the shapes of the ink or pixels in the image and attempts to translate them into digital characters and tables."},{"question":"Can OCR misread quantities?","answer":"Yes. OCR frequently confuses visually similar characters, such as 1 and l, or 0 and O. Strict manual review is absolutely critical."},{"question":"Does image resolution matter?","answer":"Immensely. Scans should ideally be 300 DPI or higher. Low-quality or compressed scans will result in poor extraction."},{"question":"Can handwritten BOQs be processed?","answer":"Standard OCR struggles heavily with handwriting. While it may capture some clear block letters, handwritten BOQs generally require manual data entry."},{"question":"How should scanned results be checked?","answer":"Every single item, unit, and especially quantity must be manually cross-referenced against the original scanned image."},{"question":"Can scanned documents be exported?","answer":"Once the data is extracted, reviewed, and structured, it can be exported to standard formats like XLSX."},{"question":"Does Quantara perform drawing takeoff?","answer":"No, Quantara processes text and tables from scanned documents, not measurements from scanned drawings."}],
+  limitations: ["Automated OCR for scanned/image-only PDFs is not yet implemented — affected content must currently be transcribed manually.","Scanned/image-only detection does not attempt to guess or reconstruct text — it honestly reports that OCR is required.","When OCR ships, accuracy is still expected to require professional review, especially for numeric quantities."],
+  faqs: [{"question":"What is a scanned PDF?","answer":"A scanned PDF is an image-based file (like a photograph) where the text cannot be highlighted or selected by a computer natively."},{"question":"Does Quantara currently OCR scanned BOQ documents?","answer":"Not yet. Quantara detects and flags scanned/image-only pages today, but automated OCR text recognition is planned and not yet implemented. Scanned content currently requires manual transcription."},{"question":"Will OCR results need review once available?","answer":"Yes. Once implemented, OCR is expected to occasionally confuse visually similar characters, such as 1 and l, or 0 and O. Strict manual, item-by-item review will be required, exactly as it is for all data in Quantara today."},{"question":"Will image resolution matter for future OCR?","answer":"Yes — once OCR ships, higher-resolution scans (300 DPI or higher) are expected to produce meaningfully better results, consistent with how OCR technology generally performs."},{"question":"Will handwritten BOQs be supported?","answer":"Standard OCR technology, once implemented, is expected to struggle with handwriting. Handwritten BOQs will likely still require manual data entry."},{"question":"How is manually transcribed scanned data checked today?","answer":"Every item, unit, and quantity transcribed from a scanned document must be manually cross-referenced against the original page image, exactly like any other data entered into Quantara."},{"question":"Can scanned documents be exported?","answer":"Once the data is transcribed today (or extracted via OCR once available), reviewed, and structured, it can be exported to standard formats like XLSX."},{"question":"Does Quantara perform drawing takeoff?","answer":"No, Quantara does not perform automated measurement or takeoff from scanned drawings."}],
   relatedPages: [{"href":"/pdf-boq-extraction","label":"Text-Based Extraction","description":"Processing high-quality digital PDFs."},{"href":"/ai-boq-software","label":"AI BOQ Software","description":"The technology powering the extraction."},{"href":"/boq-management","label":"BOQ Management","description":"Structuring the extracted data."},{"href":"/features","label":"Product Features","description":"View all Quantara features."}]
 };
 
@@ -64,8 +64,8 @@ export default function Page() {
                 "@type": "WebPage",
                 "@id": "https://quantara.vistabylara.com/scanned-pdf-boq#webpage",
                 "url": "https://quantara.vistabylara.com/scanned-pdf-boq",
-                "name": "Scanned PDF BOQ Extraction and OCR Review | Quantara",
-                "description": "Process supported scanned BOQ PDFs using OCR-assisted extraction, structured review and professional validation with Quantara.",
+                "name": "Scanned PDF BOQ Detection | OCR Planned | Quantara",
+                "description": "Quantara detects scanned and image-only PDF BOQs and flags them for review today. Automated OCR text extraction is planned and not yet available.",
                 "isPartOf": { "@id": "https://quantara.vistabylara.com/#website" },
                 "about": { "@id": "https://quantara.vistabylara.com/#organization" }
               },

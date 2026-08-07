@@ -53,7 +53,7 @@ export default function Page() {
 ],
     supportedInputs: [
   "Text-based PDF",
-  "Scanned PDF",
+  "Scanned PDF (detection only — OCR planned)",
   "XLSX",
   "CSV"
 ],
@@ -95,7 +95,7 @@ export default function Page() {
   },
   {
     "question": "Does it support scanned consultant PDFs?",
-    "answer": "Yes, OCR is available for scanned PDFs, but rigorous human review of the extracted quantities and units is mandatory."
+    "answer": "Scanned consultant PDFs can be uploaded and are automatically detected and flagged as requiring OCR. Automated OCR is planned and not yet available, so scanned content currently requires manual transcription with rigorous human review of every quantity and unit."
   },
   {
     "question": "Can consultants manage multiple project revisions?",
@@ -209,7 +209,7 @@ export default function Page() {
     "name": "Does it support scanned consultant PDFs?",
     "acceptedAnswer": {
       "@type": "Answer",
-      "text": "Yes, OCR is available for scanned PDFs, but rigorous human review of the extracted quantities and units is mandatory."
+      "text": "Scanned consultant PDFs can be uploaded and are automatically detected and flagged as requiring OCR. Automated OCR is planned and not yet available, so scanned content currently requires manual transcription with rigorous human review of every quantity and unit."
     }
   },
   {

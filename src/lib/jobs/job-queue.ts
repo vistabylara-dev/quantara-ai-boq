@@ -43,6 +43,17 @@ export interface JobQueue {
   /** Idempotent: an existing non-terminal job for the same file + engine type is returned instead of creating a duplicate. */
   enqueue(input: EnqueueJobInput): Promise<ExtractionJob>;
   cancel(companyId: string, jobId: string): Promise<ExtractionJob>;
-  /** Resets any job left RUNNING by a process that died mid-job back to QUEUED and reprocesses it. Call once at startup. */
+  /**
+   * Resets any job left RUNNING by an invocation that died mid-job back to
+   * QUEUED. Call once at startup. Does not itself re-execute those jobs —
+   * see the QUEUED branch in LocalJobQueue.enqueue() for why.
+   */
   recoverStaleJobs(): Promise<void>;
+  /**
+   * Runs a single QUEUED job to a terminal (or retry-pending) state,
+   * including its own bounded retry loop. Public so a request-scoped
+   * caller can hand it to Next.js `after()` — see local-job-queue.ts. A
+   * no-op if the job is not (or no longer) QUEUED for this companyId.
+   */
+  processQueuedJob(companyId: string, jobId: string): Promise<void>;
 }

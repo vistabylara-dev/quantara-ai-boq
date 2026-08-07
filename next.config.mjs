@@ -34,6 +34,19 @@ const CATALOGUE_DATASET_CSV_GLOBS = [
   "./data-imports/uae-authority-regulatory/*.csv",
 ];
 
+// PDF-WORKER-VERCEL — pdfjs-dist's legacy Node build lazily sets up a
+// same-thread "fake worker" the first time any PDFParse method triggers a
+// document load (getInfo/getText/getTable/getScreenshot all go through it,
+// not just rendering). That setup dynamically imports its own worker
+// script by a real node_modules-relative path — @vercel/nft's static trace
+// doesn't see that dynamic import, so the file is absent from the deployed
+// function bundle: confirmed in staged testing via the exact runtime error
+// `Cannot find module '/var/task/node_modules/pdfjs-dist/legacy/build/
+// pdf.worker.mjs' imported from .../pdf.mjs`. Same tracing-gap class as the
+// @napi-rs/canvas entries below; same fix — declare the one file actually
+// missing, nothing broader.
+const PDFJS_WORKER_GLOB = ["./node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs"];
+
 const nextConfig = {
   reactStrictMode: true,
   typescript: { ignoreBuildErrors: true },
@@ -83,6 +96,14 @@ const nextConfig = {
     "/api/projects/[projectId]/drawings/upload-authorization": ["./node_modules/@napi-rs/canvas/**", "./node_modules/@napi-rs/canvas-linux-x64-gnu/**"],
     "/api/projects/[projectId]/drawings/upload-authorization/[sessionId]/finalize": ["./node_modules/@napi-rs/canvas/**", "./node_modules/@napi-rs/canvas-linux-x64-gnu/**"],
     "/api/projects/[projectId]/files": ["./node_modules/@napi-rs/canvas/**", "./node_modules/@napi-rs/canvas-linux-x64-gnu/**"],
+    // PDF-WORKER-VERCEL — the two routes that actually call PDFParse methods
+    // (getScreenshot/getText/getTable) and were confirmed hitting the missing-
+    // worker crash. Every other PDFParse call site (extractPdfPageCount's
+    // getInfo(), in drawing-service.ts) is untouched by this PR — flagged
+    // separately, not fixed here, since it isn't the confirmed blocker this
+    // task scopes to.
+    "/api/files/[fileId]/preprocess": ["./node_modules/@napi-rs/canvas/**", "./node_modules/@napi-rs/canvas-linux-x64-gnu/**", ...PDFJS_WORKER_GLOB],
+    "/api/files/[fileId]/extract": [...PDFJS_WORKER_GLOB],
   },
   // pdfkit reads its standard-14 font metrics (data/*.afm) from disk via a
   // path relative to its own package directory at runtime. Letting webpack

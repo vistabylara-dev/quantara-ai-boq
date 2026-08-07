@@ -96,7 +96,7 @@ export default function Page() {
     "id": "quantara-workflow",
     "heading": "How Quantara Processes PDFs",
     "paragraphs": [
-      "Quantara supports both document types. It leverages AI-assisted extraction to parse the clean data from text PDFs, and utilizes advanced OCR capabilities to process scanned documents, bringing them both into a structured, manageable format.",
+      "Quantara accepts both document types. It extracts clean data directly from text-based PDFs today. Scanned/image-only documents are automatically detected and flagged as requiring OCR — automated OCR text extraction is planned and not yet implemented, so scanned content currently requires manual transcription.",
       "Quantara currently focuses on supported document extraction, BOQ structuring, project organization, templates, revisions, and professional outputs."
     ]
   }

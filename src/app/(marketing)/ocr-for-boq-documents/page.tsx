@@ -63,10 +63,10 @@ export default function Page() {
   },
   {
     "id": "quantara-workflow",
-    "heading": "How Quantara Uses OCR",
+    "heading": "Quantara's Current OCR Status",
     "paragraphs": [
-      "Quantara utilizes AI-assisted OCR workflows to extract data from scanned BOQs while maintaining the structural hierarchy of the document. The platform is designed to make the human review and correction process as seamless as possible.",
-      "Quantara currently focuses on supported document extraction, BOQ structuring, project organization, templates, revisions, and professional outputs. It does not perform professional measurement or scope interpretation."
+      "Automated OCR is planned but not yet implemented in Quantara. Today, Quantara detects scanned and image-only PDF pages and flags them as requiring OCR — it does not invent or guess text for them. Scanned BOQ content currently requires manual transcription.",
+      "Quantara currently focuses on supported document extraction (text-based PDFs, XLSX, CSV), BOQ structuring, project organization, templates, revisions, and professional outputs. It does not perform professional measurement or scope interpretation."
     ]
   }
 ],
@@ -89,7 +89,7 @@ export default function Page() {
   },
   {
     "question": "Does OCR understand construction terminology?",
-    "answer": "Basic OCR only reads letters. AI-assisted tools (like Quantara) apply construction-specific context to improve the structuring of the extracted data."
+    "answer": "Basic OCR only reads letters; construction-specific context typically needs to be applied afterward to improve structuring. Quantara does not yet run OCR — this kind of context-aware structuring is part of the planned OCR roadmap, not a current feature."
   }
 ],
     relatedReading: [

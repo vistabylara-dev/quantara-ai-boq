@@ -92,18 +92,25 @@ const nextConfig = {
     "/api/files/[fileId]/classification": ["./node_modules/@napi-rs/canvas/**", "./node_modules/@napi-rs/canvas-linux-x64-gnu/**"],
     "/api/files/[fileId]/classify": ["./node_modules/@napi-rs/canvas/**", "./node_modules/@napi-rs/canvas-linux-x64-gnu/**"],
     "/api/files/[fileId]/download": ["./node_modules/@napi-rs/canvas/**", "./node_modules/@napi-rs/canvas-linux-x64-gnu/**"],
-    "/api/projects/[projectId]/drawings": ["./node_modules/@napi-rs/canvas/**", "./node_modules/@napi-rs/canvas-linux-x64-gnu/**"],
     "/api/projects/[projectId]/drawings/upload-authorization": ["./node_modules/@napi-rs/canvas/**", "./node_modules/@napi-rs/canvas-linux-x64-gnu/**"],
-    "/api/projects/[projectId]/drawings/upload-authorization/[sessionId]/finalize": ["./node_modules/@napi-rs/canvas/**", "./node_modules/@napi-rs/canvas-linux-x64-gnu/**"],
     "/api/projects/[projectId]/files": ["./node_modules/@napi-rs/canvas/**", "./node_modules/@napi-rs/canvas-linux-x64-gnu/**"],
-    // PDF-WORKER-VERCEL — the two routes that actually call PDFParse methods
-    // (getScreenshot/getText/getTable) and were confirmed hitting the missing-
-    // worker crash. Every other PDFParse call site (extractPdfPageCount's
-    // getInfo(), in drawing-service.ts) is untouched by this PR — flagged
-    // separately, not fixed here, since it isn't the confirmed blocker this
-    // task scopes to.
+    // PDF-WORKER-VERCEL — every route that actually calls a PDFParse method
+    // requiring pdfjs-dist's lazy same-thread worker setup
+    // (getScreenshot/getText/getTable in preprocessing-handler.ts and
+    // pdf-table-parser.ts; getInfo() via extractPdfPageCount() in
+    // drawing-service.ts for both the normal upload and the direct-to-Blob
+    // finalize path) gets the exact missing worker file traced. Confirmed:
+    // extractPdfPageCount() already swallows any parsing error and returns
+    // null for pageCount rather than failing the upload, so without this
+    // the upload itself would appear to succeed while silently losing page
+    // count on every single PDF drawing in production — not a crash, a
+    // silent data loss. upload-authorization (step 1 of the direct-upload
+    // flow) is deliberately NOT included: it only validates metadata and
+    // issues a Blob token before any bytes exist, it never touches PDFParse.
     "/api/files/[fileId]/preprocess": ["./node_modules/@napi-rs/canvas/**", "./node_modules/@napi-rs/canvas-linux-x64-gnu/**", ...PDFJS_WORKER_GLOB],
     "/api/files/[fileId]/extract": [...PDFJS_WORKER_GLOB],
+    "/api/projects/[projectId]/drawings": ["./node_modules/@napi-rs/canvas/**", "./node_modules/@napi-rs/canvas-linux-x64-gnu/**", ...PDFJS_WORKER_GLOB],
+    "/api/projects/[projectId]/drawings/upload-authorization/[sessionId]/finalize": ["./node_modules/@napi-rs/canvas/**", "./node_modules/@napi-rs/canvas-linux-x64-gnu/**", ...PDFJS_WORKER_GLOB],
   },
   // pdfkit reads its standard-14 font metrics (data/*.afm) from disk via a
   // path relative to its own package directory at runtime. Letting webpack

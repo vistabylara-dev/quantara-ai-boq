@@ -15,6 +15,20 @@ function buildMarkerPdf(): Promise<Buffer> {
   });
 }
 
+function buildTwoPagePdf(): Promise<Buffer> {
+  return new Promise((resolve, reject) => {
+    const doc = new PDFDocument({ size: "A4", margin: 40 });
+    const chunks: Buffer[] = [];
+    doc.on("data", (chunk) => chunks.push(chunk));
+    doc.on("end", () => resolve(Buffer.concat(chunks)));
+    doc.on("error", reject);
+    doc.font("Helvetica").fontSize(14).text("QUANTARA_PAGECOUNT_WORKER_8472 page 1");
+    doc.addPage();
+    doc.font("Helvetica").fontSize(14).text("QUANTARA_PAGECOUNT_WORKER_8472 page 2");
+    doc.end();
+  });
+}
+
 /**
  * Real runtime proof (no mocked worker loading) that pdfjs-dist's lazy
  * same-thread "fake worker" setup — triggered by any PDFParse method that
@@ -48,6 +62,23 @@ describe("pdf-parse PDFParse — worker-dependent operations", () => {
       expect(page.data.byteLength).toBeGreaterThan(0);
       const pngSignature = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
       expect(Buffer.from(page.data.slice(0, 8)).equals(pngSignature)).toBe(true);
+    } finally {
+      await parser.destroy();
+    }
+  });
+
+  /**
+   * Same worker-dependent code path as drawing-service.ts's
+   * extractPdfPageCount() (PDFParse.getInfo()) — the metadata-only call the
+   * normal drawing upload route and the direct-to-Blob finalize route both
+   * use for pageCount. Real two-page PDF, no mocked worker loading.
+   */
+  it("getInfo() reports the real page count via the actual installed worker path", async () => {
+    const buffer = await buildTwoPagePdf();
+    const parser = new PDFParse({ data: buffer });
+    try {
+      const info = await parser.getInfo();
+      expect(info.total).toBe(2);
     } finally {
       await parser.destroy();
     }

@@ -4,6 +4,8 @@ import { extractionJobQueue } from "@/lib/jobs/extraction-worker";
 import { createStorageAdapter, resolveStorageProvider } from "@/lib/storage/storage-factory";
 import type { DocumentStorageAdapter } from "@/lib/storage/document-storage-adapter";
 import { hasReviewedRows, replaceExtractedTablesForFile } from "@/lib/repositories/extracted-table-repository";
+import { hasReviewedTableDerivedCandidates } from "@/lib/repositories/extracted-entity-repository";
+import { generateCandidatesFromStructuredTables } from "@/lib/services/source-candidate-bridge-service";
 import { parseCsvTables } from "./table-extraction/csv-table-parser";
 import { parseXlsxTables } from "./table-extraction/xlsx-table-parser";
 import { parsePdfTables } from "./table-extraction/pdf-table-parser";
@@ -25,8 +27,11 @@ function getProjectFileStorageAdapter(): DocumentStorageAdapter {
 extractionJobQueue.registerHandler(ExtractionEngineType.TABLE_EXTRACTION, async (job, ctx) => {
   const file = await prisma.projectFile.findUniqueOrThrow({ where: { id: job.projectFileId } });
 
-  if (await hasReviewedRows(job.companyId, job.projectFileId)) {
-    return { status: ExtractionJobStatus.COMPLETED, resultSummary: { skipped: true, reason: "Reviewed rows already exist for this file; re-extraction was skipped to avoid discarding confirmed work." } };
+  // A reviewed row (legacy per-row review path) OR a reviewed TABLE_PARSER candidate (the
+  // structured source → review-candidate bridge) both mean this file's tables must not be
+  // silently replaced — a reviewed candidate's source table/row must never disappear under it.
+  if ((await hasReviewedRows(job.companyId, job.projectFileId)) || (await hasReviewedTableDerivedCandidates(job.companyId, job.projectFileId))) {
+    return { status: ExtractionJobStatus.COMPLETED, resultSummary: { skipped: true, reason: "Reviewed rows or review candidates already exist for this file; re-extraction was skipped to avoid discarding confirmed work." } };
   }
 
   await ctx.updateProgress(20, "reading file");
@@ -70,6 +75,16 @@ extractionJobQueue.registerHandler(ExtractionEngineType.TABLE_EXTRACTION, async 
   // PDF-derived tables are a best-effort heuristic (no real layout coordinates) — never let them land as auto-confirmable; force review regardless of confidence.
   const status = file.extension === "pdf" ? ExtractionJobStatus.NEEDS_REVIEW : ExtractionJobStatus.COMPLETED;
 
+  await ctx.updateProgress(80, "generating review candidates");
+  // job.projectId is always the canonical project UUID (every enqueue call resolves it before
+  // creating the job), so this always resolves immediately — never fails on a fresh table set.
+  const bridgeResult = await generateCandidatesFromStructuredTables({
+    companyId: job.companyId,
+    projectId: job.projectId,
+    projectFileId: job.projectFileId,
+    extractionJobId: job.id,
+  });
+
   return {
     status,
     resultSummary: {
@@ -77,6 +92,12 @@ extractionJobQueue.registerHandler(ExtractionEngineType.TABLE_EXTRACTION, async 
       extractedTableIds: createdTableIds,
       rowsFound: parsedTables.reduce((sum, table) => sum + table.rows.length, 0),
       method: parsedTables[0]?.method,
+      tablesConsidered: bridgeResult.tablesConsidered,
+      rowsConsidered: bridgeResult.rowsConsidered,
+      candidatesCreated: bridgeResult.candidatesCreated,
+      ...(bridgeResult.status === "skipped"
+        ? { candidateGenerationSkipped: true, candidateGenerationSkippedReason: bridgeResult.reason }
+        : {}),
     },
   };
 });

@@ -9,11 +9,22 @@ import {
   toExtractedEntityDTO,
   type CreateExtractedEntityInput,
 } from "@/lib/repositories/extracted-entity-repository";
+import { getProjectRecord } from "@/lib/repositories/project-repository";
+import { getProjectFileRecord } from "@/lib/repositories/project-file-repository";
 import { createAuditLog } from "@/lib/repositories/audit-repository";
 
 export async function manuallyAddExtractedEntity(actor: CurrentActor, input: CreateExtractedEntityInput) {
   requireCapability(actor, "files:manage");
-  const row = await createExtractedEntity(actor.companyId, { ...input, extractionMethod: "MANUAL" });
+  // input.projectId/projectFileId are caller-supplied (possibly a project slug) — resolve both
+  // to canonical, tenant-owned records and prove the file actually belongs to that project
+  // before persisting. A cross-company or cross-project file id must never be accepted.
+  const project = await getProjectRecord(actor.companyId, input.projectId);
+  const file = await getProjectFileRecord(actor.companyId, input.projectFileId);
+  if (file.projectId !== project.id) {
+    throw new AppError("FILE_PROJECT_MISMATCH", "This file does not belong to the specified project.", 400);
+  }
+
+  const row = await createExtractedEntity(actor.companyId, { ...input, projectId: project.id, projectFileId: file.id, extractionMethod: "MANUAL" });
   await createAuditLog(actor.companyId, { entityType: "ExtractedEntity", entityId: row.id, action: "ENTITY_MANUALLY_ADDED", payload: { entityType: input.entityType, label: input.label } });
   return toExtractedEntityDTO(row);
 }

@@ -22,7 +22,9 @@ import {
   listRegisteredDatasetsSummary,
   processNextBatch,
   registerAndDryRun,
+  STALE_IMPORT_RUNNING_MS,
 } from "../src/lib/services/master-catalogue-import-job-service";
+import { MasterCatalogueImportJobStatus } from "@prisma/client";
 
 const RUN_ID = `${Date.now()}-${process.pid}`;
 const HVAC_DATASET_ID = "quantara-master-hvac-v1";
@@ -46,6 +48,18 @@ async function cleanupHvacItems() {
     await prisma.masterItemVersion.deleteMany({ where: { masterItemId: item.id } });
   }
   await prisma.masterItem.deleteMany({ where: { disciplineId: mechanical.id, itemCode: { startsWith: "HVAC-" } } });
+}
+
+/**
+ * CodeRabbit finding — cleanupHvacItems() scopes deletion to the "mechanical"
+ * discipline, but a plain `itemCode: { startsWith: "HVAC-" }` count could
+ * also match an HVAC-prefixed item belonging to a different discipline,
+ * making a concurrency assertion fail for unrelated data. Every HVAC item
+ * count in this file must use this same discipline-scoped condition.
+ */
+async function hvacItemWhere() {
+  const mechanical = await prisma.masterDiscipline.findUnique({ where: { key: "mechanical" } });
+  return { disciplineId: mechanical?.id ?? "__no_mechanical_discipline__", itemCode: { startsWith: "HVAC-" } } as const;
 }
 
 describe("CATALOGUE-PROD-ACTIVATE: registered dataset registry", () => {
@@ -311,6 +325,108 @@ describe("CATALOGUE-PROD-ACTIVATE: resumable job execution (integration, real lo
       job = await processNextBatch(ownerActor(), dryRun.id);
     }
     expect(job.status).toBe("COMPLETED");
+  }, 60_000);
+
+  /**
+   * CATALOGUE-CONCURRENCY-REPAIR — the regression test for the real
+   * production incident (Structural dataset, job stuck IMPORT_RUNNING with
+   * insertedCount exceeding processedRows and a UNIQUE_CONSTRAINT error).
+   * The existing "prevents two concurrent continuations" test above only
+   * exercises two callers racing to claim a job starting from PAUSED — that
+   * case was already safe (only one atomic updateMany can match). The actual
+   * incident is a *sequential* race: caller A's claim already committed
+   * (job is now IMPORT_RUNNING with a fresh updatedAt) before caller B reads
+   * it. This deterministically reproduces exactly that moment by writing the
+   * post-claim state directly, then proves a second caller cannot steal it.
+   */
+  it("a fresh IMPORT_RUNNING job cannot be stolen by a second caller, and is left completely untouched", async () => {
+    const dryRun = await registerAndDryRun(ownerActor(), HVAC_DATASET_ID);
+    const armed = await confirmExecution(ownerActor(), dryRun.id);
+    expect(armed.status).toBe("PAUSED");
+
+    // Simulate caller A's claim having already committed a moment ago (well within the
+    // staleness window) — the exact state a second caller would observe mid-race.
+    await prisma.masterCatalogueImportJob.update({
+      where: { id: dryRun.id },
+      data: { status: MasterCatalogueImportJobStatus.IMPORT_RUNNING },
+    });
+    const freshClaimSnapshot = await prisma.masterCatalogueImportJob.findUniqueOrThrow({ where: { id: dryRun.id } });
+    expect(Date.now() - freshClaimSnapshot.updatedAt.getTime()).toBeLessThan(STALE_IMPORT_RUNNING_MS);
+
+    await expect(processNextBatch(ownerActor(), dryRun.id)).rejects.toMatchObject({ code: "JOB_BUSY" });
+
+    // Left completely untouched: no cursor movement, no status change, no row processed.
+    const afterStolenAttempt = await prisma.masterCatalogueImportJob.findUniqueOrThrow({ where: { id: dryRun.id } });
+    expect(afterStolenAttempt.status).toBe(MasterCatalogueImportJobStatus.IMPORT_RUNNING);
+    expect(afterStolenAttempt.currentRowCursor).toBe(freshClaimSnapshot.currentRowCursor);
+    expect(afterStolenAttempt.processedRows).toBe(freshClaimSnapshot.processedRows);
+    expect(afterStolenAttempt.updatedAt).toEqual(freshClaimSnapshot.updatedAt);
+
+    // Restore to PAUSED (what caller A would have left it as on success) and drain to
+    // completion so afterAll cleanup finds a consistent final state.
+    await prisma.masterCatalogueImportJob.update({ where: { id: dryRun.id }, data: { status: MasterCatalogueImportJobStatus.PAUSED } });
+    let job = await getJob(ownerActor(), dryRun.id);
+    // processNextBatch always returns PAUSED or a terminal status on success — IMPORT_RUNNING
+    // is only ever a transient DB state during a call, never a value handed back to the caller.
+    while (job.status === "PAUSED") {
+      job = await processNextBatch(ownerActor(), dryRun.id);
+    }
+    expect(job.status).toBe("COMPLETED");
+    expect(job.insertedCount + job.updatedCount + job.unchangedCount).toBe(job.processedRows);
+  }, 60_000);
+
+  it("a genuinely stale IMPORT_RUNNING job (abandoned by a crashed/timed-out caller) can be recovered and processes exactly one more batch, with no duplicates", async () => {
+    // Every earlier test in this suite leaves the full 891 HVAC items in place (only the
+    // dedicated cancellation test below cleans up), so a fresh slate is required here —
+    // otherwise every "insert" is really an idempotent "unchanged" and proves nothing about
+    // duplicate creation.
+    await cleanupHvacItems();
+
+    const dryRun = await registerAndDryRun(ownerActor(), HVAC_DATASET_ID);
+    const armed = await confirmExecution(ownerActor(), dryRun.id);
+    const afterFirstBatch = await processNextBatch(ownerActor(), armed.id);
+    expect(afterFirstBatch.status).toBe("PAUSED");
+    expect(afterFirstBatch.insertedCount).toBe(afterFirstBatch.processedRows); // clean slate: every row in batch 1 is a real insert
+    const cursorAfterFirstBatch = afterFirstBatch.processedRows;
+    const itemsAfterFirstBatch = await prisma.masterItem.count({ where: await hvacItemWhere() });
+    expect(itemsAfterFirstBatch).toBe(cursorAfterFirstBatch);
+
+    // Simulate an abandoned claim: IMPORT_RUNNING with an updatedAt well past the
+    // staleness window — as if a prior serverless invocation crashed mid-batch and
+    // never reached the final status update.
+    await prisma.masterCatalogueImportJob.update({
+      where: { id: dryRun.id },
+      data: { status: MasterCatalogueImportJobStatus.IMPORT_RUNNING, updatedAt: new Date(Date.now() - STALE_IMPORT_RUNNING_MS - 5_000) },
+    });
+
+    const recovered = await processNextBatch(ownerActor(), dryRun.id);
+    expect(recovered.processedRows).toBeGreaterThan(cursorAfterFirstBatch);
+    expect(recovered.processedRows - cursorAfterFirstBatch).toBeLessThanOrEqual(recovered.batchSize);
+
+    const itemsAfterRecovery = await prisma.masterItem.count({ where: await hvacItemWhere() });
+    // Exactly the newly-inserted rows from this one recovered batch — no duplicates from the
+    // abandoned claim being processed twice.
+    expect(itemsAfterRecovery - itemsAfterFirstBatch).toBe(recovered.processedRows - cursorAfterFirstBatch);
+
+    // Drain to completion so afterAll cleanup finds a consistent final state. processNextBatch
+    // always returns PAUSED or a terminal status on success — IMPORT_RUNNING is only ever a
+    // transient DB state during a call, never a value handed back to the caller.
+    let job = recovered;
+    while (job.status === "PAUSED") {
+      job = await processNextBatch(ownerActor(), dryRun.id);
+    }
+    expect(job.status).toBe("COMPLETED");
+    expect(job.processedRows).toBe(891);
+    expect(job.itemsCreated).toBe(891);
+    expect(job.versionsCreated).toBe(891);
+    expect(job.insertedCount + job.updatedCount + job.unchangedCount).toBe(job.processedRows);
+
+    const finalItemCount = await prisma.masterItem.count({ where: await hvacItemWhere() });
+    expect(finalItemCount).toBe(891); // no duplicate MasterItems from the stale-recovery batch
+    const versionCount = await prisma.masterItemVersion.count({ where: { masterItem: await hvacItemWhere() } });
+    expect(versionCount).toBe(891); // no duplicate MasterItemVersions
+    const classificationCount = await prisma.masterItemClassification.count({ where: { masterItem: await hvacItemWhere() } });
+    expect(classificationCount).toBe(job.classificationsCreated); // no duplicate classifications
   }, 60_000);
 
   it("a cancelled job can never be continued again", async () => {

@@ -18,8 +18,17 @@ export const dynamic = "force-dynamic";
  * reviewed migration and nothing else. The actual upsert/record logic lives
  * in catalogue-reference-disciplines-migration-service.ts so it can be
  * exercised directly in tests without going through HTTP/auth.
+ *
+ * POST, not GET: this writes reference rows and migration history, so it
+ * must not be reachable via a plain link/prefetch/crawler request.
+ * PLATFORM_OWNER-only via requirePlatformActor() — the correct mechanism
+ * for this actor/role family (PlatformActor/PlatformRole), matching every
+ * other /api/admin/master-catalogue and /api/admin/system-health route in
+ * this codebase. src/lib/auth/rbac.ts's requireCapability() is a distinct,
+ * parallel mechanism scoped to CurrentActor/UserRole (company-tenant
+ * mutating routes) and does not apply to platform-level actors.
  */
-export async function GET() {
+export async function POST() {
   try {
     await requirePlatformActor([PlatformRole.PLATFORM_OWNER]);
     const result = await applyCatalogueReferenceDisciplinesMigration();

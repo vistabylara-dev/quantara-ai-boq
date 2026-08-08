@@ -1,6 +1,10 @@
 import { MasterCatalogueImportJobStatus, MasterCatalogueImportStatus } from "@prisma/client";
 import { prisma } from "@/lib/db/prisma";
 import { AppError, NotFoundError, PermissionDeniedError } from "@/lib/errors/app-error";
+import {
+  databaseStorageCapacityError,
+  isDatabaseStorageCapacityError,
+} from "@/lib/db/database-capacity-error";
 import type { PlatformActor } from "@/lib/auth/platform-authorization";
 import { recordPlatformActionAudit } from "@/lib/repositories/platform-action-audit-repository";
 import {
@@ -120,6 +124,29 @@ function loadDatasetRowSequence(dataset: DatasetDefinition): { validRows: Parsed
 function fileNameForCursor(rowFileBoundaries: { fileName: string; startIndex: number; endIndex: number }[], cursor: number): string | null {
   const boundary = rowFileBoundaries.find((b) => cursor >= b.startIndex && cursor < b.endIndex);
   return boundary?.fileName ?? rowFileBoundaries[rowFileBoundaries.length - 1]?.fileName ?? null;
+}
+
+/**
+ * CATALOGUE-CAPACITY-RECOVERY (CodeRabbit follow-up) — an itemCode is only
+ * guaranteed unique at the database level (@@unique([disciplineId,
+ * itemCode])), never proven unique in the source rows themselves. A
+ * partial-batch reconciliation candidate identified purely by
+ * itemCode + sourceBatchId can't distinguish "this exact batch slice's own
+ * crashed partial write" from "a different, already-completed and
+ * already-counted earlier batch of the same job that happened to touch the
+ * same itemCode" — reconciling the latter would double count it. Returns
+ * only the itemCodes from `sliceItemCodes` that occur EXACTLY ONCE across
+ * `allRows` (the entire dataset's row sequence) — the only ones a database
+ * match can be unambiguously attributed to this slice. Exported as a pure
+ * function specifically so this guarantee is unit-testable without needing
+ * a dataset that actually contains a duplicate.
+ */
+export function itemCodesUnambiguouslyInSlice(allRows: { itemCode: string }[], sliceItemCodes: string[]): string[] {
+  const occurrenceCount = new Map<string, number>();
+  for (const row of allRows) {
+    occurrenceCount.set(row.itemCode, (occurrenceCount.get(row.itemCode) ?? 0) + 1);
+  }
+  return sliceItemCodes.filter((code) => occurrenceCount.get(code) === 1);
 }
 
 /**
@@ -447,7 +474,71 @@ export async function processNextBatch(owner: PlatformActor, jobId: string) {
 
     const cursor = job.currentRowCursor;
     const slice = validRows.slice(cursor, cursor + job.batchSize);
+
+    // CATALOGUE-CAPACITY-RECOVERY — read-only reconciliation for a batch that
+    // may already have partially persisted rows from an earlier attempt that
+    // was interrupted (e.g. SQLSTATE 53100 disk-full — see the catch block
+    // below, which deliberately leaves the job IMPORT_RUNNING rather than
+    // advancing its checkpoint so PR12's stale-claim path can retry it).
+    // evaluate()'s own row logic is already idempotent (find-before-create,
+    // upsert-by-unique-key, content-equality checks), so a replay can never
+    // create a duplicate MasterItem/MasterItemVersion/MasterItemClassification
+    // — but a row fully persisted by the crashed attempt now looks
+    // "unchanged" (or only partially "updated") to THIS call, so trusting
+    // batchResult alone would silently undercount insertedCount/itemsCreated/
+    // versionsCreated/classificationsCreated relative to what the database
+    // actually holds.
+    //
+    // CodeRabbit follow-up — sourceBatchId alone identifies "created by this
+    // job" but not "created by THIS exact batch slice": itemCode is only
+    // guaranteed unique at the database level (@@unique([disciplineId,
+    // itemCode])), nothing proves the source rows never repeat an itemCode
+    // across two different batches of the same job. A match on itemCode +
+    // sourceBatchId could therefore belong to a different, already-completed
+    // and already-counted earlier batch that happened to touch the same
+    // code — reconciling it again would double count. Only itemCodes that
+    // occur EXACTLY ONCE across the entire dataset's row sequence can be
+    // unambiguously attributed to this exact slice; every dataset currently
+    // registered has zero duplicate itemCodes, but nothing enforces that as
+    // an invariant, so the reconciliation itself must not assume it.
+    const sliceItemCodes = slice.map((row) => row.itemCode);
+    const uniqueToThisSliceItemCodes = itemCodesUnambiguouslyInSlice(validRows, sliceItemCodes);
+    const alreadyPersistedThisAttempt = job.legacyBatchId && uniqueToThisSliceItemCodes.length > 0
+      ? await prisma.masterItem.findMany({
+          where: { disciplineId: ctx.disciplineId, itemCode: { in: uniqueToThisSliceItemCodes }, sourceBatchId: job.legacyBatchId },
+          select: { id: true, itemCode: true },
+        })
+      : [];
+    const reconciledItemCodes = new Set(alreadyPersistedThisAttempt.map((item) => item.itemCode));
+    const reconciledItemIds = alreadyPersistedThisAttempt.map((item) => item.id);
+    const reconciledInserted = reconciledItemIds.length;
+    const [reconciledVersions, reconciledClassifications] = reconciledItemIds.length > 0
+      ? await Promise.all([
+          prisma.masterItemVersion.count({ where: { masterItemId: { in: reconciledItemIds } } }),
+          prisma.masterItemClassification.count({ where: { masterItemId: { in: reconciledItemIds } } }),
+        ])
+      : [0, 0];
+
     const batchResult = await evaluate(owner, ctx, dataset.profile, slice, true, job.legacyBatchId ?? undefined);
+
+    // CodeRabbit follow-up — a reconciled row already exists, so evaluate()
+    // necessarily classifies it as "update" (if a version/classification was
+    // still missing) or "unchanged" (if fully complete) in batchResult, never
+    // "insert". Crediting the full reconciledInserted count to insertedCount
+    // *in addition to* whatever bucket batchResult placed those same rows in
+    // would let insertedCount + updatedCount + unchangedCount exceed
+    // processedRows. Move each reconciled row's THIS-PASS bucket credit into
+    // "inserted" instead, so every processed row still contributes to
+    // exactly one outcome bucket overall.
+    let reconciledFromUpdated = 0;
+    let reconciledFromUnchanged = 0;
+    if (reconciledItemCodes.size > 0) {
+      for (const result of batchResult.results) {
+        if (!reconciledItemCodes.has(result.itemCode)) continue;
+        if (result.outcome === "update") reconciledFromUpdated += 1;
+        else if (result.outcome === "unchanged") reconciledFromUnchanged += 1;
+      }
+    }
 
     const newCursor = cursor + slice.length;
     const isComplete = newCursor >= validRows.length;
@@ -461,12 +552,18 @@ export async function processNextBatch(owner: PlatformActor, jobId: string) {
       data: {
         currentRowCursor: newCursor,
         processedRows: newCursor,
-        insertedCount: { increment: batchResult.inserted },
-        updatedCount: { increment: batchResult.updated },
-        unchangedCount: { increment: batchResult.unchanged },
-        itemsCreated: { increment: batchResult.inserted },
-        versionsCreated: { increment: batchResult.versionsCreated },
-        classificationsCreated: { increment: batchResult.classificationsCreated },
+        // reconciledInserted/Versions/Classifications are 0 for every normal batch (nothing to
+        // reconcile) and only become non-zero when this exact slice was partially persisted by
+        // an earlier, uncounted attempt — see the reconciliation comment above. Subtracting
+        // reconciledFromUpdated/Unchanged from their batchResult buckets before adding the full
+        // reconciledInserted count keeps insertedCount + updatedCount + unchangedCount exactly
+        // equal to this batch's row count, even when reconciliation applies.
+        insertedCount: { increment: batchResult.inserted + reconciledInserted },
+        updatedCount: { increment: batchResult.updated - reconciledFromUpdated },
+        unchangedCount: { increment: batchResult.unchanged - reconciledFromUnchanged },
+        itemsCreated: { increment: batchResult.inserted + reconciledInserted },
+        versionsCreated: { increment: batchResult.versionsCreated + reconciledVersions },
+        classificationsCreated: { increment: batchResult.classificationsCreated + reconciledClassifications },
         hierarchyNodesCreated: { increment: batchResult.hierarchyNodesCreated },
         categoriesCreated: { increment: batchResult.categoriesCreated },
         currentFileName: fileNameForCursor(rowFileBoundaries, Math.min(newCursor, validRows.length - 1)),
@@ -489,11 +586,36 @@ export async function processNextBatch(owner: PlatformActor, jobId: string) {
 
     return toJobDTO(updated);
   } catch (error) {
+    // PostgreSQL SQLSTATE 53100 means the database cannot allocate any more
+    // storage. Do not attempt the usual FAILED-state update: that write is
+    // subject to the same exhausted capacity and would mask the original
+    // persistence failure (the production incident did exactly that). Leave
+    // the claimed job IMPORT_RUNNING; after capacity is increased, PR12's
+    // stale-claim path can reclaim the persisted cursor without duplicating
+    // records. A job from an actual capacity incident still needs a read-only
+    // partial-batch reconciliation before reuse because row writes and the
+    // job checkpoint are not one transaction (creation counters may lag).
+    if (isDatabaseStorageCapacityError(error)) {
+      console.error("[catalogue-import] Database storage capacity exceeded while processing a batch", error);
+      throw databaseStorageCapacityError();
+    }
+
     const message = error instanceof AppError ? error.message : "Unexpected error while processing this batch.";
-    await prisma.masterCatalogueImportJob.update({
-      where: { id: jobId },
-      data: { status: MasterCatalogueImportJobStatus.FAILED, lastErrorMessage: message },
-    });
+    try {
+      await prisma.masterCatalogueImportJob.update({
+        where: { id: jobId },
+        data: { status: MasterCatalogueImportJobStatus.FAILED, lastErrorMessage: message },
+      });
+    } catch (statusUpdateError) {
+      // Capacity may be exhausted between the original failure and this
+      // diagnostic write. Preserve the actionable storage outcome instead of
+      // returning a second, unexplained Prisma 500 from the catch block.
+      if (isDatabaseStorageCapacityError(statusUpdateError)) {
+        console.error("[catalogue-import] Database storage capacity exceeded while recording a batch failure", statusUpdateError);
+        throw databaseStorageCapacityError();
+      }
+      throw statusUpdateError;
+    }
     throw error;
   }
 }

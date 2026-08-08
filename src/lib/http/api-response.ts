@@ -1,6 +1,11 @@
 import { Prisma } from "@prisma/client";
 import { NextResponse } from "next/server";
 import { ZodError, type ZodType, type ZodTypeDef } from "zod";
+import {
+  DATABASE_STORAGE_CAPACITY_ERROR_CODE,
+  DATABASE_STORAGE_CAPACITY_ERROR_MESSAGE,
+  isDatabaseStorageCapacityError,
+} from "@/lib/db/database-capacity-error";
 import { AppError } from "@/lib/errors/app-error";
 
 export type ApiErrorBody = {
@@ -79,6 +84,15 @@ export function handleApiError(error: unknown) {
       "The request contains invalid fields.",
       400,
       zodFieldErrors(error),
+    );
+  }
+
+  if (isDatabaseStorageCapacityError(error)) {
+    console.error("[database] Storage capacity exceeded", error);
+    return apiFailure(
+      DATABASE_STORAGE_CAPACITY_ERROR_CODE,
+      DATABASE_STORAGE_CAPACITY_ERROR_MESSAGE,
+      507,
     );
   }
 

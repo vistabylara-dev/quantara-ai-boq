@@ -6,8 +6,21 @@ import { useSearchParams } from "next/navigation";
 import { CheckCircle2, ChevronLeft, ExternalLink, File, Folder, HardDrive, Loader2, Unplug } from "lucide-react";
 import { apiClient, getApiErrorMessage } from "@/lib/api/client";
 
-type ProviderDetail = {
-  connection: { status: string; connectedAt: string; lastSyncAt: string | null } | null;
+type GoogleDriveRuntimeStatus = {
+  configured: boolean;
+  redirectUri: string | null;
+  missingConfiguration: string[];
+  connectionStatus: "NOT_CONFIGURED" | "NOT_CONNECTED" | "CONNECTED" | "REAUTH_REQUIRED" | "UNAVAILABLE";
+};
+
+const CONNECT_ERROR_MESSAGES: Record<string, string> = {
+  GOOGLE_DRIVE_NOT_CONFIGURED: "Google Drive connection needs administrator configuration.",
+  GOOGLE_DRIVE_OAUTH_STATE_MISMATCH: "The connection request could not be verified. Please reconnect.",
+  GOOGLE_DRIVE_AUTH_DENIED: "Google Drive read-only authorization was not granted.",
+  GOOGLE_DRIVE_TOKEN_ERROR: "Google Drive could not complete authorization. Please reconnect.",
+  GOOGLE_DRIVE_NO_REFRESH_TOKEN: "Google Drive did not provide durable authorization. Revoke the prior grant in Google and reconnect.",
+  GOOGLE_DRIVE_REAUTH_REQUIRED: "Google Drive authorization expired or was revoked. Please reconnect.",
+  GOOGLE_DRIVE_CONNECT_FAILED: "Google Drive connection could not be started. Please try again.",
 };
 
 type DriveEntry = {
@@ -49,15 +62,16 @@ function formatBytes(bytes: number | null): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-export default function GoogleDriveConnectPanel({ provider }: { provider: ProviderDetail }) {
+export default function GoogleDriveConnectPanel({ runtimeStatus }: { runtimeStatus: GoogleDriveRuntimeStatus }) {
   const searchParams = useSearchParams();
-  const connectError = searchParams.get("connectError");
+  const connectErrorCode = searchParams.get("connectError");
+  const connectError = connectErrorCode
+    ? CONNECT_ERROR_MESSAGES[connectErrorCode] ?? "Google Drive connection could not be completed. Please try again."
+    : null;
   const justConnected = searchParams.get("connected") === "1";
 
-  const connectionNeedsReconnect = provider.connection !== null
-    && ["ERROR", "REAUTH_REQUIRED"].includes(provider.connection.status);
-  const isConnected = provider.connection !== null
-    && !["DISCONNECTED", "ERROR", "REAUTH_REQUIRED"].includes(provider.connection.status);
+  const connectionNeedsReconnect = runtimeStatus.connectionStatus === "REAUTH_REQUIRED";
+  const isConnected = runtimeStatus.connectionStatus === "CONNECTED";
 
   const [folderStack, setFolderStack] = useState<{ id: string | undefined; name: string }[]>([{ id: undefined, name: "My Drive" }]);
   const [entries, setEntries] = useState<DriveEntry[]>([]);
@@ -181,13 +195,41 @@ export default function GoogleDriveConnectPanel({ provider }: { provider: Provid
           {connectError}
         </div>
       )}
-      {justConnected && !connectError && (
+      {justConnected && !connectError && isConnected && (
         <div className="mb-6 rounded-2xl border border-emerald-700/40 bg-emerald-950/10 px-4 py-3 text-sm text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300">
           Google Drive connected successfully.
         </div>
       )}
 
-      {!isConnected ? (
+      {!runtimeStatus.configured ? (
+        <div className="text-center">
+          <HardDrive className="mx-auto h-8 w-8 text-[#7B879C] dark:text-[#7F8DA6]" aria-hidden="true" />
+          <h1 className="mt-4 text-xl font-semibold text-[#0B1630] dark:text-white">Administrator configuration required</h1>
+          <p className="mx-auto mt-3 max-w-lg text-sm text-[#536078] dark:text-[#B8C4D8]">
+            Google Drive connection needs administrator configuration before authorization can begin.
+          </p>
+          {runtimeStatus.redirectUri ? (
+            <p className="mx-auto mt-3 max-w-2xl break-all text-xs text-[#7B879C] dark:text-[#7F8DA6]">
+              Authorized callback: {runtimeStatus.redirectUri}
+            </p>
+          ) : null}
+        </div>
+      ) : runtimeStatus.connectionStatus === "UNAVAILABLE" ? (
+        <div className="text-center">
+          <HardDrive className="mx-auto h-8 w-8 text-[#7B879C] dark:text-[#7F8DA6]" aria-hidden="true" />
+          <h1 className="mt-4 text-xl font-semibold text-[#0B1630] dark:text-white">Google Drive status unavailable</h1>
+          <p className="mx-auto mt-3 max-w-md text-sm text-[#536078] dark:text-[#B8C4D8]">
+            Quantara could not validate the live Google Drive grant. Refresh this page or reconnect later.
+          </p>
+          <button
+            type="button"
+            onClick={() => window.location.reload()}
+            className="mt-6 inline-flex rounded-2xl border border-[#D9E2EC] px-4 py-2 text-sm font-semibold text-[#0B1630] hover:bg-[#EEF3F8] dark:border-[#1E2A42] dark:text-white dark:hover:bg-[#111D33]"
+          >
+            Check again
+          </button>
+        </div>
+      ) : !isConnected ? (
         <div className="text-center">
           <HardDrive className="mx-auto h-8 w-8 text-[#7B879C] dark:text-[#7F8DA6]" aria-hidden="true" />
           <h1 className="mt-4 text-xl font-semibold text-[#0B1630] dark:text-white">

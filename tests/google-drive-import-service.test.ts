@@ -206,13 +206,13 @@ describe("Google Drive project-file import service", () => {
       accessToken: "old-access-secret",
       refreshToken: "stable-refresh-secret",
       expiresAt: new Date(Date.now() - 1_000).toISOString(),
-      scope: "drive.readonly",
+      scope: "https://www.googleapis.com/auth/drive.readonly",
       tokenType: "Bearer",
     });
     mocks.refreshGoogleDriveAccessToken.mockResolvedValue({
       access_token: "new-access-secret",
       expires_in: 3600,
-      scope: "drive.readonly",
+      scope: "https://www.googleapis.com/auth/drive.readonly",
       token_type: "Bearer",
     });
 
@@ -237,7 +237,7 @@ describe("Google Drive project-file import service", () => {
       accessToken: "expired-access",
       refreshToken: null,
       expiresAt: new Date(Date.now() - 1_000).toISOString(),
-      scope: "drive.readonly",
+      scope: "https://www.googleapis.com/auth/drive.readonly",
       tokenType: "Bearer",
     });
     await expectCode(
@@ -258,7 +258,7 @@ describe("Google Drive project-file import service", () => {
       accessToken: "expired-access",
       refreshToken: "refresh-secret",
       expiresAt: new Date(Date.now() - 1_000).toISOString(),
-      scope: "drive.readonly",
+      scope: "https://www.googleapis.com/auth/drive.readonly",
       tokenType: "Bearer",
     });
     mocks.refreshGoogleDriveAccessToken.mockRejectedValue(

@@ -16,9 +16,67 @@ const TOKEN_ENDPOINT = "https://oauth2.googleapis.com/token";
 const DRIVE_FILES_ENDPOINT = "https://www.googleapis.com/drive/v3/files";
 
 // Read-only scope — least privilege for browsing/importing files, no write/delete access to the user's Drive.
-const DRIVE_SCOPE = "https://www.googleapis.com/auth/drive.readonly";
+export const GOOGLE_DRIVE_READONLY_SCOPE = "https://www.googleapis.com/auth/drive.readonly";
 
-function requireEnv(name: "GOOGLE_DRIVE_CLIENT_ID" | "GOOGLE_DRIVE_CLIENT_SECRET" | "APP_BASE_URL"): string {
+const REQUIRED_GOOGLE_DRIVE_ENV = [
+  "GOOGLE_DRIVE_CLIENT_ID",
+  "GOOGLE_DRIVE_CLIENT_SECRET",
+  "APP_BASE_URL",
+] as const;
+
+type GoogleDriveEnvironmentName = typeof REQUIRED_GOOGLE_DRIVE_ENV[number];
+
+export type GoogleDriveConfigurationStatus = {
+  configured: boolean;
+  redirectUri: string | null;
+  missingConfiguration: GoogleDriveEnvironmentName[];
+};
+
+function parseAppBaseUrl(value: string): URL | null {
+  try {
+    const url = new URL(value);
+    const isLocalHost = ["localhost", "127.0.0.1", "::1"].includes(url.hostname);
+    const isProduction = process.env.NODE_ENV === "production";
+
+    if (
+      url.username
+      || url.password
+      || url.search
+      || url.hash
+      || (url.pathname !== "/" && url.pathname !== "")
+      || (isProduction && url.protocol !== "https:")
+      || (isProduction && isLocalHost)
+      || (isProduction && process.env.VERCEL_ENV === "preview")
+      || (!isProduction && !["http:", "https:"].includes(url.protocol))
+    ) {
+      return null;
+    }
+
+    return new URL(url.origin);
+  } catch {
+    return null;
+  }
+}
+
+export function getGoogleDriveConfigurationStatus(): GoogleDriveConfigurationStatus {
+  const missingConfiguration = REQUIRED_GOOGLE_DRIVE_ENV.filter((name) => !process.env[name]?.trim());
+  const baseUrl = process.env.APP_BASE_URL?.trim();
+  const parsedBaseUrl = baseUrl ? parseAppBaseUrl(baseUrl) : null;
+
+  if (baseUrl && !parsedBaseUrl && !missingConfiguration.includes("APP_BASE_URL")) {
+    missingConfiguration.push("APP_BASE_URL");
+  }
+
+  return {
+    configured: missingConfiguration.length === 0,
+    redirectUri: parsedBaseUrl
+      ? new URL("/api/integrations/google-drive/callback", parsedBaseUrl).toString()
+      : null,
+    missingConfiguration,
+  };
+}
+
+function requireEnv(name: GoogleDriveEnvironmentName): string {
   const value = process.env[name];
   if (!value) {
     throw new AppError(
@@ -30,17 +88,25 @@ function requireEnv(name: "GOOGLE_DRIVE_CLIENT_ID" | "GOOGLE_DRIVE_CLIENT_SECRET
   return value;
 }
 
-function redirectUri(): string {
-  return `${requireEnv("APP_BASE_URL")}/api/integrations/google-drive/callback`;
+export function getGoogleDriveCallbackUri(): string {
+  const status = getGoogleDriveConfigurationStatus();
+  if (!status.configured || !status.redirectUri) {
+    throw new AppError(
+      "GOOGLE_DRIVE_NOT_CONFIGURED",
+      "Google Drive connection needs administrator configuration.",
+      503,
+    );
+  }
+  return status.redirectUri;
 }
 
 export function buildGoogleDriveAuthorizationUrl(state: string): string {
   const clientId = requireEnv("GOOGLE_DRIVE_CLIENT_ID");
   const params = new URLSearchParams({
     client_id: clientId,
-    redirect_uri: redirectUri(),
+    redirect_uri: getGoogleDriveCallbackUri(),
     response_type: "code",
-    scope: DRIVE_SCOPE,
+    scope: GOOGLE_DRIVE_READONLY_SCOPE,
     access_type: "offline", // required to receive a refresh_token
     prompt: "consent", // forces the consent screen every time, guaranteeing a refresh_token even on re-connect
     state,
@@ -52,13 +118,24 @@ export type GoogleTokenResponse = {
   access_token: string;
   refresh_token?: string;
   expires_in: number;
-  scope: string;
-  token_type: string;
+  scope?: string;
+  token_type?: string;
 };
+
+export function googleDriveTokenHasReadOnlyScope(token: Pick<GoogleTokenResponse, "scope">): boolean {
+  return token.scope?.split(/\s+/).includes(GOOGLE_DRIVE_READONLY_SCOPE) === true;
+}
 
 async function parseTokenResponse(response: Response): Promise<GoogleTokenResponse> {
   const body = await response.json().catch(() => null) as any;
-  if (!response.ok || !body || typeof body.access_token !== "string") {
+  if (
+    !response.ok
+    || !body
+    || typeof body.access_token !== "string"
+    || typeof body.expires_in !== "number"
+    || !Number.isFinite(body.expires_in)
+    || body.expires_in <= 0
+  ) {
     throw new AppError(
       "GOOGLE_DRIVE_TOKEN_ERROR",
       "Google Drive could not complete the authorization request. Please reconnect and try again.",
@@ -78,7 +155,7 @@ export async function exchangeGoogleDriveAuthorizationCode(code: string): Promis
       code,
       client_id: clientId,
       client_secret: clientSecret,
-      redirect_uri: redirectUri(),
+      redirect_uri: getGoogleDriveCallbackUri(),
       grant_type: "authorization_code",
     }),
   });
@@ -165,6 +242,22 @@ async function fetchGoogleDrive(url: string, accessToken: string): Promise<Respo
     return await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } });
   } catch {
     throw new AppError("GOOGLE_DRIVE_API_ERROR", "Google Drive could not be reached. Please try again.", 502);
+  }
+}
+
+/** Verifies the live grant without returning any account or file data. */
+export async function verifyGoogleDriveAccess(accessToken: string): Promise<void> {
+  const params = new URLSearchParams({
+    pageSize: "1",
+    fields: "files(id)",
+  });
+  const response = await fetchGoogleDrive(`${DRIVE_FILES_ENDPOINT}?${params.toString()}`, accessToken);
+  if (!response.ok) {
+    return throwDriveApiError(response, "verify authorization");
+  }
+  const body = await response.json().catch(() => null) as unknown;
+  if (!body || typeof body !== "object" || !Array.isArray((body as { files?: unknown }).files)) {
+    throw new AppError("GOOGLE_DRIVE_API_ERROR", "Google Drive returned an invalid authorization response.", 502);
   }
 }
 

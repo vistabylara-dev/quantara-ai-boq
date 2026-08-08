@@ -156,4 +156,129 @@ describe("catalogue import storage-capacity recovery", () => {
     expect(await prisma.masterItemVersion.count({ where: { masterItem: await hvacItemWhere() } })).toBe(recovered.batchSize);
     expect(await prisma.masterItemClassification.count({ where: { masterItem: await hvacItemWhere() } })).toBe(recovered.classificationsCreated);
   }, 120_000);
+
+  /**
+   * CodeRabbit Major finding #1 — the case the test above does NOT cover: the
+   * existing test fails on the very FIRST masterItem.create() call, so zero
+   * rows ever persist before the checkpoint is left stale. In the real
+   * incident, SQLSTATE 53100 can strike after one or more rows have already
+   * fully persisted (MasterItem + MasterItemVersion + classifications) but
+   * before the batch's checkpoint/counter update runs. This test forces
+   * exactly that: a few rows complete for real, then the failure hits
+   * mid-batch, then recovery must reconcile — not duplicate, not undercount.
+   */
+  it("recovers a batch that already persisted several full rows before a 53100 failure, with no duplicates and reconciled counters", async () => {
+    // The test above leaves its job PAUSED (never drained or cancelled) rather than resetting
+    // state, so this test must not assume a clean slate.
+    await cleanTestState();
+
+    const dryRun = await registerAndDryRun(ownerActor(), HVAC_DATASET_ID);
+    const armed = await confirmExecution(ownerActor(), dryRun.id);
+    expect(armed.status).toBe(MasterCatalogueImportJobStatus.PAUSED);
+
+    const productionCapacityError = new Prisma.PrismaClientUnknownRequestError(
+      'ConnectorError(ConnectorError { kind: QueryError(PostgresError { code: "53100", message: "could not extend file because project size limit (512 MB) has been exceeded" }) })',
+      { clientVersion: "6.19.3" },
+    );
+
+    const ROWS_TO_PERSIST_BEFORE_FAILURE = 3;
+    const masterItemDelegate = prisma.masterItem;
+    const originalCreate = masterItemDelegate.create.bind(masterItemDelegate);
+    let createCallCount = 0;
+    // Prisma's generated delegate type is too complex a generic overload for vi.spyOn's
+    // mockImplementation to accept directly; the existing test above works around the same
+    // proxy-backed delegate issue by using mockRejectedValueOnce instead.
+    const createSpy = vi.spyOn(masterItemDelegate, "create").mockImplementation((async (args: any) => {
+      createCallCount += 1;
+      // Let the first few rows persist for real (item + version + classifications, exactly
+      // like a genuine successful insert), then fail exactly like the production incident —
+      // mid-batch, with real rows already on disk.
+      if (createCallCount > ROWS_TO_PERSIST_BEFORE_FAILURE) throw productionCapacityError;
+      return originalCreate(args);
+    }) as unknown as typeof originalCreate);
+    const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
+
+    try {
+      await expect(processNextBatch(ownerActor(), dryRun.id)).rejects.toMatchObject({
+        code: DATABASE_STORAGE_CAPACITY_ERROR_CODE,
+        status: 507,
+      });
+    } finally {
+      createSpy.mockRestore();
+      Object.defineProperty(masterItemDelegate, "create", {
+        value: originalCreate,
+        configurable: true,
+        writable: true,
+      });
+      consoleSpy.mockRestore();
+    }
+
+    // Real, verifiable partial persistence — proves this isn't the "nothing wrote yet" case
+    // the test above already covers.
+    expect(await prisma.masterItem.count({ where: await hvacItemWhere() })).toBe(ROWS_TO_PERSIST_BEFORE_FAILURE);
+    expect(await prisma.masterItemVersion.count({ where: { masterItem: await hvacItemWhere() } })).toBe(ROWS_TO_PERSIST_BEFORE_FAILURE);
+
+    // The exact inconsistency CodeRabbit flagged: real rows exist, but the job checkpoint
+    // doesn't know it yet.
+    const blocked = await prisma.masterCatalogueImportJob.findUniqueOrThrow({ where: { id: dryRun.id } });
+    expect(blocked).toMatchObject({
+      status: MasterCatalogueImportJobStatus.IMPORT_RUNNING,
+      currentRowCursor: 0,
+      processedRows: 0,
+      insertedCount: 0,
+      itemsCreated: 0,
+      versionsCreated: 0,
+      classificationsCreated: 0,
+      lastErrorMessage: null,
+    });
+
+    // PR12's protection must still hold: a fresh IMPORT_RUNNING claim cannot be stolen.
+    await expect(processNextBatch(ownerActor(), dryRun.id)).rejects.toMatchObject({ code: "JOB_BUSY" });
+
+    // Simulate the claim going stale (capacity fixed, owner retries later).
+    await prisma.masterCatalogueImportJob.update({
+      where: { id: dryRun.id },
+      data: { updatedAt: new Date(Date.now() - STALE_IMPORT_RUNNING_MS - 5_000) },
+    });
+
+    const recovered = await processNextBatch(ownerActor(), dryRun.id);
+    expect(recovered.status).toBe("PAUSED");
+    // Correct cursor advancement: the full batch, not a partial one (processedRows and
+    // currentRowCursor are always set to the same value — see processNextBatch's update call
+    // — but only processedRows is exposed on this DTO).
+    expect(recovered.processedRows).toBe(recovered.batchSize);
+
+    const finalItemCount = await prisma.masterItem.count({ where: await hvacItemWhere() });
+    const finalVersionCount = await prisma.masterItemVersion.count({ where: { masterItem: await hvacItemWhere() } });
+    const finalClassificationCount = await prisma.masterItemClassification.count({ where: { masterItem: await hvacItemWhere() } });
+
+    // No duplicate MasterItem: exactly one per row in the batch, not batchSize + the 3 that
+    // already existed.
+    expect(finalItemCount).toBe(recovered.batchSize);
+    // No duplicate MasterItemVersion, and none dangling/missing for the 3 rows that already
+    // had one before recovery ran.
+    expect(finalVersionCount).toBe(recovered.batchSize);
+
+    // The actual fix: the job's own counters now match database reality exactly, including
+    // the rows the crashed attempt already wrote — without this reconciliation, insertedCount/
+    // itemsCreated would silently read (batchSize - 3) instead.
+    expect(recovered.insertedCount).toBe(recovered.batchSize);
+    expect(recovered.itemsCreated).toBe(recovered.batchSize);
+    expect(recovered.versionsCreated).toBe(finalVersionCount);
+    expect(recovered.classificationsCreated).toBe(finalClassificationCount);
+
+    // Successful continued processing after recovery, exactly like a normal run.
+    let job = recovered;
+    while (job.status === "PAUSED") {
+      job = await processNextBatch(ownerActor(), dryRun.id);
+    }
+    expect(["COMPLETED", "COMPLETED_WITH_WARNINGS"]).toContain(job.status);
+
+    const totalItemCount = await prisma.masterItem.count({ where: await hvacItemWhere() });
+    const totalVersionCount = await prisma.masterItemVersion.count({ where: { masterItem: await hvacItemWhere() } });
+    expect(totalItemCount).toBe(891); // full HVAC dataset, no duplicates anywhere across the whole run
+    expect(totalVersionCount).toBe(891); // no dangling/duplicate versions anywhere across the whole run
+    expect(job.itemsCreated).toBe(891);
+    expect(job.versionsCreated).toBe(totalVersionCount);
+  }, 120_000);
 });

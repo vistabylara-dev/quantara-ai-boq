@@ -451,6 +451,41 @@ export async function processNextBatch(owner: PlatformActor, jobId: string) {
 
     const cursor = job.currentRowCursor;
     const slice = validRows.slice(cursor, cursor + job.batchSize);
+
+    // CATALOGUE-CAPACITY-RECOVERY — read-only reconciliation for a batch that
+    // may already have partially persisted rows from an earlier attempt that
+    // was interrupted (e.g. SQLSTATE 53100 disk-full — see the catch block
+    // below, which deliberately leaves the job IMPORT_RUNNING rather than
+    // advancing its checkpoint so PR12's stale-claim path can retry it).
+    // evaluate()'s own row logic is already idempotent (find-before-create,
+    // upsert-by-unique-key, content-equality checks), so a replay can never
+    // create a duplicate MasterItem/MasterItemVersion/MasterItemClassification
+    // — but a row fully persisted by the crashed attempt now looks
+    // "unchanged" (or only partially "updated") to THIS call, so trusting
+    // batchResult alone would silently undercount insertedCount/itemsCreated/
+    // versionsCreated/classificationsCreated relative to what the database
+    // actually holds. Since currentRowCursor has not advanced past this
+    // batch, any MasterItem in this exact row slice that already carries this
+    // job's own legacyBatchId can only be a leftover from an earlier,
+    // never-counted attempt at this same batch — never a separate,
+    // already-tallied one — so its existing version/classification counts
+    // are safe to fold back into this call's totals.
+    const sliceItemCodes = slice.map((row) => row.itemCode);
+    const alreadyPersistedThisAttempt = job.legacyBatchId && sliceItemCodes.length > 0
+      ? await prisma.masterItem.findMany({
+          where: { disciplineId: ctx.disciplineId, itemCode: { in: sliceItemCodes }, sourceBatchId: job.legacyBatchId },
+          select: { id: true },
+        })
+      : [];
+    const reconciledItemIds = alreadyPersistedThisAttempt.map((item) => item.id);
+    const reconciledInserted = reconciledItemIds.length;
+    const [reconciledVersions, reconciledClassifications] = reconciledItemIds.length > 0
+      ? await Promise.all([
+          prisma.masterItemVersion.count({ where: { masterItemId: { in: reconciledItemIds } } }),
+          prisma.masterItemClassification.count({ where: { masterItemId: { in: reconciledItemIds } } }),
+        ])
+      : [0, 0];
+
     const batchResult = await evaluate(owner, ctx, dataset.profile, slice, true, job.legacyBatchId ?? undefined);
 
     const newCursor = cursor + slice.length;
@@ -465,12 +500,15 @@ export async function processNextBatch(owner: PlatformActor, jobId: string) {
       data: {
         currentRowCursor: newCursor,
         processedRows: newCursor,
-        insertedCount: { increment: batchResult.inserted },
+        // reconciledInserted/Versions/Classifications are 0 for every normal batch (nothing to
+        // reconcile) and only become non-zero when this exact slice was partially persisted by
+        // an earlier, uncounted attempt — see the reconciliation comment above.
+        insertedCount: { increment: batchResult.inserted + reconciledInserted },
         updatedCount: { increment: batchResult.updated },
         unchangedCount: { increment: batchResult.unchanged },
-        itemsCreated: { increment: batchResult.inserted },
-        versionsCreated: { increment: batchResult.versionsCreated },
-        classificationsCreated: { increment: batchResult.classificationsCreated },
+        itemsCreated: { increment: batchResult.inserted + reconciledInserted },
+        versionsCreated: { increment: batchResult.versionsCreated + reconciledVersions },
+        classificationsCreated: { increment: batchResult.classificationsCreated + reconciledClassifications },
         hierarchyNodesCreated: { increment: batchResult.hierarchyNodesCreated },
         categoriesCreated: { increment: batchResult.categoriesCreated },
         currentFileName: fileNameForCursor(rowFileBoundaries, Math.min(newCursor, validRows.length - 1)),

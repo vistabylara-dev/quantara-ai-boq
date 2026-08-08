@@ -21,9 +21,23 @@ async function deleteSyntheticRows() {
   await prisma.masterDiscipline.deleteMany({ where: { key: { in: [TEST_KEY_A, TEST_KEY_B] } } });
 }
 
+// The concurrency test below commits a real _prisma_migrations row for
+// CATALOGUE_REFERENCE_DISCIPLINES_MIGRATION_NAME (it exercises the real
+// production migration name, not a synthetic one, since it must prove the
+// LOCK TABLE actually serializes the real code path). Deleting only that
+// history row — never the real interior-fit-out/landscaping MasterDiscipline
+// rows other tests and the local dev seed depend on — keeps the test
+// repeatable against a persistent local database instead of only passing
+// once per fresh database.
+async function deleteMigrationHistoryRow() {
+  await prisma.$executeRaw`DELETE FROM "_prisma_migrations" WHERE migration_name = ${CATALOGUE_REFERENCE_DISCIPLINES_MIGRATION_NAME}`;
+}
+
 describe("CATALOGUE-INTEGRITY-REPAIR: reference-data migration logic", () => {
   afterEach(deleteSyntheticRows);
   afterAll(deleteSyntheticRows);
+  afterEach(deleteMigrationHistoryRow);
+  afterAll(deleteMigrationHistoryRow);
 
   it("authoritative master-data.ts contains interior-fit-out and landscaping", () => {
     const source = readFileSync("prisma/seed-data/master-data.ts", "utf-8");
@@ -115,11 +129,15 @@ describe("CATALOGUE-INTEGRITY-REPAIR: reference-data migration logic", () => {
    * from both observing the missing row under Postgres's default READ
    * COMMITTED isolation). Runs against the real interior-fit-out/landscaping
    * keys and the real migration name — safe and idempotent, exactly like the
-   * "real...safe to run" test above; this permanently (and correctly)
-   * records the migration as applied in the local dev DB, same as it
-   * eventually should be applied for real.
+   * "real...safe to run" test above. deleteMigrationHistoryRow (afterEach/
+   * afterAll below) removes only the _prisma_migrations bookkeeping row this
+   * test itself commits, never the real MasterDiscipline rows, so this test
+   * stays repeatable against a persistent local database instead of only
+   * passing once per fresh one.
    */
   it("two concurrent applyCatalogueReferenceDisciplinesMigration() calls never create duplicate migration history", async () => {
+    await deleteMigrationHistoryRow(); // self-heal if a prior interrupted run left this row behind
+
     const [a, b] = await Promise.all([
       applyCatalogueReferenceDisciplinesMigration(),
       applyCatalogueReferenceDisciplinesMigration(),

@@ -113,6 +113,13 @@ export async function ensureCatalogueReferenceDisciplines(
  * own create()-then-catch-P2002 pattern independently makes the discipline
  * rows themselves race-safe even without this lock; this lock exists
  * specifically for the migration-history bookkeeping.
+ *
+ * Explicit maxWait/timeout: Prisma's interactive-transaction defaults
+ * (maxWait 2000ms, timeout 5000ms) are sized for uncontended transactions.
+ * Here a second caller can legitimately block on the LOCK TABLE for as
+ * long as the first caller's whole critical section takes, so the
+ * defaults risk the second caller timing out with an error instead of
+ * cleanly observing alreadyApplied once the first caller commits.
  */
 export async function applyCatalogueReferenceDisciplinesMigration(): Promise<{ alreadyApplied: boolean; log: string[] }> {
   return prisma.$transaction(async (tx) => {
@@ -138,5 +145,5 @@ export async function applyCatalogueReferenceDisciplinesMigration(): Promise<{ a
     log.push(`Recorded ${CATALOGUE_REFERENCE_DISCIPLINES_MIGRATION_NAME} as applied in _prisma_migrations.`);
 
     return { alreadyApplied: false, log };
-  });
+  }, { maxWait: 15_000, timeout: 30_000 });
 }

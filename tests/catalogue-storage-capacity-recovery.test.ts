@@ -13,6 +13,7 @@ import { prisma } from "../src/lib/db/prisma";
 import { DATABASE_STORAGE_CAPACITY_ERROR_CODE } from "../src/lib/db/database-capacity-error";
 import {
   confirmExecution,
+  itemCodesUnambiguouslyInSlice,
   processNextBatch,
   registerAndDryRun,
   STALE_IMPORT_RUNNING_MS,
@@ -327,6 +328,11 @@ describe("catalogue import storage-capacity recovery", () => {
     expect(recovered.versionsCreated).toBe(finalVersionCount);
     expect(recovered.classificationsCreated).toBe(finalClassificationCount);
 
+    // CodeRabbit Finding B — every processed row must contribute to exactly one outcome
+    // bucket. Without redistributing a reconciled row's this-pass outcome (update/unchanged)
+    // into "inserted", this sum could exceed processedRows.
+    expect(recovered.insertedCount + recovered.updatedCount + recovered.unchangedCount).toBe(recovered.processedRows);
+
     // Successful continued processing after recovery, exactly like a normal run.
     let job = recovered;
     while (job.status === "PAUSED") {
@@ -340,6 +346,9 @@ describe("catalogue import storage-capacity recovery", () => {
     expect(totalVersionCount).toBe(891); // no dangling/duplicate versions anywhere across the whole run
     expect(job.itemsCreated).toBe(891);
     expect(job.versionsCreated).toBe(totalVersionCount);
+    // The partition invariant holds across the ENTIRE job's lifetime too, not just the one
+    // reconciled batch.
+    expect(job.insertedCount + job.updatedCount + job.unchangedCount).toBe(job.processedRows);
   }, 120_000);
 
   /**
@@ -354,89 +363,102 @@ describe("catalogue import storage-capacity recovery", () => {
   it("cleanup deletes only this run's own records — unrelated HVAC jobs, items, versions, and classifications survive", async () => {
     await cleanTestState(); // start from a known state regardless of prior test ordering
 
-    const unrelatedCompany = await prisma.company.create({
-      data: { legalName: `Unrelated Co ${RUN_ID}`, tradeName: "Unrelated Co", email: `unrelated-${RUN_ID}@example.com` },
-    });
-    const unrelatedUser = await prisma.user.create({
-      data: {
-        companyId: unrelatedCompany.id,
-        email: `unrelated-${RUN_ID}-owner@example.com`,
-        passwordHash: `hash-unrelated-${RUN_ID}`,
-        fullName: "Unrelated Owner",
-        role: UserRole.COMPANY_OWNER,
-        platformRole: PlatformRole.PLATFORM_OWNER,
-        isActive: true,
-        emailVerifiedAt: new Date(),
-      },
-    });
-    const mechanical = await prisma.masterDiscipline.upsert({
-      where: { key: "mechanical" },
-      update: {},
-      create: { key: "mechanical", name: "Mechanical" },
-    });
-    const unrelatedCategory = await prisma.masterCategory.create({
-      data: { disciplineId: mechanical.id, key: `unrelated-${RUN_ID}`, name: "Unrelated Category", path: `unrelated-${RUN_ID}`, depth: 0 },
-    });
-    const unrelatedBatch = await prisma.masterCatalogueImportBatch.create({
-      data: {
-        actorUserId: unrelatedUser.id,
-        disciplineId: mechanical.id,
-        uploadedFileName: `unrelated-${RUN_ID}.csv`,
-        checksum: `unrelated-checksum-${RUN_ID}`,
-        status: MasterCatalogueImportStatus.EXECUTED,
-        totalRows: 1,
-      },
-    });
-    const unrelatedJob = await prisma.masterCatalogueImportJob.create({
-      data: {
-        datasetId: HVAC_DATASET_ID,
-        datasetVersion: "1",
-        actorUserId: unrelatedUser.id,
-        disciplineId: mechanical.id,
-        legacyBatchId: unrelatedBatch.id,
-        status: MasterCatalogueImportJobStatus.COMPLETED,
-        sourceChecksum: `unrelated-source-checksum-${RUN_ID}`,
-        manifestJson: [],
-        totalRows: 1,
-        processedRows: 1,
-      },
-    });
-    const unrelatedItem = await prisma.masterItem.create({
-      data: {
-        disciplineId: mechanical.id,
-        categoryId: unrelatedCategory.id,
-        itemCode: `HVAC-UNRELATED-${RUN_ID}`,
-        name: "Unrelated fixture item",
-        shortDescription: "Unrelated fixture item",
-        fullDescription: "Unrelated fixture item",
-        defaultUnit: "no.",
-        sourceBatchId: unrelatedBatch.id,
-      },
-    });
-    const unrelatedVersion = await prisma.masterItemVersion.create({
-      data: {
-        masterItemId: unrelatedItem.id,
-        versionNumber: 1,
-        status: MasterItemVersionStatus.PUBLISHED,
-        effectiveDate: new Date(),
-        name: "Unrelated fixture item",
-        shortDescription: "Unrelated fixture item",
-        fullDescription: "Unrelated fixture item",
-        primaryUnit: "no.",
-        createdByUserId: unrelatedUser.id,
-      },
-    });
-    const unrelatedClassification = await prisma.masterItemClassification.create({
-      data: {
-        masterItemId: unrelatedItem.id,
-        system: MasterClassificationSystem.MASTERFORMAT_2020,
-        code: `UNRELATED-${RUN_ID}`,
-        label: "Unrelated",
-        source: "unrelated-fixture",
-      },
-    });
+    // CodeRabbit Finding C — every fixture handle is declared before try and created INSIDE
+    // it, so a failure partway through setup leaves finally able to clean up exactly what was
+    // actually created, never silently orphaning the rest (see the dedicated setup-failure
+    // test below for a direct proof of this).
+    let unrelatedCompany: Awaited<ReturnType<typeof prisma.company.create>> | undefined;
+    let unrelatedUser: Awaited<ReturnType<typeof prisma.user.create>> | undefined;
+    let unrelatedCategory: Awaited<ReturnType<typeof prisma.masterCategory.create>> | undefined;
+    let unrelatedBatch: Awaited<ReturnType<typeof prisma.masterCatalogueImportBatch.create>> | undefined;
+    let unrelatedJob: Awaited<ReturnType<typeof prisma.masterCatalogueImportJob.create>> | undefined;
+    let unrelatedItem: Awaited<ReturnType<typeof prisma.masterItem.create>> | undefined;
+    let unrelatedVersion: Awaited<ReturnType<typeof prisma.masterItemVersion.create>> | undefined;
+    let unrelatedClassification: Awaited<ReturnType<typeof prisma.masterItemClassification.create>> | undefined;
 
     try {
+      unrelatedCompany = await prisma.company.create({
+        data: { legalName: `Unrelated Co ${RUN_ID}`, tradeName: "Unrelated Co", email: `unrelated-${RUN_ID}@example.com` },
+      });
+      unrelatedUser = await prisma.user.create({
+        data: {
+          companyId: unrelatedCompany.id,
+          email: `unrelated-${RUN_ID}-owner@example.com`,
+          passwordHash: `hash-unrelated-${RUN_ID}`,
+          fullName: "Unrelated Owner",
+          role: UserRole.COMPANY_OWNER,
+          platformRole: PlatformRole.PLATFORM_OWNER,
+          isActive: true,
+          emailVerifiedAt: new Date(),
+        },
+      });
+      const mechanical = await prisma.masterDiscipline.upsert({
+        where: { key: "mechanical" },
+        update: {},
+        create: { key: "mechanical", name: "Mechanical" },
+      });
+      unrelatedCategory = await prisma.masterCategory.create({
+        data: { disciplineId: mechanical.id, key: `unrelated-${RUN_ID}`, name: "Unrelated Category", path: `unrelated-${RUN_ID}`, depth: 0 },
+      });
+      unrelatedBatch = await prisma.masterCatalogueImportBatch.create({
+        data: {
+          actorUserId: unrelatedUser.id,
+          disciplineId: mechanical.id,
+          uploadedFileName: `unrelated-${RUN_ID}.csv`,
+          checksum: `unrelated-checksum-${RUN_ID}`,
+          status: MasterCatalogueImportStatus.EXECUTED,
+          totalRows: 1,
+        },
+      });
+      unrelatedJob = await prisma.masterCatalogueImportJob.create({
+        data: {
+          datasetId: HVAC_DATASET_ID,
+          datasetVersion: "1",
+          actorUserId: unrelatedUser.id,
+          disciplineId: mechanical.id,
+          legacyBatchId: unrelatedBatch.id,
+          status: MasterCatalogueImportJobStatus.COMPLETED,
+          sourceChecksum: `unrelated-source-checksum-${RUN_ID}`,
+          manifestJson: [],
+          totalRows: 1,
+          processedRows: 1,
+        },
+      });
+      unrelatedItem = await prisma.masterItem.create({
+        data: {
+          disciplineId: mechanical.id,
+          categoryId: unrelatedCategory.id,
+          itemCode: `HVAC-UNRELATED-${RUN_ID}`,
+          name: "Unrelated fixture item",
+          shortDescription: "Unrelated fixture item",
+          fullDescription: "Unrelated fixture item",
+          defaultUnit: "no.",
+          sourceBatchId: unrelatedBatch.id,
+        },
+      });
+      unrelatedVersion = await prisma.masterItemVersion.create({
+        data: {
+          masterItemId: unrelatedItem.id,
+          versionNumber: 1,
+          status: MasterItemVersionStatus.PUBLISHED,
+          effectiveDate: new Date(),
+          name: "Unrelated fixture item",
+          shortDescription: "Unrelated fixture item",
+          fullDescription: "Unrelated fixture item",
+          primaryUnit: "no.",
+          createdByUserId: unrelatedUser.id,
+        },
+      });
+      unrelatedClassification = await prisma.masterItemClassification.create({
+        data: {
+          masterItemId: unrelatedItem.id,
+          system: MasterClassificationSystem.MASTERFORMAT_2020,
+          code: `UNRELATED-${RUN_ID}`,
+          label: "Unrelated",
+          source: "unrelated-fixture",
+        },
+      });
+
       // A real job/batch/items owned by THIS run, to prove cleanup actually removes what it
       // should while leaving the unrelated fixture above alone.
       const dryRun = await registerAndDryRun(ownerActor(), HVAC_DATASET_ID);
@@ -466,15 +488,221 @@ describe("catalogue import storage-capacity recovery", () => {
     } finally {
       // This test manufactured the unrelated fixture itself, so it — not the shared
       // cleanTestState(), which must never be able to touch it — is responsible for removing
-      // it, leaving the database clean for whatever runs next.
-      await prisma.masterItemClassification.deleteMany({ where: { masterItemId: unrelatedItem.id } });
-      await prisma.masterItemVersion.deleteMany({ where: { masterItemId: unrelatedItem.id } });
-      await prisma.masterItem.deleteMany({ where: { id: unrelatedItem.id } });
-      await prisma.masterCatalogueImportJob.deleteMany({ where: { id: unrelatedJob.id } });
-      await prisma.masterCatalogueImportBatch.deleteMany({ where: { id: unrelatedBatch.id } });
-      await prisma.masterCategory.deleteMany({ where: { id: unrelatedCategory.id } });
-      await prisma.user.deleteMany({ where: { id: unrelatedUser.id } });
-      await prisma.company.deleteMany({ where: { id: unrelatedCompany.id } });
+      // it, leaving the database clean for whatever runs next. Only delete handles that were
+      // actually created (Finding C) — a failure partway through the try block must not
+      // attempt to delete something that was never created.
+      if (unrelatedClassification) await prisma.masterItemClassification.deleteMany({ where: { id: unrelatedClassification.id } });
+      if (unrelatedVersion) await prisma.masterItemVersion.deleteMany({ where: { id: unrelatedVersion.id } });
+      if (unrelatedItem) await prisma.masterItem.deleteMany({ where: { id: unrelatedItem.id } });
+      if (unrelatedJob) await prisma.masterCatalogueImportJob.deleteMany({ where: { id: unrelatedJob.id } });
+      if (unrelatedBatch) await prisma.masterCatalogueImportBatch.deleteMany({ where: { id: unrelatedBatch.id } });
+      if (unrelatedCategory) await prisma.masterCategory.deleteMany({ where: { id: unrelatedCategory.id } });
+      if (unrelatedUser) await prisma.user.deleteMany({ where: { id: unrelatedUser.id } });
+      if (unrelatedCompany) await prisma.company.deleteMany({ where: { id: unrelatedCompany.id } });
     }
   }, 60_000);
+
+  /**
+   * CodeRabbit Final Re-Review, Finding C — proves the fix directly: force a failure on the
+   * LAST fixture-creation call (after company/user/category/batch/job/item/version already
+   * succeeded) and confirm nothing from any of those earlier steps is left behind. If cleanup
+   * correctly handles the "failed at the very last step" case, it trivially handles failing
+   * at any earlier step too, since strictly fewer records would exist to clean up.
+   */
+  it("a failure partway through unrelated-fixture setup leaves no residue", async () => {
+    const setupRunId = `${RUN_ID}-setupfail`;
+    let failCompany: Awaited<ReturnType<typeof prisma.company.create>> | undefined;
+    let failUser: Awaited<ReturnType<typeof prisma.user.create>> | undefined;
+    let failCategory: Awaited<ReturnType<typeof prisma.masterCategory.create>> | undefined;
+    let failBatch: Awaited<ReturnType<typeof prisma.masterCatalogueImportBatch.create>> | undefined;
+    let failJob: Awaited<ReturnType<typeof prisma.masterCatalogueImportJob.create>> | undefined;
+    let failItem: Awaited<ReturnType<typeof prisma.masterItem.create>> | undefined;
+    let failVersion: Awaited<ReturnType<typeof prisma.masterItemVersion.create>> | undefined;
+
+    const classificationDelegate = prisma.masterItemClassification;
+    const originalClassificationCreate = classificationDelegate.create.bind(classificationDelegate);
+    const failureSpy = vi.spyOn(classificationDelegate, "create").mockRejectedValueOnce(new Error("simulated setup failure"));
+
+    try {
+      await expect(
+        (async () => {
+          failCompany = await prisma.company.create({
+            data: { legalName: `SetupFail Co ${setupRunId}`, tradeName: "SetupFail Co", email: `${setupRunId}@example.com` },
+          });
+          failUser = await prisma.user.create({
+            data: {
+              companyId: failCompany.id,
+              email: `${setupRunId}-owner@example.com`,
+              passwordHash: `hash-${setupRunId}`,
+              fullName: "SetupFail Owner",
+              role: UserRole.COMPANY_OWNER,
+              platformRole: PlatformRole.PLATFORM_OWNER,
+              isActive: true,
+              emailVerifiedAt: new Date(),
+            },
+          });
+          const mechanical = await prisma.masterDiscipline.upsert({
+            where: { key: "mechanical" },
+            update: {},
+            create: { key: "mechanical", name: "Mechanical" },
+          });
+          failCategory = await prisma.masterCategory.create({
+            data: { disciplineId: mechanical.id, key: `setupfail-${setupRunId}`, name: "SetupFail Category", path: `setupfail-${setupRunId}`, depth: 0 },
+          });
+          failBatch = await prisma.masterCatalogueImportBatch.create({
+            data: {
+              actorUserId: failUser.id,
+              disciplineId: mechanical.id,
+              uploadedFileName: `setupfail-${setupRunId}.csv`,
+              checksum: `setupfail-checksum-${setupRunId}`,
+              status: MasterCatalogueImportStatus.EXECUTED,
+              totalRows: 1,
+            },
+          });
+          failJob = await prisma.masterCatalogueImportJob.create({
+            data: {
+              datasetId: HVAC_DATASET_ID,
+              datasetVersion: "1",
+              actorUserId: failUser.id,
+              disciplineId: mechanical.id,
+              legacyBatchId: failBatch.id,
+              status: MasterCatalogueImportJobStatus.COMPLETED,
+              sourceChecksum: `setupfail-source-${setupRunId}`,
+              manifestJson: [],
+              totalRows: 1,
+              processedRows: 1,
+            },
+          });
+          failItem = await prisma.masterItem.create({
+            data: {
+              disciplineId: mechanical.id,
+              categoryId: failCategory.id,
+              itemCode: `HVAC-SETUPFAIL-${setupRunId}`,
+              name: "SetupFail fixture item",
+              shortDescription: "SetupFail fixture item",
+              fullDescription: "SetupFail fixture item",
+              defaultUnit: "no.",
+              sourceBatchId: failBatch.id,
+            },
+          });
+          failVersion = await prisma.masterItemVersion.create({
+            data: {
+              masterItemId: failItem.id,
+              versionNumber: 1,
+              status: MasterItemVersionStatus.PUBLISHED,
+              effectiveDate: new Date(),
+              name: "SetupFail fixture item",
+              shortDescription: "SetupFail fixture item",
+              fullDescription: "SetupFail fixture item",
+              primaryUnit: "no.",
+              createdByUserId: failUser.id,
+            },
+          });
+          // Mocked to throw once — simulates the setup failing on its very last step.
+          await prisma.masterItemClassification.create({
+            data: {
+              masterItemId: failItem.id,
+              system: MasterClassificationSystem.MASTERFORMAT_2020,
+              code: `SETUPFAIL-${setupRunId}`,
+              label: "SetupFail",
+              source: "setupfail-fixture",
+            },
+          });
+        })(),
+      ).rejects.toThrow("simulated setup failure");
+    } finally {
+      failureSpy.mockRestore();
+      Object.defineProperty(classificationDelegate, "create", { value: originalClassificationCreate, configurable: true, writable: true });
+
+      if (failVersion) await prisma.masterItemVersion.deleteMany({ where: { id: failVersion.id } });
+      if (failItem) await prisma.masterItem.deleteMany({ where: { id: failItem.id } });
+      if (failJob) await prisma.masterCatalogueImportJob.deleteMany({ where: { id: failJob.id } });
+      if (failBatch) await prisma.masterCatalogueImportBatch.deleteMany({ where: { id: failBatch.id } });
+      if (failCategory) await prisma.masterCategory.deleteMany({ where: { id: failCategory.id } });
+      if (failUser) await prisma.user.deleteMany({ where: { id: failUser.id } });
+      if (failCompany) await prisma.company.deleteMany({ where: { id: failCompany.id } });
+    }
+
+    // Prove nothing survives from ANY step of the failed setup — company, user, category,
+    // batch, job, and MasterItem (which cascades to its own version) are all gone.
+    expect(await prisma.company.findFirst({ where: { legalName: `SetupFail Co ${setupRunId}` } })).toBeNull();
+    expect(await prisma.user.findFirst({ where: { email: `${setupRunId}-owner@example.com` } })).toBeNull();
+    expect(await prisma.masterCategory.findFirst({ where: { key: `setupfail-${setupRunId}` } })).toBeNull();
+    expect(await prisma.masterCatalogueImportBatch.findFirst({ where: { uploadedFileName: `setupfail-${setupRunId}.csv` } })).toBeNull();
+    expect(await prisma.masterCatalogueImportJob.findFirst({ where: { sourceChecksum: `setupfail-source-${setupRunId}` } })).toBeNull();
+    expect(await prisma.masterItem.findFirst({ where: { itemCode: `HVAC-SETUPFAIL-${setupRunId}` } })).toBeNull();
+  }, 60_000);
+});
+
+/**
+ * CodeRabbit Final Re-Review, Finding A — pure unit coverage for the exact
+ * mechanism the reconciliation guard relies on. No dataset registered today
+ * actually contains a duplicate itemCode, so this can't be exercised through
+ * a real end-to-end import without either fabricating CSV content (not
+ * allowed) or fragile module mocking — a plain unit test on the extracted
+ * pure function proves the guard correctly regardless.
+ */
+describe("itemCodesUnambiguouslyInSlice (pure, no database)", () => {
+  it("excludes an itemCode that also appears outside the current slice, even though it's present in the slice", () => {
+    const allRows = [
+      { itemCode: "A" }, // row 0 — appears again below, outside any slice under test
+      { itemCode: "B" }, // row 1 — unique
+      { itemCode: "C" }, // row 2 — unique
+      { itemCode: "A" }, // row 3 — same code as row 0, in a LATER batch
+    ];
+    // Simulate "batch 2" = rows [1, 3): itemCodes ["B", "C"] are genuinely unique to this
+    // slice; "A" would also need to be excluded if it were part of this slice, since it
+    // occurs at both row 0 (a different, already-completed batch) and row 3.
+    const sliceItemCodes = ["B", "C"];
+    expect(itemCodesUnambiguouslyInSlice(allRows, sliceItemCodes)).toEqual(["B", "C"]);
+
+    // Now simulate a slice that DOES include the duplicated code alongside unique ones —
+    // this is the exact scenario CodeRabbit flagged: "A" must never be treated as safe to
+    // reconcile, because a database match on itemCode="A" could belong to the OTHER
+    // occurrence (a different, already-counted batch), not this slice's own row.
+    const sliceIncludingDuplicate = ["A", "B"];
+    expect(itemCodesUnambiguouslyInSlice(allRows, sliceIncludingDuplicate)).toEqual(["B"]);
+    expect(itemCodesUnambiguouslyInSlice(allRows, sliceIncludingDuplicate)).not.toContain("A");
+  });
+
+  it("returns every itemCode in the slice when none repeat anywhere in the dataset (the normal, current-production case)", () => {
+    const allRows = [{ itemCode: "X" }, { itemCode: "Y" }, { itemCode: "Z" }];
+    expect(itemCodesUnambiguouslyInSlice(allRows, ["X", "Y", "Z"])).toEqual(["X", "Y", "Z"]);
+  });
+
+  it("returns an empty array for an empty slice", () => {
+    expect(itemCodesUnambiguouslyInSlice([{ itemCode: "A" }, { itemCode: "A" }], [])).toEqual([]);
+  });
+});
+
+/**
+ * CodeRabbit Final Re-Review, Finding D — the nitpick suggests capturing the
+ * original property descriptor before spying and letting mockRestore()
+ * restore normally, only falling back to manual restoration "if needed."
+ * This proves it IS needed for this specific Prisma delegate: Prisma's
+ * generated client exposes model methods as Proxy-trapped accessors, not
+ * plain own-value properties (getOwnPropertyDescriptor on the underlying
+ * delegate reports the same shape whether or not a spy is active), and
+ * Vitest's mockRestore() leaves the spied property as an own `undefined`
+ * value rather than reinstating the callable method — breaking every
+ * subsequent call in the same process. Capturing "the original descriptor"
+ * wouldn't help either, since that descriptor never reflects the real
+ * underlying accessor. This documents why the manual bind-and-reassign
+ * workaround used above is necessary, not just stylistic.
+ */
+describe("Prisma delegate restoration after vi.spyOn (Finding D)", () => {
+  it("mockRestore() alone leaves a spied Prisma delegate method uncallable", async () => {
+    const delegate = prisma.masterItem;
+    const originalCreate = delegate.create.bind(delegate);
+
+    const spy = vi.spyOn(delegate, "create").mockRejectedValue(new Error("mocked for this diagnostic only"));
+    spy.mockRestore();
+
+    expect(typeof delegate.create).toBe("undefined");
+
+    // Restore it for real so this test doesn't leave the shared Prisma client broken for
+    // whatever runs next in this process.
+    Object.defineProperty(delegate, "create", { value: originalCreate, configurable: true, writable: true });
+    expect(typeof delegate.create).toBe("function");
+  });
 });

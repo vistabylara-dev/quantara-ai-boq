@@ -6,6 +6,7 @@ import type { Project } from "@/types/project";
 import { ApiClientError, apiClient, getApiErrorMessage } from "@/lib/api/client";
 import { formatDate } from "@/lib/formatting/dates";
 import { deriveProjectWorkflow } from "@/lib/guidance/project-workflow";
+import type { ProjectWorkflowSnapshot } from "@/lib/guidance/project-workflow-snapshot";
 import { ProjectWorkflowGuide } from "@/components/guidance/project-workflow-guide";
 
 type PageProps = {
@@ -15,8 +16,6 @@ type PageProps = {
 };
 
 type ProposalSummary = { id: string; status: string; recipientName: string; expiresAt: string };
-type ProjectFileSummary = { id: string };
-type ExtractedEntitySummary = { status: string };
 
 const PROPOSAL_STATUS_COLORS: Record<string, string> = {
   DRAFT: "text-slate-400",
@@ -36,8 +35,7 @@ export default function ProjectOverviewPage(props: PageProps) {
   const [project, setProject] = useState<Project | null>(null);
   const [latestProposal, setLatestProposal] = useState<ProposalSummary | null>(null);
   const [boqs, setBoqs] = useState<any[]>([]);
-  const [files, setFiles] = useState<ProjectFileSummary[]>([]);
-  const [extractions, setExtractions] = useState<ExtractedEntitySummary[]>([]);
+  const [workflowSnapshot, setWorkflowSnapshot] = useState<ProjectWorkflowSnapshot | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [notFound, setNotFound] = useState(false);
@@ -47,19 +45,21 @@ export default function ProjectOverviewPage(props: PageProps) {
     setError(null);
     setNotFound(false);
     try {
-      const [data, proposals, boqData, fileData, extractionData] = await Promise.all([
+      const [data, proposals, boqData, workflowSnapshotData] = await Promise.all([
         apiClient.get<Project>(`/api/projects/${encodeURIComponent(params.projectId)}`, signal),
         apiClient.get<ProposalSummary[]>(`/api/projects/${encodeURIComponent(params.projectId)}/proposals`, signal).catch(() => []),
         apiClient.get<any[]>(`/api/projects/${encodeURIComponent(params.projectId)}/boqs`, signal),
-        apiClient.get<ProjectFileSummary[]>(`/api/projects/${encodeURIComponent(params.projectId)}/files`, signal),
-        apiClient.get<ExtractedEntitySummary[]>(`/api/projects/${encodeURIComponent(params.projectId)}/extractions`, signal),
+        apiClient.get<ProjectWorkflowSnapshot>(
+          `/api/projects/${encodeURIComponent(params.projectId)}/workflow-snapshot`,
+          signal,
+        ).catch(() => null),
       ]);
 
+      if (signal?.aborted) return;
       setProject(data);
       setLatestProposal(proposals[0] ?? null);
       setBoqs([...boqData].sort((left, right) => (Number(right.revision?.replace(/^R/i, "")) || 0) - (Number(left.revision?.replace(/^R/i, "")) || 0)));
-      setFiles(fileData);
-      setExtractions(extractionData);
+      setWorkflowSnapshot(workflowSnapshotData);
     } catch (loadError) {
       if (loadError instanceof DOMException && loadError.name === "AbortError") return;
       if (loadError instanceof ApiClientError && loadError.status === 404) {
@@ -116,13 +116,14 @@ export default function ProjectOverviewPage(props: PageProps) {
     );
   }
 
-  const workflow = deriveProjectWorkflow({
-    projectExists: true,
-    projectId: project.id,
-    fileCount: files.length,
-    entityStatuses: extractions.map((entity) => entity.status),
-    hasBoq: Boolean(activeBoq),
-  });
+  const workflow = workflowSnapshot
+    ? deriveProjectWorkflow({
+        projectExists: true,
+        projectId: project.id,
+        snapshot: workflowSnapshot,
+        hasBoq: Boolean(activeBoq),
+      })
+    : null;
 
   return (
     <div className="space-y-6">
@@ -148,7 +149,23 @@ export default function ProjectOverviewPage(props: PageProps) {
         </div>
       </div>
 
-      <ProjectWorkflowGuide workflow={workflow} />
+      {workflow ? (
+        <ProjectWorkflowGuide workflow={workflow} />
+      ) : (
+        <section className="rounded-[28px] border border-amber-300 bg-amber-50 p-6 text-amber-950 dark:border-amber-400/30 dark:bg-amber-400/10 dark:text-amber-100 sm:p-8">
+          <h2 className="text-lg font-semibold">Project intelligence is temporarily unavailable</h2>
+          <p className="mt-2 max-w-3xl text-sm leading-6">
+            Quantara is not claiming workflow progress without a verified snapshot. Your project, sources, BOQ, documents, and other valid workspaces remain available.
+          </p>
+          <button
+            type="button"
+            onClick={() => void loadProject()}
+            className="mt-4 rounded-xl border border-amber-500 px-4 py-2 text-sm font-semibold transition hover:bg-amber-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-600 dark:hover:bg-amber-400/10"
+          >
+            Retry project intelligence
+          </button>
+        </section>
+      )}
 
       <div className="rounded-[32px] border border-slate-800 bg-slate-950 p-8">
         <h3 className="text-xl font-semibold text-white">Project summary</h3>

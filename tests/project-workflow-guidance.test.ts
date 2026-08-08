@@ -40,12 +40,12 @@ describe("deterministic project workflow guidance", () => {
     expect(stateOf(result, "EXTRACTION")).toBe("NOT_STARTED");
   });
 
-  it("C. sends files with no extraction candidates to Review Project Sources", () => {
+  it("C. sends files with no proven processing results to source processing", () => {
     const result = workflow({ fileCount: 2 });
 
     expect(result.nextStep).toEqual({
-      message: "Your project sources are available. Process the supported files to continue.",
-      ctaLabel: "Review Project Sources",
+      message: "Project sources are available, but completed processing results are not yet proven. Review the supported source-processing actions.",
+      ctaLabel: "View Source Processing",
       href: "/projects/dubai-tower/files",
     });
     expect(stateOf(result, "SOURCES")).toBe("COMPLETE");
@@ -61,8 +61,8 @@ describe("deterministic project workflow guidance", () => {
     });
 
     expect(result.nextStep).toEqual({
-      message: "Quantara found project information that requires professional review.",
-      ctaLabel: "Review Extracted Data",
+      message: "Quantara captured project information that requires professional confirmation, correction, or rejection.",
+      ctaLabel: "Review Extracted Information",
       href: "/projects/dubai-tower/extractions",
     });
     expect(stateOf(result, "EXTRACTION")).toBe("NEEDS_ATTENTION");
@@ -77,7 +77,7 @@ describe("deterministic project workflow guidance", () => {
     });
 
     expect(result.nextStep).toEqual({
-      message: "Source review is complete. Continue to dimension review in the BOQ workspace.",
+      message: "Extraction review is complete. Continue to the BOQ workspace to review the dimensions used for professional quantities.",
       ctaLabel: "Review Dimensions",
       href: "/projects/dubai-tower/boq",
     });
@@ -91,7 +91,7 @@ describe("deterministic project workflow guidance", () => {
     const result = workflow({ fileCount: 1, entityStatuses: ["CONFIRMED"], hasBoq: false });
 
     expect(result.nextStep).toEqual({
-      message: "Source review is complete. Create the BOQ workspace to begin dimension review.",
+      message: "Extraction review is complete. Open the BOQ workspace to begin professional dimension review.",
       ctaLabel: "Create BOQ",
       href: "/projects/dubai-tower/boq",
     });
@@ -106,7 +106,7 @@ describe("deterministic project workflow guidance", () => {
 
     expect(result.extractionSummary).toMatchObject({ total: 0, reviewed: 0, needsAttention: 0, complete: false });
     expect(stateOf(result, "EXTRACTION")).toBe("CURRENT");
-    expect(result.nextStep?.ctaLabel).toBe("Review Project Sources");
+    expect(result.nextStep?.ctaLabel).toBe("View Source Processing");
   });
 
   it("treats unknown extraction states as attention instead of implicit completion", () => {
@@ -183,6 +183,8 @@ describe("project source presentation", () => {
     expect(getProjectSourceProcessingState("COMPLETED")).toMatchObject({ label: "Ready", tone: "success" });
     expect(getProjectSourceProcessingState("PROCESSING", "NEEDS_REVIEW")).toMatchObject({ label: "Needs review", needsAttention: true });
     expect(getProjectSourceProcessingState("UPLOADED", "FAILED")).toMatchObject({ label: "Failed", tone: "error", needsAttention: true });
+    expect(getProjectSourceProcessingState("FAILED", "RUNNING", true)).toMatchObject({ label: "Processing", tone: "info", isProcessing: true });
+    expect(getProjectSourceProcessingState("FAILED", "COMPLETED", true)).toMatchObject({ label: "Ready", tone: "success", needsAttention: false });
   });
 
   it("uses a generic warning and fails safely for stored or unknown errors", () => {

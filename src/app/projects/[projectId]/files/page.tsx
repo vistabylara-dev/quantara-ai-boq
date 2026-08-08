@@ -5,7 +5,10 @@ import { useCallback, useEffect, useMemo, useState, use } from "react";
 import { apiClient, getApiErrorMessage } from "@/lib/api/client";
 import { formatDate } from "@/lib/formatting/dates";
 import StatusBadge, { formatStatusLabel } from "@/components/dashboard/status-badge";
+import { FeatureHint, FEATURE_HINT_REGISTRY } from "@/components/guidance/feature-hint";
+import { GuideTip } from "@/components/guidance/guide-tip";
 import { getProjectSourceOrigin, getProjectSourceProcessingState } from "@/lib/guidance/project-workflow";
+import type { ProjectWorkflowSnapshot } from "@/lib/guidance/project-workflow-snapshot";
 
 type FileView = {
   id: string;
@@ -26,12 +29,6 @@ type FileView = {
   processingErrorMessage: string | null;
   metadata: unknown;
   uploadedBy: { id: string; fullName: string; email: string };
-  createdAt: string;
-};
-
-type ExtractionJobView = {
-  id: string;
-  status: string;
   createdAt: string;
 };
 
@@ -68,10 +65,16 @@ export default function ProjectFilesPage(props: {
   const searchParams = use(props.searchParams);
   const requestedFileId = Array.isArray(searchParams.file) ? searchParams.file[0] : searchParams.file;
   const [files, setFiles] = useState<FileView[]>([]);
-  const [latestJobs, setLatestJobs] = useState<Record<string, ExtractionJobView | null>>({});
+  const [currentJobStatuses, setCurrentJobStatuses] = useState<Record<string, string | null>>({});
+  const [workflowSnapshot, setWorkflowSnapshot] = useState<ProjectWorkflowSnapshot | null>(null);
   const [selectedFileId, setSelectedFileId] = useState<string | null>(null);
   const [pages, setPages] = useState<PageView[]>([]);
   const [tables, setTables] = useState<TableView[]>([]);
+  const [pageResultsAvailable, setPageResultsAvailable] = useState<boolean | null>(null);
+  const [tableResultsAvailable, setTableResultsAvailable] = useState<boolean | null>(null);
+  const [detailWarning, setDetailWarning] = useState<string | null>(null);
+  const [filesAvailable, setFilesAvailable] = useState<boolean | null>(null);
+  const [snapshotWarning, setSnapshotWarning] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -81,47 +84,96 @@ export default function ProjectFilesPage(props: {
     [files, selectedFileId],
   );
 
+  const processingFacts = useMemo(() => {
+    if (!workflowSnapshot) return [];
+    const facts = [`${workflowSnapshot.files.total} source${workflowSnapshot.files.total === 1 ? "" : "s"}`];
+    const running = (workflowSnapshot.processingJobs.queued ?? 0) + (workflowSnapshot.processingJobs.running ?? 0);
+    const completed = workflowSnapshot.processingJobs.completed;
+    const failed = workflowSnapshot.processingJobs.failed;
+    const pagesAvailable = workflowSnapshot.capturedResults.pageCount;
+    const tablesCaptured = workflowSnapshot.capturedResults.tableCount;
+    const candidates = workflowSnapshot.extractedEntities.total;
+    const candidatesNeedingReview = workflowSnapshot.extractedEntities.needsReview;
+
+    if (running > 0) facts.push(`${running} processing`);
+    if (completed !== null && completed > 0) facts.push(`${completed} completed`);
+    if (failed !== null && failed > 0) facts.push(`${failed} failed`);
+    if (pagesAvailable !== null && pagesAvailable > 0) facts.push(`${pagesAvailable} pages available`);
+    if (tablesCaptured !== null && tablesCaptured > 0) facts.push(`${tablesCaptured} tables captured`);
+    if (candidatesNeedingReview !== null && candidatesNeedingReview > 0) {
+      facts.push(`${candidatesNeedingReview} candidates need review`);
+    } else if (candidates !== null && candidates > 0) {
+      facts.push(`${candidates} candidates captured`);
+    } else if (candidates === 0 && (completed !== null || pagesAvailable !== null || tablesCaptured !== null)) {
+      facts.push("0 candidates ready for review");
+    }
+    return facts;
+  }, [workflowSnapshot]);
+
   const loadDetail = useCallback(async (fileId: string) => {
     setSelectedFileId(fileId);
     setPages([]);
     setTables([]);
-    try {
-      const [pagesResult, tablesData] = await Promise.all([
-        apiClient
-          .get<{ pages: PageView[]; classification: string; ocrStatus: string }>(
-            `/api/files/${encodeURIComponent(fileId)}/pages`,
-          )
-          .catch(() => ({ pages: [], classification: "UNKNOWN", ocrStatus: "NOT_IMPLEMENTED" })),
-        apiClient
-          .get<TableView[]>(`/api/files/${encodeURIComponent(fileId)}/tables`)
-          .catch(() => []),
-      ]);
-      setPages(pagesResult.pages);
-      setTables(tablesData);
-    } catch (err) {
-      setError(getApiErrorMessage(err));
+    setPageResultsAvailable(null);
+    setTableResultsAvailable(null);
+    setDetailWarning(null);
+
+    const [pagesResult, tablesResult] = await Promise.allSettled([
+      apiClient.get<{ pages: PageView[]; classification: string; ocrStatus: string }>(
+        `/api/files/${encodeURIComponent(fileId)}/pages`,
+      ),
+      apiClient.get<TableView[]>(`/api/files/${encodeURIComponent(fileId)}/tables`),
+    ]);
+
+    if (pagesResult.status === "fulfilled") {
+      setPages(pagesResult.value.pages);
+      setPageResultsAvailable(true);
+    } else {
+      setPageResultsAvailable(false);
+    }
+
+    if (tablesResult.status === "fulfilled") {
+      setTables(tablesResult.value);
+      setTableResultsAvailable(true);
+    } else {
+      setTableResultsAvailable(false);
+    }
+
+    if (pagesResult.status === "rejected" || tablesResult.status === "rejected") {
+      setDetailWarning("Some captured processing information is currently unavailable. No missing result is being reported as zero.");
     }
   }, []);
 
   const loadFiles = useCallback(async () => {
     setLoading(true);
     setError(null);
+    setSnapshotWarning(null);
     try {
-      const data = await apiClient.get<FileView[]>(
-        `/api/projects/${encodeURIComponent(params.projectId)}/files`,
-      );
-      const jobEntries = await Promise.all(
-        data.map(async (file) => {
-          const jobs = await apiClient
-            .get<ExtractionJobView[]>(`/api/files/${encodeURIComponent(file.id)}/jobs`)
-            .catch(() => []);
-          return [file.id, jobs[0] ?? null] as const;
-        }),
-      );
-      setFiles(data);
-      setLatestJobs(Object.fromEntries(jobEntries));
-    } catch (err) {
-      setError(getApiErrorMessage(err));
+      const [filesResult, snapshotResult] = await Promise.allSettled([
+        apiClient.get<FileView[]>(`/api/projects/${encodeURIComponent(params.projectId)}/files`),
+        apiClient.get<ProjectWorkflowSnapshot>(
+          `/api/projects/${encodeURIComponent(params.projectId)}/workflow-snapshot`,
+        ),
+      ]);
+
+      if (filesResult.status === "fulfilled") {
+        setFiles(filesResult.value);
+        setFilesAvailable(true);
+      } else {
+        setFilesAvailable(false);
+        setError(getApiErrorMessage(filesResult.reason));
+      }
+
+      if (snapshotResult.status === "fulfilled") {
+        setWorkflowSnapshot(snapshotResult.value);
+        setCurrentJobStatuses(Object.fromEntries(
+          snapshotResult.value.sources.map((source) => [source.id, source.currentJobStatus] as const),
+        ));
+      } else {
+        setWorkflowSnapshot(null);
+        setCurrentJobStatuses({});
+        setSnapshotWarning("Project processing facts are temporarily unavailable. Source access and professional actions remain available.");
+      }
     } finally {
       setLoading(false);
     }
@@ -177,7 +229,17 @@ export default function ProjectFilesPage(props: {
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <p className="text-sm uppercase tracking-[0.28em] text-slate-500">Project sources</p>
-            <h2 className="mt-2 text-2xl font-semibold text-white">Source documents and processing</h2>
+            <div className="mt-2 flex items-center gap-3">
+              <h2 className="text-2xl font-semibold text-white">Source documents and processing</h2>
+              <GuideTip
+                title="Project sources"
+                shortDescription="Drawings, schedules, spreadsheets, and supported connected sources become traceable project evidence."
+                whatQuantaraDoes="Quantara preserves each source, its origin, current processing state, and any captured pages or tables that can be proven."
+                whatProfessionalCanDo="Add sources, inspect processing, review captured results, and open any available project workspace without a Guide-imposed lock."
+                cta={{ label: "Review source list", href: `/projects/${encodeURIComponent(params.projectId)}/files` }}
+                ariaLabel="Open guidance for project sources"
+              />
+            </div>
             <p className="mt-2 max-w-3xl text-sm text-slate-400">
               Review where each source came from, what Quantara has processed, and any item that still needs professional attention.
             </p>
@@ -188,6 +250,28 @@ export default function ProjectFilesPage(props: {
           >
             Review Extracted Data
           </Link>
+        </div>
+
+        <div className="mt-6 grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
+          <div className="rounded-2xl border border-slate-800 bg-slate-900 p-4">
+            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Captured processing summary</p>
+            {processingFacts.length > 0 ? (
+              <ul className="mt-3 flex flex-wrap gap-2" aria-label="Captured project source facts">
+                {processingFacts.map((fact) => (
+                  <li key={fact} className="rounded-full border border-slate-700 bg-slate-950 px-3 py-1.5 text-xs font-medium text-slate-200">
+                    {fact}
+                  </li>
+                ))}
+              </ul>
+            ) : loading ? (
+              <p className="mt-3 text-sm text-slate-400">Loading provable source-processing facts...</p>
+            ) : (
+              <p className="mt-3 text-sm text-amber-200">
+                {snapshotWarning ?? "No source-processing facts are being claimed without a verified project snapshot."}
+              </p>
+            )}
+          </div>
+          <FeatureHint {...FEATURE_HINT_REGISTRY.GOOGLE_DRIVE_SOURCES} />
         </div>
       </div>
 
@@ -211,7 +295,7 @@ export default function ProjectFilesPage(props: {
               const origin = getProjectSourceOrigin(file.metadata);
               const processing = getProjectSourceProcessingState(
                 file.status,
-                latestJobs[file.id]?.status ?? null,
+                currentJobStatuses[file.id] ?? null,
                 Boolean(file.processingErrorCode || file.processingErrorMessage),
               );
               const isImported = origin === "Google Drive";
@@ -258,6 +342,18 @@ export default function ProjectFilesPage(props: {
                           {file.classificationConfidence !== null ? ` (${file.classificationConfidence}%)` : ""}
                         </dd>
                       </div>
+                      {file.pageCount !== null && (
+                        <div>
+                          <dt className="text-slate-500">Declared pages</dt>
+                          <dd className="mt-0.5 text-slate-300">{file.pageCount}</dd>
+                        </div>
+                      )}
+                      {currentJobStatuses[file.id] && (
+                        <div>
+                          <dt className="text-slate-500">Current processing</dt>
+                          <dd className="mt-0.5 text-slate-300">{formatStatusLabel(currentJobStatuses[file.id] ?? "")}</dd>
+                        </div>
+                      )}
                       {file.revisionNumber && (
                         <div>
                           <dt className="text-slate-500">Revision</dt>
@@ -283,9 +379,14 @@ export default function ProjectFilesPage(props: {
               );
             })}
             {loading && files.length === 0 && <li className="text-sm text-slate-500">Loading project sources...</li>}
-            {!loading && files.length === 0 && (
+            {!loading && filesAvailable === true && files.length === 0 && (
               <li className="rounded-2xl border border-dashed border-slate-700 p-4 text-sm text-slate-400">
                 No project sources are available yet. Upload a drawing, schedule, or supported project file to begin.
+              </li>
+            )}
+            {!loading && filesAvailable === false && files.length === 0 && (
+              <li className="rounded-2xl border border-amber-800/70 bg-amber-950/30 p-4 text-sm text-amber-200">
+                Project sources could not be verified. Retry before relying on a source count.
               </li>
             )}
           </ul>
@@ -325,6 +426,18 @@ export default function ProjectFilesPage(props: {
                   Extract Tables
                 </button>
               </div>
+
+              {detailWarning && (
+                <p className="rounded-xl border border-amber-800/70 bg-amber-950/30 px-4 py-3 text-sm text-amber-200">
+                  {detailWarning}
+                </p>
+              )}
+
+              {(pageResultsAvailable === null || tableResultsAvailable === null) && (
+                <p className="rounded-xl border border-slate-800 bg-slate-900 p-4 text-sm text-slate-400">
+                  Loading captured processing information for this source...
+                </p>
+              )}
 
               {pages.length > 0 && (
                 <div>
@@ -372,7 +485,7 @@ export default function ProjectFilesPage(props: {
                 </div>
               )}
 
-              {pages.length === 0 && tables.length === 0 && (
+              {pageResultsAvailable === true && tableResultsAvailable === true && pages.length === 0 && tables.length === 0 && (
                 <p className="rounded-xl border border-slate-800 bg-slate-900 p-4 text-sm text-slate-400">
                   No rendered pages or extracted tables are available for this source yet. Use only the supported processing actions above.
                 </p>

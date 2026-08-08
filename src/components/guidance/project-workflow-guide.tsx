@@ -1,4 +1,8 @@
 import Link from "next/link";
+import { CheckCircle2 } from "lucide-react";
+import { GuideTip } from "@/components/guidance/guide-tip";
+import { getGuideStageDefinition } from "@/lib/guidance/guide-registry";
+import { getGuideStageHref } from "@/lib/guidance/guide-navigation";
 import type {
   ProjectWorkflowResult,
   ProjectWorkflowStage,
@@ -28,23 +32,6 @@ function getCurrentStage(stages: ProjectWorkflowStage[]): ProjectWorkflowStage |
   );
 }
 
-function describeCompletedWork(workflow: ProjectWorkflowResult): string {
-  if (!workflow.projectExists) {
-    return "Project information is not available, so no workflow completion is being reported.";
-  }
-  if (workflow.fileCount === 0) {
-    return "The project is set up. No project sources have been added yet.";
-  }
-
-  const sourceLabel = workflow.fileCount === 1 ? "project source is" : "project sources are";
-  if (workflow.extractionSummary.total === 0) {
-    return `${workflow.fileCount} ${sourceLabel} available. No extracted BOQ candidates are available yet.`;
-  }
-
-  const attentionLabel = workflow.extractionSummary.needsAttention === 1 ? "item requires" : "items require";
-  return `${workflow.extractionSummary.total} candidates found. ${workflow.extractionSummary.reviewed} reviewed. ${workflow.extractionSummary.needsAttention} ${attentionLabel} attention.`;
-}
-
 export function ProjectWorkflowGuide({ workflow }: { workflow: ProjectWorkflowResult }) {
   const currentStage = getCurrentStage(workflow.stages);
   const totalStages = workflow.stages.length;
@@ -58,10 +45,11 @@ export function ProjectWorkflowGuide({ workflow }: { workflow: ProjectWorkflowRe
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.28em] text-[#0077B6] dark:text-[#21C7F3]">Where am I?</p>
           <h2 id="project-workflow-guide-title" className="mt-2 text-2xl font-semibold">
-            Project workflow
+            Project intelligence guide
           </h2>
           <p className="mt-2 text-sm text-[#536078] dark:text-[#8CA0BE]">
             {currentStage ? `Current focus: ${currentStage.label}.` : "No current workflow stage is available."}
+            {" "}The recommendation never blocks another valid workspace.
           </p>
         </div>
         <p className="text-sm font-medium text-[#536078] dark:text-[#8CA0BE]">
@@ -85,17 +73,33 @@ export function ProjectWorkflowGuide({ workflow }: { workflow: ProjectWorkflowRe
       </div>
 
       <ol className="mt-6 grid gap-2 sm:grid-cols-3 xl:grid-cols-9" aria-label="Project workflow stages">
-        {workflow.stages.map((stage, index) => (
-          <li
-            key={stage.id}
-            aria-current={stage.state === "CURRENT" || stage.state === "NEEDS_ATTENTION" ? "step" : undefined}
-            className={`rounded-2xl border p-3 ${stateClasses[stage.state]}`}
-          >
-            <span className="text-[10px] font-semibold uppercase tracking-[0.18em] opacity-75">Step {index + 1}</span>
-            <p className="mt-1 text-sm font-semibold leading-5">{stage.label}</p>
-            <p className="mt-1 text-[11px] font-medium">{stateLabel[stage.state]}</p>
-          </li>
-        ))}
+        {workflow.stages.map((stage, index) => {
+          const definition = getGuideStageDefinition(stage.id);
+          return (
+            <li
+              key={stage.id}
+              aria-current={stage.state === "CURRENT" || stage.state === "NEEDS_ATTENTION" ? "step" : undefined}
+              className={`relative min-h-32 rounded-2xl border p-3 ${stateClasses[stage.state]}`}
+            >
+              <div className="flex items-start justify-between gap-2">
+                <span className="text-[10px] font-semibold uppercase tracking-[0.18em] opacity-75">Step {index + 1}</span>
+                <GuideTip
+                  title={definition.title}
+                  shortDescription={`${definition.shortDescription} ${definition.professionalPurpose}`}
+                  whatQuantaraDoes={definition.whatQuantaraDoes}
+                  whatProfessionalCanDo={definition.whatUserCanDo}
+                  cta={{
+                    label: definition.suggestedActionLabel,
+                    href: getGuideStageHref(stage.id, workflow.projectId),
+                  }}
+                  ariaLabel={`Open guidance for ${definition.title}`}
+                />
+              </div>
+              <p className="mt-2 text-sm font-semibold leading-5">{stage.label}</p>
+              <p className="mt-1 text-[11px] font-medium">{stateLabel[stage.state]}</p>
+            </li>
+          );
+        })}
       </ol>
 
       <div className="mt-6 grid gap-4 lg:grid-cols-2">
@@ -103,21 +107,34 @@ export function ProjectWorkflowGuide({ workflow }: { workflow: ProjectWorkflowRe
           <p className="text-xs font-semibold uppercase tracking-[0.24em] text-[#7B879C] dark:text-[#7F8DA6]">
             What has Quantara done?
           </p>
-          <p className="mt-3 text-sm leading-6 text-[#536078] dark:text-[#B8C4D8]">
-            {describeCompletedWork(workflow)}
-          </p>
+          {workflow.factualSummary.length > 0 ? (
+            <ul className="mt-3 space-y-2" aria-label="Factual project processing summary">
+              {workflow.factualSummary.map((fact) => (
+                <li key={fact} className="flex items-start gap-2 text-sm leading-6 text-[#536078] dark:text-[#B8C4D8]">
+                  <CheckCircle2 className="mt-1 h-4 w-4 shrink-0 text-[#0077B6] dark:text-[#21C7F3]" aria-hidden="true" />
+                  <span>{fact}</span>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="mt-3 text-sm leading-6 text-[#536078] dark:text-[#B8C4D8]">
+              No completed project activity is being claimed because the required project data is unavailable.
+            </p>
+          )}
         </div>
 
         <div className="rounded-2xl border border-[#009FE3]/30 bg-[#009FE3]/5 p-5 dark:border-[#21C7F3]/30 dark:bg-[#21C7F3]/5">
           <p className="text-xs font-semibold uppercase tracking-[0.24em] text-[#0077B6] dark:text-[#21C7F3]">
-            What should I do next?
+            Recommended next step
           </p>
           {workflow.nextStep ? (
             <>
-              <p className="mt-3 text-sm leading-6 text-[#536078] dark:text-[#B8C4D8]">{workflow.nextStep.message}</p>
+              <p className="mt-3 text-sm font-semibold text-[#08152E] dark:text-white">{workflow.nextStep.ctaLabel}</p>
+              <p className="mt-2 text-xs font-semibold uppercase tracking-[0.16em] text-[#7B879C] dark:text-[#7F8DA6]">Why</p>
+              <p className="mt-1 text-sm leading-6 text-[#536078] dark:text-[#B8C4D8]">{workflow.nextStep.message}</p>
               <Link
                 href={workflow.nextStep.href}
-                className="mt-4 inline-flex rounded-xl border border-[#009FE3] bg-[#009FE3] px-4 py-2 text-sm font-semibold text-white transition hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-[#009FE3]/40 dark:border-[#21C7F3] dark:bg-[#21C7F3] dark:text-[#040A16]"
+                className="mt-4 inline-flex rounded-xl border border-[#009FE3] bg-[#009FE3] px-4 py-2 text-sm font-semibold text-white transition hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#009FE3] dark:border-[#21C7F3] dark:bg-[#21C7F3] dark:text-[#040A16] dark:focus-visible:outline-[#21C7F3]"
               >
                 {workflow.nextStep.ctaLabel}
               </Link>

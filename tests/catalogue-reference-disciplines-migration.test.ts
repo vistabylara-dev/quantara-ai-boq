@@ -3,7 +3,9 @@ import { afterAll, afterEach, describe, expect, it } from "vitest";
 import { prisma } from "../src/lib/db/prisma";
 import { listDatasetDefinitions } from "../src/lib/services/catalogue-dataset-registry";
 import {
+  CATALOGUE_REFERENCE_DISCIPLINES_MIGRATION_NAME,
   REQUIRED_CATALOGUE_REFERENCE_DISCIPLINES,
+  applyCatalogueReferenceDisciplinesMigration,
   ensureCatalogueReferenceDisciplines,
 } from "../src/lib/services/catalogue-reference-disciplines-migration-service";
 
@@ -105,4 +107,48 @@ describe("CATALOGUE-INTEGRITY-REPAIR: reference-data migration logic", () => {
     const missing = Array.from(requiredKeys).filter((k) => !existingKeys.has(k));
     expect(missing, `MasterDiscipline keys missing for active registered datasets: ${missing.join(", ")}`).toEqual([]);
   });
+
+  /**
+   * CATALOGUE-INTEGRITY-REPAIR — proves the LOCK TABLE fix actually
+   * serializes the migration-history decision under real concurrency, not
+   * just "inside a transaction" (which alone does not stop two transactions
+   * from both observing the missing row under Postgres's default READ
+   * COMMITTED isolation). Runs against the real interior-fit-out/landscaping
+   * keys and the real migration name — safe and idempotent, exactly like the
+   * "real...safe to run" test above; this permanently (and correctly)
+   * records the migration as applied in the local dev DB, same as it
+   * eventually should be applied for real.
+   */
+  it("two concurrent applyCatalogueReferenceDisciplinesMigration() calls never create duplicate migration history", async () => {
+    const [a, b] = await Promise.all([
+      applyCatalogueReferenceDisciplinesMigration(),
+      applyCatalogueReferenceDisciplinesMigration(),
+    ]);
+
+    // Exactly one of the two truly concurrent calls performs the apply; the other
+    // must observe it already applied — never both applying, never both erroring
+    // with an uncaught P2002 or duplicate-key violation.
+    const outcomes = [a.alreadyApplied, b.alreadyApplied].sort();
+    expect(outcomes).toEqual([false, true]);
+
+    const historyRows = await prisma.$queryRaw<{ count: number }[]>`
+      SELECT COUNT(*)::int AS count FROM "_prisma_migrations" WHERE migration_name = ${CATALOGUE_REFERENCE_DISCIPLINES_MIGRATION_NAME}
+    `;
+    expect(Number(historyRows[0].count)).toBe(1);
+
+    const disciplineRows = await prisma.masterDiscipline.findMany({
+      where: { key: { in: REQUIRED_CATALOGUE_REFERENCE_DISCIPLINES.map((d) => d.key) } },
+    });
+    expect(disciplineRows).toHaveLength(REQUIRED_CATALOGUE_REFERENCE_DISCIPLINES.length);
+    expect(new Set(disciplineRows.map((r) => r.key)).size).toBe(disciplineRows.length); // no duplicates by key
+
+    // A third, later, normal rerun remains safe/idempotent.
+    const third = await applyCatalogueReferenceDisciplinesMigration();
+    expect(third.alreadyApplied).toBe(true);
+
+    const historyRowsAfterThird = await prisma.$queryRaw<{ count: number }[]>`
+      SELECT COUNT(*)::int AS count FROM "_prisma_migrations" WHERE migration_name = ${CATALOGUE_REFERENCE_DISCIPLINES_MIGRATION_NAME}
+    `;
+    expect(Number(historyRowsAfterThird[0].count)).toBe(1);
+  }, 30_000);
 });

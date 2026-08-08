@@ -41,6 +41,19 @@ function isUniqueConstraintViolation(error: unknown): boolean {
  * for two concurrent callers to both miss the row and both try to create it.
  * Accepts an optional db client so it can run inside an existing transaction
  * (see applyCatalogueReferenceDisciplinesMigration below) or standalone.
+ *
+ * When running inside a transaction (db !== the module-level prisma
+ * singleton, i.e. a Prisma.TransactionClient), each create() attempt is
+ * wrapped in its own SAVEPOINT. Postgres aborts an entire transaction on
+ * any statement error — including a P2002 that application code catches —
+ * so without the SAVEPOINT, a caught "already exists" on the first
+ * discipline would poison the transaction and make every later statement
+ * (the next create(), the verification query, applyCatalogueReferenceDisciplinesMigration's
+ * own _prisma_migrations INSERT) fail with 25P02 "current transaction is
+ * aborted", even though the P2002 itself was expected and handled. This
+ * does not change the create()-then-catch(P2002) decision logic or its
+ * created/alreadyExisted outputs — it only keeps the surrounding
+ * transaction healthy when that decision lands on "already exists".
  */
 export async function ensureCatalogueReferenceDisciplines(
   disciplines: ReadonlyArray<{ key: string; name: string; description: string; icon: string }> = REQUIRED_CATALOGUE_REFERENCE_DISCIPLINES,
@@ -48,13 +61,23 @@ export async function ensureCatalogueReferenceDisciplines(
 ): Promise<{ created: string[]; alreadyExisted: string[] }> {
   const created: string[] = [];
   const alreadyExisted: string[] = [];
+  const runningInsideTransaction = db !== prisma;
 
   for (const d of disciplines) {
+    if (runningInsideTransaction) {
+      await db.$executeRaw`SAVEPOINT ensure_discipline`;
+    }
     try {
       await db.masterDiscipline.create({ data: { key: d.key, name: d.name, description: d.description, icon: d.icon } });
       created.push(d.key);
+      if (runningInsideTransaction) {
+        await db.$executeRaw`RELEASE SAVEPOINT ensure_discipline`;
+      }
     } catch (error) {
       if (isUniqueConstraintViolation(error)) {
+        if (runningInsideTransaction) {
+          await db.$executeRaw`ROLLBACK TO SAVEPOINT ensure_discipline`;
+        }
         alreadyExisted.push(d.key);
         continue;
       }
@@ -79,16 +102,22 @@ export async function ensureCatalogueReferenceDisciplines(
  * Called by the owner-only route; kept here so the route stays a thin
  * auth+HTTP wrapper, matching this codebase's route/service convention.
  *
- * The _prisma_migrations lookup and the discipline creation + history insert
- * all happen inside one transaction, with the lookup re-checked after the
- * transaction has started — closes the TOCTOU window where two concurrent
- * calls could both see "not yet applied" and both attempt the insert.
- * ensureCatalogueReferenceDisciplines's own create()-then-catch-P2002
- * pattern independently makes the discipline rows themselves race-safe even
- * within that transaction.
+ * Putting the SELECT inside a transaction alone does not serialize the
+ * "missing row" decision under Postgres's default READ COMMITTED isolation
+ * — two concurrent transactions can both run the SELECT before either has
+ * committed, both see no row, and both proceed to insert. LOCK TABLE
+ * "_prisma_migrations" IN SHARE ROW EXCLUSIVE MODE closes that window: the
+ * second caller blocks on the lock until the first caller's transaction
+ * commits (or rolls back), then re-runs the SELECT and correctly observes
+ * the first caller's committed row. ensureCatalogueReferenceDisciplines's
+ * own create()-then-catch-P2002 pattern independently makes the discipline
+ * rows themselves race-safe even without this lock; this lock exists
+ * specifically for the migration-history bookkeeping.
  */
 export async function applyCatalogueReferenceDisciplinesMigration(): Promise<{ alreadyApplied: boolean; log: string[] }> {
   return prisma.$transaction(async (tx) => {
+    await tx.$executeRaw`LOCK TABLE "_prisma_migrations" IN SHARE ROW EXCLUSIVE MODE`;
+
     const alreadyRecorded = await tx.$queryRaw<{ migration_name: string }[]>`
       SELECT migration_name FROM "_prisma_migrations" WHERE migration_name = ${CATALOGUE_REFERENCE_DISCIPLINES_MIGRATION_NAME}
     `;

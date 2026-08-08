@@ -69,7 +69,7 @@ export const GUIDE_STAGE_REGISTRY = {
     professionalPurpose:
       "Establish the measured inputs required for a defensible project quantity.",
     whatQuantaraDoes:
-      "Quantara presents required measurements and keeps missing values visible instead of estimating them.",
+      "For supported deterministic measurement types, Quantara shows the required dimensions and keeps missing required values visible.",
     whatUserCanDo:
       "Review available dimensions, enter missing measurements manually, and correct inputs before calculation.",
     suggestedActionLabel: "Review Dimensions",
@@ -77,13 +77,14 @@ export const GUIDE_STAGE_REGISTRY = {
   CALCULATIONS: {
     id: "CALCULATIONS",
     title: "Calculations",
-    shortDescription: "Visible deterministic equations are built from reviewed inputs.",
+    shortDescription:
+      "Review the equation, inputs, deductions or allowances, and calculated result before professional confirmation.",
     professionalPurpose:
       "Produce a quantity that can be checked against its reviewed measurements and calculation method.",
     whatQuantaraDoes:
-      "Quantara applies deterministic formulas and presents the visible equation before a quantity is accepted.",
+      "Quantara displays the deterministic equation, inputs, deductions or allowances, and calculated result for professional review before confirmation.",
     whatUserCanDo:
-      "Inspect the equation, verify every input, and confirm or correct the proposed calculation.",
+      "Review or correct the inputs, then explicitly confirm the calculated result.",
     suggestedActionLabel: "Review Calculations",
   },
   BOQ: {
@@ -93,7 +94,7 @@ export const GUIDE_STAGE_REGISTRY = {
     professionalPurpose:
       "Maintain the project Bill of Quantities as a controlled professional record.",
     whatQuantaraDoes:
-      "Quantara keeps project BOQ sections, items, quantities, rates, and revision state in one governed workspace.",
+      "Quantara keeps project BOQ sections, items, quantities, rates, and revision state governed, and can propose a professionally confirmed calculated quantity against an item without applying it until the user confirms the quantity update.",
     whatUserCanDo:
       "Prepare items manually, use valid project evidence, and continue normal BOQ work without Guide-imposed locks.",
     suggestedActionLabel: "Open BOQ Workspace",

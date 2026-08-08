@@ -129,6 +129,28 @@ describe("Quantara Guide v2 registry and advisory navigation", () => {
     }
   });
 
+  it("describes only the merged, professionally confirmed measurement workflow", () => {
+    expect(GUIDE_STAGE_REGISTRY.DIMENSIONS.whatQuantaraDoes).toContain(
+      "supported deterministic measurement types",
+    );
+    expect(GUIDE_STAGE_REGISTRY.DIMENSIONS.whatQuantaraDoes).toContain(
+      "missing required values visible",
+    );
+    expect(GUIDE_STAGE_REGISTRY.CALCULATIONS.whatQuantaraDoes).toContain(
+      "equation, inputs, deductions or allowances, and calculated result",
+    );
+    expect(GUIDE_STAGE_REGISTRY.CALCULATIONS.whatUserCanDo).toContain(
+      "explicitly confirm",
+    );
+    expect(GUIDE_STAGE_REGISTRY.BOQ.whatQuantaraDoes).toContain(
+      "without applying it until the user confirms the quantity update",
+    );
+    expect(FEATURE_HINT_REGISTRY.MANUAL_MEASUREMENTS.availability).toBe("AVAILABLE");
+    expect(FEATURE_HINT_REGISTRY.VISIBLE_QUANTITY_EQUATIONS.availability).toBe("AVAILABLE");
+    expect("cta" in FEATURE_HINT_REGISTRY.MANUAL_MEASUREMENTS).toBe(false);
+    expect("cta" in FEATURE_HINT_REGISTRY.VISIBLE_QUANTITY_EQUATIONS).toBe(false);
+  });
+
   it("emits only supported real project routes and no dead query parameters", () => {
     const hrefs = GUIDE_STAGE_IDS.map((stageId) => getGuideStageHref(stageId, PROJECT_ID));
     expect(hrefs.every(isSupportedGuideHref)).toBe(true);

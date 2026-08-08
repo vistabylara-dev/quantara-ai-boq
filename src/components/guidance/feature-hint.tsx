@@ -34,14 +34,14 @@ export const FEATURE_HINT_REGISTRY = {
   MANUAL_MEASUREMENTS: {
     id: "MANUAL_MEASUREMENTS",
     title: "Manual measurement entry",
-    description: "Manual entry for missing guided-workflow measurements is planned for a future release.",
-    availability: "COMING_SOON",
+    description: "Enter missing required values manually for supported deterministic measurement types before calculation.",
+    availability: "AVAILABLE",
   },
   VISIBLE_QUANTITY_EQUATIONS: {
     id: "VISIBLE_QUANTITY_EQUATIONS",
     title: "Visible quantity equations",
-    description: "Visible deterministic equations within the guided quantity workflow are planned for a future release.",
-    availability: "COMING_SOON",
+    description: "Review the equation, inputs, deductions or allowances, and calculated result before professional confirmation.",
+    availability: "AVAILABLE",
   },
   VOICE_GUIDANCE: {
     id: "VOICE_GUIDANCE",

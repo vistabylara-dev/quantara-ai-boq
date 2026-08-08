@@ -25,6 +25,13 @@ export type UploadProjectFileInput = {
   originalName: string;
   mimeType: string;
   buffer: Buffer;
+  sourceAttribution?: {
+    provider: "google-drive";
+    externalConnectionId: string;
+    externalFileId: string;
+    modifiedTime: string | null;
+    webViewLink: string | null;
+  };
 };
 
 /**
@@ -52,20 +59,21 @@ function getProjectFileStorageAdapter(): DocumentStorageAdapter {
  */
 export async function uploadProjectFile(actor: CurrentActor, projectId: string, input: UploadProjectFileInput) {
   requireCapability(actor, "files:manage");
-  await getProjectRecord(actor.companyId, projectId);
+  const project = await getProjectRecord(actor.companyId, projectId);
+  const canonicalProjectId = project.id;
 
   const { extension, safeFileName } = validateUpload(input.originalName, input.mimeType, input.buffer.byteLength);
   const checksum = computeChecksum(input.buffer);
-  const duplicate = await findDuplicateByChecksum(actor.companyId, projectId, checksum);
+  const duplicate = await findDuplicateByChecksum(actor.companyId, canonicalProjectId, checksum);
 
-  const storageKey = buildStorageKey(actor.companyId, projectId, "originals", safeFileName);
+  const storageKey = buildStorageKey(actor.companyId, canonicalProjectId, "originals", safeFileName);
   const storage = getProjectFileStorageAdapter();
   await storage.putObject({ key: storageKey, body: input.buffer, contentType: input.mimeType });
 
   let row;
   try {
     row = await createProjectFile(actor.companyId, {
-      projectId,
+      projectId: canonicalProjectId,
       uploadedByUserId: actor.userId,
       originalName: input.originalName,
       safeFileName,
@@ -74,6 +82,9 @@ export async function uploadProjectFile(actor: CurrentActor, projectId: string, 
       extension,
       fileSize: input.buffer.byteLength,
       checksum,
+      metadataJson: input.sourceAttribution
+        ? { importSource: input.sourceAttribution }
+        : undefined,
     });
   } catch (error) {
     // The Blob object was already written above — if the metadata write
@@ -87,15 +98,21 @@ export async function uploadProjectFile(actor: CurrentActor, projectId: string, 
     entityType: "ProjectFile",
     entityId: row.id,
     action: "FILE_UPLOADED",
-    payload: { projectId, originalName: input.originalName, fileSize: input.buffer.byteLength, checksum },
+    payload: {
+      projectId: canonicalProjectId,
+      originalName: input.originalName,
+      fileSize: input.buffer.byteLength,
+      checksum,
+      ...(input.sourceAttribution ? { importSource: input.sourceAttribution } : {}),
+    },
   });
 
   return { file: toProjectFileDTO(row), duplicateOfFileId: duplicate?.id ?? null };
 }
 
 export async function listProjectFilesForProject(actor: CurrentActor, projectId: string) {
-  await getProjectRecord(actor.companyId, projectId);
-  const rows = await listProjectFiles(actor.companyId, projectId);
+  const project = await getProjectRecord(actor.companyId, projectId);
+  const rows = await listProjectFiles(actor.companyId, project.id);
   return rows.map(toProjectFileDTO);
 }
 

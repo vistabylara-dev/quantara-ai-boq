@@ -8,15 +8,11 @@ import type { ProviderRegistryEntry } from "./connector-types";
  * `IntegrationProvider` DB rows are seeded from this file for 1B+ to
  * reference by a stable id, but the UI reads this array directly.
  *
- * Status honesty rule for this phase: no connector has shipped yet in
- * INTEGRATIONS-1A (not even Autodesk OAuth — explicitly deferred to 1B and
- * beyond, separately approved). Every OAuth-cloud provider is therefore
- * COMING_SOON right now regardless of its eventual target status, and every
- * plugin/file-import-ceiling provider shows the status that honestly
- * describes how it will *ever* connect (REQUIRES_PLUGIN / FILE_IMPORT_ONLY),
- * since that is true independent of Quantara's build progress. No provider
- * in this file is AVAILABLE, BETA, or CONNECTED — none of those would be
- * true yet.
+ * Status honesty rule: Google Drive is the sole Controlled Early Access
+ * connector because its OAuth, browser, and selected-file project import are
+ * implemented. Every other OAuth-cloud provider remains COMING_SOON, while
+ * plugin/file-import-ceiling providers use the status that truthfully
+ * describes how they will connect (REQUIRES_PLUGIN / FILE_IMPORT_ONLY).
  */
 export const PROVIDER_REGISTRY: ProviderRegistryEntry[] = [
   // ---------------------------------------------------------------- Autodesk
@@ -287,11 +283,11 @@ export const PROVIDER_REGISTRY: ProviderRegistryEntry[] = [
     displayName: "Google Drive",
     category: "DOCUMENTS_STORAGE",
     connectionType: "OAUTH_CLOUD",
-    status: "COMING_SOON",
+    status: "BETA",
     shortPurpose: "Cloud file storage.",
-    description: "Google OAuth with least-privilege (read-only) scope — browse folders and files directly from Drive.",
-    supportedData: ["Folder/file browsing"],
-    plannedData: ["Selected file import into a project", "Version metadata"],
+    description: "Google OAuth with least-privilege (read-only) scope — browse folders and import selected supported files into a Quantara project.",
+    supportedData: ["Folder/file browsing", "Selected supported file import into a Quantara project"],
+    plannedData: ["Version metadata"],
     recommendedOrder: 11,
     icon: "HardDrive",
     isIndependentIntegration: true,

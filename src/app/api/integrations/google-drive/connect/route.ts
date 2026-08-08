@@ -34,9 +34,9 @@ export async function GET(request: Request) {
     return NextResponse.redirect(authorizationUrl);
   } catch (error) {
     if (error instanceof UnauthorizedError) {
-      return NextResponse.redirect(new URL("/login?next=/integrations/google-drive", request.url));
+      return NextResponse.redirect(new URL("/login?next=/integrations/google-drive/connect", request.url));
     }
     const message = error instanceof Error ? error.message : "Could not start the Google Drive connection.";
-    return NextResponse.redirect(new URL(`/integrations/google-drive?connectError=${encodeURIComponent(message)}`, request.url));
+    return NextResponse.redirect(new URL(`/integrations/google-drive/connect?connectError=${encodeURIComponent(message)}`, request.url));
   }
 }

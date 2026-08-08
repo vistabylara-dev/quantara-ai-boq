@@ -167,6 +167,14 @@ export default function ProviderDetailPage(props: PageProps) {
                 {actionLabel(provider)}
               </Link>
             )}
+            {provider.connection && provider.id === "google-drive" && (
+              <Link
+                href="/integrations/google-drive/connect"
+                className="rounded-2xl border border-[#0EA5E9] bg-[#0EA5E9] px-4 py-2 text-sm font-semibold text-white hover:opacity-90 dark:border-[#22D3EE] dark:bg-[#22D3EE] dark:text-[#050B18]"
+              >
+                {["ERROR", "REAUTH_REQUIRED"].includes(provider.connection.status) ? "Reconnect Google Drive" : "Browse files"}
+              </Link>
+            )}
             <Link
               href="/integrations"
               className="rounded-2xl border border-[#D9E2EC] bg-white px-4 py-2 text-sm font-semibold text-[#0B1630] hover:bg-[#EEF3F8] dark:border-[#1E2A42] dark:bg-[#0B1426] dark:text-white dark:hover:bg-[#111D33]"

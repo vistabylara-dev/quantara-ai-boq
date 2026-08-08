@@ -37,6 +37,7 @@ describe("Phase 8 sub-phase 1: file security and storage (integration, real loca
   let companyAId: string;
   let companyBId: string;
   let projectAId: string;
+  let projectASlug: string;
   let ownerActorA: CurrentActor;
   let designerActorA: CurrentActor;
   let reviewerActorA: CurrentActor;
@@ -78,6 +79,7 @@ describe("Phase 8 sub-phase 1: file security and storage (integration, real loca
       language: "English",
     });
     projectAId = project.databaseId;
+    projectASlug = project.id;
 
     const companyB = await prisma.company.create({
       data: { legalName: `Phase8 Test Co B ${RUN_ID}`, tradeName: `Phase8 B`, email: `phase8-b-${RUN_ID}@example.com` },
@@ -177,6 +179,75 @@ describe("Phase 8 sub-phase 1: file security and storage (integration, real loca
   });
 
   describe("upload, list, download, delete (service + RBAC + tenant isolation)", () => {
+    describe("slug and UUID project identifiers", () => {
+      it("uploads by slug while persisting the canonical project UUID in the row and storage key", async () => {
+        const result = await uploadProjectFile(ownerActorA, projectASlug, {
+          originalName: "slug-upload.pdf",
+          mimeType: "application/pdf",
+          buffer: pdfBuffer("slug upload content"),
+        });
+
+        const row = await prisma.projectFile.findUniqueOrThrow({ where: { id: result.file.id } });
+        expect(row.projectId).toBe(projectAId);
+        expect(row.storageKey).toContain(`/projects/${projectAId}/`);
+        expect(row.storageKey).not.toContain(`/projects/${projectASlug}/`);
+      });
+
+      it("lists through the slug a file uploaded through the database UUID", async () => {
+        const uploaded = await uploadProjectFile(ownerActorA, projectAId, {
+          originalName: "uuid-then-slug.pdf",
+          mimeType: "application/pdf",
+          buffer: pdfBuffer("uuid then slug content"),
+        });
+
+        const files = await listProjectFilesForProject(reviewerActorA, projectASlug);
+        expect(files.some((file) => file.id === uploaded.file.id)).toBe(true);
+      });
+
+      it("detects duplicates across UUID and slug forms of the same project", async () => {
+        const bytes = pdfBuffer("cross-identifier duplicate content");
+        const first = await uploadProjectFile(ownerActorA, projectAId, {
+          originalName: "duplicate-by-uuid.pdf",
+          mimeType: "application/pdf",
+          buffer: bytes,
+        });
+        const second = await uploadProjectFile(ownerActorA, projectASlug, {
+          originalName: "duplicate-by-slug.pdf",
+          mimeType: "application/pdf",
+          buffer: bytes,
+        });
+
+        expect(second.duplicateOfFileId).toBe(first.file.id);
+      });
+
+      it("denies a cross-tenant slug for both upload and list without creating a file", async () => {
+        const beforeCount = await prisma.projectFile.count({ where: { companyId: companyBId } });
+
+        await expect(listProjectFilesForProject(ownerActorB, projectASlug)).rejects.toThrow(NotFoundError);
+        await expect(
+          uploadProjectFile(ownerActorB, projectASlug, {
+            originalName: "cross-tenant-slug.pdf",
+            mimeType: "application/pdf",
+            buffer: pdfBuffer("must not persist"),
+          }),
+        ).rejects.toThrow(NotFoundError);
+
+        expect(await prisma.projectFile.count({ where: { companyId: companyBId } })).toBe(beforeCount);
+      });
+
+      it("continues to accept the database UUID directly for upload and list", async () => {
+        const uploaded = await uploadProjectFile(ownerActorA, projectAId, {
+          originalName: "direct-uuid.pdf",
+          mimeType: "application/pdf",
+          buffer: pdfBuffer("direct uuid content"),
+        });
+
+        expect(uploaded.file.projectId).toBe(projectAId);
+        const files = await listProjectFilesForProject(reviewerActorA, projectAId);
+        expect(files.some((file) => file.id === uploaded.file.id)).toBe(true);
+      });
+    });
+
     it("uploads a file and returns UPLOADED status with UNKNOWN classification", async () => {
       const result = await uploadProjectFile(ownerActorA, projectAId, {
         originalName: "structural-schedule.pdf",

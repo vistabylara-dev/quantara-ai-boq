@@ -1,5 +1,6 @@
 import { QuantityCalculationType } from "@prisma/client";
 import { z } from "zod";
+import { projectIdentifierSchema } from "@/lib/validation/boq-route-schemas";
 
 export const calculationIdParamsSchema = z.object({
   calculationId: z.string().uuid("A valid calculation ID is required."),
@@ -23,12 +24,13 @@ export const previewCalculationSchema = z.object({
 
 export const prefillDimensionsQuerySchema = z.object({
   calculationType: z.nativeEnum(QuantityCalculationType),
+  projectId: projectIdentifierSchema,
   extractedEntityId: z.string().uuid().optional(),
   detectedRoomId: z.string().uuid().optional(),
 }).strict();
 
 export const createCalculationSchema = z.object({
-  projectId: z.string().uuid("A valid project ID is required."),
+  projectId: projectIdentifierSchema,
   calculationType: z.nativeEnum(QuantityCalculationType),
   extractedEntityId: z.string().uuid().optional().nullable(),
   dimensionValues: z.array(dimensionValueInputSchema).min(1).max(50),

@@ -31,9 +31,29 @@ export type QuantityUpdateProposal = {
   calculationConfirmed: boolean;
 };
 
+/**
+ * Both QuantityCalculation and BOQ carry their own independent projectId — nothing in the
+ * schema stops a calculation from company A's project X being applied to a BOQ item that
+ * lives in project Y. This is the proof step: a calculation may only ever be proposed or
+ * applied against an item whose BOQ belongs to the exact same project it was calculated for.
+ */
+function assertCalculationMatchesItemProject(
+  calculation: { projectId: string },
+  item: { section: { boq: { projectId: string } } },
+) {
+  if (calculation.projectId !== item.section.boq.projectId) {
+    throw new AppError(
+      "CALCULATION_PROJECT_MISMATCH",
+      "This calculation belongs to a different project and cannot be applied to this BOQ item.",
+      400,
+    );
+  }
+}
+
 export async function proposeCalculatedQuantityForItem(actor: CurrentActor, itemId: string, calculationId: string): Promise<QuantityUpdateProposal> {
   const item = await getBOQItemRecord(actor.companyId, itemId);
   const calculation = await getQuantityCalculationRecord(actor.companyId, calculationId);
+  assertCalculationMatchesItemProject(calculation, item);
   return {
     itemId: item.id,
     itemCode: item.itemCode,
@@ -59,6 +79,7 @@ export async function confirmCalculatedQuantityForItem(actor: CurrentActor, item
   requireCapability(actor, "boq:edit");
   const item = await getBOQItemRecord(actor.companyId, itemId);
   const calculation = await getQuantityCalculationRecord(actor.companyId, calculationId);
+  assertCalculationMatchesItemProject(calculation, item);
   if (calculation.status !== "CONFIRMED") {
     throw new AppError("CALCULATION_NOT_CONFIRMED", "This calculation must be professionally confirmed before its quantity can be applied to a BOQ item.", 409);
   }

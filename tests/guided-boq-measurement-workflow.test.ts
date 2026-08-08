@@ -18,6 +18,8 @@ import {
   overrideCalculationResult,
   getCalculation,
   previewCalculation,
+  prefillDimensionValues,
+  listCalculationsForProject,
 } from "../src/lib/services/quantity-calculation-service";
 import { proposeCalculatedQuantityForItem, confirmCalculatedQuantityForItem } from "../src/lib/services/boq-quantity-update-service";
 import { importExtractedEntityToBoq } from "../src/lib/services/extraction-to-boq-service";
@@ -76,6 +78,7 @@ describe("Guided BOQ measurement workflow (Release 1) — integration (real loca
   let companyBId: string;
   let ownerUserId: string;
   let projectAId: string;
+  let projectASlug: string;
   let boqAId: string;
   let sectionAId: string;
   let projectFileAId: string;
@@ -116,6 +119,7 @@ describe("Guided BOQ measurement workflow (Release 1) — integration (real loca
       language: "English",
     });
     projectAId = project.databaseId;
+    projectASlug = project.id; // toProjectDTO's "id" field is the SLUG, not the database UUID
     boqAId = boq.databaseId;
     sectionAId = boq.sections[0].id;
 
@@ -400,7 +404,7 @@ describe("Guided BOQ measurement workflow (Release 1) — integration (real loca
 
   it("a locked BOQ cannot have its quantity mutated by a confirmed calculation, even though propose (read-only) still works", async () => {
     const client = await createClient(companyAId, { name: "Lock Test Client", email: `guided-lock-client-${RUN_ID}@example.com` });
-    const { boq } = await createProjectWithDefaultBoq(ownerActor(), {
+    const { project: lockProject, boq } = await createProjectWithDefaultBoq(ownerActor(), {
       clientId: client.id,
       industryEngineId: "construction",
       reference: `GUIDED-LOCK-${RUN_ID}`,
@@ -435,7 +439,7 @@ describe("Guided BOQ measurement workflow (Release 1) — integration (real loca
     await lockBOQ(companyAId, lockBoqId, ownerActor().fullName, ownerUserId);
 
     const calculation = await createCalculation(ownerActor(), {
-      projectId: projectAId,
+      projectId: lockProject.databaseId,
       calculationType: "FLOOR_AREA",
       dimensionValues: [dim("netFloorArea", "Net Floor Area", "m2", true, 20), dim("wastagePercentage", "Wastage", "%", false, 5)],
     });
@@ -449,5 +453,232 @@ describe("Guided BOQ measurement workflow (Release 1) — integration (real loca
     await expect(confirmCalculatedQuantityForItem(ownerActor(), lockItem.id, calculation.id)).rejects.toThrow(LockedBOQError);
     const stillLocked = await prisma.bOQItem.findUniqueOrThrow({ where: { id: lockItem.id } });
     expect(stillLocked.quantity.toNumber()).toBe(5);
+  });
+
+  it("ISSUE 1 — a project SLUG resolves through getProjectRecord and persists the canonical project UUID", async () => {
+    const created = await createCalculation(ownerActor(), {
+      projectId: projectASlug,
+      calculationType: "SKIRTING_LENGTH",
+      dimensionValues: [dim("perimeter", "Perimeter", "m", true, 12)],
+    });
+    expect(created.projectId).toBe(projectAId);
+
+    const listed = await listCalculationsForProject(ownerActor(), projectASlug);
+    expect(listed.some((c) => c.id === created.id)).toBe(true);
+  });
+
+  it("ISSUE 1 — a company A actor cannot create a calculation against company B's project", async () => {
+    const clientB = await createClient(companyBId, { name: "Company B Client", email: `guided-b-client-${RUN_ID}@example.com` });
+    const { project: projectB } = await createProjectWithDefaultBoq(otherCompanyActor(), {
+      clientId: clientB.id,
+      industryEngineId: "construction",
+      reference: `GUIDED-B-${RUN_ID}`,
+      name: "Company B Project",
+      location: "Dubai",
+      currency: "AED",
+      taxRate: "5",
+      language: "English",
+    });
+
+    await expect(
+      createCalculation(ownerActor(), {
+        projectId: projectB.databaseId,
+        calculationType: "SKIRTING_LENGTH",
+        dimensionValues: [dim("perimeter", "Perimeter", "m", true, 10)],
+      }),
+    ).rejects.toThrow(NotFoundError);
+
+    await expect(listCalculationsForProject(ownerActor(), projectB.databaseId)).rejects.toThrow(NotFoundError);
+  });
+
+  it("ISSUE 2 — a calculation from one project cannot be proposed or applied to a BOQ item from a different project in the same company", async () => {
+    const clientA2 = await createClient(companyAId, { name: "Second Project Client", email: `guided-a2-client-${RUN_ID}@example.com` });
+    const { boq: boqA2 } = await createProjectWithDefaultBoq(ownerActor(), {
+      clientId: clientA2.id,
+      industryEngineId: "construction",
+      reference: `GUIDED-A2-${RUN_ID}`,
+      name: "Second Guided Workflow Project",
+      location: "Dubai",
+      currency: "AED",
+      taxRate: "5",
+      language: "English",
+    });
+
+    const calculation = await createCalculation(ownerActor(), {
+      projectId: projectAId,
+      calculationType: "SKIRTING_LENGTH",
+      dimensionValues: [dim("perimeter", "Perimeter", "m", true, 10)],
+    });
+    await confirmCalculation(ownerActor(), calculation.id);
+
+    const itemInOtherProject = await prisma.bOQItem.create({
+      data: {
+        companyId: companyAId,
+        sectionId: boqA2.sections[0].id,
+        itemNumber: 950,
+        itemCode: `MISMATCH-${RUN_ID}`,
+        category: "General",
+        description: "Item in a different project",
+        quantity: 8,
+        unit: "m",
+        unitCost: 10,
+        marginPercentage: 10,
+        sellingRate: 11,
+        totalAmount: 88,
+        landedCost: 10,
+        sortOrder: 950,
+      },
+    });
+
+    await expect(proposeCalculatedQuantityForItem(ownerActor(), itemInOtherProject.id, calculation.id)).rejects.toMatchObject({
+      code: "CALCULATION_PROJECT_MISMATCH",
+    });
+    await expect(confirmCalculatedQuantityForItem(ownerActor(), itemInOtherProject.id, calculation.id)).rejects.toMatchObject({
+      code: "CALCULATION_PROJECT_MISMATCH",
+    });
+
+    const stillUnchanged = await prisma.bOQItem.findUniqueOrThrow({ where: { id: itemInOtherProject.id } });
+    expect(stillUnchanged.quantity.toNumber()).toBe(8);
+  });
+
+  it("ISSUE 3 — CONCRETE_VOLUME never guesses length/width/depth from a single unit-matched quantity", async () => {
+    const entity = await prisma.extractedEntity.create({
+      data: {
+        companyId: companyAId,
+        projectId: projectAId,
+        projectFileId: projectFileAId,
+        entityType: ExtractedEntityType.WALL_FINISH,
+        label: "Unit-only guess test — concrete",
+        quantity: 5,
+        unit: "m",
+        confidence: 90,
+        extractionMethod: ExtractionMethod.VISION_MODEL,
+      },
+    });
+
+    const values = await prefillDimensionValues(companyAId, "CONCRETE_VOLUME", {
+      projectId: projectAId,
+      extractedEntityId: entity.id,
+    });
+    const byKey = Object.fromEntries(values.map((v) => [v.key, v]));
+
+    expect(byKey.length.value).toBeNull();
+    expect(byKey.length.reviewStatus).toBe("MISSING");
+    expect(byKey.width.value).toBeNull();
+    expect(byKey.width.reviewStatus).toBe("MISSING");
+    expect(byKey.depth.value).toBeNull();
+    expect(byKey.depth.reviewStatus).toBe("MISSING");
+  });
+
+  it("ISSUE 3 — PAINT_AREA never guesses wallArea/openingsArea from a single unit-matched quantity", async () => {
+    const entity = await prisma.extractedEntity.create({
+      data: {
+        companyId: companyAId,
+        projectId: projectAId,
+        projectFileId: projectFileAId,
+        entityType: ExtractedEntityType.WALL_FINISH,
+        label: "Unit-only guess test — paint",
+        quantity: 30,
+        unit: "m2",
+        confidence: 90,
+        extractionMethod: ExtractionMethod.VISION_MODEL,
+      },
+    });
+
+    const values = await prefillDimensionValues(companyAId, "PAINT_AREA", {
+      projectId: projectAId,
+      extractedEntityId: entity.id,
+    });
+    const byKey = Object.fromEntries(values.map((v) => [v.key, v]));
+
+    expect(byKey.wallArea.value).toBeNull();
+    expect(byKey.wallArea.reviewStatus).toBe("MISSING");
+    expect(byKey.openingsArea.value).toBeNull();
+    expect(byKey.openingsArea.reviewStatus).toBe("MISSING");
+  });
+
+  it("ISSUE 3 — an exact technicalDataJson semantic-key match remains a valid prefill source", async () => {
+    const entity = await prisma.extractedEntity.create({
+      data: {
+        companyId: companyAId,
+        projectId: projectAId,
+        projectFileId: projectFileAId,
+        entityType: ExtractedEntityType.WALL_FINISH,
+        label: "Exact key match test",
+        confidence: 92,
+        extractionMethod: ExtractionMethod.VISION_MODEL,
+        technicalDataJson: { length: 4.2, width: 2.1, depth: 0.3 },
+      },
+    });
+
+    const values = await prefillDimensionValues(companyAId, "CONCRETE_VOLUME", {
+      projectId: projectAId,
+      extractedEntityId: entity.id,
+    });
+    const byKey = Object.fromEntries(values.map((v) => [v.key, v]));
+
+    expect(byKey.length.value).toBe(4.2);
+    expect(byKey.length.source).toBe("extracted_entity");
+    expect(byKey.length.reviewStatus).toBe("PREFILLED");
+    expect(byKey.width.value).toBe(2.1);
+    expect(byKey.depth.value).toBe(0.3);
+  });
+
+  it("PROJECT-SCOPED PREFILL — an extracted entity from a different project cannot prefill this calculation", async () => {
+    const clientA3 = await createClient(companyAId, { name: "Prefill Isolation Client", email: `guided-a3-client-${RUN_ID}@example.com` });
+    const { project: projectA3 } = await createProjectWithDefaultBoq(ownerActor(), {
+      clientId: clientA3.id,
+      industryEngineId: "construction",
+      reference: `GUIDED-A3-${RUN_ID}`,
+      name: "Prefill Isolation Project",
+      location: "Dubai",
+      currency: "AED",
+      taxRate: "5",
+      language: "English",
+    });
+
+    const otherProjectFile = await prisma.projectFile.create({
+      data: {
+        companyId: companyAId,
+        projectId: projectA3.databaseId,
+        uploadedByUserId: ownerUserId,
+        originalName: "other-project.pdf",
+        safeFileName: "other-project.pdf",
+        storageKey: `test/${RUN_ID}/other-project.pdf`,
+        mimeType: "application/pdf",
+        extension: "pdf",
+        fileSize: 1024,
+        checksum: `checksum-other-${RUN_ID}`,
+      },
+    });
+
+    const entityInOtherProject = await prisma.extractedEntity.create({
+      data: {
+        companyId: companyAId,
+        projectId: projectA3.databaseId,
+        projectFileId: otherProjectFile.id,
+        entityType: ExtractedEntityType.WALL_FINISH,
+        label: "Entity from a different project",
+        confidence: 90,
+        extractionMethod: ExtractionMethod.VISION_MODEL,
+        technicalDataJson: { length: 9.9 },
+      },
+    });
+
+    await expect(
+      prefillDimensionValues(companyAId, "CONCRETE_VOLUME", {
+        projectId: projectAId, // deliberately NOT projectA3 — the entity's real project
+        extractedEntityId: entityInOtherProject.id,
+      }),
+    ).rejects.toMatchObject({ code: "ENTITY_PROJECT_MISMATCH" });
+  });
+
+  it("PROJECT-SCOPED PREFILL — resolving a foreign/unknown project throws a tenant-safe NotFound", async () => {
+    await expect(
+      prefillDimensionValues(companyBId, "CONCRETE_VOLUME", {
+        projectId: projectAId, // belongs to company A, not B
+        extractedEntityId: null,
+      }),
+    ).rejects.toThrow(NotFoundError);
   });
 });

@@ -14,10 +14,12 @@ export async function GET(request: Request) {
     const url = new URL(request.url);
     const query = prefillDimensionsQuerySchema.parse({
       calculationType: url.searchParams.get("calculationType"),
+      projectId: url.searchParams.get("projectId"),
       extractedEntityId: url.searchParams.get("extractedEntityId") ?? undefined,
       detectedRoomId: url.searchParams.get("detectedRoomId") ?? undefined,
     });
     const data = await prefillDimensionValues(actor.companyId, query.calculationType, {
+      projectId: query.projectId,
       extractedEntityId: query.extractedEntityId,
       detectedRoomId: query.detectedRoomId,
     });

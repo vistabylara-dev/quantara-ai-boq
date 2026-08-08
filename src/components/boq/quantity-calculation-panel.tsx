@@ -60,7 +60,7 @@ export function QuantityCalculationPanel({ projectId, calculationType, extracted
     const controller = new AbortController();
     setIsLoadingPrefill(true);
     setError(null);
-    const query = new URLSearchParams({ calculationType });
+    const query = new URLSearchParams({ calculationType, projectId });
     if (extractedEntityId) query.set("extractedEntityId", extractedEntityId);
     apiClient
       .get<DimensionValueState[]>(`/api/quantity-calculations/prefill?${query.toString()}`, controller.signal)
@@ -71,7 +71,7 @@ export function QuantityCalculationPanel({ projectId, calculationType, extracted
       })
       .finally(() => setIsLoadingPrefill(false));
     return () => controller.abort();
-  }, [calculationType, definition, extractedEntityId]);
+  }, [calculationType, definition, extractedEntityId, projectId]);
 
   useEffect(() => {
     if (!definition || dimensionValues.length === 0) return;

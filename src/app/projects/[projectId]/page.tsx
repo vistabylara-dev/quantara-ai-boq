@@ -5,6 +5,8 @@ import { useCallback, useEffect, useState, use } from "react";
 import type { Project } from "@/types/project";
 import { ApiClientError, apiClient, getApiErrorMessage } from "@/lib/api/client";
 import { formatDate } from "@/lib/formatting/dates";
+import { deriveProjectWorkflow } from "@/lib/guidance/project-workflow";
+import { ProjectWorkflowGuide } from "@/components/guidance/project-workflow-guide";
 
 type PageProps = {
   params: Promise<{
@@ -13,6 +15,8 @@ type PageProps = {
 };
 
 type ProposalSummary = { id: string; status: string; recipientName: string; expiresAt: string };
+type ProjectFileSummary = { id: string };
+type ExtractedEntitySummary = { status: string };
 
 const PROPOSAL_STATUS_COLORS: Record<string, string> = {
   DRAFT: "text-slate-400",
@@ -32,6 +36,8 @@ export default function ProjectOverviewPage(props: PageProps) {
   const [project, setProject] = useState<Project | null>(null);
   const [latestProposal, setLatestProposal] = useState<ProposalSummary | null>(null);
   const [boqs, setBoqs] = useState<any[]>([]);
+  const [files, setFiles] = useState<ProjectFileSummary[]>([]);
+  const [extractions, setExtractions] = useState<ExtractedEntitySummary[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [notFound, setNotFound] = useState(false);
@@ -41,14 +47,19 @@ export default function ProjectOverviewPage(props: PageProps) {
     setError(null);
     setNotFound(false);
     try {
-      const [data, proposals, boqData] = await Promise.all([
+      const [data, proposals, boqData, fileData, extractionData] = await Promise.all([
         apiClient.get<Project>(`/api/projects/${encodeURIComponent(params.projectId)}`, signal),
         apiClient.get<ProposalSummary[]>(`/api/projects/${encodeURIComponent(params.projectId)}/proposals`, signal).catch(() => []),
-        apiClient.get<any[]>(`/api/projects/${encodeURIComponent(params.projectId)}/boqs`, signal).catch(() => []),
+        apiClient.get<any[]>(`/api/projects/${encodeURIComponent(params.projectId)}/boqs`, signal),
+        apiClient.get<ProjectFileSummary[]>(`/api/projects/${encodeURIComponent(params.projectId)}/files`, signal),
+        apiClient.get<ExtractedEntitySummary[]>(`/api/projects/${encodeURIComponent(params.projectId)}/extractions`, signal),
       ]);
+
       setProject(data);
       setLatestProposal(proposals[0] ?? null);
       setBoqs([...boqData].sort((left, right) => (Number(right.revision?.replace(/^R/i, "")) || 0) - (Number(left.revision?.replace(/^R/i, "")) || 0)));
+      setFiles(fileData);
+      setExtractions(extractionData);
     } catch (loadError) {
       if (loadError instanceof DOMException && loadError.name === "AbortError") return;
       if (loadError instanceof ApiClientError && loadError.status === 404) {
@@ -105,6 +116,14 @@ export default function ProjectOverviewPage(props: PageProps) {
     );
   }
 
+  const workflow = deriveProjectWorkflow({
+    projectExists: true,
+    projectId: project.id,
+    fileCount: files.length,
+    entityStatuses: extractions.map((entity) => entity.status),
+    hasBoq: Boolean(activeBoq),
+  });
+
   return (
     <div className="space-y-6">
       <div className="rounded-[32px] border border-slate-800 bg-slate-950 p-8">
@@ -128,6 +147,8 @@ export default function ProjectOverviewPage(props: PageProps) {
           </div>
         </div>
       </div>
+
+      <ProjectWorkflowGuide workflow={workflow} />
 
       <div className="rounded-[32px] border border-slate-800 bg-slate-950 p-8">
         <h3 className="text-xl font-semibold text-white">Project summary</h3>

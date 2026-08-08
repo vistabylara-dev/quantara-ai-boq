@@ -447,8 +447,11 @@ describe("GuideTip, feature hints, and source deep-link contracts", () => {
     expect(source).not.toMatch(/<li[^>]+onClick=/s);
   });
 
-  it("never advertises Voice as available and contains no fake purchase CTA", () => {
-    expect(FEATURE_HINT_REGISTRY.VOICE_GUIDANCE.availability).toBe("COMING_SOON");
+  it("advertises verified voice only as a supported input method and contains no fake purchase CTA", () => {
+    expect(FEATURE_HINT_REGISTRY.VOICE_GUIDANCE.availability).toBe("AVAILABLE");
+    expect(FEATURE_HINT_REGISTRY.VOICE_GUIDANCE.description).toBe(
+      "Use voice to enter or correct supported BOQ measurements.",
+    );
     expect("cta" in FEATURE_HINT_REGISTRY.VOICE_GUIDANCE).toBe(false);
 
     const serialized = JSON.stringify(FEATURE_HINT_REGISTRY);

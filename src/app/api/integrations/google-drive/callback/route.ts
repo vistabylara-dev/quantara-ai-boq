@@ -2,8 +2,12 @@ import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import { getCurrentActor } from "@/lib/auth/current-actor";
 import { setActorContext } from "@/lib/auth/request-context";
-import { UnauthorizedError } from "@/lib/errors/app-error";
-import { completeGoogleDriveConnection, STATE_COOKIE_NAME } from "@/lib/services/google-drive-integration-service";
+import { AppError, UnauthorizedError } from "@/lib/errors/app-error";
+import {
+  completeGoogleDriveConnection,
+  STATE_COOKIE_NAME,
+  verifyGoogleDriveOAuthState,
+} from "@/lib/services/google-drive-integration-service";
 
 export const dynamic = "force-dynamic";
 
@@ -13,25 +17,36 @@ export async function GET(request: Request) {
   const connectPageUrl = new URL("/integrations/google-drive/connect", url.origin);
 
   const cookieStore = await cookies();
-  const expectedState = cookieStore.get(STATE_COOKIE_NAME)?.value;
+  const stateCookie = cookieStore.get(STATE_COOKIE_NAME)?.value ?? null;
   cookieStore.delete(STATE_COOKIE_NAME);
-
-  const error = url.searchParams.get("error");
-  if (error) {
-    connectPageUrl.searchParams.set("connectError", error === "access_denied" ? "You declined the Google Drive permission request." : error);
-    return NextResponse.redirect(connectPageUrl);
-  }
-
-  const code = url.searchParams.get("code");
-  const state = url.searchParams.get("state");
-  if (!code || !state || !expectedState || state !== expectedState) {
-    connectPageUrl.searchParams.set("connectError", "The connection request could not be verified. Please try connecting again.");
-    return NextResponse.redirect(connectPageUrl);
-  }
 
   try {
     const actor = await getCurrentActor();
     setActorContext(actor);
+
+    verifyGoogleDriveOAuthState(
+      actor,
+      url.searchParams.get("state"),
+      stateCookie,
+    );
+
+    const providerError = url.searchParams.get("error");
+    if (providerError) {
+      throw new AppError(
+        "GOOGLE_DRIVE_AUTH_DENIED",
+        "Google Drive authorization was not granted.",
+        403,
+      );
+    }
+
+    const code = url.searchParams.get("code");
+    if (!code) {
+      throw new AppError(
+        "GOOGLE_DRIVE_TOKEN_ERROR",
+        "Google Drive did not return a valid authorization response.",
+        400,
+      );
+    }
     await completeGoogleDriveConnection(actor, code);
     connectPageUrl.searchParams.set("connected", "1");
     return NextResponse.redirect(connectPageUrl);
@@ -39,8 +54,18 @@ export async function GET(request: Request) {
     if (err instanceof UnauthorizedError) {
       return NextResponse.redirect(new URL("/login?next=/integrations/google-drive/connect", url.origin));
     }
-    const message = err instanceof Error ? err.message : "Could not complete the Google Drive connection.";
-    connectPageUrl.searchParams.set("connectError", message);
+    const allowedCodes = new Set([
+      "GOOGLE_DRIVE_NOT_CONFIGURED",
+      "GOOGLE_DRIVE_OAUTH_STATE_MISMATCH",
+      "GOOGLE_DRIVE_AUTH_DENIED",
+      "GOOGLE_DRIVE_TOKEN_ERROR",
+      "GOOGLE_DRIVE_NO_REFRESH_TOKEN",
+      "GOOGLE_DRIVE_REAUTH_REQUIRED",
+    ]);
+    const code = err instanceof AppError && allowedCodes.has(err.code)
+      ? err.code
+      : "GOOGLE_DRIVE_TOKEN_ERROR";
+    connectPageUrl.searchParams.set("connectError", code);
     return NextResponse.redirect(connectPageUrl);
   }
 }

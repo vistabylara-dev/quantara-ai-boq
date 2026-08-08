@@ -6,18 +6,21 @@ import { ArrowLeft } from "lucide-react";
 import { apiClient, getApiErrorMessage } from "@/lib/api/client";
 import GoogleDriveConnectPanel from "./google-drive-connect-panel";
 
-type ProviderDetail = {
-  connection: { status: string; connectedAt: string; lastSyncAt: string | null } | null;
+type GoogleDriveRuntimeStatus = {
+  configured: boolean;
+  redirectUri: string | null;
+  missingConfiguration: string[];
+  connectionStatus: "NOT_CONFIGURED" | "NOT_CONNECTED" | "CONNECTED" | "REAUTH_REQUIRED" | "UNAVAILABLE";
 };
 
 export default function GoogleDriveConnectPage() {
-  const [provider, setProvider] = useState<ProviderDetail | null>(null);
+  const [runtimeStatus, setRuntimeStatus] = useState<GoogleDriveRuntimeStatus | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
 
   const load = useCallback(async (signal?: AbortSignal) => {
     try {
-      const data = await apiClient.get<ProviderDetail>("/api/integrations/providers/google-drive", signal);
-      setProvider(data);
+      const data = await apiClient.get<GoogleDriveRuntimeStatus>("/api/integrations/google-drive/status", signal);
+      setRuntimeStatus(data);
     } catch (error) {
       if (error instanceof DOMException && error.name === "AbortError") return;
       setLoadError(getApiErrorMessage(error));
@@ -42,9 +45,9 @@ export default function GoogleDriveConnectPage() {
         </div>
       )}
 
-      {provider && (
+      {runtimeStatus && (
         <Suspense fallback={null}>
-          <GoogleDriveConnectPanel provider={provider} />
+          <GoogleDriveConnectPanel runtimeStatus={runtimeStatus} />
         </Suspense>
       )}
     </div>

@@ -41,6 +41,7 @@ export default function ProjectBOQPage(props: PageProps) {
   const [project, setProject] = useState<Project | null>(null);
   const [revisions, setRevisions] = useState<BOQ[]>([]);
   const [activeBoq, setActiveBoq] = useState<BOQ | null>(null);
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [pendingAction, setPendingAction] = useState<PendingAction>(null);
@@ -72,6 +73,7 @@ export default function ProjectBOQPage(props: PageProps) {
       setProject(projectData);
       setRevisions(orderedRevisions);
       setActiveBoq(orderedRevisions[0] ?? null);
+      setHasUnsavedChanges(false);
       setFileCount(filesData.length);
       setExtractedEntities(entitiesData);
       setCalculations(calculationsData);
@@ -98,6 +100,12 @@ export default function ProjectBOQPage(props: PageProps) {
       return newestFirst(next);
     });
     setActiveBoq(updated);
+    setHasUnsavedChanges(false);
+  }, []);
+
+  const handleBoqChange = useCallback((updated: BOQ) => {
+    setActiveBoq(updated);
+    setHasUnsavedChanges(true);
   }, []);
 
   const saveBoq = useCallback(async (boq: BOQ) => {
@@ -272,6 +280,7 @@ export default function ProjectBOQPage(props: PageProps) {
       const draft = revisions.find(r => !isReadOnlyBOQ(r));
       if (draft) {
         setActiveBoq(draft);
+        setHasUnsavedChanges(false);
       }
       setShowCreationSelector(false);
     } else if (method === "upload_drawings") {
@@ -396,16 +405,19 @@ export default function ProjectBOQPage(props: PageProps) {
           ) : activeRevision ? (
             <BoqEditor
               boq={activeRevision}
+              projectId={params.projectId}
               currency={project.currency}
               taxRate={project.taxRate}
               industryId={project.industryId}
               actionPending={actionInProgress}
-              onChange={setActiveBoq}
+              onChange={handleBoqChange}
               onSave={saveBoq}
               onCreateRevision={createRevision}
               onLock={lockRevision}
               onApplyCatalogueRate={applyCatalogueRate}
               onAddItem={() => setShowAddItem(true)}
+              hasUnsavedChanges={hasUnsavedChanges}
+              onVoiceApplied={replaceRevision}
             />
           ) : (
             <div className="rounded-[32px] border border-slate-800 bg-slate-950 p-8 text-slate-300">
@@ -424,7 +436,10 @@ export default function ProjectBOQPage(props: PageProps) {
                   key={boq.id}
                   type="button"
                   onClick={() => {
-                    if (boq.id !== activeRevision?.id) setActiveBoq(boq);
+                    if (boq.id !== activeRevision?.id) {
+                      setActiveBoq(boq);
+                      setHasUnsavedChanges(false);
+                    }
                   }}
                   disabled={actionInProgress}
                   className={`w-full rounded-3xl border px-4 py-4 text-left text-sm transition disabled:cursor-not-allowed disabled:opacity-60 ${

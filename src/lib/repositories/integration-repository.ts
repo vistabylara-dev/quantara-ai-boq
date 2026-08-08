@@ -162,9 +162,16 @@ export async function markConnectionDisconnected(companyId: string, externalConn
 }
 
 export async function recordConnectionError(externalConnectionId: string, code: string, message: string): Promise<void> {
+  const status = [
+    "TOKEN_EXPIRED_NO_REFRESH",
+    "TOKEN_REFRESH_FAILED",
+    "GOOGLE_DRIVE_REAUTH_REQUIRED",
+  ].includes(code)
+    ? "REAUTH_REQUIRED" as const
+    : "ERROR" as const;
   await prisma.externalConnection.update({
     where: { id: externalConnectionId },
-    data: { status: "ERROR", lastErrorCode: code, lastErrorMessage: message },
+    data: { status, lastErrorCode: code, lastErrorMessage: message },
   });
 }
 

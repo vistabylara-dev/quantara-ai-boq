@@ -45,9 +45,9 @@ export const FEATURE_HINT_REGISTRY = {
   },
   VOICE_GUIDANCE: {
     id: "VOICE_GUIDANCE",
-    title: "Voice guidance",
-    description: "Voice guidance is not available in the verified product yet.",
-    availability: "COMING_SOON",
+    title: "Voice measurement input",
+    description: "Use voice to enter or correct supported BOQ measurements.",
+    availability: "AVAILABLE",
   },
 } as const satisfies Record<FeatureHintDefinition["id"], FeatureHintDefinition>;
 

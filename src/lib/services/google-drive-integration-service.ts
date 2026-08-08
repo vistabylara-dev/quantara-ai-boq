@@ -1,4 +1,4 @@
-import { randomBytes } from "crypto";
+import { createHmac, randomBytes, timingSafeEqual } from "crypto";
 import type { CurrentActor } from "@/lib/auth/current-actor";
 import { requireCapability } from "@/lib/auth/rbac";
 import { AppError, NotFoundError } from "@/lib/errors/app-error";
@@ -10,8 +10,12 @@ import {
   isGoogleDriveFolder,
   getGoogleDriveFileMetadata,
   downloadGoogleDriveFile,
+  getGoogleDriveConfigurationStatus,
+  googleDriveTokenHasReadOnlyScope,
+  verifyGoogleDriveAccess,
   type GoogleDriveFile,
   type GoogleTokenResponse,
+  type GoogleDriveConfigurationStatus,
 } from "@/lib/integrations/connectors/google-drive-client";
 import {
   getConnectionForProvider,
@@ -31,8 +35,14 @@ const PROVIDER_ID = "google-drive";
 const PROVIDER_FAMILY = "google";
 const STATE_COOKIE_NAME = "google_drive_oauth_state";
 const GOOGLE_NATIVE_MIME_PREFIX = "application/vnd.google-apps.";
+const GOOGLE_DRIVE_READONLY_SCOPE = "https://www.googleapis.com/auth/drive.readonly";
 
-function tokenResponseToStoredCredentials(token: GoogleTokenResponse, previousRefreshToken: string | null): StoredOAuthCredentials {
+function tokenResponseToStoredCredentials(
+  token: GoogleTokenResponse,
+  previousRefreshToken: string | null,
+  previousScope: string | null = null,
+  previousTokenType: string | null = null,
+): StoredOAuthCredentials {
   return {
     accessToken: token.access_token,
     // Google only returns refresh_token on first consent (or with prompt=consent, which the
@@ -40,8 +50,8 @@ function tokenResponseToStoredCredentials(token: GoogleTokenResponse, previousRe
     // return a new refresh_token at all.
     refreshToken: token.refresh_token ?? previousRefreshToken,
     expiresAt: new Date(Date.now() + token.expires_in * 1000).toISOString(),
-    scope: token.scope,
-    tokenType: token.token_type,
+    scope: token.scope ?? previousScope ?? "",
+    tokenType: token.token_type ?? previousTokenType ?? "Bearer",
   };
 }
 
@@ -51,6 +61,94 @@ export function generateOAuthState(): string {
 
 export { STATE_COOKIE_NAME };
 
+type OAuthStateCookiePayload = {
+  state: string;
+  userId: string;
+  companyId: string;
+  issuedAt: number;
+};
+
+function stateSigningSecret(): string {
+  const status = getGoogleDriveConfigurationStatus();
+  const secret = process.env.GOOGLE_DRIVE_CLIENT_SECRET;
+  if (!status.configured || !secret) {
+    throw new AppError(
+      "GOOGLE_DRIVE_NOT_CONFIGURED",
+      "Google Drive connection needs administrator configuration.",
+      503,
+    );
+  }
+  return secret;
+}
+
+function signOAuthStatePayload(encodedPayload: string): string {
+  return createHmac("sha256", stateSigningSecret()).update(encodedPayload).digest("base64url");
+}
+
+function constantTimeStringEqual(left: string, right: string): boolean {
+  const leftBuffer = Buffer.from(left);
+  const rightBuffer = Buffer.from(right);
+  return leftBuffer.byteLength === rightBuffer.byteLength && timingSafeEqual(leftBuffer, rightBuffer);
+}
+
+export function createGoogleDriveOAuthState(actor: CurrentActor): { state: string; cookieValue: string } {
+  requireCapability(actor, "integrations:connect");
+  const payload: OAuthStateCookiePayload = {
+    state: generateOAuthState(),
+    userId: actor.userId,
+    companyId: actor.companyId,
+    issuedAt: Date.now(),
+  };
+  const encodedPayload = Buffer.from(JSON.stringify(payload), "utf8").toString("base64url");
+  return {
+    state: payload.state,
+    cookieValue: `${encodedPayload}.${signOAuthStatePayload(encodedPayload)}`,
+  };
+}
+
+function oauthStateMismatch(): AppError {
+  return new AppError(
+    "GOOGLE_DRIVE_OAUTH_STATE_MISMATCH",
+    "The Google Drive connection request could not be verified. Please reconnect.",
+    400,
+  );
+}
+
+export function verifyGoogleDriveOAuthState(
+  actor: CurrentActor,
+  returnedState: string | null,
+  cookieValue: string | null,
+): void {
+  if (!returnedState || !cookieValue) throw oauthStateMismatch();
+  const [encodedPayload, suppliedSignature, ...extraParts] = cookieValue.split(".");
+  if (!encodedPayload || !suppliedSignature || extraParts.length > 0) throw oauthStateMismatch();
+
+  const expectedSignature = signOAuthStatePayload(encodedPayload);
+  if (!constantTimeStringEqual(suppliedSignature, expectedSignature)) throw oauthStateMismatch();
+
+  let payload: OAuthStateCookiePayload;
+  try {
+    payload = JSON.parse(Buffer.from(encodedPayload, "base64url").toString("utf8")) as OAuthStateCookiePayload;
+  } catch {
+    throw oauthStateMismatch();
+  }
+
+  const ageMs = Date.now() - payload.issuedAt;
+  if (
+    typeof payload.state !== "string"
+    || typeof payload.userId !== "string"
+    || typeof payload.companyId !== "string"
+    || typeof payload.issuedAt !== "number"
+    || ageMs < 0
+    || ageMs > 10 * 60 * 1000
+    || payload.userId !== actor.userId
+    || payload.companyId !== actor.companyId
+    || !constantTimeStringEqual(payload.state, returnedState)
+  ) {
+    throw oauthStateMismatch();
+  }
+}
+
 export function initiateGoogleDriveConnection(actor: CurrentActor, state: string): string {
   requireCapability(actor, "integrations:connect");
   return buildGoogleDriveAuthorizationUrl(state);
@@ -59,6 +157,13 @@ export function initiateGoogleDriveConnection(actor: CurrentActor, state: string
 export async function completeGoogleDriveConnection(actor: CurrentActor, code: string): Promise<void> {
   requireCapability(actor, "integrations:connect");
   const token = await exchangeGoogleDriveAuthorizationCode(code);
+  if (!googleDriveTokenHasReadOnlyScope(token)) {
+    throw new AppError(
+      "GOOGLE_DRIVE_AUTH_DENIED",
+      "Google Drive read-only access was not granted. Please reconnect and approve the requested permission.",
+      403,
+    );
+  }
   if (!token.refresh_token) {
     throw new AppError(
       "GOOGLE_DRIVE_NO_REFRESH_TOKEN",
@@ -66,6 +171,7 @@ export async function completeGoogleDriveConnection(actor: CurrentActor, code: s
       502,
     );
   }
+  await verifyGoogleDriveAccess(token.access_token);
   const credentials = tokenResponseToStoredCredentials(token, null);
   await upsertConnectedExternalConnection({
     companyId: actor.companyId,
@@ -73,7 +179,7 @@ export async function completeGoogleDriveConnection(actor: CurrentActor, code: s
     providerId: PROVIDER_ID,
     credentials,
     providerAccountId: null,
-    grantedScopesJson: token.scope.split(" "),
+    grantedScopesJson: token.scope?.split(/\s+/) ?? [],
   });
 }
 
@@ -89,7 +195,19 @@ async function getValidAccessToken(actor: CurrentActor): Promise<{ connectionId:
   const connection = await getConnectionForProvider(actor.companyId, PROVIDER_ID);
   if (!connection) throw new NotFoundError("No active Google Drive connection. Connect Google Drive first.");
 
+  if (["ERROR", "REAUTH_REQUIRED"].includes(connection.status)) {
+    throw new AppError("GOOGLE_DRIVE_REAUTH_REQUIRED", "Google Drive authorization needs to be renewed.", 401);
+  }
+
   const credentials = await getDecryptedCredentialsForConnection(actor.companyId, connection.id);
+  if (!credentials.scope?.split(/\s+/).includes(GOOGLE_DRIVE_READONLY_SCOPE)) {
+    await recordConnectionError(
+      connection.id,
+      "GOOGLE_DRIVE_REAUTH_REQUIRED",
+      "The stored Google Drive grant does not include the required read-only scope.",
+    );
+    throw new AppError("GOOGLE_DRIVE_REAUTH_REQUIRED", "Google Drive read-only access must be renewed.", 401);
+  }
   const expiresAt = credentials.expiresAt ? new Date(credentials.expiresAt).getTime() : 0;
   const isExpiringSoon = expiresAt - Date.now() < 60_000; // refresh proactively within 60s of expiry
 
@@ -104,7 +222,15 @@ async function getValidAccessToken(actor: CurrentActor): Promise<{ connectionId:
 
   try {
     const refreshed = await refreshGoogleDriveAccessToken(credentials.refreshToken);
-    const nextCredentials = tokenResponseToStoredCredentials(refreshed, credentials.refreshToken);
+    const nextCredentials = tokenResponseToStoredCredentials(
+      refreshed,
+      credentials.refreshToken,
+      credentials.scope,
+      credentials.tokenType,
+    );
+    if (!nextCredentials.scope?.split(/\s+/).includes(GOOGLE_DRIVE_READONLY_SCOPE)) {
+      throw new AppError("GOOGLE_DRIVE_REAUTH_REQUIRED", "Google Drive read-only access must be renewed.", 401);
+    }
     await updateStoredCredentials(actor.companyId, connection.id, nextCredentials);
     return { connectionId: connection.id, accessToken: nextCredentials.accessToken };
   } catch {
@@ -114,6 +240,53 @@ async function getValidAccessToken(actor: CurrentActor): Promise<{ connectionId:
       "Google Drive token refresh failed. Reconnect required.",
     );
     throw new AppError("GOOGLE_DRIVE_REAUTH_REQUIRED", "Google Drive connection could not be refreshed. Please reconnect.", 401);
+  }
+}
+
+export type GoogleDriveRuntimeStatus = GoogleDriveConfigurationStatus & {
+  connectionStatus: "NOT_CONFIGURED" | "NOT_CONNECTED" | "CONNECTED" | "REAUTH_REQUIRED" | "UNAVAILABLE";
+};
+
+/**
+ * Returns a browser-safe status based on configuration, stored state, and a
+ * live read-only Drive request. A database row alone never proves CONNECTED.
+ */
+export async function getGoogleDriveRuntimeStatus(actor: CurrentActor): Promise<GoogleDriveRuntimeStatus> {
+  requireCapability(actor, "integrations:connect");
+  const configuration = getGoogleDriveConfigurationStatus();
+  if (!configuration.configured) {
+    return { ...configuration, connectionStatus: "NOT_CONFIGURED" };
+  }
+
+  const connection = await getConnectionForProvider(actor.companyId, PROVIDER_ID);
+  if (!connection) {
+    return { ...configuration, connectionStatus: "NOT_CONNECTED" };
+  }
+  if (["ERROR", "REAUTH_REQUIRED"].includes(connection.status)) {
+    return { ...configuration, connectionStatus: "REAUTH_REQUIRED" };
+  }
+
+  try {
+    const { accessToken } = await getValidAccessToken(actor);
+    await verifyGoogleDriveAccess(accessToken);
+    return { ...configuration, connectionStatus: "CONNECTED" };
+  } catch (error) {
+    const requiresReauth = error instanceof AppError && [
+      "GOOGLE_DRIVE_REAUTH_REQUIRED",
+      "GOOGLE_DRIVE_ACCESS_DENIED",
+    ].includes(error.code);
+    if (requiresReauth) {
+      await recordConnectionError(
+        connection.id,
+        "GOOGLE_DRIVE_REAUTH_REQUIRED",
+        "Google Drive authorization could not be validated. Reconnect required.",
+      ).catch(() => undefined);
+      return { ...configuration, connectionStatus: "REAUTH_REQUIRED" };
+    }
+    if (error instanceof NotFoundError) {
+      return { ...configuration, connectionStatus: "NOT_CONNECTED" };
+    }
+    return { ...configuration, connectionStatus: "UNAVAILABLE" };
   }
 }
 

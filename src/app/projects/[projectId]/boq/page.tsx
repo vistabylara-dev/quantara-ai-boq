@@ -11,6 +11,8 @@ import { withCalculatedBOQTotals } from "@/lib/calculations/boq-totals";
 import BoqEditor from "@/components/boq/boq-editor";
 import AddItemFromSourceModal from "@/components/boq/add-item-from-source-modal";
 import { BoqCreationMethodSelector, type BoqCreationMethod } from "@/components/boq/boq-creation-method-selector";
+import { BoqWorkflowStepper } from "@/components/boq/boq-workflow-stepper";
+import { computeBoqWorkflowState, type NextStepAction } from "@/lib/workflow/boq-workflow-state";
 
 type PageProps = {
   params: Promise<{
@@ -45,6 +47,10 @@ export default function ProjectBOQPage(props: PageProps) {
   const [actionError, setActionError] = useState<string | null>(null);
   const [showAddItem, setShowAddItem] = useState(false);
   const [showCreationSelector, setShowCreationSelector] = useState(false);
+  const [fileCount, setFileCount] = useState(0);
+  const [extractedEntities, setExtractedEntities] = useState<{ id: string; status: string }[]>([]);
+  const [calculations, setCalculations] = useState<{ id: string; extractedEntityId: string | null; status: string }[]>([]);
+  const [validationWarningCount, setValidationWarningCount] = useState(0);
   const hasTriggeredAction = useRef(false);
 
   const loadWorkspace = useCallback(async (signal?: AbortSignal) => {
@@ -53,14 +59,22 @@ export default function ProjectBOQPage(props: PageProps) {
     setActionError(null);
     try {
       const encodedProjectId = encodeURIComponent(params.projectId);
-      const [projectData, boqData] = await Promise.all([
+      const [projectData, boqData, filesData, entitiesData, calculationsData] = await Promise.all([
         apiClient.get<Project>(`/api/projects/${encodedProjectId}`, signal),
         apiClient.get<BOQ[]>(`/api/projects/${encodedProjectId}/boqs`, signal),
+        apiClient.get<unknown[]>(`/api/projects/${encodedProjectId}/files`, signal).catch(() => []),
+        apiClient.get<{ id: string; status: string }[]>(`/api/projects/${encodedProjectId}/extractions`, signal).catch(() => []),
+        apiClient
+          .get<{ id: string; extractedEntityId: string | null; status: string }[]>(`/api/projects/${encodedProjectId}/quantity-calculations`, signal)
+          .catch(() => []),
       ]);
       const orderedRevisions = newestFirst(boqData);
       setProject(projectData);
       setRevisions(orderedRevisions);
       setActiveBoq(orderedRevisions[0] ?? null);
+      setFileCount(filesData.length);
+      setExtractedEntities(entitiesData);
+      setCalculations(calculationsData);
     } catch (error) {
       if (error instanceof DOMException && error.name === "AbortError") return;
       setLoadError(getApiErrorMessage(error));
@@ -186,6 +200,59 @@ export default function ProjectBOQPage(props: PageProps) {
 
   const activeRevision = useMemo(() => activeBoq ?? revisions[0] ?? null, [activeBoq, revisions]);
 
+  useEffect(() => {
+    if (!activeRevision) {
+      setValidationWarningCount(0);
+      return;
+    }
+    const controller = new AbortController();
+    apiClient
+      .get<{ code: string }[]>(`/api/boqs/${encodeURIComponent(activeRevision.id)}/validation-preview`, controller.signal)
+      .then((warnings) => setValidationWarningCount(warnings.length))
+      .catch(() => setValidationWarningCount(0));
+    return () => controller.abort();
+  }, [activeRevision]);
+
+  const boqItemCount = useMemo(
+    () => (activeRevision ? activeRevision.sections.reduce((sum, section) => sum + section.items.length, 0) : 0),
+    [activeRevision],
+  );
+
+  const workflowState = useMemo(
+    () =>
+      computeBoqWorkflowState({
+        fileCount,
+        extractedEntities,
+        calculations,
+        boqItemCount,
+        validationWarningCount,
+        isLocked: isReadOnlyBOQ(activeRevision),
+      }),
+    [fileCount, extractedEntities, calculations, boqItemCount, validationWarningCount, activeRevision],
+  );
+
+  const handleWorkflowAction = useCallback((action: NonNullable<NextStepAction["ctaAction"]>) => {
+    const encodedProjectId = encodeURIComponent(params.projectId);
+    switch (action) {
+      case "open_files":
+        router.push(`/projects/${encodedProjectId}/drawings`);
+        break;
+      case "review_extractions":
+      case "review_dimensions":
+      case "review_calculations":
+        // These stages are reviewed on the project's extraction-review workflow, not this page.
+        router.push(`/projects/${encodedProjectId}`);
+        break;
+      case "open_boq":
+        setShowAddItem(true);
+        break;
+      case "run_validation":
+      case "lock_boq":
+        if (activeRevision) void lockRevision(activeRevision);
+        break;
+    }
+  }, [activeRevision, lockRevision, params.projectId, router]);
+
   const applyCatalogueRate = useCallback(async (itemId: string, catalogueItemId: string, confirmReplaceOverrides = false) => {
     if (!activeRevision || isReadOnlyBOQ(activeRevision)) return;
     await persistDraft(activeRevision);
@@ -207,11 +274,17 @@ export default function ProjectBOQPage(props: PageProps) {
         setActiveBoq(draft);
       }
       setShowCreationSelector(false);
-    } else {
-      // Feature not implemented yet (Phases 8+)
-      alert("This creation method is coming soon.");
+    } else if (method === "upload_drawings") {
+      // Honest routing (spec section 13): this navigates to the project's real,
+      // already-working file/drawing upload workflow instead of a "coming soon" alert.
+      router.push(`/projects/${encodeURIComponent(params.projectId)}/drawings`);
+    } else if (method === "connect_app") {
+      // Honest routing (spec section 13): this navigates to the real integrations hub.
+      router.push("/integrations");
     }
-  }, [createInitialBOQ, revisions]);
+    // import_measurements / import_boq are rendered as disabled "Coming soon" cards in
+    // BoqCreationMethodSelector itself and can never reach this handler.
+  }, [createInitialBOQ, params.projectId, revisions, router]);
 
   if (isLoading) {
     return (
@@ -296,6 +369,8 @@ export default function ProjectBOQPage(props: PageProps) {
         </div>
       </div>
 
+      <BoqWorkflowStepper steps={workflowState.steps} nextAction={workflowState.nextAction} onAction={handleWorkflowAction} />
+
       {actionError && (
         <div className="rounded-[28px] border border-rose-900 bg-rose-950/40 p-5 text-sm text-rose-200" role="alert">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -378,6 +453,7 @@ export default function ProjectBOQPage(props: PageProps) {
 
       {showAddItem && activeRevision && (
         <AddItemFromSourceModal
+          projectId={params.projectId}
           boqId={activeRevision.id}
           sections={activeRevision.sections.map((section) => ({ id: section.id, title: section.title }))}
           nextItemNumber={activeRevision.sections.reduce((max, section) => Math.max(max, ...section.items.map((item) => item.itemNumber), 0), 0) + 1}

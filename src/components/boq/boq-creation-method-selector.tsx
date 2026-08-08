@@ -1,6 +1,6 @@
 import { FileUp, Link2, Download, Copy, PencilLine, Clock } from "lucide-react";
 
-export type BoqCreationMethod = 
+export type BoqCreationMethod =
   | "upload_drawings"
   | "connect_app"
   | "import_measurements"
@@ -13,6 +13,16 @@ interface BoqCreationMethodSelectorProps {
   hasDrafts?: boolean;
 }
 
+/**
+ * Guided BOQ measurement workflow (Release 1), spec section 13 — every card
+ * here must be honest about whether it does something real. "Upload
+ * Drawings" and "Connect an Engineering Application" route to real,
+ * already-working pages (the project's file/drawings workflow and the
+ * integrations hub). "Import Measurements" and "Import Existing BOQ" have
+ * no real implementation yet — they are visibly disabled and labeled
+ * "Coming Soon" instead of accepting a click that used to fall through to a
+ * generic alert.
+ */
 export function BoqCreationMethodSelector({ onSelectMethod, hasDrafts }: BoqCreationMethodSelectorProps) {
   return (
     <div className="rounded-[32px] border border-slate-800 bg-slate-950 p-8">
@@ -70,11 +80,18 @@ export function BoqCreationMethodSelector({ onSelectMethod, hasDrafts }: BoqCrea
 
         <button
           type="button"
-          onClick={() => onSelectMethod("import_measurements")}
-          className="group flex flex-col rounded-3xl border border-slate-800 bg-slate-900/50 p-6 text-left transition hover:border-amber-500/50 hover:bg-slate-900"
+          disabled
+          title="Coming soon"
+          aria-disabled="true"
+          className="group flex cursor-not-allowed flex-col rounded-3xl border border-slate-800 bg-slate-900/30 p-6 text-left opacity-60"
         >
-          <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-amber-950 text-amber-400 transition group-hover:scale-110 group-hover:bg-amber-900 group-hover:text-amber-300">
-            <Download className="h-6 w-6" />
+          <div className="flex items-center justify-between">
+            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-amber-950 text-amber-400">
+              <Download className="h-6 w-6" />
+            </div>
+            <span className="rounded-full border border-slate-700 px-2 py-1 text-[0.6rem] font-semibold uppercase tracking-wide text-slate-400">
+              Coming soon
+            </span>
           </div>
           <h3 className="mt-6 text-lg font-semibold text-white">Import Measurements</h3>
           <p className="mt-2 text-sm text-slate-400">
@@ -84,11 +101,18 @@ export function BoqCreationMethodSelector({ onSelectMethod, hasDrafts }: BoqCrea
 
         <button
           type="button"
-          onClick={() => onSelectMethod("import_boq")}
-          className="group flex flex-col rounded-3xl border border-slate-800 bg-slate-900/50 p-6 text-left transition hover:border-purple-500/50 hover:bg-slate-900"
+          disabled
+          title="Coming soon"
+          aria-disabled="true"
+          className="group flex cursor-not-allowed flex-col rounded-3xl border border-slate-800 bg-slate-900/30 p-6 text-left opacity-60"
         >
-          <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-purple-950 text-purple-400 transition group-hover:scale-110 group-hover:bg-purple-900 group-hover:text-purple-300">
-            <Copy className="h-6 w-6" />
+          <div className="flex items-center justify-between">
+            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-purple-950 text-purple-400">
+              <Copy className="h-6 w-6" />
+            </div>
+            <span className="rounded-full border border-slate-700 px-2 py-1 text-[0.6rem] font-semibold uppercase tracking-wide text-slate-400">
+              Coming soon
+            </span>
           </div>
           <h3 className="mt-6 text-lg font-semibold text-white">Import Existing BOQ</h3>
           <p className="mt-2 text-sm text-slate-400">

@@ -69,7 +69,7 @@ describe("deterministic project workflow guidance", () => {
     expect(stateOf(result, "BOQ")).toBe("NOT_STARTED");
   });
 
-  it("D. continues an existing BOQ only after all extraction candidates are reviewed", () => {
+  it("D. sends reviewed extraction with an existing BOQ to dimension review", () => {
     const result = workflow({
       fileCount: 1,
       entityStatuses: ["CONFIRMED", "CORRECTED", "REJECTED", "IMPORTED"],
@@ -77,23 +77,28 @@ describe("deterministic project workflow guidance", () => {
     });
 
     expect(result.nextStep).toEqual({
-      message: "Source review is complete. Continue the BOQ workflow.",
-      ctaLabel: "Continue BOQ",
+      message: "Source review is complete. Continue to dimension review in the BOQ workspace.",
+      ctaLabel: "Review Dimensions",
       href: "/projects/dubai-tower/boq",
     });
     expect(stateOf(result, "EXTRACTION")).toBe("COMPLETE");
-    expect(stateOf(result, "BOQ")).toBe("CURRENT");
+    expect(stateOf(result, "DIMENSIONS")).toBe("CURRENT");
+    expect(stateOf(result, "CALCULATIONS")).toBe("NOT_STARTED");
+    expect(stateOf(result, "BOQ")).toBe("NOT_STARTED");
   });
 
-  it("E. starts a BOQ only after all extraction candidates are reviewed", () => {
+  it("E. sends reviewed extraction without a BOQ to workspace creation before dimension review", () => {
     const result = workflow({ fileCount: 1, entityStatuses: ["CONFIRMED"], hasBoq: false });
 
     expect(result.nextStep).toEqual({
-      message: "Source review is complete. Start your project BOQ.",
+      message: "Source review is complete. Create the BOQ workspace to begin dimension review.",
       ctaLabel: "Create BOQ",
       href: "/projects/dubai-tower/boq",
     });
-    expect(stateOf(result, "BOQ")).toBe("CURRENT");
+    expect(stateOf(result, "EXTRACTION")).toBe("COMPLETE");
+    expect(stateOf(result, "DIMENSIONS")).toBe("CURRENT");
+    expect(stateOf(result, "CALCULATIONS")).toBe("NOT_STARTED");
+    expect(stateOf(result, "BOQ")).toBe("NOT_STARTED");
   });
 
   it("never reports zero candidates as completed extraction", () => {

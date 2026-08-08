@@ -193,17 +193,17 @@ export function deriveProjectWorkflow(input: ProjectWorkflowInput): ProjectWorkf
         };
       } else {
         states.EXTRACTION = "COMPLETE";
-        // BOQ is the next/current stage in this scoped guide. A BOQ record
-        // proves existence, not completion, so this stage is never COMPLETE.
-        states.BOQ = "CURRENT";
+        // Dimension review is the next provable stage. The guided BOQ
+        // workspace owns that review, but BOQ work has not started yet.
+        states.DIMENSIONS = "CURRENT";
         nextStep = input.hasBoq
           ? {
-              message: "Source review is complete. Continue the BOQ workflow.",
-              ctaLabel: "Continue BOQ",
+              message: "Source review is complete. Continue to dimension review in the BOQ workspace.",
+              ctaLabel: "Review Dimensions",
               href: `${projectPath}/boq`,
             }
           : {
-              message: "Source review is complete. Start your project BOQ.",
+              message: "Source review is complete. Create the BOQ workspace to begin dimension review.",
               ctaLabel: "Create BOQ",
               href: `${projectPath}/boq`,
             };

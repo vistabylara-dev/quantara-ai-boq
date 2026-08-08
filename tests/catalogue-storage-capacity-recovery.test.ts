@@ -1,4 +1,12 @@
-import { MasterCatalogueImportJobStatus, PlatformRole, Prisma, UserRole } from "@prisma/client";
+import {
+  MasterCatalogueImportJobStatus,
+  MasterCatalogueImportStatus,
+  MasterClassificationSystem,
+  MasterItemVersionStatus,
+  PlatformRole,
+  Prisma,
+  UserRole,
+} from "@prisma/client";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import type { PlatformActor } from "../src/lib/auth/platform-authorization";
 import { prisma } from "../src/lib/db/prisma";
@@ -42,25 +50,77 @@ function assertIsolatedLocalTestDatabase(): void {
   }
 }
 
+/**
+ * CodeRabbit finding — the previous version of this helper scoped every
+ * DELETE by the global HVAC_DATASET_ID constant or an itemCode prefix, both
+ * shared with production and with every other test file that touches this
+ * same dataset (e.g. tests/catalogue-prod-activate.test.ts). That could
+ * delete baseline fixtures or another test's records outright, not just this
+ * run's own. Every DELETE here is now scoped strictly by provenance back to
+ * this run's own uniquely-created ownerUserId — never by datasetId, never by
+ * itemCode prefix:
+ *   MasterCatalogueImportJob.actorUserId === ownerUserId
+ *   MasterCatalogueImportBatch.actorUserId === ownerUserId
+ *   MasterItem.sourceBatchId -> one of the batches above
+ *   MasterItemVersion / MasterItemClassification -> one of the items above
+ * A record with no provable path back to ownerUserId is never touched, no
+ * matter what dataset it claims or what its itemCode looks like.
+ */
 async function cleanTestState(): Promise<void> {
   assertIsolatedLocalTestDatabase();
-  const jobs = await prisma.masterCatalogueImportJob.findMany({
-    where: { datasetId: HVAC_DATASET_ID },
-    select: { legacyBatchId: true },
-  });
-  const legacyBatchIds = jobs.map((job) => job.legacyBatchId).filter((id): id is string => Boolean(id));
-  await prisma.masterCatalogueImportJob.deleteMany({ where: { datasetId: HVAC_DATASET_ID } });
+  if (!ownerUserId) return; // nothing can be owned by this run before its own user exists
 
-  const itemWhere = await hvacItemWhere();
-  const items = await prisma.masterItem.findMany({ where: itemWhere, select: { id: true } });
-  const itemIds = items.map((item) => item.id);
-  if (itemIds.length > 0) {
-    await prisma.masterItemClassification.deleteMany({ where: { masterItemId: { in: itemIds } } });
-    await prisma.masterItemVersion.deleteMany({ where: { masterItemId: { in: itemIds } } });
-    await prisma.masterItem.deleteMany({ where: { id: { in: itemIds } } });
+  const [ownedJobs, ownedBatches] = await Promise.all([
+    prisma.masterCatalogueImportJob.findMany({ where: { actorUserId: ownerUserId }, select: { legacyBatchId: true } }),
+    prisma.masterCatalogueImportBatch.findMany({ where: { actorUserId: ownerUserId }, select: { id: true } }),
+  ]);
+  const ownedBatchIds = Array.from(
+    new Set([
+      ...ownedJobs.map((job) => job.legacyBatchId).filter((id): id is string => Boolean(id)),
+      ...ownedBatches.map((batch) => batch.id),
+    ]),
+  );
+
+  const ownedItems = ownedBatchIds.length > 0
+    ? await prisma.masterItem.findMany({ where: { sourceBatchId: { in: ownedBatchIds } }, select: { id: true } })
+    : [];
+  const ownedItemIds = ownedItems.map((item) => item.id);
+
+  if (ownedItemIds.length > 0) {
+    await prisma.masterItemClassification.deleteMany({ where: { masterItemId: { in: ownedItemIds } } });
+    await prisma.masterItemVersion.deleteMany({ where: { masterItemId: { in: ownedItemIds } } });
+    await prisma.masterItem.deleteMany({ where: { id: { in: ownedItemIds } } });
   }
-  if (legacyBatchIds.length > 0) {
-    await prisma.masterCatalogueImportBatch.deleteMany({ where: { id: { in: legacyBatchIds } } });
+  await prisma.masterCatalogueImportJob.deleteMany({ where: { actorUserId: ownerUserId } });
+  if (ownedBatchIds.length > 0) {
+    await prisma.masterCatalogueImportBatch.deleteMany({ where: { id: { in: ownedBatchIds } } });
+  }
+}
+
+/**
+ * CodeRabbit finding — the old beforeAll called the (then-unsafe) cleanTestState()
+ * to manufacture a clean slate before this run's own fixtures existed. If a prior
+ * run crashed before reaching its own afterAll, or a baseline fixture, or another
+ * process left real HVAC catalogue data in this database, this test has no way to
+ * prove it's safe to delete — so it fails closed with a clear, actionable error
+ * instead of either silently wiping unknown data or silently running on top of it.
+ */
+async function assertNoUnrelatedHvacResidue(): Promise<void> {
+  const existingJob = await prisma.masterCatalogueImportJob.findFirst({ where: { datasetId: HVAC_DATASET_ID } });
+  if (existingJob) {
+    throw new Error(
+      `Refusing to run: a MasterCatalogueImportJob (id=${existingJob.id}) already exists for ${HVAC_DATASET_ID} in ` +
+        "this database, before this test run created anything of its own. This test cannot prove it's safe to " +
+        "delete, so it is failing closed rather than guessing — investigate and clean up manually before rerunning.",
+    );
+  }
+  const existingItem = await prisma.masterItem.findFirst({ where: await hvacItemWhere() });
+  if (existingItem) {
+    throw new Error(
+      `Refusing to run: a MasterItem (id=${existingItem.id}, itemCode=${existingItem.itemCode}) already matches ` +
+        "this test's HVAC scope, before this test run created anything of its own. This test cannot prove it's " +
+        "safe to delete, so it is failing closed rather than guessing — investigate and clean up manually before rerunning.",
+    );
   }
 }
 
@@ -72,7 +132,7 @@ describe("catalogue import storage-capacity recovery", () => {
       update: {},
       create: { key: "mechanical", name: "Mechanical" },
     });
-    await cleanTestState();
+    await assertNoUnrelatedHvacResidue();
     const company = await prisma.company.create({
       data: { legalName: `Capacity Co ${RUN_ID}`, tradeName: "Capacity Co", email: `${RUN_ID}@example.com` },
     });
@@ -281,4 +341,140 @@ describe("catalogue import storage-capacity recovery", () => {
     expect(job.itemsCreated).toBe(891);
     expect(job.versionsCreated).toBe(totalVersionCount);
   }, 120_000);
+
+  /**
+   * CodeRabbit Major finding #2 — proves cleanTestState() deletes only records
+   * provably owned by this run's own ownerUserId, never anything that merely
+   * shares HVAC_DATASET_ID or an "HVAC-" itemCode prefix. Simulates a
+   * completely separate process/test owning real HVAC catalogue data in this
+   * same database (its own company, user, category, batch, job, item,
+   * version, and classification) and proves cleanup leaves every one of them
+   * untouched while still fully removing this run's own records.
+   */
+  it("cleanup deletes only this run's own records — unrelated HVAC jobs, items, versions, and classifications survive", async () => {
+    await cleanTestState(); // start from a known state regardless of prior test ordering
+
+    const unrelatedCompany = await prisma.company.create({
+      data: { legalName: `Unrelated Co ${RUN_ID}`, tradeName: "Unrelated Co", email: `unrelated-${RUN_ID}@example.com` },
+    });
+    const unrelatedUser = await prisma.user.create({
+      data: {
+        companyId: unrelatedCompany.id,
+        email: `unrelated-${RUN_ID}-owner@example.com`,
+        passwordHash: `hash-unrelated-${RUN_ID}`,
+        fullName: "Unrelated Owner",
+        role: UserRole.COMPANY_OWNER,
+        platformRole: PlatformRole.PLATFORM_OWNER,
+        isActive: true,
+        emailVerifiedAt: new Date(),
+      },
+    });
+    const mechanical = await prisma.masterDiscipline.upsert({
+      where: { key: "mechanical" },
+      update: {},
+      create: { key: "mechanical", name: "Mechanical" },
+    });
+    const unrelatedCategory = await prisma.masterCategory.create({
+      data: { disciplineId: mechanical.id, key: `unrelated-${RUN_ID}`, name: "Unrelated Category", path: `unrelated-${RUN_ID}`, depth: 0 },
+    });
+    const unrelatedBatch = await prisma.masterCatalogueImportBatch.create({
+      data: {
+        actorUserId: unrelatedUser.id,
+        disciplineId: mechanical.id,
+        uploadedFileName: `unrelated-${RUN_ID}.csv`,
+        checksum: `unrelated-checksum-${RUN_ID}`,
+        status: MasterCatalogueImportStatus.EXECUTED,
+        totalRows: 1,
+      },
+    });
+    const unrelatedJob = await prisma.masterCatalogueImportJob.create({
+      data: {
+        datasetId: HVAC_DATASET_ID,
+        datasetVersion: "1",
+        actorUserId: unrelatedUser.id,
+        disciplineId: mechanical.id,
+        legacyBatchId: unrelatedBatch.id,
+        status: MasterCatalogueImportJobStatus.COMPLETED,
+        sourceChecksum: `unrelated-source-checksum-${RUN_ID}`,
+        manifestJson: [],
+        totalRows: 1,
+        processedRows: 1,
+      },
+    });
+    const unrelatedItem = await prisma.masterItem.create({
+      data: {
+        disciplineId: mechanical.id,
+        categoryId: unrelatedCategory.id,
+        itemCode: `HVAC-UNRELATED-${RUN_ID}`,
+        name: "Unrelated fixture item",
+        shortDescription: "Unrelated fixture item",
+        fullDescription: "Unrelated fixture item",
+        defaultUnit: "no.",
+        sourceBatchId: unrelatedBatch.id,
+      },
+    });
+    const unrelatedVersion = await prisma.masterItemVersion.create({
+      data: {
+        masterItemId: unrelatedItem.id,
+        versionNumber: 1,
+        status: MasterItemVersionStatus.PUBLISHED,
+        effectiveDate: new Date(),
+        name: "Unrelated fixture item",
+        shortDescription: "Unrelated fixture item",
+        fullDescription: "Unrelated fixture item",
+        primaryUnit: "no.",
+        createdByUserId: unrelatedUser.id,
+      },
+    });
+    const unrelatedClassification = await prisma.masterItemClassification.create({
+      data: {
+        masterItemId: unrelatedItem.id,
+        system: MasterClassificationSystem.MASTERFORMAT_2020,
+        code: `UNRELATED-${RUN_ID}`,
+        label: "Unrelated",
+        source: "unrelated-fixture",
+      },
+    });
+
+    try {
+      // A real job/batch/items owned by THIS run, to prove cleanup actually removes what it
+      // should while leaving the unrelated fixture above alone.
+      const dryRun = await registerAndDryRun(ownerActor(), HVAC_DATASET_ID);
+      await confirmExecution(ownerActor(), dryRun.id);
+      const afterOneBatch = await processNextBatch(ownerActor(), dryRun.id);
+      expect(afterOneBatch.insertedCount).toBeGreaterThan(0);
+      const ownedJobRaw = await prisma.masterCatalogueImportJob.findUniqueOrThrow({ where: { id: dryRun.id } });
+      const ownedBatchId = ownedJobRaw.legacyBatchId;
+      expect(ownedBatchId).not.toBeNull();
+      const ownedItemCountBeforeCleanup = await prisma.masterItem.count({ where: { sourceBatchId: ownedBatchId } });
+      expect(ownedItemCountBeforeCleanup).toBeGreaterThan(0);
+
+      await cleanTestState();
+
+      // A + F: this run's own job, batch, and items are fully gone — nothing left behind.
+      expect(await prisma.masterCatalogueImportJob.findUnique({ where: { id: dryRun.id } })).toBeNull();
+      expect(await prisma.masterCatalogueImportBatch.findUnique({ where: { id: ownedBatchId! } })).toBeNull();
+      expect(await prisma.masterItem.count({ where: { sourceBatchId: ownedBatchId } })).toBe(0);
+
+      // B/C/D: the unrelated fixture — different owner, same dataset/discipline/itemCode
+      // prefix — survives completely untouched.
+      expect(await prisma.masterItem.findUnique({ where: { id: unrelatedItem.id } })).not.toBeNull();
+      expect(await prisma.masterCatalogueImportJob.findUnique({ where: { id: unrelatedJob.id } })).not.toBeNull();
+      expect(await prisma.masterCatalogueImportBatch.findUnique({ where: { id: unrelatedBatch.id } })).not.toBeNull();
+      expect(await prisma.masterItemVersion.findUnique({ where: { id: unrelatedVersion.id } })).not.toBeNull();
+      expect(await prisma.masterItemClassification.findUnique({ where: { id: unrelatedClassification.id } })).not.toBeNull();
+    } finally {
+      // This test manufactured the unrelated fixture itself, so it — not the shared
+      // cleanTestState(), which must never be able to touch it — is responsible for removing
+      // it, leaving the database clean for whatever runs next.
+      await prisma.masterItemClassification.deleteMany({ where: { masterItemId: unrelatedItem.id } });
+      await prisma.masterItemVersion.deleteMany({ where: { masterItemId: unrelatedItem.id } });
+      await prisma.masterItem.deleteMany({ where: { id: unrelatedItem.id } });
+      await prisma.masterCatalogueImportJob.deleteMany({ where: { id: unrelatedJob.id } });
+      await prisma.masterCatalogueImportBatch.deleteMany({ where: { id: unrelatedBatch.id } });
+      await prisma.masterCategory.deleteMany({ where: { id: unrelatedCategory.id } });
+      await prisma.user.deleteMany({ where: { id: unrelatedUser.id } });
+      await prisma.company.deleteMany({ where: { id: unrelatedCompany.id } });
+    }
+  }, 60_000);
 });

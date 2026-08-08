@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { BOQ, BOQItem, BOQSection } from "@/types/boq";
 import {
   calculateEditableBOQItem,
@@ -13,9 +13,14 @@ import { formatCurrency } from "@/lib/formatting/currency";
 import { formatDate } from "@/lib/formatting/dates";
 import CatalogueRateDrawer from "@/components/boq/catalogue-rate-drawer";
 import type { CatalogueItem } from "@/types/catalogue";
+import { apiClient, getApiErrorMessage } from "@/lib/api/client";
+import type { VoiceCommandProposal } from "@/lib/voice/voice-types";
+import { VoiceCommandButton } from "@/components/voice/voice-command-button";
+import { VoiceProposalCard } from "@/components/voice/voice-proposal-card";
 
 type BoqEditorProps = {
   boq: BOQ;
+  projectId: string;
   currency: string;
   taxRate: number;
   industryId?: string;
@@ -26,11 +31,40 @@ type BoqEditorProps = {
   onLock: (boq: BOQ) => Promise<void> | void;
   onApplyCatalogueRate?: (itemId: string, catalogueItemId: string, confirmReplaceOverrides?: boolean) => Promise<void>;
   onAddItem?: () => void;
+  hasUnsavedChanges?: boolean;
+  onVoiceApplied?: (boq: BOQ) => void;
 };
 
-function isPersistedItemId(itemId: string): boolean {
+export function isPersistedItemId(itemId: string): boolean {
   return !itemId.includes("-item-");
 }
+
+export function getVoiceBOQFieldLabel(field: string): string {
+  switch (field) {
+    case "quantity":
+      return "Quantity";
+    case "description":
+      return "Description";
+    case "unit":
+      return "Unit";
+    case "notes":
+      return "Notes";
+    default:
+      return field.replace(/_/g, " ");
+  }
+}
+
+type PendingBOQVoiceProposal = {
+  itemId: string;
+  proposal: VoiceCommandProposal;
+};
+
+const SUPPORTED_BOQ_VOICE_COMMANDS = new Set([
+  "SET_BOQ_QUANTITY",
+  "SET_BOQ_DESCRIPTION",
+  "SET_BOQ_UNIT",
+  "SET_BOQ_NOTES",
+]);
 
 const emptyItem = (section: BOQSection, nextNumber: number): BOQItem => ({
   id: `${section.id}-item-${Date.now()}`,
@@ -63,6 +97,7 @@ const emptyItem = (section: BOQSection, nextNumber: number): BOQItem => ({
 
 export default function BoqEditor({
   boq,
+  projectId,
   currency,
   taxRate,
   industryId,
@@ -73,11 +108,18 @@ export default function BoqEditor({
   onLock,
   onApplyCatalogueRate,
   onAddItem,
+  hasUnsavedChanges = false,
+  onVoiceApplied,
 }: BoqEditorProps) {
   const [isSaving, setIsSaving] = useState(false);
   const [rateDrawerItemId, setRateDrawerItemId] = useState<string | null>(null);
   const [isApplyingRate, setIsApplyingRate] = useState(false);
   const [rateError, setRateError] = useState<string | null>(null);
+  const [voiceBusyItemId, setVoiceBusyItemId] = useState<string | null>(null);
+  const [pendingVoiceProposal, setPendingVoiceProposal] = useState<PendingBOQVoiceProposal | null>(null);
+  const [isApplyingVoice, setIsApplyingVoice] = useState(false);
+  const [voiceApplyError, setVoiceApplyError] = useState<string | null>(null);
+  const voiceButtonRefs = useRef(new Map<string, HTMLButtonElement>());
   const activeBoq = boq;
   const effectiveTaxRate = activeBoq.taxRate ?? taxRate;
 
@@ -91,9 +133,46 @@ export default function BoqEditor({
   );
 
   const isReadOnly = Boolean(activeBoq.isLocked) || activeBoq.status === "locked" || activeBoq.status === "approved";
+  const voiceInteractionActive = voiceBusyItemId !== null || pendingVoiceProposal !== null || isApplyingVoice;
+  const editorControlsDisabled = isReadOnly || actionPending || voiceInteractionActive;
+
+  useEffect(() => {
+    setVoiceBusyItemId(null);
+    setPendingVoiceProposal(null);
+    setVoiceApplyError(null);
+    setIsApplyingVoice(false);
+  }, [activeBoq.id]);
+
+  const handleBOQVoiceProposal = useCallback((itemId: string, proposal: VoiceCommandProposal) => {
+    if (proposal.targetType !== "BOQ_ITEM" || proposal.targetId !== itemId || !SUPPORTED_BOQ_VOICE_COMMANDS.has(proposal.commandType)) {
+      throw new Error("This voice instruction did not resolve to a supported change for this BOQ item.");
+    }
+    setVoiceApplyError(null);
+    setPendingVoiceProposal({ itemId, proposal });
+  }, []);
+
+  const confirmBOQVoiceProposal = useCallback(async () => {
+    if (!pendingVoiceProposal || !onVoiceApplied) return;
+    setIsApplyingVoice(true);
+    setVoiceApplyError(null);
+    try {
+      const updated = await apiClient.post<BOQ>(
+        `/api/projects/${encodeURIComponent(projectId)}/voice/apply`,
+        { confirmed: true, proposal: pendingVoiceProposal.proposal },
+      );
+      onVoiceApplied(updated);
+      const itemId = pendingVoiceProposal.itemId;
+      setPendingVoiceProposal(null);
+      requestAnimationFrame(() => voiceButtonRefs.current.get(itemId)?.focus());
+    } catch (caught) {
+      setVoiceApplyError(getApiErrorMessage(caught));
+    } finally {
+      setIsApplyingVoice(false);
+    }
+  }, [onVoiceApplied, pendingVoiceProposal, projectId]);
 
   const updateItem = (sectionId: string, itemId: string, key: keyof BOQItem, value: string | number | boolean) => {
-    if (isReadOnly) return;
+    if (editorControlsDisabled) return;
     onChange({
       ...activeBoq,
       sections: activeBoq.sections.map((section) => {
@@ -132,7 +211,7 @@ export default function BoqEditor({
   };
 
   const addItem = (sectionId: string) => {
-    if (isReadOnly) return;
+    if (editorControlsDisabled) return;
     const section = activeBoq.sections.find((entry) => entry.id === sectionId);
     if (!section) return;
     const nextNumber = section.items.length + 1;
@@ -146,7 +225,7 @@ export default function BoqEditor({
   };
 
   const deleteItem = (sectionId: string, itemId: string) => {
-    if (isReadOnly) return;
+    if (editorControlsDisabled) return;
     onChange({
       ...activeBoq,
       sections: activeBoq.sections.map((section) =>
@@ -172,7 +251,7 @@ export default function BoqEditor({
   const currentPayload = () => withCalculatedBOQTotals(activeBoq, effectiveTaxRate);
 
   const save = async () => {
-    if (isReadOnly || isSaving || actionPending) return;
+    if (isReadOnly || isSaving || actionPending || voiceInteractionActive) return;
     setIsSaving(true);
     try {
       await onSave(currentPayload());
@@ -182,7 +261,7 @@ export default function BoqEditor({
   };
 
   const applyCatalogueRate = async (catalogueItem: CatalogueItem) => {
-    if (!rateDrawerItemId || !onApplyCatalogueRate) return;
+    if (!rateDrawerItemId || !onApplyCatalogueRate || voiceInteractionActive) return;
     setIsApplyingRate(true);
     setRateError(null);
     try {
@@ -239,7 +318,7 @@ export default function BoqEditor({
               <button
                 type="button"
                 onClick={() => void onCreateRevision(currentPayload())}
-                disabled={actionPending}
+                disabled={actionPending || voiceInteractionActive}
                 className="rounded-2xl border border-slate-700 bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 Create Editable Revision
@@ -250,7 +329,7 @@ export default function BoqEditor({
               <button
                 type="button"
                 onClick={() => void save()}
-                disabled={isReadOnly || isSaving || actionPending}
+                disabled={isReadOnly || isSaving || actionPending || voiceInteractionActive}
                 className="rounded-2xl border border-slate-700 bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {isSaving ? "Saving…" : "Save draft"}
@@ -258,7 +337,7 @@ export default function BoqEditor({
               <button
                 type="button"
                 onClick={() => void onCreateRevision(currentPayload())}
-                disabled={isSaving || actionPending}
+                disabled={isSaving || actionPending || voiceInteractionActive}
                 className="rounded-2xl border border-slate-700 bg-slate-900 px-4 py-2 text-sm font-semibold text-slate-200 hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 Create revision
@@ -267,7 +346,7 @@ export default function BoqEditor({
                 type="button"
                 title={activeBoq.sections.every(s => s.items.length === 0) ? "Add at least one valid item before locking this revision." : ""}
                 onClick={() => void onLock(currentPayload())}
-                disabled={isReadOnly || isSaving || actionPending || activeBoq.sections.every(s => s.items.length === 0)}
+                disabled={isReadOnly || isSaving || actionPending || voiceInteractionActive || activeBoq.sections.every(s => s.items.length === 0)}
                 className="rounded-2xl border border-slate-700 bg-[#1F2937] px-4 py-2 text-sm font-semibold text-slate-200 hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 Lock revision
@@ -292,7 +371,7 @@ export default function BoqEditor({
                     onAddItem();
                   }
                 }}
-                disabled={actionPending}
+                disabled={actionPending || voiceInteractionActive}
                 className="rounded-2xl bg-blue-600 px-6 py-3 font-semibold text-white hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 Add First Item
@@ -305,7 +384,7 @@ export default function BoqEditor({
                     onAddItem();
                   }
                 }}
-                disabled={actionPending}
+                disabled={actionPending || voiceInteractionActive}
                 className="rounded-2xl border border-slate-700 bg-slate-900 px-6 py-3 font-semibold text-slate-200 hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 Enter Item Manually
@@ -332,14 +411,15 @@ export default function BoqEditor({
               <button
                 type="button"
                 onClick={() => toggleSection(section.id)}
-                className="rounded-2xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-200 hover:bg-slate-900"
+                disabled={voiceInteractionActive}
+                className="rounded-2xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-200 hover:bg-slate-900 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {section.collapsed ? "Expand" : "Collapse"}
               </button>
               <button
                 type="button"
                 onClick={() => onAddItem && onAddItem()}
-                disabled={isReadOnly || actionPending}
+                disabled={editorControlsDisabled}
                 className="rounded-2xl border border-slate-700 bg-blue-600 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 Add item
@@ -368,14 +448,15 @@ export default function BoqEditor({
                 </thead>
                 <tbody>
                   {section.items.map((item) => (
-                    <tr key={item.id} className="border-t border-slate-800 hover:bg-slate-900">
+                    <Fragment key={item.id}>
+                    <tr className="border-t border-slate-800 hover:bg-slate-900">
                       <td className="px-4 py-3 text-slate-200">{item.itemNumber}</td>
                       <td className="px-4 py-3">
                         <input
                           type="text"
                           value={item.itemCode}
                           onChange={(event) => updateItem(section.id, item.id, "itemCode", event.target.value)}
-                          disabled={isReadOnly || actionPending}
+                          disabled={editorControlsDisabled}
                           className="w-full rounded-2xl border border-slate-800 bg-slate-900 px-2 py-2 text-slate-100 outline-none focus:border-blue-500 disabled:cursor-not-allowed disabled:opacity-60"
                         />
                       </td>
@@ -384,7 +465,7 @@ export default function BoqEditor({
                           type="text"
                           value={item.description}
                           onChange={(event) => updateItem(section.id, item.id, "description", event.target.value)}
-                          disabled={isReadOnly || actionPending}
+                          disabled={editorControlsDisabled}
                           className="w-full rounded-2xl border border-slate-800 bg-slate-900 px-2 py-2 text-slate-100 outline-none focus:border-blue-500 disabled:cursor-not-allowed disabled:opacity-60"
                         />
                         {item.pricingMetadata && (
@@ -401,13 +482,14 @@ export default function BoqEditor({
                               : `Catalogue · ${item.pricingMetadata.catalogueItemCode}`}
                           </p>
                         )}
+                        {item.notes ? <p className="mt-1 text-xs text-slate-400">Notes: {item.notes}</p> : null}
                       </td>
                       <td className="px-4 py-3 w-24">
                         <input
                           type="number"
                           value={item.quantity}
                           onChange={(event) => updateItem(section.id, item.id, "quantity", Number(event.target.value))}
-                          disabled={isReadOnly || actionPending}
+                          disabled={editorControlsDisabled}
                           className="w-full rounded-2xl border border-slate-800 bg-slate-900 px-2 py-2 text-slate-100 outline-none focus:border-blue-500 disabled:cursor-not-allowed disabled:opacity-60"
                         />
                       </td>
@@ -416,7 +498,7 @@ export default function BoqEditor({
                           type="text"
                           value={item.unit}
                           onChange={(event) => updateItem(section.id, item.id, "unit", event.target.value)}
-                          disabled={isReadOnly || actionPending}
+                          disabled={editorControlsDisabled}
                           className="w-full rounded-2xl border border-slate-800 bg-slate-900 px-2 py-2 text-slate-100 outline-none focus:border-blue-500 disabled:cursor-not-allowed disabled:opacity-60"
                         />
                       </td>
@@ -425,7 +507,7 @@ export default function BoqEditor({
                           type="number"
                           value={item.unitCost}
                           onChange={(event) => updateItem(section.id, item.id, "unitCost", Number(event.target.value))}
-                          disabled={isReadOnly || actionPending}
+                          disabled={editorControlsDisabled}
                           className="w-full rounded-2xl border border-slate-800 bg-slate-900 px-2 py-2 text-slate-100 outline-none focus:border-blue-500 disabled:cursor-not-allowed disabled:opacity-60"
                         />
                       </td>
@@ -435,7 +517,7 @@ export default function BoqEditor({
                             aria-label={`Pricing mode for item ${item.itemNumber}`}
                             value={normalizeMarginMode(item.marginMode)}
                             onChange={(event) => updateItem(section.id, item.id, "marginMode", event.target.value)}
-                            disabled={isReadOnly || actionPending}
+                            disabled={editorControlsDisabled}
                             className="w-full rounded-2xl border border-slate-800 bg-slate-900 px-2 py-2 text-slate-100 outline-none focus:border-blue-500 disabled:cursor-not-allowed disabled:opacity-60"
                           >
                             <option value="markup">Markup</option>
@@ -447,7 +529,7 @@ export default function BoqEditor({
                             step="0.01"
                             value={item.marginPercentage}
                             onChange={(event) => updateItem(section.id, item.id, "marginPercentage", Number(event.target.value))}
-                            disabled={isReadOnly || actionPending}
+                            disabled={editorControlsDisabled}
                             className="w-full rounded-2xl border border-slate-800 bg-slate-900 px-2 py-2 text-slate-100 outline-none focus:border-blue-500 disabled:cursor-not-allowed disabled:opacity-60"
                           />
                         </div>
@@ -460,16 +542,52 @@ export default function BoqEditor({
                             <button
                               type="button"
                               onClick={() => setRateDrawerItemId(item.id)}
-                              disabled={isReadOnly || actionPending || isApplyingRate}
+                              disabled={editorControlsDisabled || isApplyingRate}
                               className="rounded-2xl border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-200 hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
                             >
                               Apply rate
                             </button>
                           )}
+                          {isPersistedItemId(item.id) ? (
+                            <VoiceCommandButton
+                              ref={(element) => {
+                                if (element) voiceButtonRefs.current.set(item.id, element);
+                                else voiceButtonRefs.current.delete(item.id);
+                              }}
+                              projectId={projectId}
+                              context={{ type: "BOQ_ITEM", itemId: item.id }}
+                              onProposal={(proposal) => handleBOQVoiceProposal(item.id, proposal)}
+                              onBusyChange={(busy) => {
+                                setVoiceBusyItemId((current) => busy ? item.id : current === item.id ? null : current);
+                              }}
+                              disabled={
+                                isReadOnly
+                                || actionPending
+                                || hasUnsavedChanges
+                                || !onVoiceApplied
+                                || pendingVoiceProposal !== null
+                                || isApplyingVoice
+                                || (voiceBusyItemId !== null && voiceBusyItemId !== item.id)
+                              }
+                              disabledReason={
+                                isReadOnly
+                                  ? "This BOQ revision is read-only."
+                                  : hasUnsavedChanges
+                                    ? "Save the draft before using voice so the saved old value can be verified."
+                                    : pendingVoiceProposal
+                                      ? "Review or cancel the current voice proposal first."
+                                      : actionPending || isApplyingVoice || voiceBusyItemId !== null
+                                        ? "Wait for the current BOQ action to finish."
+                                        : "Voice updates are not available for this item."
+                              }
+                              compact
+                              ariaLabel={`Record a voice instruction for BOQ item ${item.itemNumber}`}
+                            />
+                          ) : null}
                           <button
                             type="button"
                             onClick={() => deleteItem(section.id, item.id)}
-                            disabled={isReadOnly || actionPending}
+                            disabled={editorControlsDisabled}
                             className="rounded-2xl border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-200 hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
                           >
                             Delete
@@ -477,6 +595,28 @@ export default function BoqEditor({
                         </div>
                       </td>
                     </tr>
+                    {pendingVoiceProposal?.itemId === item.id ? (
+                      <tr className="border-t border-blue-800/60 bg-blue-950/10">
+                        <td colSpan={10} className="px-4 py-4">
+                          <VoiceProposalCard
+                            proposal={pendingVoiceProposal.proposal}
+                            fieldLabel={getVoiceBOQFieldLabel(pendingVoiceProposal.proposal.field)}
+                            confirmationScope="PERSISTED_BOQ_ITEM"
+                            isConfirming={isApplyingVoice}
+                            error={voiceApplyError}
+                            onConfirm={confirmBOQVoiceProposal}
+                            onCancel={() => {
+                              const itemId = pendingVoiceProposal.itemId;
+                              setPendingVoiceProposal(null);
+                              setVoiceApplyError(null);
+                              requestAnimationFrame(() => voiceButtonRefs.current.get(itemId)?.focus());
+                            }}
+                            returnFocusRef={{ current: voiceButtonRefs.current.get(item.id) ?? null }}
+                          />
+                        </td>
+                      </tr>
+                    ) : null}
+                    </Fragment>
                   ))}
                   {section.items.length === 0 && (
                     <tr>
@@ -486,7 +626,7 @@ export default function BoqEditor({
                           <button
                             type="button"
                             onClick={() => onAddItem && onAddItem()}
-                            disabled={actionPending}
+                            disabled={actionPending || voiceInteractionActive}
                             className="inline-flex items-center gap-2 rounded-2xl border border-slate-700 bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
                           >
                             Add First Item

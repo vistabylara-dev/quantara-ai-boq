@@ -1,10 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { QuantityCalculationType } from "@prisma/client";
 import { apiClient, getApiErrorMessage } from "@/lib/api/client";
 import { getRequiredDimensions } from "@/lib/calculations/required-dimensions-registry";
 import type { FormulaResult } from "@/lib/calculations/quantity-formulas";
+import type { VoiceCommandProposal } from "@/lib/voice/voice-types";
+import { VoiceCommandButton } from "@/components/voice/voice-command-button";
+import { applyConfirmedDimensionVoiceProposal, VoiceProposalCard } from "@/components/voice/voice-proposal-card";
 
 /**
  * Guided BOQ measurement workflow (Release 1), spec sections 2-6 — the
@@ -15,7 +18,7 @@ import type { FormulaResult } from "@/lib/calculations/quantity-formulas";
  * component against an extractedEntityId without any change here.
  */
 
-type DimensionValueState = {
+export type DimensionValueState = {
   key: string;
   label: string;
   unit: string | null;
@@ -32,6 +35,15 @@ type CalculationDTO = {
   resultValue: number;
   resultUnit: string;
   formula: string;
+};
+
+type PendingDimensionVoiceProposal = {
+  proposal: VoiceCommandProposal;
+  dimensionKey: string;
+  expectedOldValue: number | null;
+  proposedValues: DimensionValueState[];
+  oldResult: FormulaResult | null;
+  newResult: FormulaResult | null;
 };
 
 export type QuantityCalculationPanelProps = {
@@ -51,6 +63,10 @@ export function QuantityCalculationPanel({ projectId, calculationType, extracted
   const [savedCalculation, setSavedCalculation] = useState<CalculationDTO | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [isConfirming, setIsConfirming] = useState(false);
+  const [isVoiceBusy, setIsVoiceBusy] = useState(false);
+  const [pendingVoiceProposal, setPendingVoiceProposal] = useState<PendingDimensionVoiceProposal | null>(null);
+  const [voiceProposalError, setVoiceProposalError] = useState<string | null>(null);
+  const voiceButtonRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     if (!definition) {
@@ -64,7 +80,11 @@ export function QuantityCalculationPanel({ projectId, calculationType, extracted
     if (extractedEntityId) query.set("extractedEntityId", extractedEntityId);
     apiClient
       .get<DimensionValueState[]>(`/api/quantity-calculations/prefill?${query.toString()}`, controller.signal)
-      .then((values) => setDimensionValues(values))
+      .then((values) => {
+        setDimensionValues(values);
+        setPendingVoiceProposal(null);
+        setSavedCalculation(null);
+      })
       .catch((err) => {
         if (err instanceof DOMException && err.name === "AbortError") return;
         setError(getApiErrorMessage(err));
@@ -105,7 +125,84 @@ export function QuantityCalculationPanel({ projectId, calculationType, extracted
       ),
     );
     setSavedCalculation(null);
+    setPendingVoiceProposal(null);
+    setVoiceProposalError(null);
   }, []);
+
+  const dimensionVoiceContext = useMemo(() => ({
+    type: "DIMENSION_CALCULATION" as const,
+    calculationType,
+    dimensionValues,
+  }), [calculationType, dimensionValues]);
+
+  const handleDimensionVoiceProposal = useCallback(async (proposal: VoiceCommandProposal) => {
+    if (proposal.commandType !== "SET_DIMENSION" || !proposal.dimensionKey) {
+      throw new Error("This voice instruction did not resolve to a supported dimension change.");
+    }
+    if (typeof proposal.newValue !== "number" || !Number.isFinite(proposal.newValue) || proposal.newValue < 0) {
+      throw new Error("The proposed dimension must be a valid non-negative number.");
+    }
+
+    const target = dimensionValues.find((dimension) => dimension.key === proposal.dimensionKey);
+    if (!target) {
+      throw new Error("The proposed dimension is not valid for this calculation type.");
+    }
+
+    const proposedValues = applyConfirmedDimensionVoiceProposal(
+      dimensionValues,
+      proposal.dimensionKey,
+      proposal.newValue,
+    );
+    try {
+      const previewRequest = (values: DimensionValueState[]) => apiClient.post<{
+        result: FormulaResult | null;
+        missingRequiredDimensions: DimensionValueState[];
+      }>("/api/quantity-calculations/preview", {
+        calculationType,
+        dimensionValues: values,
+      });
+      const [currentPreview, proposedPreview] = await Promise.all([
+        previewRequest(dimensionValues),
+        previewRequest(proposedValues),
+      ]);
+      setVoiceProposalError(null);
+      setPendingVoiceProposal({
+        proposal: {
+          ...proposal,
+          oldValue: target.value,
+          unit: target.unit ?? proposal.unit,
+        },
+        dimensionKey: proposal.dimensionKey,
+        expectedOldValue: target.value,
+        proposedValues,
+        oldResult: currentPreview.result,
+        newResult: proposedPreview.result,
+      });
+    } catch (caught) {
+      throw new Error(getApiErrorMessage(caught));
+    }
+  }, [calculationType, dimensionValues]);
+
+  const confirmDimensionVoiceProposal = useCallback(() => {
+    if (!pendingVoiceProposal) return;
+    const currentValue = dimensionValues.find(
+      (dimension) => dimension.key === pendingVoiceProposal.dimensionKey,
+    )?.value ?? null;
+    if (currentValue !== pendingVoiceProposal.expectedOldValue) {
+      setVoiceProposalError("This dimension changed after the proposal was prepared. Cancel it and record a new instruction.");
+      return;
+    }
+
+    // This is deliberately local form state only. It never creates or confirms
+    // a QuantityCalculation and never writes a BOQ item.
+    setDimensionValues(pendingVoiceProposal.proposedValues);
+    setSavedCalculation(null);
+    setVoiceProposalError(null);
+    setPendingVoiceProposal(null);
+    requestAnimationFrame(() => voiceButtonRef.current?.focus());
+  }, [dimensionValues, pendingVoiceProposal]);
+
+  const voiceInteractionLocked = isVoiceBusy || pendingVoiceProposal !== null;
 
   const saveCalculation = useCallback(async () => {
     setIsSaving(true);
@@ -150,9 +247,21 @@ export function QuantityCalculationPanel({ projectId, calculationType, extracted
 
   return (
     <div className="space-y-5 rounded-3xl border border-slate-800 bg-slate-950 p-6">
-      <div>
-        <p className="text-sm uppercase tracking-[0.24em] text-slate-500">{definition.label}</p>
-        <p className="mt-1 text-xs text-slate-500">Result unit: {definition.resultUnit}</p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <p className="text-sm uppercase tracking-[0.24em] text-slate-500">{definition.label}</p>
+          <p className="mt-1 text-xs text-slate-500">Result unit: {definition.resultUnit}</p>
+        </div>
+        <VoiceCommandButton
+          ref={voiceButtonRef}
+          projectId={projectId}
+          context={dimensionVoiceContext}
+          onProposal={handleDimensionVoiceProposal}
+          onBusyChange={setIsVoiceBusy}
+          disabled={isLoadingPrefill || pendingVoiceProposal !== null}
+          disabledReason={pendingVoiceProposal ? "Review or cancel the current voice proposal first." : "Wait for known evidence to load."}
+          ariaLabel={`Record a voice instruction for ${definition.label} dimensions`}
+        />
       </div>
 
       {isLoadingPrefill ? (
@@ -188,13 +297,36 @@ export function QuantityCalculationPanel({ projectId, calculationType, extracted
                 inputMode="decimal"
                 value={dim.value ?? ""}
                 onChange={(e) => updateValue(dim.key, e.target.value)}
+                disabled={voiceInteractionLocked}
                 placeholder="Enter value"
-                className="mt-3 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white outline-none focus:border-blue-500"
+                className="mt-3 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white outline-none focus:border-blue-500 disabled:cursor-not-allowed disabled:opacity-60"
               />
             </div>
           ))}
         </div>
       )}
+
+      {pendingVoiceProposal ? (
+        <VoiceProposalCard
+          proposal={pendingVoiceProposal.proposal}
+          fieldLabel={dimensionValues.find((dimension) => dimension.key === pendingVoiceProposal.dimensionKey)?.label}
+          confirmationScope="LOCAL_DIMENSION"
+          affectedCalculation={{
+            oldValue: pendingVoiceProposal.oldResult?.resultValue ?? null,
+            newValue: pendingVoiceProposal.newResult?.resultValue ?? null,
+            unit: pendingVoiceProposal.newResult?.resultUnit ?? pendingVoiceProposal.oldResult?.resultUnit ?? definition.resultUnit,
+            oldFormula: pendingVoiceProposal.oldResult?.formula,
+            newFormula: pendingVoiceProposal.newResult?.formula,
+          }}
+          error={voiceProposalError}
+          onConfirm={confirmDimensionVoiceProposal}
+          onCancel={() => {
+            setPendingVoiceProposal(null);
+            setVoiceProposalError(null);
+          }}
+          returnFocusRef={voiceButtonRef}
+        />
+      ) : null}
 
       <div className="rounded-2xl border border-slate-800 bg-slate-900 p-4">
         <p className="text-xs uppercase tracking-[0.24em] text-slate-500">Equation</p>
@@ -225,7 +357,7 @@ export function QuantityCalculationPanel({ projectId, calculationType, extracted
           <button
             type="button"
             onClick={() => void saveCalculation()}
-            disabled={!preview.result || isSaving}
+            disabled={!preview.result || isSaving || voiceInteractionLocked}
             className="rounded-2xl border border-slate-700 bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {isSaving ? "Calculating…" : "Calculate"}
@@ -234,7 +366,7 @@ export function QuantityCalculationPanel({ projectId, calculationType, extracted
           <button
             type="button"
             onClick={() => void confirmCalculation()}
-            disabled={isConfirming}
+            disabled={isConfirming || voiceInteractionLocked}
             className="rounded-2xl border border-slate-700 bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {isConfirming ? "Confirming…" : "Confirm calculation"}

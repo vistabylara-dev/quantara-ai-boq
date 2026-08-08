@@ -792,6 +792,25 @@ export type BOQItemWriteInput = {
   pricingMetadataJson?: Prisma.InputJsonValue | null;
 };
 
+export type BOQItemExpectedCurrent =
+  | { field: "quantity"; value: Prisma.Decimal.Value }
+  | { field: "unit" | "description" | "notes"; value: string };
+
+export type BOQItemMutationContext = {
+  /**
+   * Optional optimistic field guard for preview/confirm flows. The comparison
+   * is made against updateBOQItem's own fresh tenant-scoped read, immediately
+   * before the existing BOQ version claim. A stale preview therefore cannot
+   * be applied to a newer item value.
+   */
+  expectedCurrent?: BOQItemExpectedCurrent | readonly BOQItemExpectedCurrent[];
+  /** Written in the same transaction as ITEM_CHANGED and the item mutation. */
+  additionalAudit?: {
+    action: string;
+    payload?: Prisma.InputJsonValue;
+  };
+};
+
 async function getItemRecord(companyId: string, itemId: string) {
   const item = await prisma.bOQItem.findFirst({
     where: { id: itemId, companyId },
@@ -896,9 +915,38 @@ export async function updateBOQItem(
   companyId: string,
   itemId: string,
   input: Partial<BOQItemWriteInput>,
+  mutationContext?: BOQItemMutationContext,
 ) {
   const current = await getItemRecord(companyId, itemId);
   assertBOQEditable(current.section.boq, "edit");
+  const expectedValues = mutationContext?.expectedCurrent
+    ? Array.isArray(mutationContext.expectedCurrent)
+      ? mutationContext.expectedCurrent
+      : [mutationContext.expectedCurrent]
+    : [];
+  for (const expected of expectedValues) {
+    let matches = false;
+    switch (expected.field) {
+      case "quantity":
+        matches = current.quantity.equals(new Prisma.Decimal(expected.value));
+        break;
+      case "unit":
+        matches = current.unit === expected.value;
+        break;
+      case "description":
+        matches = current.description === expected.value;
+        break;
+      case "notes":
+        matches = current.notes === expected.value;
+        break;
+    }
+    if (!matches) {
+      throw new ConflictError(
+        "VOICE_PROPOSAL_STALE",
+        "This BOQ item changed after the voice preview. Review the current value and try again.",
+      );
+    }
+  }
   const quantity = input.quantity ?? current.quantity;
   const unitCost = input.unitCost ?? current.unitCost;
   const freightCost = input.freightCost ?? current.freightCost;
@@ -994,6 +1042,14 @@ export async function updateBOQItem(
       action: "ITEM_CHANGED",
       payload: { boqId: current.section.boqId, sectionId: current.sectionId, itemCode: input.itemCode ?? current.itemCode },
     }, tx);
+    if (mutationContext?.additionalAudit) {
+      await createAuditLog(companyId, {
+        entityType: "BOQItem",
+        entityId: current.id,
+        action: mutationContext.additionalAudit.action,
+        payload: mutationContext.additionalAudit.payload,
+      }, tx);
+    }
     if (pricingMetadataUpdate && pricingMetadataUpdate !== Prisma.JsonNull) {
       await createAuditLog(companyId, {
         entityType: "BOQItem",

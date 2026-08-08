@@ -3,6 +3,7 @@ import { ExtractedEntityType } from "@prisma/client";
 import { apiSuccess, handleApiError, parseJsonBody } from "@/lib/http/api-response";
 import { getCurrentActor } from "@/lib/auth/current-actor";
 import { setActorContext } from "@/lib/auth/request-context";
+import { getProjectRecord } from "@/lib/repositories/project-repository";
 import { listEntitiesForProject, manuallyAddExtractedEntity } from "@/lib/services/extracted-entity-service";
 import { projectIdParamsSchema } from "@/lib/validation/boq-route-schemas";
 
@@ -25,8 +26,9 @@ export async function GET(request: Request, context: RouteContext) {
     setActorContext(actor);
     const params = await context.params;
     const { projectId } = projectIdParamsSchema.parse(params);
+    const project = await getProjectRecord(actor.companyId, projectId);
     const url = new URL(request.url);
-    const data = await listEntitiesForProject(actor, projectId, {
+    const data = await listEntitiesForProject(actor, project.id, {
       status: url.searchParams.get("status") ?? undefined,
       entityType: url.searchParams.get("entityType") ?? undefined,
     });

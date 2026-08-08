@@ -39,6 +39,8 @@ function requireOwner(actor: PlatformActor): void {
 }
 
 export const CONTINUABLE_STATUSES: MasterCatalogueImportJobStatus[] = [MasterCatalogueImportJobStatus.PAUSED, MasterCatalogueImportJobStatus.IMPORT_RUNNING];
+/** How long a job may sit in IMPORT_RUNNING before a new caller may treat it as abandoned (crashed/timed-out mid-batch) and reclaim it. Must exceed the longest maxDuration of any route that calls processNextBatch (the /activate route's runJobBatches loop is bounded at 300s) — otherwise a second caller could misclassify a still-legitimately-running call as stale before its own request ceiling has even expired, recreating the same race this guards against. 360s (6 min) gives a full minute of margin beyond that 300s ceiling. */
+export const STALE_IMPORT_RUNNING_MS = 6 * 60 * 1000;
 export const TERMINAL_STATUSES: MasterCatalogueImportJobStatus[] = [
   MasterCatalogueImportJobStatus.COMPLETED,
   MasterCatalogueImportJobStatus.COMPLETED_WITH_WARNINGS,
@@ -404,8 +406,35 @@ export async function processNextBatch(owner: PlatformActor, jobId: string) {
     );
   }
 
+  // CATALOGUE-CONCURRENCY-REPAIR — CONTINUABLE_STATUSES intentionally includes
+  // IMPORT_RUNNING (a job can be genuinely stuck there if a prior serverless
+  // invocation crashed or timed out mid-batch), but a claim must never treat
+  // a FRESH IMPORT_RUNNING job the same as a stale one. Previously this
+  // updateMany matched status IN CONTINUABLE_STATUSES unconditionally, so two
+  // overlapping callers could both win the lock in sequence: A claims
+  // PAUSED->IMPORT_RUNNING, then B reads that same IMPORT_RUNNING row (with
+  // the updatedAt A just wrote) and reclaims IMPORT_RUNNING->IMPORT_RUNNING
+  // before A finishes — both then process the same cursor slice. That is the
+  // exact mechanism behind the duplicate-row/unique-constraint incident this
+  // repairs. A job is only eligible for reclaim from IMPORT_RUNNING if it has
+  // sat there, untouched, longer than STALE_IMPORT_RUNNING_MS — comfortably
+  // longer than a single 200-row batch should ever take, so a live
+  // in-progress claim is never stolen, while a genuinely abandoned one
+  // (crashed process) is still recoverable using only the already-persisted
+  // updatedAt column — no new field, no migration.
+  const isStaleImportRunning =
+    job.status === MasterCatalogueImportJobStatus.IMPORT_RUNNING && Date.now() - job.updatedAt.getTime() > STALE_IMPORT_RUNNING_MS;
+
+  if (job.status === MasterCatalogueImportJobStatus.IMPORT_RUNNING && !isStaleImportRunning) {
+    throw new AppError("JOB_BUSY", "Another continuation is already in progress for this job.", 409);
+  }
+
   const claim = await prisma.masterCatalogueImportJob.updateMany({
-    where: { id: jobId, updatedAt: job.updatedAt, status: { in: CONTINUABLE_STATUSES } },
+    where: {
+      id: jobId,
+      updatedAt: job.updatedAt,
+      status: isStaleImportRunning ? MasterCatalogueImportJobStatus.IMPORT_RUNNING : MasterCatalogueImportJobStatus.PAUSED,
+    },
     data: { status: MasterCatalogueImportJobStatus.IMPORT_RUNNING },
   });
   if (claim.count === 0) {

@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { MasterClassificationSystem } from "@prisma/client";
 import { AppError } from "@/lib/errors/app-error";
 import { computeChecksum } from "@/lib/files/file-security";
+import { computeCatalogueCsvChecksum } from "@/lib/services/catalogue-csv-checksum";
 import { parseCsv } from "@/lib/imports/csv-parser";
 import { parseHvacSpecification } from "@/lib/imports/hvac-specification-parser";
 import { parsePlumbingSpecification } from "@/lib/imports/plumbing-specification-parser";
@@ -103,21 +104,21 @@ const GENERATED_DATASETS: DatasetDefinition[] = [
     disciplineKey: "interior-fit-out",
     sourceDir: "data-imports/architectural-finishes",
     files: [
-      { fileName: "interior-fitout-architectural-finishes-part10of15-company-library-import.csv", approvedChecksum: "dfba0963028aed6ef2b4ee304b7ab66efdf90d6e25c521486c4e4bdfb4ece68f", expectedRowCount: 5500 },
-      { fileName: "interior-fitout-architectural-finishes-part11of15-company-library-import.csv", approvedChecksum: "95f093262ebd8b37a7def4304574d9f15e31f6fc9895e62f6de321335f816687", expectedRowCount: 5500 },
-      { fileName: "interior-fitout-architectural-finishes-part12of15-company-library-import.csv", approvedChecksum: "3752a593e43a975afdf9f2876efe208f59094e44c3eb505fac047eb634869c56", expectedRowCount: 5500 },
-      { fileName: "interior-fitout-architectural-finishes-part13of15-company-library-import.csv", approvedChecksum: "03a67bdf7e2a3d43b96544c736b5daf70c1ed6b9ad9e7c9aa11e50c3b39b1239", expectedRowCount: 5500 },
-      { fileName: "interior-fitout-architectural-finishes-part14of15-company-library-import.csv", approvedChecksum: "a2e2ca7f2d1e2a603135badca615e3796654aee7f2fa1b7eeae36a4c93802790", expectedRowCount: 5500 },
-      { fileName: "interior-fitout-architectural-finishes-part15of15-company-library-import.csv", approvedChecksum: "a1e3c4c66ceea0b448e10d0b8270980e9e794040a6571148d6819b800d9cd6b8", expectedRowCount: 3176 },
-      { fileName: "interior-fitout-architectural-finishes-part1of15-company-library-import.csv", approvedChecksum: "dbbb0714d2a0b257eb3493cd635327f1f71f95e9f18b53e11d4f6f14b9e62a6a", expectedRowCount: 5500 },
-      { fileName: "interior-fitout-architectural-finishes-part2of15-company-library-import.csv", approvedChecksum: "5e38d3f8b9975730ae586db08f1a372f52f79aa6e77c606c2e4f86850bf1d952", expectedRowCount: 5500 },
-      { fileName: "interior-fitout-architectural-finishes-part3of15-company-library-import.csv", approvedChecksum: "7650032ecd1c0375a36694683c701c46dba287882bbbca35e826cd9a1a1f6ab0", expectedRowCount: 5500 },
-      { fileName: "interior-fitout-architectural-finishes-part4of15-company-library-import.csv", approvedChecksum: "c7380a97d4a2fe4da946ba9ee9c3f8a6640ba3932e7d6faae855b6c24071d79f", expectedRowCount: 5500 },
-      { fileName: "interior-fitout-architectural-finishes-part5of15-company-library-import.csv", approvedChecksum: "81dd97bbfdb5b28782439b94c65783c004e6ff2f9cdb80eebe3e9447437c563c", expectedRowCount: 5500 },
-      { fileName: "interior-fitout-architectural-finishes-part6of15-company-library-import.csv", approvedChecksum: "e494149c7fb1505d4db01ebbfe7d0d176a86f77dd050b835bd9e8527474548d1", expectedRowCount: 5500 },
-      { fileName: "interior-fitout-architectural-finishes-part7of15-company-library-import.csv", approvedChecksum: "478c7b460aeb81f118f3a0ba25563b84dec49a3a20b3d895e7940edc93696e58", expectedRowCount: 5500 },
-      { fileName: "interior-fitout-architectural-finishes-part8of15-company-library-import.csv", approvedChecksum: "e1c2642a5c00b5474fd5663a0f36ff3e6d1463a20e63f1c538fb3b8095b9480a", expectedRowCount: 5500 },
-      { fileName: "interior-fitout-architectural-finishes-part9of15-company-library-import.csv", approvedChecksum: "5778f0755c954b2335a86f325766e6777a84b55d810e66cda2c675829b81f781", expectedRowCount: 5500 },
+      { fileName: "interior-fitout-architectural-finishes-part10of15-company-library-import.csv", approvedChecksum: "8cee56b7997873158b654bb0583c5e165954993ffbb1d7a06bcd7842ab7d9b13", expectedRowCount: 5500 },
+      { fileName: "interior-fitout-architectural-finishes-part11of15-company-library-import.csv", approvedChecksum: "814ca27451763fd0b810bc65969ca72a4a6c744246948d0aaf142f512381faeb", expectedRowCount: 5500 },
+      { fileName: "interior-fitout-architectural-finishes-part12of15-company-library-import.csv", approvedChecksum: "baf74834ae0366ccdd30463adbce4f6c4f8948dbf957a8b51eb2071b886cd375", expectedRowCount: 5500 },
+      { fileName: "interior-fitout-architectural-finishes-part13of15-company-library-import.csv", approvedChecksum: "6da39ca18a33aabcec06b16e4a289fc3f3c7e1f87b565a4452eff0d49944efc6", expectedRowCount: 5500 },
+      { fileName: "interior-fitout-architectural-finishes-part14of15-company-library-import.csv", approvedChecksum: "1d2dbdd88198d908f0784982b33aa06c7c32ad2f24daf5cd1ca78fe9c8212421", expectedRowCount: 5500 },
+      { fileName: "interior-fitout-architectural-finishes-part15of15-company-library-import.csv", approvedChecksum: "2362a4da5237769161b9146fd5b703d65b036aa3bd80c2690d0e42c59b388472", expectedRowCount: 3176 },
+      { fileName: "interior-fitout-architectural-finishes-part1of15-company-library-import.csv", approvedChecksum: "b4ed459daba1ecce7721ee375da862a465c7996a96df58269c572677870d0e91", expectedRowCount: 5500 },
+      { fileName: "interior-fitout-architectural-finishes-part2of15-company-library-import.csv", approvedChecksum: "d00a3b1af483e16b00b35791da47a23ab2da046b0aa6b6b398f9bcfb14a4b80b", expectedRowCount: 5500 },
+      { fileName: "interior-fitout-architectural-finishes-part3of15-company-library-import.csv", approvedChecksum: "ee4016b2ff6462e29f0c7a6de87a1311895096718916b0945a16072e24be6d3a", expectedRowCount: 5500 },
+      { fileName: "interior-fitout-architectural-finishes-part4of15-company-library-import.csv", approvedChecksum: "4dc7f5ce10517b40954a954a790a8b64dbbc9f0f96d9eb5d126b4730283a2c76", expectedRowCount: 5500 },
+      { fileName: "interior-fitout-architectural-finishes-part5of15-company-library-import.csv", approvedChecksum: "687e17764a0fe2be0552a5b6b9c9acdb7c45c0d0962486ad5e6cfd9f3ef0bc03", expectedRowCount: 5500 },
+      { fileName: "interior-fitout-architectural-finishes-part6of15-company-library-import.csv", approvedChecksum: "e911e76b6e4fd74128fb944c6c8ef0ea7e56cb6a7d799757f53429a827d13fab", expectedRowCount: 5500 },
+      { fileName: "interior-fitout-architectural-finishes-part7of15-company-library-import.csv", approvedChecksum: "762610617713ba8c01b86adcdccc69828032e6241895c71a12e52afd9b05b1d9", expectedRowCount: 5500 },
+      { fileName: "interior-fitout-architectural-finishes-part8of15-company-library-import.csv", approvedChecksum: "4eb2ef8079465a08589cffdcc4bb0a15fee2e8ccb875d6ff00c5d94a3f28ba87", expectedRowCount: 5500 },
+      { fileName: "interior-fitout-architectural-finishes-part9of15-company-library-import.csv", approvedChecksum: "3b3e0368790515bafd840fbe4698185238f90e4f4314da73315b609698f47f52", expectedRowCount: 5500 },
     ],
     profile: buildGenericConstructionProfile("interior-fit-out", "architectural-finishes", "Architectural Finishes"),
     industryCode: "CONSTRUCTION",
@@ -135,7 +136,7 @@ const GENERATED_DATASETS: DatasetDefinition[] = [
     disciplineKey: "construction",
     sourceDir: "data-imports/bim-digital-deliverables",
     files: [
-      { fileName: "construction-bim-and-digital-deliverables-company-library-import.csv", approvedChecksum: "d2b3a4e2e3af8ccb4c0fa4693d8bdb141b9264c1d1be548191e7626aa94cb0af", expectedRowCount: 4718 },
+      { fileName: "construction-bim-and-digital-deliverables-company-library-import.csv", approvedChecksum: "4293e7a9bec5cce467319d940d2c4ad41a47545046e1ecec39cc29439b354460", expectedRowCount: 4718 },
     ],
     profile: buildGenericConstructionProfile("construction", "bim-digital-deliverables", "BIM & Digital Deliverables"),
     industryCode: "CONSTRUCTION",
@@ -153,7 +154,7 @@ const GENERATED_DATASETS: DatasetDefinition[] = [
     disciplineKey: "construction",
     sourceDir: "data-imports/civil-works",
     files: [
-      { fileName: "construction-civil-works-company-library-import.csv", approvedChecksum: "a0a723eb2a2217f354ac55752707eb2ef68ace05108e735a7cfabb814bb61d0d", expectedRowCount: 3675 },
+      { fileName: "construction-civil-works-company-library-import.csv", approvedChecksum: "a08a1d6eeeae14fbca46cceb7f9b1bfb6a85448012ec4d0d14c27addc7f4b43c", expectedRowCount: 3675 },
     ],
     profile: buildGenericConstructionProfile("construction", "civil-works", "Civil Works"),
     industryCode: "CONSTRUCTION",
@@ -171,8 +172,8 @@ const GENERATED_DATASETS: DatasetDefinition[] = [
     disciplineKey: "construction",
     sourceDir: "data-imports/closeout",
     files: [
-      { fileName: "construction-closeout-part1of2-company-library-import.csv", approvedChecksum: "4cad5c93e3cc48faca7bea5b43720c8d5ab79b5c9abc78d8cf951c1ad2dda77a", expectedRowCount: 4775 },
-      { fileName: "construction-closeout-part2of2-company-library-import.csv", approvedChecksum: "e0cc39fc8d7fc5a79a58029f4c2ef24688e2a847c9f09ecd786d4bc147ed417f", expectedRowCount: 4677 },
+      { fileName: "construction-closeout-part1of2-company-library-import.csv", approvedChecksum: "6d227b991a0c10cad3e806c40df32ee58ebcd944b5205839c99294e5bffdb53e", expectedRowCount: 4775 },
+      { fileName: "construction-closeout-part2of2-company-library-import.csv", approvedChecksum: "9ac13a16e7397425b033223e5f6344ba1763ec1f23ea7d7249477962b4a8a6d4", expectedRowCount: 4677 },
     ],
     profile: buildGenericConstructionProfile("construction", "closeout", "Closeout"),
     industryCode: "CONSTRUCTION",
@@ -190,9 +191,9 @@ const GENERATED_DATASETS: DatasetDefinition[] = [
     disciplineKey: "construction",
     sourceDir: "data-imports/doors-and-windows",
     files: [
-      { fileName: "construction-doors-and-windows-part1of3-company-library-import.csv", approvedChecksum: "eac3d77330b81833283c5074f4bb2a00d61dfa1dc5eb7276e3068fb867b9e8ba", expectedRowCount: 4288 },
-      { fileName: "construction-doors-and-windows-part2of3-company-library-import.csv", approvedChecksum: "5d5d3cc75b5dd24a8fa5f8f214cbc4bc7aa0816095a5b8f1e65ccfa12507817a", expectedRowCount: 4288 },
-      { fileName: "construction-doors-and-windows-part3of3-company-library-import.csv", approvedChecksum: "d614551a945fb483873df85956d453418462f83de8835f47ccc3b513efa6471d", expectedRowCount: 2991 },
+      { fileName: "construction-doors-and-windows-part1of3-company-library-import.csv", approvedChecksum: "ab2ee276c6c10d34eea0d86bd5592cf877e099cd0f9d2641c384389b0942e943", expectedRowCount: 4288 },
+      { fileName: "construction-doors-and-windows-part2of3-company-library-import.csv", approvedChecksum: "8af2f60390b006b73b9fb7fb40822952a4d9814b95a50482349a62d4a05a0237", expectedRowCount: 4288 },
+      { fileName: "construction-doors-and-windows-part3of3-company-library-import.csv", approvedChecksum: "f8e7affa67f16741f928d2cd5f9ad7bc771612a01fb2c212cf8a2f046bb5ad17", expectedRowCount: 2991 },
     ],
     profile: buildGenericConstructionProfile("construction", "doors-and-windows", "Doors and Windows"),
     industryCode: "CONSTRUCTION",
@@ -210,11 +211,11 @@ const GENERATED_DATASETS: DatasetDefinition[] = [
     disciplineKey: "construction",
     sourceDir: "data-imports/facade",
     files: [
-      { fileName: "construction-facade-part1of5-company-library-import.csv", approvedChecksum: "73d3586c7eae3667a8bfe289cc9549fe058f2ebb529d07ce25248a063267e791", expectedRowCount: 3721 },
-      { fileName: "construction-facade-part2of5-company-library-import.csv", approvedChecksum: "6c433787d661944668523ba3d52923bbf3149088d376252754fa2ec072dcad3b", expectedRowCount: 3721 },
-      { fileName: "construction-facade-part3of5-company-library-import.csv", approvedChecksum: "b815e15951f724a99e0cf00dd654a3a3094adf5796e21d97d43c9cbe1ceefafd", expectedRowCount: 3721 },
-      { fileName: "construction-facade-part4of5-company-library-import.csv", approvedChecksum: "4fb592b8ee38cdd7b0f8605d4aa91a0d3670997918dddea99056a5ae94702ed3", expectedRowCount: 3721 },
-      { fileName: "construction-facade-part5of5-company-library-import.csv", approvedChecksum: "1147ccdabea5d49c81a50ac64d82d26a6591cd4c50ee9511c7cae10d533e1138", expectedRowCount: 902 },
+      { fileName: "construction-facade-part1of5-company-library-import.csv", approvedChecksum: "fec1cbbf88a65d68258a025e2a6bb9d32c543314022f93bddb7536b99bb3b3e2", expectedRowCount: 3721 },
+      { fileName: "construction-facade-part2of5-company-library-import.csv", approvedChecksum: "9d045d78834b50d20fb34ea3fb450afa98f841fb04f335aa085a8f7261d1db0a", expectedRowCount: 3721 },
+      { fileName: "construction-facade-part3of5-company-library-import.csv", approvedChecksum: "2fe340c83711dfafa3c329b4357d765ef39ae055d91063e60af7dce95e75edf7", expectedRowCount: 3721 },
+      { fileName: "construction-facade-part4of5-company-library-import.csv", approvedChecksum: "ea294af609698c649f1234b0f7bb2f5766f53dc5af34822bda5fa1b8e1ffe68d", expectedRowCount: 3721 },
+      { fileName: "construction-facade-part5of5-company-library-import.csv", approvedChecksum: "d8fd6bb7e5dea34f72f46cd99858a37af9abbe1960ff51ec57b8b1d87c8ebd32", expectedRowCount: 902 },
     ],
     profile: buildGenericConstructionProfile("construction", "facade", "Facade"),
     industryCode: "CONSTRUCTION",
@@ -232,7 +233,7 @@ const GENERATED_DATASETS: DatasetDefinition[] = [
     disciplineKey: "construction",
     sourceDir: "data-imports/general-requirements",
     files: [
-      { fileName: "construction-general-requirements-preliminaries-company-library-import.csv", approvedChecksum: "57a715f437046c925cf403964f24f560a07775092f2182cb0a40266f57f173d4", expectedRowCount: 4065 },
+      { fileName: "construction-general-requirements-preliminaries-company-library-import.csv", approvedChecksum: "3a403f86345161da0322a2e97385901e5cb4a2b7c5f4b001126522e5cf88fa47", expectedRowCount: 4065 },
     ],
     profile: buildGenericConstructionProfile("construction", "general-requirements", "General Requirements"),
     industryCode: "CONSTRUCTION",
@@ -250,7 +251,7 @@ const GENERATED_DATASETS: DatasetDefinition[] = [
     disciplineKey: "landscaping",
     sourceDir: "data-imports/landscaping",
     files: [
-      { fileName: "landscaping-company-library-import.csv", approvedChecksum: "1833a636c4575cbb1f027439c096afab8ade2dad5200e5bf84293401894113a7", expectedRowCount: 2867 },
+      { fileName: "landscaping-company-library-import.csv", approvedChecksum: "71cb9021e32656163a16140fe94b36286da016eecd5cb10299c176ff091bf23f", expectedRowCount: 2867 },
     ],
     profile: buildGenericConstructionProfile("landscaping", "landscaping", "Landscaping"),
     industryCode: "CONSTRUCTION",
@@ -268,7 +269,7 @@ const GENERATED_DATASETS: DatasetDefinition[] = [
     disciplineKey: "construction",
     sourceDir: "data-imports/roofing",
     files: [
-      { fileName: "construction-roofing-company-library-import.csv", approvedChecksum: "7aa16165b29580bc14ee538b0f80856cecd049fe9d19489d76a196e20664b8fa", expectedRowCount: 4162 },
+      { fileName: "construction-roofing-company-library-import.csv", approvedChecksum: "53fc8095ec77c3c256ea818226525c5a8c80a443f2c64343bc466e7b57051795", expectedRowCount: 4162 },
     ],
     profile: buildGenericConstructionProfile("construction", "roofing", "Roofing"),
     industryCode: "CONSTRUCTION",
@@ -286,7 +287,7 @@ const GENERATED_DATASETS: DatasetDefinition[] = [
     disciplineKey: "construction",
     sourceDir: "data-imports/site-infrastructure",
     files: [
-      { fileName: "construction-site-infrastructure-company-library-import.csv", approvedChecksum: "7a6d6c98e9dfd82e8129540d5df2c76f655ceec73b0575dcba6dd15eb5c8f8f9", expectedRowCount: 4345 },
+      { fileName: "construction-site-infrastructure-company-library-import.csv", approvedChecksum: "87538363fa80713bfcad7ca1b2715ed1c0d2aa62a3ee4d7643afcf908f7baf40", expectedRowCount: 4345 },
     ],
     profile: buildGenericConstructionProfile("construction", "site-infrastructure", "Site Infrastructure"),
     industryCode: "CONSTRUCTION",
@@ -304,8 +305,8 @@ const GENERATED_DATASETS: DatasetDefinition[] = [
     disciplineKey: "construction",
     sourceDir: "data-imports/structural",
     files: [
-      { fileName: "construction-structural-works-part1of2-company-library-import.csv", approvedChecksum: "e7d1bd972956bf5986cb1329be45df6d6838c3a0d94eba33817e087a0f0ba3bc", expectedRowCount: 5500 },
-      { fileName: "construction-structural-works-part2of2-company-library-import.csv", approvedChecksum: "42c6c7a531ecd184c59736d8e493ccc0e6af11f45b6986a4ff8f9af4e944c477", expectedRowCount: 3547 },
+      { fileName: "construction-structural-works-part1of2-company-library-import.csv", approvedChecksum: "29a877acb8b8803ddd91623be9346af2698a6621721991de4e0565f26825a04c", expectedRowCount: 5500 },
+      { fileName: "construction-structural-works-part2of2-company-library-import.csv", approvedChecksum: "9265ebe2a507a65881cef233d26fd73008d2d69c6087754301e3c9992a50637c", expectedRowCount: 3547 },
     ],
     profile: buildGenericConstructionProfile("construction", "structural", "Structural"),
     industryCode: "CONSTRUCTION",
@@ -323,8 +324,8 @@ const GENERATED_DATASETS: DatasetDefinition[] = [
     disciplineKey: "construction",
     sourceDir: "data-imports/temporary-works",
     files: [
-      { fileName: "construction-temporary-works-part1of2-company-library-import.csv", approvedChecksum: "8498d1b31604dcf7e7b804aebb5081ec49fa0db47433e1d88aaf1c9116d0cd35", expectedRowCount: 4907 },
-      { fileName: "construction-temporary-works-part2of2-company-library-import.csv", approvedChecksum: "3e5e238964925351fa24e4919173fb9ff98d5e233c22581cfdae5172b89096d2", expectedRowCount: 3047 },
+      { fileName: "construction-temporary-works-part1of2-company-library-import.csv", approvedChecksum: "12104e7d3098a6be41404dafb4247e8d8aba88510d3446aba193a75806e06d43", expectedRowCount: 4907 },
+      { fileName: "construction-temporary-works-part2of2-company-library-import.csv", approvedChecksum: "75a0c13dc8bfe51ca1318792902e5a4e06799df8dc21c751b9adcd2b2893e56c", expectedRowCount: 3047 },
     ],
     profile: buildGenericConstructionProfile("construction", "temporary-works", "Temporary Works"),
     industryCode: "CONSTRUCTION",
@@ -342,9 +343,9 @@ const GENERATED_DATASETS: DatasetDefinition[] = [
     disciplineKey: "construction",
     sourceDir: "data-imports/uae-authority-regulatory",
     files: [
-      { fileName: "construction-uae-authority-and-regulatory-part1of3-company-library-import.csv", approvedChecksum: "8bb997af18f6c096f3be87facddcb2251c4b097d28f254a3cc62cc26878cc4b3", expectedRowCount: 3997 },
-      { fileName: "construction-uae-authority-and-regulatory-part2of3-company-library-import.csv", approvedChecksum: "bb4a73e1c94314135bbc5ea6fa9554e1b6758c3673781eaca6f13cf799d7cd96", expectedRowCount: 3997 },
-      { fileName: "construction-uae-authority-and-regulatory-part3of3-company-library-import.csv", approvedChecksum: "4104362cc937902c225700b0e1662e1caeb10352ba9bdaba6f01a7956369e13a", expectedRowCount: 3687 },
+      { fileName: "construction-uae-authority-and-regulatory-part1of3-company-library-import.csv", approvedChecksum: "29b89053f30e727f3423ff377a0fd1af9ff5ff0c8851373db98dd057ba8c38ce", expectedRowCount: 3997 },
+      { fileName: "construction-uae-authority-and-regulatory-part2of3-company-library-import.csv", approvedChecksum: "7e73ee3e00bbbb71e2745cf53662aba3ab7747cc06e41e849523776f9c57795e", expectedRowCount: 3997 },
+      { fileName: "construction-uae-authority-and-regulatory-part3of3-company-library-import.csv", approvedChecksum: "c37ace9b711a8493e242e116f5adfa4f2e36aba6cb6d034f3b0eaae8b5a59063", expectedRowCount: 3687 },
     ],
     profile: buildGenericConstructionProfile("construction", "uae-authority-regulatory", "UAE Authority & Regulatory"),
     industryCode: "CONSTRUCTION",
@@ -365,8 +366,8 @@ const DATASETS: DatasetDefinition[] = [
     disciplineKey: "mechanical",
     sourceDir: "data-imports/hvac",
     files: [
-      { fileName: "hvac-company-library-import.csv", approvedChecksum: "3f53af3f2617227bdf1634b3b41c022ece1253e7d015a4259edca80caf58007a", expectedRowCount: 707 },
-      { fileName: "hvac-air-distribution-company-library-import.csv", approvedChecksum: "5637cd11dc85f13de2d5ff5e4eb4dcd7944402773333497bc02c73f9260900b5", expectedRowCount: 184 },
+      { fileName: "hvac-company-library-import.csv", approvedChecksum: "fbb9d85cd46b5eaf19142464e79fa0611ecf564cafdb0c2fe0dd5da8d11baf64", expectedRowCount: 707 },
+      { fileName: "hvac-air-distribution-company-library-import.csv", approvedChecksum: "3e2ec5f1e7693ff5e91e25cf3c417df8e6cd1a696bc9e86d927e6b7f64461433", expectedRowCount: 184 },
     ],
     profile: HVAC_PROFILE,
     industryCode: "CONSTRUCTION",
@@ -388,19 +389,19 @@ const DATASETS: DatasetDefinition[] = [
     disciplineKey: "plumbing",
     sourceDir: "data-imports/plumbing",
     files: [
-      { fileName: "plumbing-common-plumbing-work-results-company-library-import.csv", approvedChecksum: "4eb85d2958740c470b874fb775b16aba6dd0cf05f7d77e653837ea4ba685e7b7", expectedRowCount: 61 },
-      { fileName: "plumbing-drainage-specialties-company-library-import.csv", approvedChecksum: "d6caee0cdee0f2f7047e3eda4486437d459c84c2a77c293767fef0a8963201b3", expectedRowCount: 124 },
-      { fileName: "plumbing-fixture-fittings-and-accessories-company-library-import.csv", approvedChecksum: "78e0c26f55ed64fa58f879861ceb90a44a65e6be7c1fb679f7cd34e6d6e31c44", expectedRowCount: 132 },
-      { fileName: "plumbing-instrumentation-and-controls-company-library-import.csv", approvedChecksum: "6a24a7b714056c238e6df9dacc04a8193155072e60ca3834efc97229c569bbfb", expectedRowCount: 145 },
-      { fileName: "plumbing-medical-and-laboratory-systems-company-library-import.csv", approvedChecksum: "3d56b665f06ee4080c867267d53151518dffc977cfdd78b3f49755f33d494f8f", expectedRowCount: 51 },
-      { fileName: "plumbing-piping-systems-part1-company-library-import.csv", approvedChecksum: "ac0cf1d47a01c4cce2a8d8fa2c40ddda09bc5e73dd44b22403a24df722fe56ba", expectedRowCount: 3000 },
-      { fileName: "plumbing-piping-systems-part2-company-library-import.csv", approvedChecksum: "b48ec774c4e1edd9dd7a143b840468790ee2ffc3f593b30b6e94a80d50503bd0", expectedRowCount: 3000 },
-      { fileName: "plumbing-piping-systems-part3-company-library-import.csv", approvedChecksum: "9aee1875cea8156c4221789f09ea0c53d794b726de16bf419f07807b56fb6ebf", expectedRowCount: 3000 },
-      { fileName: "plumbing-piping-systems-part4-company-library-import.csv", approvedChecksum: "19d176e2e75fe008f2772fb59e54f275a0fcc9305c49995b1cdc5828c23363b2", expectedRowCount: 1198 },
-      { fileName: "plumbing-plumbing-equipment-company-library-import.csv", approvedChecksum: "50bb0bb405de5b428b0f9787d079f55bac6d8ea7f715a8f5fef981edf0bfcbfa", expectedRowCount: 280 },
-      { fileName: "plumbing-plumbing-fixtures-company-library-import.csv", approvedChecksum: "a17a21ecf3856b0eb1a3e73a616f0df71c144c1cb19f9f0fa2883b0c95f7d12d", expectedRowCount: 320 },
-      { fileName: "plumbing-pool-and-fountain-plumbing-company-library-import.csv", approvedChecksum: "fb0b736f8cc9874b118cf91425bff788792247d789e4530dee58e3c659c963eb", expectedRowCount: 84 },
-      { fileName: "plumbing-valves-and-piping-specialties-company-library-import.csv", approvedChecksum: "03c9aa4df169418b33bc245dc0970b8aedf0ae52eff106c1bacc506f7b3b0e62", expectedRowCount: 1716 },
+      { fileName: "plumbing-common-plumbing-work-results-company-library-import.csv", approvedChecksum: "04ebac7beef67f47a6ce8863d7fbe61aa5f840a4c5efbf90d3821d8a6797301a", expectedRowCount: 61 },
+      { fileName: "plumbing-drainage-specialties-company-library-import.csv", approvedChecksum: "84f79387f3ed98514c3c42d872b2ce9d2330ed5bbfdcf51392c26915a9e92be2", expectedRowCount: 124 },
+      { fileName: "plumbing-fixture-fittings-and-accessories-company-library-import.csv", approvedChecksum: "390941d4a78791486e570213e7423537fbd40ca9de05042d165d2d0e93ee99f7", expectedRowCount: 132 },
+      { fileName: "plumbing-instrumentation-and-controls-company-library-import.csv", approvedChecksum: "49592fbb722fe450e0ce7175ca2480ad594ebb73f2e9eecb77dda332ccee49f3", expectedRowCount: 145 },
+      { fileName: "plumbing-medical-and-laboratory-systems-company-library-import.csv", approvedChecksum: "e9d1fb538e665ae899ba2c832c08e0ab32274c952f3726b688a684c6874a1d05", expectedRowCount: 51 },
+      { fileName: "plumbing-piping-systems-part1-company-library-import.csv", approvedChecksum: "3b6f459ce8f2d6622fd67bdbf925c576fc9f23b1eb07820afb504eea633ddc8f", expectedRowCount: 3000 },
+      { fileName: "plumbing-piping-systems-part2-company-library-import.csv", approvedChecksum: "3b2acd8fd446584087b7f8043d24cfd613a7b7725ebbd82fe7493c1d09d468f1", expectedRowCount: 3000 },
+      { fileName: "plumbing-piping-systems-part3-company-library-import.csv", approvedChecksum: "48e3b7b64af97484573c7fa46e6e5d0db08d3e9bc523cc39b83ad1c03e8cbc8f", expectedRowCount: 3000 },
+      { fileName: "plumbing-piping-systems-part4-company-library-import.csv", approvedChecksum: "61829ffe69793666ad7941f1182a61458712eee7ac4e666d1260e7b53b7dd7a0", expectedRowCount: 1198 },
+      { fileName: "plumbing-plumbing-equipment-company-library-import.csv", approvedChecksum: "e674a9b073fee5cde49d46d645b0b88d23d3447b8c9ecc9a2ecf6530c18501ea", expectedRowCount: 280 },
+      { fileName: "plumbing-plumbing-fixtures-company-library-import.csv", approvedChecksum: "de552631a3aec56fb57be42d6b233615c81db68d848c58fb18864078c2588838", expectedRowCount: 320 },
+      { fileName: "plumbing-pool-and-fountain-plumbing-company-library-import.csv", approvedChecksum: "d3d237293325a47a148c24c33b2173f998def068faab48438e266b58c1321cc8", expectedRowCount: 84 },
+      { fileName: "plumbing-valves-and-piping-specialties-company-library-import.csv", approvedChecksum: "ab602f12a3e6a4cf02b93b2feb2cc8911cc0bad947a2a50262083e8b3012b5c2", expectedRowCount: 1716 },
     ],
     profile: PLUMBING_PROFILE,
     industryCode: "CONSTRUCTION",
@@ -450,7 +451,7 @@ export function loadApprovedDatasetFiles(dataset: DatasetDefinition): LoadedData
     } catch {
       throw new AppError("SOURCE_FILE_MISSING", `Approved source file "${manifestEntry.fileName}" for dataset "${dataset.datasetId}" was not found on the server.`, 500);
     }
-    const actualChecksum = computeChecksum(buffer);
+    const actualChecksum = computeCatalogueCsvChecksum(buffer);
     if (actualChecksum !== manifestEntry.approvedChecksum) {
       throw new AppError(
         "SOURCE_FILE_CHECKSUM_MISMATCH",
@@ -566,7 +567,7 @@ export function checkDatasetReadiness(dataset: DatasetDefinition, knownDisciplin
       blockReasons.push(`FILE_MISSING:${manifestEntry.fileName}`);
       continue;
     }
-    const actualChecksum = computeChecksum(buffer);
+    const actualChecksum = computeCatalogueCsvChecksum(buffer);
     if (actualChecksum !== manifestEntry.approvedChecksum) {
       blockReasons.push(`CHECKSUM_MISMATCH:${manifestEntry.fileName}`);
       continue; // a changed file makes a row-count comparison meaningless — already blocked above

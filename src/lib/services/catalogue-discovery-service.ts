@@ -1,9 +1,9 @@
 import { createReadStream } from "node:fs";
-import { createHash } from "node:crypto";
-import { readdir, stat } from "node:fs/promises";
+import { readFile, readdir, stat } from "node:fs/promises";
 import { createInterface } from "node:readline";
 import { join, relative } from "node:path";
 import { parseCsv } from "@/lib/imports/csv-parser";
+import { computeCatalogueCsvChecksum } from "@/lib/services/catalogue-csv-checksum";
 
 /**
  * CATALOGUE-DISCOVERY — recursive, streaming, read-only audit of
@@ -51,15 +51,18 @@ export type DiscoveredFolder = {
   confidence: CatalogueDatasetConfidence;
 };
 
-/** sha256 of file content, computed via a piped stream — the file is never held whole in memory. */
-function streamChecksum(absPath: string): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const hash = createHash("sha256");
-    const stream = createReadStream(absPath);
-    stream.on("data", (chunk) => hash.update(chunk));
-    stream.on("end", () => resolve(hash.digest("hex")));
-    stream.on("error", reject);
-  });
+/**
+ * Canonical (CRLF-normalized) sha256 of file content — the same function
+ * catalogue-dataset-registry.ts's verification uses, so a checksum captured
+ * here at discovery time and pasted into the registry will always agree
+ * with what verification computes later, on any platform. These files are
+ * already assumed small enough for a full in-memory parse elsewhere in this
+ * module (see the row/column scan below), so reading whole here trades
+ * nothing real for guaranteed determinism.
+ */
+async function streamChecksum(absPath: string): Promise<string> {
+  const buffer = await readFile(absPath);
+  return computeCatalogueCsvChecksum(buffer);
 }
 
 /**

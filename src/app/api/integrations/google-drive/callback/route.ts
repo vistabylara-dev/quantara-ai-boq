@@ -10,7 +10,7 @@ export const dynamic = "force-dynamic";
 /** Google redirects the user's browser here after consent. Full-page navigation, not a fetch() — responds with a redirect back into the app, success or failure either way. */
 export async function GET(request: Request) {
   const url = new URL(request.url);
-  const providerPageUrl = new URL("/integrations/google-drive", url.origin);
+  const connectPageUrl = new URL("/integrations/google-drive/connect", url.origin);
 
   const cookieStore = await cookies();
   const expectedState = cookieStore.get(STATE_COOKIE_NAME)?.value;
@@ -18,29 +18,29 @@ export async function GET(request: Request) {
 
   const error = url.searchParams.get("error");
   if (error) {
-    providerPageUrl.searchParams.set("connectError", error === "access_denied" ? "You declined the Google Drive permission request." : error);
-    return NextResponse.redirect(providerPageUrl);
+    connectPageUrl.searchParams.set("connectError", error === "access_denied" ? "You declined the Google Drive permission request." : error);
+    return NextResponse.redirect(connectPageUrl);
   }
 
   const code = url.searchParams.get("code");
   const state = url.searchParams.get("state");
   if (!code || !state || !expectedState || state !== expectedState) {
-    providerPageUrl.searchParams.set("connectError", "The connection request could not be verified. Please try connecting again.");
-    return NextResponse.redirect(providerPageUrl);
+    connectPageUrl.searchParams.set("connectError", "The connection request could not be verified. Please try connecting again.");
+    return NextResponse.redirect(connectPageUrl);
   }
 
   try {
     const actor = await getCurrentActor();
     setActorContext(actor);
     await completeGoogleDriveConnection(actor, code);
-    providerPageUrl.searchParams.set("connected", "1");
-    return NextResponse.redirect(providerPageUrl);
+    connectPageUrl.searchParams.set("connected", "1");
+    return NextResponse.redirect(connectPageUrl);
   } catch (err) {
     if (err instanceof UnauthorizedError) {
-      return NextResponse.redirect(new URL("/login?next=/integrations/google-drive", url.origin));
+      return NextResponse.redirect(new URL("/login?next=/integrations/google-drive/connect", url.origin));
     }
     const message = err instanceof Error ? err.message : "Could not complete the Google Drive connection.";
-    providerPageUrl.searchParams.set("connectError", message);
-    return NextResponse.redirect(providerPageUrl);
+    connectPageUrl.searchParams.set("connectError", message);
+    return NextResponse.redirect(connectPageUrl);
   }
 }

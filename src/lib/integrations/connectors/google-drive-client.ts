@@ -59,8 +59,11 @@ export type GoogleTokenResponse = {
 async function parseTokenResponse(response: Response): Promise<GoogleTokenResponse> {
   const body = await response.json().catch(() => null) as any;
   if (!response.ok || !body || typeof body.access_token !== "string") {
-    const message = body && typeof body.error_description === "string" ? body.error_description : `Google token request failed (${response.status}).`;
-    throw new AppError("GOOGLE_DRIVE_TOKEN_ERROR", message, 502);
+    throw new AppError(
+      "GOOGLE_DRIVE_TOKEN_ERROR",
+      "Google Drive could not complete the authorization request. Please reconnect and try again.",
+      502,
+    );
   }
   return body as GoogleTokenResponse;
 }
@@ -111,6 +114,60 @@ export type GoogleDriveFile = {
 
 const DRIVE_FOLDER_MIME_TYPE = "application/vnd.google-apps.folder";
 
+function parseGoogleDriveFile(value: unknown): GoogleDriveFile {
+  if (!value || typeof value !== "object") {
+    throw new AppError("GOOGLE_DRIVE_API_ERROR", "Google Drive returned invalid file metadata.", 502);
+  }
+  const file = value as Record<string, unknown>;
+  if (
+    typeof file.id !== "string"
+    || typeof file.name !== "string"
+    || typeof file.mimeType !== "string"
+  ) {
+    throw new AppError("GOOGLE_DRIVE_API_ERROR", "Google Drive returned invalid file metadata.", 502);
+  }
+  if (file.size !== undefined && file.size !== null && typeof file.size !== "string") {
+    throw new AppError("GOOGLE_DRIVE_API_ERROR", "Google Drive returned an invalid file size.", 502);
+  }
+
+  return {
+    id: file.id,
+    name: file.name,
+    mimeType: file.mimeType,
+    size: typeof file.size === "string" ? file.size : null,
+    modifiedTime: typeof file.modifiedTime === "string" ? file.modifiedTime : "",
+    parents: Array.isArray(file.parents) && file.parents.every((parent) => typeof parent === "string")
+      ? file.parents as string[]
+      : null,
+    iconLink: typeof file.iconLink === "string" ? file.iconLink : null,
+    webViewLink: typeof file.webViewLink === "string" ? file.webViewLink : null,
+  };
+}
+
+async function throwDriveApiError(response: Response, operation: string): Promise<never> {
+  // Provider error bodies can contain account or file details. Keep the
+  // public Quantara error contract controlled and credential-free.
+  await response.body?.cancel().catch(() => undefined);
+  if (response.status === 401) {
+    throw new AppError("GOOGLE_DRIVE_REAUTH_REQUIRED", "Google Drive authorization expired. Please reconnect.", 401);
+  }
+  if (response.status === 404) {
+    throw new AppError("GOOGLE_DRIVE_FILE_NOT_FOUND", "The selected Google Drive file was not found.", 404);
+  }
+  if (response.status === 403) {
+    throw new AppError("GOOGLE_DRIVE_ACCESS_DENIED", "Google Drive denied access to the selected file.", 403);
+  }
+  throw new AppError("GOOGLE_DRIVE_API_ERROR", `Google Drive could not ${operation}. Please try again.`, 502);
+}
+
+async function fetchGoogleDrive(url: string, accessToken: string): Promise<Response> {
+  try {
+    return await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } });
+  } catch {
+    throw new AppError("GOOGLE_DRIVE_API_ERROR", "Google Drive could not be reached. Please try again.", 502);
+  }
+}
+
 /** Lists files/folders inside a given folder (root Drive if folderId is omitted). Excludes trashed items. */
 export async function listGoogleDriveFiles(accessToken: string, folderId?: string): Promise<GoogleDriveFile[]> {
   const parent = folderId ?? "root";
@@ -120,15 +177,13 @@ export async function listGoogleDriveFiles(accessToken: string, folderId?: strin
     pageSize: "200",
     orderBy: "folder,name",
   });
-  const response = await fetch(`${DRIVE_FILES_ENDPOINT}?${params.toString()}`, {
-    headers: { Authorization: `Bearer ${accessToken}` },
-  });
-  const body = await response.json().catch(() => null) as any;
+  const response = await fetchGoogleDrive(`${DRIVE_FILES_ENDPOINT}?${params.toString()}`, accessToken);
   if (!response.ok) {
-    const message = body?.error?.message ?? `Google Drive files.list failed (${response.status}).`;
-    throw new AppError("GOOGLE_DRIVE_API_ERROR", message, response.status === 401 ? 401 : 502);
+    return throwDriveApiError(response, "list files");
   }
-  return (body.files ?? []) as GoogleDriveFile[];
+  const body = await response.json().catch(() => null) as any;
+  const files = Array.isArray(body?.files) ? body.files : [];
+  return files.map(parseGoogleDriveFile);
 }
 
 export function isGoogleDriveFolder(file: Pick<GoogleDriveFile, "mimeType">): boolean {
@@ -137,24 +192,121 @@ export function isGoogleDriveFolder(file: Pick<GoogleDriveFile, "mimeType">): bo
 
 export async function getGoogleDriveFileMetadata(accessToken: string, fileId: string): Promise<GoogleDriveFile> {
   const params = new URLSearchParams({ fields: "id, name, mimeType, size, modifiedTime, parents, iconLink, webViewLink" });
-  const response = await fetch(`${DRIVE_FILES_ENDPOINT}/${fileId}?${params.toString()}`, {
-    headers: { Authorization: `Bearer ${accessToken}` },
-  });
-  const body = await response.json().catch(() => null) as any;
+  const response = await fetchGoogleDrive(
+    `${DRIVE_FILES_ENDPOINT}/${encodeURIComponent(fileId)}?${params.toString()}`,
+    accessToken,
+  );
   if (!response.ok) {
-    const message = body?.error?.message ?? `Google Drive files.get failed (${response.status}).`;
-    throw new AppError("GOOGLE_DRIVE_API_ERROR", message, response.status === 401 ? 401 : 502);
+    return throwDriveApiError(response, "read file metadata");
   }
-  return body as GoogleDriveFile;
+  const body = await response.json().catch(() => null) as any;
+  return parseGoogleDriveFile(body);
 }
 
 /** Downloads a file's raw bytes. Google Docs/Sheets/Slides (no direct binary) are not supported yet — caller should check mimeType first. */
-export async function downloadGoogleDriveFile(accessToken: string, fileId: string): Promise<ArrayBuffer> {
-  const response = await fetch(`${DRIVE_FILES_ENDPOINT}/${fileId}?alt=media`, {
-    headers: { Authorization: `Bearer ${accessToken}` },
-  });
+export async function downloadGoogleDriveFile(
+  accessToken: string,
+  fileId: string,
+  options: { maxBytes?: number; expectedBytes?: number } = {},
+): Promise<{ bytes: ArrayBuffer; contentType: string | null; contentLength: number | null }> {
+  const response = await fetchGoogleDrive(
+    `${DRIVE_FILES_ENDPOINT}/${encodeURIComponent(fileId)}?alt=media`,
+    accessToken,
+  );
   if (!response.ok) {
-    throw new AppError("GOOGLE_DRIVE_API_ERROR", `Google Drive file download failed (${response.status}).`, response.status === 401 ? 401 : 502);
+    return throwDriveApiError(response, "download the selected file");
   }
-  return response.arrayBuffer();
+
+  const rawContentLength = response.headers.get("content-length");
+  const contentLength = rawContentLength && /^\d+$/.test(rawContentLength)
+    ? Number(rawContentLength)
+    : null;
+  if (contentLength !== null && options.maxBytes !== undefined && contentLength > options.maxBytes) {
+    await response.body?.cancel().catch(() => undefined);
+    throw new AppError(
+      "FILE_TOO_LARGE",
+      `The selected file exceeds the ${Math.floor(options.maxBytes / (1024 * 1024))}MB size limit.`,
+      400,
+    );
+  }
+  if (contentLength !== null && options.expectedBytes !== undefined && contentLength !== options.expectedBytes) {
+    await response.body?.cancel().catch(() => undefined);
+    throw new AppError(
+      "GOOGLE_DRIVE_FILE_CHANGED",
+      "The selected Google Drive file changed while it was being imported. Please try again.",
+      409,
+    );
+  }
+
+  const byteLimit = Math.min(
+    options.maxBytes ?? Number.MAX_SAFE_INTEGER,
+    options.expectedBytes ?? Number.MAX_SAFE_INTEGER,
+  );
+  const expectedBuffer = options.expectedBytes !== undefined
+    ? new Uint8Array(options.expectedBytes)
+    : null;
+  const chunks: Uint8Array[] = [];
+  let totalBytes = 0;
+
+  try {
+    if (response.body) {
+      const reader = response.body.getReader();
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        const nextTotalBytes = totalBytes + value.byteLength;
+        if (nextTotalBytes > byteLimit) {
+          await reader.cancel().catch(() => undefined);
+          if (options.expectedBytes !== undefined && nextTotalBytes > options.expectedBytes) {
+            throw new AppError(
+              "GOOGLE_DRIVE_FILE_CHANGED",
+              "The selected Google Drive file changed while it was being imported. Please try again.",
+              409,
+            );
+          }
+          throw new AppError(
+            "FILE_TOO_LARGE",
+            `The selected file exceeds the ${Math.floor(byteLimit / (1024 * 1024))}MB size limit.`,
+            400,
+          );
+        }
+        if (expectedBuffer) {
+          expectedBuffer.set(value, totalBytes);
+        } else {
+          chunks.push(value);
+        }
+        totalBytes = nextTotalBytes;
+      }
+    }
+  } catch (error) {
+    if (error instanceof AppError) throw error;
+    throw new AppError("GOOGLE_DRIVE_API_ERROR", "The Google Drive download was interrupted. Please try again.", 502);
+  }
+
+  if (options.expectedBytes !== undefined && totalBytes !== options.expectedBytes) {
+    throw new AppError(
+      "GOOGLE_DRIVE_FILE_CHANGED",
+      "The selected Google Drive file changed while it was being imported. Please try again.",
+      409,
+    );
+  }
+
+  let bytes: ArrayBuffer;
+  if (expectedBuffer) {
+    bytes = expectedBuffer.buffer;
+  } else {
+    const combined = new Uint8Array(totalBytes);
+    let offset = 0;
+    for (const chunk of chunks) {
+      combined.set(chunk, offset);
+      offset += chunk.byteLength;
+    }
+    bytes = combined.buffer;
+  }
+
+  return {
+    bytes,
+    contentType: response.headers.get("content-type"),
+    contentLength,
+  };
 }

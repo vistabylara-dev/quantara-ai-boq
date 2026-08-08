@@ -58,9 +58,14 @@ describe("INTEGRATIONS-1A: AEC applications and connected data hub foundation (i
       expect(new Set(ids).size).toBe(ids.length);
     });
 
-    it("never marks a provider AVAILABLE, BETA, or CONNECTED — nothing is live yet in this phase", () => {
-      const liveStatuses = PROVIDER_REGISTRY.filter((p) => ["AVAILABLE", "BETA"].includes(p.status));
-      expect(liveStatuses).toHaveLength(0);
+    it("marks only Google Drive as BETA and leaves every other cloud provider non-live", () => {
+      const liveProviders = PROVIDER_REGISTRY.filter((provider) => ["AVAILABLE", "BETA"].includes(provider.status));
+      expect(liveProviders.map((provider) => provider.id)).toEqual(["google-drive"]);
+      expect(getProviderById("google-drive")).toMatchObject({
+        status: "BETA",
+        supportedData: ["Folder/file browsing", "Selected supported file import into a Quantara project"],
+        plannedData: ["Version metadata"],
+      });
     });
 
     it("resolves a known provider by id and returns undefined for an unknown one", () => {

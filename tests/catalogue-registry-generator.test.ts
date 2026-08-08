@@ -29,7 +29,10 @@ describe("catalogue-dataset-registry — the real, committed 15-dataset registry
     expect(hvac).toBeDefined();
     expect(hvac!.datasetVersion).toBe("1");
     expect(hvac!.disciplineKey).toBe("mechanical");
-    expect(hvac!.files.map((f) => f.approvedChecksum)).toContain("3f53af3f2617227bdf1634b3b41c022ece1253e7d015a4259edca80caf58007a");
+    // CATALOGUE-INTEGRITY-REPAIR: canonical (CRLF-normalized) checksum of the Git-committed
+    // LF bytes — see catalogue-csv-checksum.ts. The old value here was computed against
+    // CRLF-converted local content and never actually matched what Git/Vercel deploy.
+    expect(hvac!.files.map((f) => f.approvedChecksum)).toContain("fbb9d85cd46b5eaf19142464e79fa0611ecf564cafdb0c2fe0dd5da8d11baf64");
     expect(hvac!.registrationSource).toBe("MANUAL");
   });
 

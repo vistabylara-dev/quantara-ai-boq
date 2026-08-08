@@ -69,6 +69,40 @@ describe("catalogue-discovery-service", () => {
     expect(first[0].files[0].checksum).toHaveLength(64); // sha256 hex
   });
 
+  /**
+   * CATALOGUE-INTEGRITY-REPAIR — the exact incident this whole repair
+   * exists to prevent: discovery-time checksums (the values a developer
+   * copies into catalogue-dataset-registry.ts) must be identical whether
+   * the CSV on disk has LF or CRLF line endings, so a registry regenerated
+   * on Windows and one regenerated on Linux/CI always agree. A real content
+   * edit must still change the checksum.
+   */
+  it("discovery checksum is identical for the same content in LF vs CRLF form, but changes on real content edits", async () => {
+    const lines = [HEADER, row("D-1", "construction", "X", "Determinism check")];
+    const lfContent = lines.join("\n");
+    const crlfContent = lines.join("\r\n");
+
+    // Distinct, non-overlapping folder names — "endings-crlf" must not end with "endings-lf"
+    // (a prior version of this test used "lf-folder"/"crlf-folder", where
+    // "crlf-folder".endsWith("lf-folder") is true, silently matching the wrong folder).
+    await mkdir(join(root, "endings-lf"), { recursive: true });
+    await writeFile(join(root, "endings-lf", "file.csv"), lfContent, "utf8");
+    await mkdir(join(root, "endings-crlf"), { recursive: true });
+    await writeFile(join(root, "endings-crlf", "file.csv"), crlfContent, "utf8");
+
+    const folders = await discoverCatalogueDatasets(root, new Set(["construction"]));
+    const lfFolder = folders.find((f) => f.folderPath.endsWith("endings-lf"));
+    const crlfFolder = folders.find((f) => f.folderPath.endsWith("endings-crlf"));
+    expect(lfFolder?.files[0].checksum).toBe(crlfFolder?.files[0].checksum);
+
+    // A real content edit — not just line endings — must still change the checksum.
+    const editedLines = [HEADER, row("D-1", "construction", "X", "Different description entirely")];
+    await writeFile(join(root, "endings-lf", "file.csv"), editedLines.join("\n"), "utf8");
+    const afterEdit = await discoverCatalogueDatasets(root, new Set(["construction"]));
+    const editedFolder = afterEdit.find((f) => f.folderPath.endsWith("endings-lf"));
+    expect(editedFolder?.files[0].checksum).not.toBe(lfFolder?.files[0].checksum);
+  });
+
   it("aggregates total rows correctly across multiple files in one folder", async () => {
     await writeCsv("agg/a.csv", [HEADER, row("A-1", "construction", "X", "x"), row("A-2", "construction", "X", "x")]);
     await writeCsv("agg/b.csv", [HEADER, row("B-1", "construction", "X", "x")]);

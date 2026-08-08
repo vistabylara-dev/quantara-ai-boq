@@ -3,11 +3,13 @@ import { PlatformRole, UserRole } from "@prisma/client";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { prisma } from "../src/lib/db/prisma";
 import { AppError, PermissionDeniedError } from "../src/lib/errors/app-error";
-import { computeChecksum } from "../src/lib/files/file-security";
+import { computeCatalogueCsvChecksum } from "../src/lib/services/catalogue-csv-checksum";
+import { parseCsv } from "../src/lib/imports/csv-parser";
 import type { PlatformActor } from "../src/lib/auth/platform-authorization";
 import {
   computeDatasetSourceChecksum,
   getDatasetDefinition,
+  listDatasetDefinitions,
   loadApprovedDatasetFiles,
   requireDatasetDefinition,
   type DatasetDefinition,
@@ -51,8 +53,39 @@ describe("CATALOGUE-PROD-ACTIVATE: registered dataset registry", () => {
     const dataset = requireDatasetDefinition(HVAC_DATASET_ID);
     for (const file of dataset.files) {
       const bytes = readFileSync(`${dataset.sourceDir}/${file.fileName}`);
-      expect(computeChecksum(bytes)).toBe(file.approvedChecksum);
+      expect(computeCatalogueCsvChecksum(bytes)).toBe(file.approvedChecksum);
     }
+  });
+
+  /**
+   * CATALOGUE-INTEGRITY-REPAIR — the real regression test for the incident
+   * itself: every registered dataset's every file, checked against the
+   * actual current worktree file using the canonical (CRLF-normalized)
+   * checksum. This must pass identically whether the checkout is LF (Git/
+   * Linux/Vercel) or CRLF (Windows, core.autocrlf=true) — that platform
+   * independence is the entire point of computeCatalogueCsvChecksum. Also
+   * confirms expectedRowCount is still correct for every file.
+   */
+  it("every registered dataset's every file matches its approved checksum (15 datasets, 53 files)", () => {
+    const datasets = listDatasetDefinitions();
+    expect(datasets.length).toBe(15);
+
+    let totalFiles = 0;
+    for (const dataset of datasets) {
+      for (const file of dataset.files) {
+        totalFiles += 1;
+        const path = `${dataset.sourceDir}/${file.fileName}`;
+        const bytes = readFileSync(path);
+
+        const canonical = computeCatalogueCsvChecksum(bytes);
+        expect(canonical, `${dataset.datasetId}/${file.fileName}: canonical checksum mismatch`).toBe(file.approvedChecksum);
+
+        const rows = parseCsv(bytes.toString("utf-8"));
+        const actualRowCount = Math.max(0, rows.length - 1);
+        expect(actualRowCount, `${dataset.datasetId}/${file.fileName}: row count mismatch`).toBe(file.expectedRowCount);
+      }
+    }
+    expect(totalFiles).toBe(53);
   });
 
   it("has an approved Plumbing dataset registered", () => {
@@ -176,6 +209,64 @@ describe("CATALOGUE-PROD-ACTIVATE: resumable job execution (integration, real lo
     await expect(processNextBatch(ownerActor(), job.id)).rejects.toThrow(AppError);
     await expect(confirmExecution(ownerActor(), job.id)).rejects.toThrow(AppError);
   });
+
+  /**
+   * CATALOGUE-INTEGRITY-REPAIR — mirrors the real doors-and-windows incident:
+   * a non-terminal, partway-through job whose persisted sourceChecksum no
+   * longer matches the current registered dataset identity (e.g. because the
+   * registry's approved checksums were corrected, exactly like this repair
+   * does). processNextBatch must refuse to continue it — and, critically,
+   * must leave the job completely untouched (no status change, no cursor
+   * movement, no row processed, no MasterItem created) rather than moving it
+   * to FAILED the way an ordinary processing error would. Then proves a job
+   * created under the CURRENT identity continues normally.
+   */
+  it("a non-terminal job with a stale source identity is never silently resumed, and is left completely untouched", async () => {
+    const dryRun = await registerAndDryRun(ownerActor(), HVAC_DATASET_ID);
+    const armed = await confirmExecution(ownerActor(), dryRun.id);
+    expect(armed.status).toBe("PAUSED");
+
+    // Make real forward progress first — like the real doors-and-windows job at 4800/11567 —
+    // so the test proves cursor/processedRows are truly unaffected, not just untouched from zero.
+    const afterOneBatch = await processNextBatch(ownerActor(), dryRun.id);
+    expect(afterOneBatch.processedRows).toBeGreaterThan(0);
+    const itemCountBeforeMismatch = await prisma.masterItem.count({ where: { itemCode: { startsWith: "HVAC-" } } });
+
+    // Simulate a registry checksum correction changing the computed identity, exactly
+    // like this repair's registry fix does — without touching the actual CSV bytes.
+    // Snapshot AFTER this injection (not before) so the comparison below isolates
+    // exactly what processNextBatch itself does — the injection update necessarily
+    // changes updatedAt too, and that's not what's under test here.
+    await prisma.masterCatalogueImportJob.update({ where: { id: dryRun.id }, data: { sourceChecksum: "stale-identity-from-before-a-registry-correction" } });
+    const staleSnapshot = await prisma.masterCatalogueImportJob.findUniqueOrThrow({ where: { id: dryRun.id } });
+
+    await expect(processNextBatch(ownerActor(), dryRun.id)).rejects.toThrow(/source registration|identity/i);
+
+    // Left completely untouched: same status, same cursor, same processedRows, same updatedAt — not moved to FAILED.
+    const afterMismatch = await prisma.masterCatalogueImportJob.findUniqueOrThrow({ where: { id: dryRun.id } });
+    expect(afterMismatch.status).toBe(staleSnapshot.status);
+    expect(afterMismatch.currentRowCursor).toBe(staleSnapshot.currentRowCursor);
+    expect(afterMismatch.processedRows).toBe(staleSnapshot.processedRows);
+    expect(afterMismatch.updatedAt).toEqual(staleSnapshot.updatedAt);
+    const itemCountAfterMismatch = await prisma.masterItem.count({ where: { itemCode: { startsWith: "HVAC-" } } });
+    expect(itemCountAfterMismatch).toBe(itemCountBeforeMismatch);
+
+    // Restore the correct identity — the owner's real remedy is "cancel and start a new dry
+    // run," but restoring here proves a job under the CURRENT identity continues normally,
+    // and lets this test drain the job so afterAll cleanup finds a consistent final state.
+    const dataset = requireDatasetDefinition(HVAC_DATASET_ID);
+    await prisma.masterCatalogueImportJob.update({ where: { id: dryRun.id }, data: { sourceChecksum: computeDatasetSourceChecksum(dataset) } });
+
+    let job = await getJob(ownerActor(), dryRun.id);
+    while (job.status === "PAUSED" || job.status === "IMPORT_RUNNING") {
+      job = await processNextBatch(ownerActor(), dryRun.id);
+    }
+    // Drained to COMPLETED via the same idempotent upsert path "an identical rerun" below
+    // relies on — the 891 items already exist from the earlier full-import test, so this
+    // drain reconfirms them as unchanged rather than duplicating anything. Deliberately no
+    // cleanup call here: later tests expect the 891 HVAC items to still exist.
+    expect(job.status).toBe("COMPLETED");
+  }, 60_000);
 
   it("an identical rerun is fully idempotent — zero new inserts, everything unchanged", async () => {
     const dryRun = await registerAndDryRun(ownerActor(), HVAC_DATASET_ID);

@@ -380,6 +380,30 @@ export async function processNextBatch(owner: PlatformActor, jobId: string) {
     throw new AppError("JOB_NOT_CONTINUABLE", `Job status is ${job.status}; it cannot be continued.`, 409);
   }
 
+  // CATALOGUE-INTEGRITY-REPAIR — verify the job's persisted source identity
+  // against the CURRENT registered dataset definition before this job is
+  // claimed/mutated at all (not after, inside the try block below). A
+  // mismatch here means the registry's checksums changed since this job was
+  // created (e.g. a registry correction like this one) — even when the
+  // underlying CSV bytes never changed, computeDatasetSourceChecksum hashes
+  // the registered checksum *strings*, so correcting them changes the
+  // computed identity. Silently resuming under a different identity than
+  // the job was created with would make its persisted provenance
+  // (sourceChecksum, dryRunReportJson) inconsistent with what actually ran.
+  // Throwing here — before the optimistic-lock claim below — guarantees the
+  // job is left completely untouched: no status change, no cursor movement,
+  // no row processed. The owner must explicitly cancel it and start a fresh
+  // dry run under the current identity.
+  const dataset = requireDatasetDefinition(job.datasetId);
+  const currentIdentityChecksum = computeDatasetSourceChecksum(dataset);
+  if (currentIdentityChecksum !== job.sourceChecksum) {
+    throw new AppError(
+      "JOB_SOURCE_IDENTITY_MISMATCH",
+      "The approved source registration for this dataset has changed since this job was created. Cancel this job and start a new dry run before continuing.",
+      409,
+    );
+  }
+
   const claim = await prisma.masterCatalogueImportJob.updateMany({
     where: { id: jobId, updatedAt: job.updatedAt, status: { in: CONTINUABLE_STATUSES } },
     data: { status: MasterCatalogueImportJobStatus.IMPORT_RUNNING },
@@ -388,14 +412,7 @@ export async function processNextBatch(owner: PlatformActor, jobId: string) {
     throw new AppError("JOB_BUSY", "Another continuation is already in progress for this job.", 409);
   }
 
-  const dataset = requireDatasetDefinition(job.datasetId);
-
   try {
-    const currentChecksum = computeDatasetSourceChecksum(dataset);
-    if (currentChecksum !== job.sourceChecksum) {
-      throw new AppError("SOURCE_CHANGED", "The approved source files changed since this job's dry run. Cancel and start a new dry run.", 409);
-    }
-
     const ctx = await requireHierarchyChain(dataset.profile);
     const { validRows, rowFileBoundaries } = loadDatasetRowSequence(dataset);
 

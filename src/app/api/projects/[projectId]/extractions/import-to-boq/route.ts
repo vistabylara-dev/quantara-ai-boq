@@ -21,6 +21,7 @@ const bodySchema = z.object({
   quantity: z.number().positive(),
   unitCost: z.number().min(0),
   marginPercentage: z.number().min(0),
+  quantityCalculationId: z.string().uuid().optional(),
 }).strict();
 
 export async function POST(request: Request, context: RouteContext) {

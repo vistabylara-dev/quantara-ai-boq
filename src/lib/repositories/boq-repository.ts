@@ -804,6 +804,11 @@ async function getItemRecord(companyId: string, itemId: string) {
   return item;
 }
 
+/** Public wrapper around the internal single-item lookup above — additive only, getItemRecord's own behavior/signature is unchanged for its existing callers in this file. */
+export async function getBOQItemRecord(companyId: string, itemId: string) {
+  return getItemRecord(companyId, itemId);
+}
+
 /**
  * Accepts an optional externally-managed transaction (matching
  * createProject's pattern in project-repository.ts) so callers that need to

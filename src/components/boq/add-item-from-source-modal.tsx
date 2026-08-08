@@ -2,7 +2,10 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
+import type { QuantityCalculationType } from "@prisma/client";
 import { apiClient, getApiErrorMessage } from "@/lib/api/client";
+import { listSupportedCalculationTypes, getRequiredDimensions } from "@/lib/calculations/required-dimensions-registry";
+import { QuantityCalculationPanel } from "@/components/boq/quantity-calculation-panel";
 
 type Section = { id: string; title: string };
 
@@ -20,6 +23,7 @@ type SearchResultItem = {
 type Tab = "search" | "manual";
 
 type Props = {
+  projectId: string;
   boqId: string;
   sections: Section[];
   nextItemNumber: number;
@@ -36,7 +40,7 @@ const SOURCE_TYPE_BY_RESULT_SOURCE: Record<string, string> = {
   SUPPLIER_CATALOGUE: "RATE_CATALOGUE",
 };
 
-export default function AddItemFromSourceModal({ boqId, sections, nextItemNumber, onClose, onAdded }: Props) {
+export default function AddItemFromSourceModal({ projectId, boqId, sections, nextItemNumber, onClose, onAdded }: Props) {
   const [tab, setTab] = useState<Tab>("search");
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<SearchResultItem[]>([]);
@@ -48,6 +52,10 @@ export default function AddItemFromSourceModal({ boqId, sections, nextItemNumber
   const [error, setError] = useState<string | null>(null);
 
   const [manualDraft, setManualDraft] = useState({ itemCode: "", category: "", description: "", specification: "", unit: "", unitCost: "0", marginPercentage: "0" });
+  const [useMeasurementCalculation, setUseMeasurementCalculation] = useState(false);
+  const [calculationType, setCalculationType] = useState<QuantityCalculationType | "">("");
+  const [confirmedCalculation, setConfirmedCalculation] = useState<{ resultValue: number; resultUnit: string } | null>(null);
+  const supportedCalculationTypes = listSupportedCalculationTypes();
 
   const switchToManualFromLocked = useCallback((item: SearchResultItem) => {
     setManualDraft((current) => ({ ...current, description: item.name, unit: item.unit }));
@@ -217,9 +225,65 @@ export default function AddItemFromSourceModal({ boqId, sections, nextItemNumber
             <input value={manualDraft.category} onChange={(e) => setManualDraft({ ...manualDraft, category: e.target.value })} placeholder="Category" className="w-full rounded-2xl border border-slate-800 bg-slate-900 px-4 py-3 text-white outline-none focus:border-blue-500" />
             <input value={manualDraft.description} onChange={(e) => setManualDraft({ ...manualDraft, description: e.target.value })} placeholder="Description" className="w-full rounded-2xl border border-slate-800 bg-slate-900 px-4 py-3 text-white outline-none focus:border-blue-500" />
             <input value={manualDraft.specification} onChange={(e) => setManualDraft({ ...manualDraft, specification: e.target.value })} placeholder="Specification" className="w-full rounded-2xl border border-slate-800 bg-slate-900 px-4 py-3 text-white outline-none focus:border-blue-500" />
+
+            <label className="flex items-center gap-2 text-sm text-slate-300">
+              <input
+                type="checkbox"
+                checked={useMeasurementCalculation}
+                onChange={(e) => {
+                  setUseMeasurementCalculation(e.target.checked);
+                  setConfirmedCalculation(null);
+                  if (!e.target.checked) setCalculationType("");
+                }}
+                className="h-4 w-4 rounded border-slate-700 bg-slate-900"
+              />
+              Add measurement calculation
+            </label>
+
+            {useMeasurementCalculation && (
+              <div className="space-y-3 rounded-2xl border border-slate-800 bg-slate-900/50 p-4">
+                <label className="block text-sm text-slate-300">
+                  <span className="text-slate-400">Calculation type</span>
+                  <select
+                    value={calculationType}
+                    onChange={(e) => {
+                      setCalculationType(e.target.value as QuantityCalculationType);
+                      setConfirmedCalculation(null);
+                    }}
+                    className="mt-2 w-full rounded-2xl border border-slate-800 bg-slate-900 px-4 py-3 text-white outline-none focus:border-blue-500"
+                  >
+                    <option value="">Select a calculation type…</option>
+                    {supportedCalculationTypes.map((type) => (
+                      <option key={type} value={type}>
+                        {getRequiredDimensions(type)?.label ?? type}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                {calculationType && !confirmedCalculation && (
+                  <QuantityCalculationPanel
+                    projectId={projectId}
+                    calculationType={calculationType}
+                    onConfirmed={(calculation) => {
+                      setConfirmedCalculation({ resultValue: calculation.resultValue, resultUnit: calculation.resultUnit });
+                      setQuantity(String(calculation.resultValue));
+                      setManualDraft((current) => ({ ...current, unit: calculation.resultUnit }));
+                    }}
+                  />
+                )}
+
+                {confirmedCalculation && (
+                  <p className="text-sm text-emerald-300">
+                    Using calculated quantity: {confirmedCalculation.resultValue} {confirmedCalculation.resultUnit}
+                  </p>
+                )}
+              </div>
+            )}
+
             <div className="grid grid-cols-3 gap-3">
-              <input value={manualDraft.unit} onChange={(e) => setManualDraft({ ...manualDraft, unit: e.target.value })} placeholder="Unit" className="rounded-2xl border border-slate-800 bg-slate-900 px-4 py-3 text-white outline-none focus:border-blue-500" />
-              <input value={quantity} onChange={(e) => setQuantity(e.target.value)} placeholder="Quantity" className="rounded-2xl border border-slate-800 bg-slate-900 px-4 py-3 text-white outline-none focus:border-blue-500" />
+              <input value={manualDraft.unit} onChange={(e) => setManualDraft({ ...manualDraft, unit: e.target.value })} placeholder="Unit" readOnly={Boolean(confirmedCalculation)} className="rounded-2xl border border-slate-800 bg-slate-900 px-4 py-3 text-white outline-none focus:border-blue-500 read-only:opacity-70" />
+              <input value={quantity} onChange={(e) => setQuantity(e.target.value)} placeholder="Quantity" readOnly={Boolean(confirmedCalculation)} className="rounded-2xl border border-slate-800 bg-slate-900 px-4 py-3 text-white outline-none focus:border-blue-500 read-only:opacity-70" />
               <input value={manualDraft.unitCost} onChange={(e) => setManualDraft({ ...manualDraft, unitCost: e.target.value })} placeholder="Unit cost" className="rounded-2xl border border-slate-800 bg-slate-900 px-4 py-3 text-white outline-none focus:border-blue-500" />
             </div>
             {error && <p className="text-xs text-rose-300">{error}</p>}

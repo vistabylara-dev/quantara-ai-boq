@@ -21,8 +21,11 @@ export const itemIdParamsSchema = z.object({
   itemId: z.string().uuid("A valid item ID is required."),
 });
 
+/** Accepts either a project's slug or its canonical UUID — the same identifier format getProjectRecord() resolves. */
+export const projectIdentifierSchema = z.string().trim().min(1, "A project ID or slug is required.").max(120);
+
 export const projectIdParamsSchema = z.object({
-  projectId: z.string().trim().min(1, "A project ID or slug is required.").max(120),
+  projectId: projectIdentifierSchema,
 });
 
 export const frontendBOQUpdateSchema = frontendBOQSchema.extend({

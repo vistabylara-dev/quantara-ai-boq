@@ -1,6 +1,10 @@
 import { MasterCatalogueImportJobStatus, MasterCatalogueImportStatus } from "@prisma/client";
 import { prisma } from "@/lib/db/prisma";
 import { AppError, NotFoundError, PermissionDeniedError } from "@/lib/errors/app-error";
+import {
+  databaseStorageCapacityError,
+  isDatabaseStorageCapacityError,
+} from "@/lib/db/database-capacity-error";
 import type { PlatformActor } from "@/lib/auth/platform-authorization";
 import { recordPlatformActionAudit } from "@/lib/repositories/platform-action-audit-repository";
 import {
@@ -489,11 +493,36 @@ export async function processNextBatch(owner: PlatformActor, jobId: string) {
 
     return toJobDTO(updated);
   } catch (error) {
+    // PostgreSQL SQLSTATE 53100 means the database cannot allocate any more
+    // storage. Do not attempt the usual FAILED-state update: that write is
+    // subject to the same exhausted capacity and would mask the original
+    // persistence failure (the production incident did exactly that). Leave
+    // the claimed job IMPORT_RUNNING; after capacity is increased, PR12's
+    // stale-claim path can reclaim the persisted cursor without duplicating
+    // records. A job from an actual capacity incident still needs a read-only
+    // partial-batch reconciliation before reuse because row writes and the
+    // job checkpoint are not one transaction (creation counters may lag).
+    if (isDatabaseStorageCapacityError(error)) {
+      console.error("[catalogue-import] Database storage capacity exceeded while processing a batch", error);
+      throw databaseStorageCapacityError();
+    }
+
     const message = error instanceof AppError ? error.message : "Unexpected error while processing this batch.";
-    await prisma.masterCatalogueImportJob.update({
-      where: { id: jobId },
-      data: { status: MasterCatalogueImportJobStatus.FAILED, lastErrorMessage: message },
-    });
+    try {
+      await prisma.masterCatalogueImportJob.update({
+        where: { id: jobId },
+        data: { status: MasterCatalogueImportJobStatus.FAILED, lastErrorMessage: message },
+      });
+    } catch (statusUpdateError) {
+      // Capacity may be exhausted between the original failure and this
+      // diagnostic write. Preserve the actionable storage outcome instead of
+      // returning a second, unexplained Prisma 500 from the catch block.
+      if (isDatabaseStorageCapacityError(statusUpdateError)) {
+        console.error("[catalogue-import] Database storage capacity exceeded while recording a batch failure", statusUpdateError);
+        throw databaseStorageCapacityError();
+      }
+      throw statusUpdateError;
+    }
     throw error;
   }
 }

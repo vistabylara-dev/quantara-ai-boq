@@ -50,6 +50,18 @@ async function cleanupHvacItems() {
   await prisma.masterItem.deleteMany({ where: { disciplineId: mechanical.id, itemCode: { startsWith: "HVAC-" } } });
 }
 
+/**
+ * CodeRabbit finding — cleanupHvacItems() scopes deletion to the "mechanical"
+ * discipline, but a plain `itemCode: { startsWith: "HVAC-" }` count could
+ * also match an HVAC-prefixed item belonging to a different discipline,
+ * making a concurrency assertion fail for unrelated data. Every HVAC item
+ * count in this file must use this same discipline-scoped condition.
+ */
+async function hvacItemWhere() {
+  const mechanical = await prisma.masterDiscipline.findUnique({ where: { key: "mechanical" } });
+  return { disciplineId: mechanical?.id ?? "__no_mechanical_discipline__", itemCode: { startsWith: "HVAC-" } } as const;
+}
+
 describe("CATALOGUE-PROD-ACTIVATE: registered dataset registry", () => {
   it("has an approved HVAC dataset with a checksum matching the real committed source files", () => {
     const dataset = requireDatasetDefinition(HVAC_DATASET_ID);
@@ -341,7 +353,7 @@ describe("CATALOGUE-PROD-ACTIVATE: resumable job execution (integration, real lo
     const freshClaimSnapshot = await prisma.masterCatalogueImportJob.findUniqueOrThrow({ where: { id: dryRun.id } });
     expect(Date.now() - freshClaimSnapshot.updatedAt.getTime()).toBeLessThan(STALE_IMPORT_RUNNING_MS);
 
-    await expect(processNextBatch(ownerActor(), dryRun.id)).rejects.toThrow(/already in progress|busy/i);
+    await expect(processNextBatch(ownerActor(), dryRun.id)).rejects.toMatchObject({ code: "JOB_BUSY" });
 
     // Left completely untouched: no cursor movement, no status change, no row processed.
     const afterStolenAttempt = await prisma.masterCatalogueImportJob.findUniqueOrThrow({ where: { id: dryRun.id } });
@@ -354,7 +366,9 @@ describe("CATALOGUE-PROD-ACTIVATE: resumable job execution (integration, real lo
     // completion so afterAll cleanup finds a consistent final state.
     await prisma.masterCatalogueImportJob.update({ where: { id: dryRun.id }, data: { status: MasterCatalogueImportJobStatus.PAUSED } });
     let job = await getJob(ownerActor(), dryRun.id);
-    while (job.status === "PAUSED" || job.status === "IMPORT_RUNNING") {
+    // processNextBatch always returns PAUSED or a terminal status on success — IMPORT_RUNNING
+    // is only ever a transient DB state during a call, never a value handed back to the caller.
+    while (job.status === "PAUSED") {
       job = await processNextBatch(ownerActor(), dryRun.id);
     }
     expect(job.status).toBe("COMPLETED");
@@ -374,7 +388,7 @@ describe("CATALOGUE-PROD-ACTIVATE: resumable job execution (integration, real lo
     expect(afterFirstBatch.status).toBe("PAUSED");
     expect(afterFirstBatch.insertedCount).toBe(afterFirstBatch.processedRows); // clean slate: every row in batch 1 is a real insert
     const cursorAfterFirstBatch = afterFirstBatch.processedRows;
-    const itemsAfterFirstBatch = await prisma.masterItem.count({ where: { itemCode: { startsWith: "HVAC-" } } });
+    const itemsAfterFirstBatch = await prisma.masterItem.count({ where: await hvacItemWhere() });
     expect(itemsAfterFirstBatch).toBe(cursorAfterFirstBatch);
 
     // Simulate an abandoned claim: IMPORT_RUNNING with an updatedAt well past the
@@ -389,14 +403,16 @@ describe("CATALOGUE-PROD-ACTIVATE: resumable job execution (integration, real lo
     expect(recovered.processedRows).toBeGreaterThan(cursorAfterFirstBatch);
     expect(recovered.processedRows - cursorAfterFirstBatch).toBeLessThanOrEqual(recovered.batchSize);
 
-    const itemsAfterRecovery = await prisma.masterItem.count({ where: { itemCode: { startsWith: "HVAC-" } } });
+    const itemsAfterRecovery = await prisma.masterItem.count({ where: await hvacItemWhere() });
     // Exactly the newly-inserted rows from this one recovered batch — no duplicates from the
     // abandoned claim being processed twice.
     expect(itemsAfterRecovery - itemsAfterFirstBatch).toBe(recovered.processedRows - cursorAfterFirstBatch);
 
-    // Drain to completion so afterAll cleanup finds a consistent final state.
+    // Drain to completion so afterAll cleanup finds a consistent final state. processNextBatch
+    // always returns PAUSED or a terminal status on success — IMPORT_RUNNING is only ever a
+    // transient DB state during a call, never a value handed back to the caller.
     let job = recovered;
-    while (job.status === "PAUSED" || job.status === "IMPORT_RUNNING") {
+    while (job.status === "PAUSED") {
       job = await processNextBatch(ownerActor(), dryRun.id);
     }
     expect(job.status).toBe("COMPLETED");
@@ -405,11 +421,11 @@ describe("CATALOGUE-PROD-ACTIVATE: resumable job execution (integration, real lo
     expect(job.versionsCreated).toBe(891);
     expect(job.insertedCount + job.updatedCount + job.unchangedCount).toBe(job.processedRows);
 
-    const finalItemCount = await prisma.masterItem.count({ where: { itemCode: { startsWith: "HVAC-" } } });
+    const finalItemCount = await prisma.masterItem.count({ where: await hvacItemWhere() });
     expect(finalItemCount).toBe(891); // no duplicate MasterItems from the stale-recovery batch
-    const versionCount = await prisma.masterItemVersion.count({ where: { masterItem: { itemCode: { startsWith: "HVAC-" } } } });
+    const versionCount = await prisma.masterItemVersion.count({ where: { masterItem: await hvacItemWhere() } });
     expect(versionCount).toBe(891); // no duplicate MasterItemVersions
-    const classificationCount = await prisma.masterItemClassification.count({ where: { masterItem: { itemCode: { startsWith: "HVAC-" } } } });
+    const classificationCount = await prisma.masterItemClassification.count({ where: { masterItem: await hvacItemWhere() } });
     expect(classificationCount).toBe(job.classificationsCreated); // no duplicate classifications
   }, 60_000);
 

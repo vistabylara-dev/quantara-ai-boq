@@ -11,7 +11,7 @@ const dimensionValueInputSchema = z.object({
   label: z.string().trim().min(1).max(200),
   unit: z.string().trim().max(20).nullable(),
   required: z.boolean(),
-  value: z.number().finite().nullable(),
+  value: z.number().finite().nonnegative("Dimension values must not be negative.").nullable(),
   source: z.enum(["extracted_entity", "detected_room", "manual_professional_input"]).nullable(),
   confidence: z.number().min(0).max(100).nullable(),
   reviewStatus: z.enum(["PREFILLED", "MANUAL_ENTRY", "MISSING"]),
@@ -37,7 +37,7 @@ export const createCalculationSchema = z.object({
 }).strict();
 
 export const overrideCalculationSchema = z.object({
-  resultValue: z.number().finite(),
+  resultValue: z.number().finite().nonnegative("The overridden result must not be negative."),
   reason: z.string().trim().min(1, "A reason is required to override a calculated quantity.").max(2_000),
 }).strict();
 

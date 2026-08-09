@@ -1,8 +1,11 @@
+import {
+  PUBLIC_CAPABILITY_STATUS_LABELS,
+  getPublicCapability,
+  type PublicCapabilityStatus,
+} from "@/lib/public-site/product-truth";
+
 export type NavigationItemStatus =
-  | "Available"
-  | "Controlled access"
-  | "Limited"
-  | "Not available";
+  (typeof PUBLIC_CAPABILITY_STATUS_LABELS)[PublicCapabilityStatus];
 
 export interface NavigationItem {
   label: string;
@@ -23,6 +26,8 @@ export interface NavigationSection {
 
 // Navigation structure matching Phase 9 requirements exactly
 
+const googleDriveImport = getPublicCapability("google-drive-import");
+
 export const publicNavigation: NavigationSection[] = [
   {
     label: "Platform",
@@ -42,13 +47,13 @@ export const publicNavigation: NavigationSection[] = [
         items: [
           { label: "PDF BOQ Extraction", href: "/pdf-boq-extraction", description: "Extract and review supported information from text-based PDF BOQ documents." },
           { label: "Scanned PDF BOQ", href: "/scanned-pdf-boq", description: "Detect scanned and image-only PDF BOQs; OCR text extraction is not currently available." },
-          { label: "BOQ Document Generation", href: "/boq-document-generation", description: "Generate professional outputs from verified project data." }
+          { label: "BOQ Document Generation", href: "/boq-document-generation", description: "Generate professional outputs from reviewed project data." }
         ]
       },
       {
         label: "Integrations",
         items: [
-          { label: "Google Drive Sources", href: "/features#google-drive-import", description: "Google Drive import requires configuration, authorization and the relevant access.", status: "Controlled access" }
+          { label: "Google Drive Sources", href: "/features#google-drive-import", description: `${googleDriveImport.summary} ${googleDriveImport.limitation}`, status: PUBLIC_CAPABILITY_STATUS_LABELS[googleDriveImport.status] }
         ]
       },
       {

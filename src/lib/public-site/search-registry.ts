@@ -163,3 +163,16 @@ export function createPublicUtilityMetadata(
     robots: { index: false, follow: false, noarchive: true },
   };
 }
+
+export function createPrivateUtilityMetadata(
+  title: string,
+  description: string,
+): Metadata {
+  return {
+    title: { absolute: title },
+    description,
+    alternates: { canonical: null },
+    robots: { index: false, follow: false, noarchive: true },
+    referrer: "no-referrer",
+  };
+}

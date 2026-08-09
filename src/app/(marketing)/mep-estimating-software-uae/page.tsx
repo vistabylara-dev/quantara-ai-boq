@@ -23,7 +23,7 @@ export default function Page() {
   }
 ],
     workflowDescription: "Quantara provides the structure to manage distinct MEP scopes, including HVAC, fire fighting, controls, and testing & commissioning. Users can organize revisions and technical schedules into a unified BOQ, preparing the data for professional review.",
-    workflowExample: "An MEP estimator in the UAE uses Quantara to extract equipment schedules from a consultant's text-based PDF, organizing the AHUs and FCUs into a structured HVAC section while keeping the lighting fixtures in a separate Electrical section. A scanned version of the same schedule would be detected and flagged for manual transcription, since OCR text extraction is not currently available.",
+    workflowExample: "An MEP estimator in the UAE reviews candidates created from supported detected table rows in a consultant's text-based PDF, then verifies and organizes accepted AHU and FCU items into an HVAC section while keeping lighting fixtures separate. A scanned version requires manual transcription because OCR text extraction is not currently available.",
     typicalCategories: [
   "HVAC",
   "Plumbing and Drainage",
@@ -63,7 +63,7 @@ export default function Page() {
   },
   {
     "question": "Can I extract HVAC equipment schedules?",
-    "answer": "Yes, you can extract technical schedules from text-based PDFs and structure them today, though manual verification is required. Scanned schedules are detected and flagged for manual transcription; OCR text extraction is not currently available."
+    "answer": "For a text-based PDF, Quantara can create review candidates only from supported detected table rows. A professional must verify and structure accepted schedule items; scanned schedules require manual transcription because OCR text extraction is not currently available."
   },
   {
     "question": "Does it validate MEP engineering compliance?",

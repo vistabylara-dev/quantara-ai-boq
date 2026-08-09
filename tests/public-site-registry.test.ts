@@ -1,13 +1,16 @@
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { dirname, join, relative, sep } from "node:path";
 import { describe, expect, it } from "vitest";
+import { NextRequest } from "next/server";
 import robots from "@/app/robots";
 import sitemap from "@/app/sitemap";
+import { middleware } from "@/middleware";
 import { PUBLIC_WEBSITE_PATHS } from "@/lib/public-site/public-route-paths";
 import {
   PUBLIC_SEARCH_PAGES,
   PUBLIC_SITE_ORIGIN,
   createPublicPageMetadata,
+  createPrivateUtilityMetadata,
   createPublicUtilityMetadata,
 } from "@/lib/public-site/search-registry";
 
@@ -160,6 +163,31 @@ describe("public search registry", () => {
     }
   });
 
+  it("serves representative signed-out marketing routes and protects application routes", () => {
+    for (const path of [
+      "/",
+      "/features",
+      "/pricing",
+      "/ai-boq-software",
+      "/boq-software",
+      "/pdf-boq-extraction",
+      "/scanned-pdf-boq",
+      "/boq-software-uae",
+      "/boq-software-dubai",
+      "/what-is-a-boq",
+    ]) {
+      const response = middleware(new NextRequest(`${PUBLIC_SITE_ORIGIN}${path}`));
+      expect(response.headers.get("location"), `${path} redirected`).toBeNull();
+      expect(response.headers.get("x-middleware-next"), `${path} did not continue`).toBe("1");
+    }
+
+    const protectedResponse = middleware(new NextRequest(`${PUBLIC_SITE_ORIGIN}/dashboard`));
+    expect(protectedResponse.status).toBe(307);
+    expect(protectedResponse.headers.get("location")).toBe(
+      `${PUBLIC_SITE_ORIGIN}/login?next=%2Fdashboard`,
+    );
+  });
+
   it("publishes a truthful AI-readable llms.txt discovery file", () => {
     const llms = readFileSync(join(repoRoot, "public", "llms.txt"), "utf8");
 
@@ -207,6 +235,54 @@ describe("public search registry", () => {
       canonical: `${PUBLIC_SITE_ORIGIN}/login`,
       languages: { "en-AE": `${PUBLIC_SITE_ORIGIN}/login` },
     });
+
+    for (const layoutPath of [
+      "src/app/login/layout.tsx",
+      "src/app/(marketing)/register/layout.tsx",
+      "src/app/forgot-password/layout.tsx",
+      "src/app/reset-password/layout.tsx",
+      "src/app/verify-email/layout.tsx",
+    ]) {
+      expect(readFileSync(join(repoRoot, layoutPath), "utf8"), layoutPath).toContain(
+        "createPublicUtilityMetadata",
+      );
+    }
+  });
+
+  it("marks private share and administration utilities as noindex without a public canonical", () => {
+    expect(createPrivateUtilityMetadata("Private", "Private utility.")).toMatchObject({
+      robots: { index: false, follow: false, noarchive: true },
+      referrer: "no-referrer",
+    });
+    expect(createPrivateUtilityMetadata("Private", "Private utility.").alternates).toEqual({
+      canonical: null,
+    });
+
+    for (const layoutPath of [
+      "src/app/proposal/layout.tsx",
+      "src/app/technical-report/layout.tsx",
+      "src/app/admin/login/layout.tsx",
+    ]) {
+      expect(readFileSync(join(repoRoot, layoutPath), "utf8"), layoutPath).toContain(
+        "createPrivateUtilityMetadata",
+      );
+    }
+  });
+
+  it("keeps public marketing and authenticated application shell ownership separate", () => {
+    const conditionalShell = readFileSync(
+      join(repoRoot, "src", "components", "layout", "conditional-app-shell.tsx"),
+      "utf8",
+    );
+    const marketingLayout = readFileSync(join(marketingRoot, "layout.tsx"), "utf8");
+
+    expect(conditionalShell).toContain("PUBLIC_WEBSITE_PATHS");
+    expect(conditionalShell).toContain("PUBLIC_SHELL_ROUTES.has");
+    expect(marketingLayout).toContain("PublicHeader");
+    expect(marketingLayout).toContain("PublicFooter");
+    expect(marketingLayout).not.toContain("AppShell");
+    expect(existsSync(join(marketingRoot, "industries", "[industryId]", "page.tsx"))).toBe(false);
+    expect(existsSync(join(repoRoot, "src", "app", "industries", "[industryId]", "page.tsx"))).toBe(true);
   });
 
   it("documents every indexable route in both required website reports", () => {

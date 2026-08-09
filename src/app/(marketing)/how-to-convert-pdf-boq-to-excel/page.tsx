@@ -57,7 +57,7 @@ export default function Page() {
     "id": "quantara-workflow",
     "heading": "How Quantara Supports Reviewable Extraction",
     "paragraphs": [
-      "Quantara captures supported text and table candidates from text-based PDF BOQs and presents them for field-level review. Hierarchy, merged cells, units and values still require checking.",
+      "Quantara stores extractable text from supported text-based PDF BOQs and presents supported detected table rows as field-level review candidates. Plain paragraph text is not automatically converted into BOQ candidates; hierarchy, merged cells, units and values still require checking.",
       "Confirmed information can be organized in BOQ sections and exported as XLSX. Cleanup and review effort vary, and no fixed saving is promised."
     ]
   }

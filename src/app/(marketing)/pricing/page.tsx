@@ -30,12 +30,12 @@ export default function PricingPage() {
         <div className="mx-auto max-w-7xl px-6 lg:px-8">
           
           <nav className="mb-12 text-sm" aria-label="Breadcrumb">
-            <ol className="flex items-center justify-center space-x-2 text-slate-500">
+            <ol className="flex items-center justify-center space-x-2 text-slate-500 dark:text-slate-400">
               <li>
-                <Link href="/" className="hover:text-slate-900 transition-colors">Home</Link>
+                <Link href="/" className="transition-colors hover:text-slate-900 dark:hover:text-white">Home</Link>
               </li>
               <li aria-hidden="true">/</li>
-              <li className="text-slate-900 font-medium" aria-current="page">Pricing</li>
+              <li className="font-medium text-slate-900 dark:text-white" aria-current="page">Pricing</li>
             </ol>
           </nav>
           

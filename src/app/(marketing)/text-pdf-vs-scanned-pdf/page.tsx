@@ -86,7 +86,7 @@ export default function Page() {
     "id": "quantara-workflow",
     "heading": "How Quantara Processes PDFs",
     "paragraphs": [
-      "Quantara accepts text-based and scanned PDFs. It captures available text and supported table information from text-based PDFs for review. Scanned or image-only documents are detected and flagged as requiring OCR; OCR text extraction is not currently available, so scanned content currently requires manual transcription.",
+      "Quantara accepts text-based and scanned PDFs. It stores extractable text from text-based PDFs and creates review candidates only from supported detected table rows; plain paragraph text does not become BOQ candidates. Scanned or image-only documents are detected and flagged as requiring OCR, but OCR text extraction is not currently available, so scanned content requires manual transcription.",
       "Quantara currently focuses on supported document extraction, BOQ structuring, project organization, templates, revisions, and professional outputs."
     ]
   }

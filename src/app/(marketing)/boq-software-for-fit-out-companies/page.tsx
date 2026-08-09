@@ -76,7 +76,7 @@ export default function Page() {
   },
   {
     "question": "How do I handle FF&E schedules?",
-    "answer": "FF&E schedules can be extracted from text-based PDFs or Excel and structured as a distinct section within the BOQ today. Scanned schedules are detected and flagged for manual transcription; OCR text extraction is not currently available."
+    "answer": "Supported structured Excel schedules can be imported. For a text-based PDF, only supported detected table rows become review candidates; a professional must verify them and organize accepted FF&E items into a BOQ section. Scanned schedules require manual transcription because OCR text extraction is not currently available."
   },
   {
     "question": "Can I use templates for common fit-out types?",

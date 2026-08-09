@@ -10,8 +10,8 @@ export default function Page() {
   const content: KnowledgePageContent = {
     breadcrumbLabel: "What Is a BOQ? A Practical Guide to Bills of Quantities",
     title: "What Is a BOQ? A Practical Guide to Bills of Quantities",
-    summary: "A Bill of Quantities (BOQ) is a structured document used in construction tendering and estimating. It itemizes the materials, parts, and labor (and their costs) required to construct, maintain, or repair a specific project structure or system. The BOQ provides a level playing field for contractors to price their work on the same terms.",
-    directAnswer: "A Bill of Quantities (BOQ) is a detailed, itemized list of materials, labor, and parts required for a construction project. It provides a standardized breakdown of scope, allowing all bidding contractors to price the project on the same terms and quantities.",
+    summary: "A Bill of Quantities (BOQ) is a structured construction document that describes and quantifies work items using defined descriptions, units and quantities. Depending on the procurement and measurement method, it may also include preliminaries, provisional sums, pricing columns, notes and rules that tenderers use as a common basis for pricing.",
+    directAnswer: "A Bill of Quantities (BOQ) describes measured construction work in organized sections and item lines, normally with descriptions, units and quantities. It gives tenderers a common pricing basis, but must be read with the drawings, specifications, procurement rules, assumptions and other contract documents.",
     keyTakeaways: [
       "A BOQ standardizes the bidding process for contractors.",
       "It contains preliminaries, measured works, and provisional sums.",
@@ -81,7 +81,7 @@ export default function Page() {
     "id": "limitations",
     "heading": "Common Mistakes and Limitations",
     "paragraphs": [
-      "A BOQ is only as accurate as the drawings it is based on. Common issues include missed scope, ambiguous descriptions, and quantity errors.",
+      "A BOQ depends on the quality and coordination of its drawings, specifications, measurement information and scope decisions. Common issues include missed scope, ambiguous descriptions, inconsistent units and quantity errors.",
       "Furthermore, it is critical to distinguish between the scope of work and the final contract price. Exclusions and assumptions must be clearly stated to avoid disputes later."
     ]
   },
@@ -89,7 +89,7 @@ export default function Page() {
     "id": "quantara-workflow",
     "heading": "How Quantara Supports BOQ Workflows",
     "paragraphs": [
-      "Quantara helps construction teams turn supported project documents into structured BOQ records. Instead of manually retyping items from a PDF, teams can extract the data into a controlled, revision-tracked environment.",
+      "Quantara helps construction teams review supported detected table rows from eligible project documents before organizing confirmed information into structured BOQ records. Plain PDF paragraph text is not automatically converted into BOQ candidates.",
       "Quantara currently focuses on supported document extraction, BOQ structuring, project organization, templates, revisions, and professional outputs."
     ]
   }

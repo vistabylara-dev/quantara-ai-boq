@@ -46,8 +46,8 @@ const PUBLIC_CAPABILITY_DEFINITIONS = [
     id: "text-pdf-extraction",
     name: "Text-based PDF extraction",
     status: "AVAILABLE",
-    summary: "Capture supported text and table information from text-based PDF files for professional review.",
-    limitation: "Results depend on the source layout and must be checked against the original file.",
+    summary: "Store extractable text from text-based PDF files and create review candidates only from supported detected table rows.",
+    limitation: "Plain paragraph text is not automatically converted into BOQ candidates; table results depend on the source layout and must be checked against the original file.",
   },
   {
     id: "spreadsheet-import",
@@ -110,11 +110,18 @@ const PUBLIC_CAPABILITY_DEFINITIONS = [
     limitation: "Generated documents are not professional approval and remain subject to project-specific review.",
   },
   {
+    id: "document-templates",
+    name: "Document templates",
+    status: "AVAILABLE",
+    summary: "Apply supported document templates to reviewed BOQ records and project data.",
+    limitation: "Template configuration and every generated result still require project-specific review.",
+  },
+  {
     id: "technical-report-generation",
     name: "Technical report generation",
-    status: "AVAILABLE",
-    summary: "Generate supported technical-report documents from reviewed project records and templates.",
-    limitation: "Voice and typed AI editing of technical reports is not currently a supported public capability.",
+    status: "LIMITED",
+    summary: "Generate DOCX technical reports from reviewed project records and templates in supported configured environments.",
+    limitation: "Durable production storage must be confirmed during Controlled Early Access; other technical-report formats and voice or typed AI editing are not currently supported.",
   },
   {
     id: "source-attribution",
@@ -142,6 +149,12 @@ const PUBLIC_CAPABILITY_DEFINITIONS = [
     name: "Automatic drawing measurement and takeoff",
     status: "NOT_AVAILABLE",
     summary: "Quantara does not currently derive final dimensions or quantities automatically from drawing geometry.",
+  },
+  {
+    id: "model-file-import",
+    name: "CAD, BIM and IFC model import",
+    status: "NOT_AVAILABLE",
+    summary: "Quantara does not currently import CAD, BIM or IFC models for quantity extraction or BOQ creation.",
   },
   {
     id: "scanned-pdf-ocr",

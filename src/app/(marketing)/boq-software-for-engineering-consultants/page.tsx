@@ -21,8 +21,8 @@ export default function Page() {
     "description": "Issuing the correct, verified revision of a BOQ to clients and contractors requires rigorous document control and tracking."
   }
 ],
-    workflowDescription: "Quantara captures supported information from text-based technical schedules for review and organizes BOQ sections, distinct revisions and available templates. Consultants remain responsible for multidisciplinary coordination, issue records and professional approval.",
-    workflowExample: "A consultant team reviews revised BOQ sections from structural and MEP departments before tender release. Supported information is captured for review, confirmed items are organized in a distinct revision record and a reviewable PDF is generated for checking.",
+    workflowDescription: "Quantara stores extractable PDF text and creates review candidates only from supported detected table rows, then organizes professionally reviewed BOQ sections, distinct revisions and available templates. Consultants remain responsible for multidisciplinary coordination, issue records and professional approval.",
+    workflowExample: "A consultant team reviews revised BOQ sections from structural and MEP departments before tender release. Supported table-row candidates are checked against their source, confirmed items are organized in a distinct revision record and a reviewable PDF is generated for checking.",
     typicalCategories: [
   "General Preliminaries",
   "Substructure",

@@ -5,6 +5,8 @@ import PublicJsonLd from "@/components/seo/public-json-ld";
 import PublicBreadcrumb from "@/components/ui/public-breadcrumb";
 import {
   PUBLIC_CAPABILITY_STATUS_LABELS,
+  getPublicCapability,
+  type PublicCapabilityId,
   type PublicCapabilityStatus,
 } from "@/lib/public-site/product-truth";
 import {
@@ -13,11 +15,12 @@ import {
 } from "@/lib/public-site/search-registry";
 import { buildPublicPageGraph } from "@/lib/public-site/schema";
 
-export type FeatureStatus =
-  | "Available"
-  | "Controlled access"
-  | "Limited"
-  | "Not available";
+type SeoCapabilityItem = {
+  capabilityId: PublicCapabilityId;
+  name: string;
+  description: string;
+  limitation?: string;
+};
 
 export interface SeoLandingPageContent {
   breadcrumbLabel: string;
@@ -37,11 +40,7 @@ export interface SeoLandingPageContent {
     heading: string;
     paragraphs: (string | ReactNode)[];
   };
-  relevantFeatures: Array<{
-    name: string;
-    status: FeatureStatus;
-    description: string;
-  }>;
+  relevantFeatures: SeoCapabilityItem[];
   workflowExample: {
     heading: string;
     introduction: string;
@@ -50,17 +49,8 @@ export interface SeoLandingPageContent {
       description: string;
     }>;
   };
-  supportedInputs: Array<{
-    name: string;
-    status: FeatureStatus;
-    description: string;
-    limitation?: string;
-  }>;
-  supportedOutputs: Array<{
-    name: string;
-    status: FeatureStatus;
-    description: string;
-  }>;
+  supportedInputs: SeoCapabilityItem[];
+  supportedOutputs: SeoCapabilityItem[];
   limitations: string[];
   faqs: Array<{
     question: string;
@@ -73,13 +63,6 @@ export interface SeoLandingPageContent {
     description: string;
   }>;
 }
-
-const statusMap: Record<FeatureStatus, PublicCapabilityStatus> = {
-  Available: "AVAILABLE",
-  "Controlled access": "CONTROLLED_ACCESS",
-  Limited: "LIMITED",
-  "Not available": "NOT_AVAILABLE",
-};
 
 const statusColors: Record<PublicCapabilityStatus, string> = {
   AVAILABLE: "bg-green-500",
@@ -95,8 +78,8 @@ const statusBadgeColors: Record<PublicCapabilityStatus, string> = {
   NOT_AVAILABLE: "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300",
 };
 
-function getPublicStatus(status: FeatureStatus) {
-  const canonicalStatus = statusMap[status];
+function getPublicStatus(capabilityId: PublicCapabilityId) {
+  const canonicalStatus = getPublicCapability(capabilityId).status;
   return {
     canonicalStatus,
     label: PUBLIC_CAPABILITY_STATUS_LABELS[canonicalStatus],
@@ -195,7 +178,7 @@ export default function SeoLandingPage({ content, currentPath }: { content: SeoL
               <h2 className="text-2xl font-bold mb-6">Relevant Features</h2>
               <div className="grid gap-6">
                 {content.relevantFeatures.map((feature) => {
-                  const status = getPublicStatus(feature.status);
+                  const status = getPublicStatus(feature.capabilityId);
                   return (
                     <div key={feature.name} className="p-6 bg-white dark:bg-slate-900/50 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
                       <div>
@@ -238,7 +221,7 @@ export default function SeoLandingPage({ content, currentPath }: { content: SeoL
                 <h2 className="text-2xl font-bold mb-6">Supported Inputs</h2>
                 <div className="space-y-4">
                   {content.supportedInputs.map((input) => {
-                    const status = getPublicStatus(input.status);
+                    const status = getPublicStatus(input.capabilityId);
                     return (
                       <div key={input.name} className="p-4 bg-white dark:bg-slate-900/50 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
                         <div className="flex items-center justify-between mb-2">
@@ -261,7 +244,7 @@ export default function SeoLandingPage({ content, currentPath }: { content: SeoL
                 <h2 className="text-2xl font-bold mb-6">Supported Outputs</h2>
                 <div className="space-y-4">
                   {content.supportedOutputs.map((output) => {
-                    const status = getPublicStatus(output.status);
+                    const status = getPublicStatus(output.capabilityId);
                     return (
                       <div key={output.name} className="p-4 bg-white dark:bg-slate-900/50 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
                         <div className="flex items-center justify-between mb-2">
@@ -271,6 +254,9 @@ export default function SeoLandingPage({ content, currentPath }: { content: SeoL
                           </span>
                         </div>
                         <p className="text-sm text-slate-600 dark:text-slate-400">{output.description}</p>
+                        {output.limitation && (
+                          <p className="text-xs text-amber-600 dark:text-amber-400 mt-2 font-medium">Note: {output.limitation}</p>
+                        )}
                       </div>
                     );
                   })}

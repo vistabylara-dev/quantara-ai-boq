@@ -231,7 +231,7 @@ export default function PublicHeader() {
           role="dialog"
           aria-modal="true"
           aria-label="Mobile Navigation"
-          className="fixed inset-0 top-16 z-40 bg-white dark:bg-slate-950 overflow-y-auto"
+          className="absolute left-0 right-0 top-full z-40 h-[calc(100vh-4rem)] overflow-y-auto bg-white dark:bg-slate-950"
         >
           <div className="px-4 py-6 space-y-2">
             {publicNavigation.map((section) => {

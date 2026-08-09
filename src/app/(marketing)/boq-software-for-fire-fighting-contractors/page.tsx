@@ -60,7 +60,7 @@ export default function Page() {
   },
   {
     "question": "Can I extract pump equipment schedules?",
-    "answer": "Yes, technical schedules can be extracted from text-based PDFs and structured as items today, but manual verification of technical specs is mandatory. Scanned schedules are detected and flagged for manual transcription; OCR text extraction is not currently available."
+    "answer": "If a text-based PDF contains a supported detected table, its rows can become review candidates. A professional must verify the technical specifications and structure accepted items; scanned schedules require manual transcription because OCR text extraction is not currently available."
   },
   {
     "question": "How are valves and accessories managed?",

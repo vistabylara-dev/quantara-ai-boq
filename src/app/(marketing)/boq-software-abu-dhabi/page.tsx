@@ -24,9 +24,9 @@ export default function Page() {
       paragraphs: ["Quantara retains BOQ revisions as distinct project records. Contractors and consultants must compare those records and document the commercial changes through their own review process.","Structured sections and item fields help organize the underlying data, while professional review remains required before any tender, contractual or construction use."]
     },
     relevantFeatures: [
-      { name: "Hierarchical Structuring", status: "Available", description: "Organize reviewed items by trade or section." },
-      { name: "BOQ Revision Records", status: "Available", description: "Keep distinct revision states for professional review." },
-      { name: "Format Extraction", status: "Available", description: "Extract items from text-based PDFs and spreadsheets." }
+      { name: "Hierarchical Structuring", capabilityId: "boq-management", description: "Organize reviewed items by trade or section." },
+      { name: "BOQ Revision Records", capabilityId: "boq-management", description: "Keep distinct revision states for professional review." },
+      { name: "Format Extraction", capabilityId: "text-pdf-extraction", description: "Store extractable PDF text and create review candidates from supported detected table rows." }
     ],
     workflowExample: {
       heading: "Hypothetical Workflow Example",
@@ -39,13 +39,13 @@ export default function Page() {
       ]
     },
     supportedInputs: [
-      { name: "XLSX / CSV", status: "Available", description: "Spreadsheet imports." },
-      { name: "Text-based PDF", status: "Available", description: "Extraction from standard PDFs." },
-      { name: "CAD / BIM", status: "Not available", description: "Model integration is not currently available.", limitation: "Capability to be confirmed." }
+      { name: "XLSX / CSV", capabilityId: "spreadsheet-import", description: "Spreadsheet imports." },
+      { name: "Text-based PDF", capabilityId: "text-pdf-extraction", description: "Supported extraction from text-based PDFs." },
+      { name: "CAD / BIM", capabilityId: "model-file-import", description: "Model integration is not currently available." }
     ],
     supportedOutputs: [
-      { name: "Structured XLSX", status: "Available", description: "Export reviewed BOQ data for further professional use." },
-      { name: "PDF Outputs", status: "Available", description: "Generate reviewable documents from stored data and available templates." }
+      { name: "Structured XLSX", capabilityId: "professional-outputs", description: "Export reviewed BOQ data for further professional use." },
+      { name: "PDF Outputs", capabilityId: "professional-outputs", description: "Generate reviewable documents from stored data and available templates." }
     ],
     limitations: [
       "Quantara does not provide automated visual measurement or drawing takeoff.",

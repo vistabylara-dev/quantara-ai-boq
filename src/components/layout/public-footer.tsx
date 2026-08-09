@@ -3,6 +3,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { publicNavigation, legalNavigation } from "@/config/public-navigation";
 import { siteConfig } from "@/config/site";
+import { QUANTARA_ENTITY_DEFINITION } from "@/lib/public-site/product-truth";
 
 export default function PublicFooter() {
   const getSectionItems = (sectionLabel: string) => {
@@ -40,7 +41,7 @@ export default function PublicFooter() {
               Quantara is developed and operated by Vista By Lara, a technology business focused on AI-assisted tools for construction, project, design and business workflows.
             </p>
             <p className="text-sm text-slate-500 dark:text-slate-400 mb-6 max-w-sm">
-              Quantara is an AI-assisted BOQ and construction-estimating platform in Controlled Early Access.
+              {QUANTARA_ENTITY_DEFINITION} It is offered through Controlled Early Access.
             </p>
             
             <div className="mt-8 space-y-2 text-sm text-slate-500 dark:text-slate-400">

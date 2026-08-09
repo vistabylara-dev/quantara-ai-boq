@@ -65,7 +65,7 @@ export default function Page() {
   },
   {
     "question": "Can I manage equipment schedules?",
-    "answer": "Yes, equipment schedules can be extracted from text-based PDFs or Excel and structured as specific items within the BOQ today. Scanned schedules are detected and flagged for manual transcription; OCR text extraction is not currently available."
+    "answer": "Supported structured Excel schedules can be imported. For a text-based PDF, only supported detected table rows become review candidates, which a professional must verify and organize as BOQ items. Scanned schedules require manual transcription because OCR text extraction is not currently available."
   },
   {
     "question": "Does it validate MEP engineering compliance?",

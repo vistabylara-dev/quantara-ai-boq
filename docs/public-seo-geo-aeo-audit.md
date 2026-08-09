@@ -95,9 +95,9 @@ The metadata values below are now centralized in `src/lib/public-site/search-reg
 | `/subprocessors` | Noindex, follow false, excluded from sitemap | Thin placeholder without a verified processor list. |
 | `/login`, `/register` | Noindex, follow false, no sitemap | Authentication/conversion utilities, not search-answer pages. |
 | `/forgot-password`, `/reset-password`, `/verify-email` | Noindex, follow false, no sitemap | Account recovery utilities. |
-| `/admin/login` | Crawl-blocked by `/admin`; no sitemap | Administrative authentication utility. It is intentionally excluded from the public search registry and public navigation. |
+| `/admin/login` | Noindex and crawl-blocked by `/admin`; no sitemap | Administrative authentication utility. It is intentionally excluded from the public search registry and public navigation. |
 | `/industries/[industryId]` | Excluded | Auth-gated product-engine view; no public prefix, canonical or sitemap entry. |
-| `/proposal/*`, `/technical-report/*` | Excluded and crawl-blocked | Tokenized sharing surfaces may contain customer/project content. |
+| `/proposal/*`, `/technical-report/*` | Noindex, excluded and crawl-blocked | Tokenized sharing surfaces may contain customer/project content and do not publish a public canonical. |
 | Authenticated application routes | Excluded and crawl-blocked | Product workspace pages are not public website content. |
 
 ## Metadata and social completion summary
@@ -127,7 +127,7 @@ The metadata values below are now centralized in `src/lib/public-site/search-reg
 - The marketing layout renders one Organization, one WebSite and one SoftwareApplication declaration through `buildPublicEntityGraph()`. Quantara is the software; Vista By Lara is the operator/publisher.
 - Do not add LocalBusiness merely to obtain a rich result. The website does not publish a verified Quantara local business address.
 - Do not add reviews, ratings, offers, prices, availability, awards or certifications without verified public evidence.
-- Existing commercial, audience, comparison and knowledge templates use the centralized page graph for WebPage, BreadcrumbList, visible FAQPage data and, for knowledge pages, TechArticle. Page names and descriptions are drawn from the metadata registry.
+- Existing commercial, audience, comparison and knowledge templates use the centralized page graph for WebPage, BreadcrumbList, visible FAQPage data and, for knowledge pages, TechArticle. Page names and descriptions are drawn from the metadata registry, and status-bearing SEO cards derive their badges from Product Truth capability IDs.
 - `/about`, `/comparisons`, `/boq-calculation-formulas`, `/pricing` and `/site-map` now also call `buildPublicPageGraph()`. No raw page-level JSON-LD implementation remains in the marketing route tree.
 - FAQ content remains useful for readers and answer engines, but Google says FAQ rich results are now normally limited to authoritative government and health sites. Quantara must not describe FAQ markup as a ranking or rich-result guarantee.
 
@@ -141,12 +141,12 @@ The metadata values below are now centralized in `src/lib/public-site/search-reg
 
 ## Local rendered verification — 2026-08-09
 
-- Representative routes across the homepage, features, pricing, regional, OCR/comparison, knowledge, sitemap, legal, registration and contact families rendered without a framework error overlay or console error.
-- Checked routes had one visible H1, one main landmark, self canonicals, matching social metadata, valid JSON-LD and no horizontal overflow at desktop and 390-pixel mobile widths.
-- The four noindex legal placeholders and the authentication/recovery utilities expose the intended noindex state; the 58 search routes remain indexable through the central registry.
-- Mobile menu focus returns to its trigger after Escape. Registration access choices expose native radio semantics, and asynchronous form errors/success states use live feedback or focus management.
-- `/llms.txt`, `/opengraph-image` and `/twitter-image` return public 200 responses without crossing the authentication middleware. Both social images decode at 1200×630.
-- Mobile Lighthouse after the fixes reports Accessibility 100, Best Practices 100 and Agentic Browsing 100. The local development navigation audit reports SEO 92 because Next.js streams the page meta description into the body for JavaScript-capable user agents; the live DOM contains the description, while an HTML-limited Twitterbot response receives the description, canonical and Open Graph image in the head. Recheck the production preview because statically generated production output can differ from development streaming.
+- The final Playwright audit passed 28/28 checks across desktop Chromium and Pixel 5 emulation for the homepage, features, pricing, AI BOQ, BOQ software, PDF extraction, scanned PDF, BOQ education, UAE, Dubai, resources and security routes.
+- Every checked route returned 200 without an auth redirect, rendered one H1 and one main landmark, exposed the public header/footer without app-shell links, emitted canonical/social metadata and parseable JSON-LD, and had no horizontal overflow, console error or page error.
+- Desktop and mobile interactions verified the Platform navigation, footer Contact Sales link, Request Early Access CTA, persistent light/dark theme handling and signed-out redirect of `/industries/[industryId]` to `/login?next=...`.
+- The interaction run exposed and fixed a mobile-menu stacking defect caused by a fixed panel inside the backdrop-filtered sticky header. The final absolute viewport-height panel is clickable in Pixel 5 emulation.
+- Representative desktop-homepage and mobile-pricing screenshots were visually inspected. No clipping or authenticated shell was present; the Pricing breadcrumb dark-theme contrast was corrected and reverified.
+- `/llms.txt`, `/opengraph-image` and `/twitter-image` remain public through the middleware contract. An earlier same-day local Lighthouse pass reported Accessibility 100, Best Practices 100 and Agentic Browsing 100; Lighthouse should be repeated on the eventual draft preview because production rendering can differ from development streaming.
 
 ## Internal-link architecture
 
@@ -191,11 +191,14 @@ The metadata values below are now centralized in `src/lib/public-site/search-reg
 | `voice` | Homepage/features/product-truth registry | Controlled access only for supported BOQ proposal contexts | Do not imply general website, report-editing or silent-update capability. |
 | `Google Drive`, `connected` | Capability registry and navigation | Controlled access; connection/user/file support required | Public navigation correctly targets the controlled-access feature section, not the auth-only `/integrations` screen. |
 | `takeoff`, `drawing measurement` | Comparison/regional/industry pages | Educational or explicitly unavailable | Keep “not automatic takeoff software” close to any calculation claim. |
-| `technical report` | Homepage, document-generation/features copy | Supported document generation; AI/voice editing is not a public capability | Separate generation from editing. |
+| `technical report` | Homepage, document-generation/features copy | Limited DOCX generation in supported configured environments; durable production storage must be confirmed; AI/voice editing is unavailable | Separate BOQ-output generation from the narrower technical-report path. |
+| `Live`, `speech` | Negative capability/industry examples or controlled voice context | No positive general-live or speech-runtime claim | Keep voice controlled, narrow and confirmation-gated. |
 | `SSO` | Product-truth registry | Not available | Do not publish as a live feature. |
 | `24/7` | No verified positive service promise; placeholder says requests may be submitted at any time | Support availability is not response availability | Avoid “24/7 support”. |
 | `dedicated`, `unlimited` | Generic workflow/comparison prose | Contextual wording, not an entitlement promise | Replace with precise scope where it could be read as a plan entitlement. |
-| `UAE compliant`, `UAE hosted` | No verified positive claim; regional pages include explicit denials | Not claimed | Keep absence/limitation; do not infer from UAE targeting. |
+| `secure`, `compliant` | Security/legal questions and explicit limitations | No absolute security or regulatory-compliance guarantee | Describe controls and boundaries, not an unqualified assurance. |
+| `UAE compliant`, `UAE hosted`, `data residency` | No verified positive claim; regional pages include explicit denials | Not claimed | Keep absence/limitation; do not infer from UAE targeting. |
+| `Arabic`, `VAT` | UAE FAQs state unverified language support and unavailable tax calculation | Negative/confirmation-required only | Do not imply Arabic OCR/translation or UAE VAT automation. |
 | `approved`, `certified` | Professional disclaimers and negative authority answers | Allowed only as a denial or user-controlled approval state | Never imply external approval/certification. |
 | `guarantee`, `accuracy` | Educational questions, terms and negative disclaimers | Allowed when denying a guarantee | Never publish an accuracy percentage without evidence. |
 | `replace spreadsheets` | BOQ software definitions/FAQ | Overbroad when presented as a universal Quantara outcome | Reframe as structured alternative/interoperable workflow. |
@@ -270,7 +273,7 @@ The metadata values below are now centralized in `src/lib/public-site/search-reg
 
 No registry, metadata, canonical, sitemap, public-navigation, structured-data or public image-markup blocker remains for the 58 intended indexable routes.
 
-1. `src/middleware.ts` still duplicates the public route allowlist. The focused parity test protects the current state; an edge-safe path-only export would reduce future drift.
+1. `src/middleware.ts` and the client shell now consume the shared metadata-free `PUBLIC_WEBSITE_PATHS` contract. Focused equality and signed-out middleware tests protect the route boundary.
 2. `/logo.png` remains a 978 KB source asset despite correct `next/image` markup. Compressing or replacing the source would improve repository and fallback delivery weight.
-3. Rendered preview verification is still required for the generated 1200×630 Open Graph/Twitter image, page-level canonical/robots output and representative JSON-LD graphs.
+3. A future non-production preview may still be useful for external social-card tools; the final branch audit does not deploy production.
 4. FAQPage remains semantic structured data for visible FAQs, not a promised Google rich result; current Google eligibility is normally limited to authoritative health and government sites.

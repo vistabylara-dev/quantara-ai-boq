@@ -1,5 +1,5 @@
-import { readFileSync, readdirSync } from "node:fs";
-import { extname, join } from "node:path";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { QUANTARA_ENTITY_DEFINITION } from "@/lib/public-site/product-truth";
 import {
@@ -10,15 +10,6 @@ import {
 } from "@/lib/public-site/schema";
 
 const repoRoot = process.cwd();
-const marketingRoot = join(repoRoot, "src", "app", "(marketing)");
-
-function collectSourceFiles(directory: string): string[] {
-  return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
-    const path = join(directory, entry.name);
-    if (entry.isDirectory()) return collectSourceFiles(path);
-    return [".ts", ".tsx"].includes(extname(entry.name)) ? [path] : [];
-  });
-}
 
 type JsonLdNode = Record<string, unknown>;
 
@@ -120,11 +111,21 @@ describe("public structured-data guardrails", () => {
     );
   });
 
-  it("only keeps FAQPage markup beside a visible public FAQ source", () => {
-    for (const file of collectSourceFiles(marketingRoot)) {
-      const source = readFileSync(file, "utf8");
-      if (!source.includes('"@type": "FAQPage"')) continue;
-      expect(source.toLowerCase(), file).toContain("faq");
+  it("builds FAQPage markup from the same FAQ collection rendered visibly", () => {
+    for (const componentPath of [
+      "src/components/layout/seo-landing-page.tsx",
+      "src/components/layout/knowledge-page.tsx",
+      "src/components/layout/industry-landing-page.tsx",
+      "src/components/layout/regional-landing-page.tsx",
+      "src/components/layout/comparison-page.tsx",
+    ]) {
+      const source = readFileSync(join(repoRoot, componentPath), "utf8");
+      expect(source, `${componentPath} must pass FAQs to the schema builder`).toMatch(
+        /faqs:\s*(?:(?:content|props)\.)?faqs|faqs:\s*schemaFaqs/,
+      );
+      expect(source, `${componentPath} must visibly render the same FAQs`).toMatch(
+        /(?:(?:content|props)\.)?faqs\.map/,
+      );
     }
   });
 });

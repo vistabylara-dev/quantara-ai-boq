@@ -71,7 +71,7 @@ export default function Page() {
   },
   {
     "question": "Is Quantara hosted in the UAE?",
-    "answer": "Quantara utilizes global cloud infrastructure and does not guarantee specific local data residency in the UAE at this time."
+    "answer": "Quantara does not publish a verified UAE data-residency commitment. Hosting, storage location and contractual data requirements must be confirmed for the specific Controlled Early Access arrangement."
   },
   {
     "question": "Does it comply with Dubai Municipality regulations?",
@@ -87,7 +87,7 @@ export default function Page() {
   },
   {
     "question": "Which file formats are currently supported?",
-    "answer": "Quantara extracts data from Text-based PDF, XLSX, and CSV files today. Scanned/image-only PDFs can be uploaded and are automatically detected and flagged for manual transcription; OCR text extraction is not currently available."
+    "answer": "Quantara imports supported structured XLSX and CSV data. For text-based PDFs, it stores extractable text and creates review candidates only from supported detected table rows. Scanned/image-only PDFs are detected and flagged for manual transcription; OCR text extraction is not currently available."
   },
   {
     "question": "Does Quantara replace a local quantity surveyor?",

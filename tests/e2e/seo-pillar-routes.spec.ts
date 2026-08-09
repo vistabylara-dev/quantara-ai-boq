@@ -1,53 +1,140 @@
-import { test, expect } from '@playwright/test';
+import { expect, test } from "@playwright/test";
 
-const seoRoutes = [
-  { path: '/ai-boq-software', h1: 'AI BOQ Software for Structured, Human-Reviewed Project Workflows' },
-  { path: '/boq-software', h1: 'BOQ Software for Controlled Construction and Estimating Workflows' },
-  { path: '/construction-estimating-software', h1: 'Construction Estimating Software Built Around Structured BOQ Workflows' },
-  { path: '/boq-management', h1: 'BOQ Management for Controlled Project Records and Revisions' },
-  { path: '/pdf-boq-extraction', h1: 'AI-Assisted PDF BOQ Extraction with Structured Human Review' },
-  { path: '/scanned-pdf-boq', h1: 'Scanned PDF BOQ Processing with OCR-Assisted Review' },
-  { path: '/quantity-surveying-software', h1: 'Quantity Surveying Software for Structured BOQ Review and Project Control' },
-  { path: '/boq-document-generation', h1: 'BOQ Document Generation from Structured, Reviewed Project Data' }
-];
+const requiredPublicRoutes = [
+  { path: "/", h1: "AI-Assisted BOQ Workflow Software for UAE Construction Teams" },
+  { path: "/features", h1: "BOQ Workflow Features and Availability" },
+  { path: "/pricing", h1: "Quantara Access and Commercial Terms" },
+  { path: "/ai-boq-software", h1: "AI BOQ Software for Structured, Human-Reviewed Project Workflows" },
+  { path: "/boq-software", h1: "BOQ Software for Controlled Construction and Estimating Workflows" },
+  { path: "/pdf-boq-extraction", h1: "AI-Assisted PDF BOQ Extraction with Structured Human Review" },
+  { path: "/scanned-pdf-boq", h1: "Scanned & Image-Only PDF BOQ Handling" },
+  { path: "/what-is-a-boq", h1: "What Is a BOQ? A Practical Guide to Bills of Quantities" },
+  { path: "/boq-software-uae", h1: "BOQ Software for UAE Construction and Estimating Teams" },
+  { path: "/boq-software-dubai", h1: "BOQ Software for Dubai Construction Workflows" },
+  { path: "/resources", h1: "BOQ Resources & Knowledge Base" },
+  { path: "/security", h1: "Security and Controlled Early Access" },
+] as const;
 
-test.describe('Anonymous SEO Pillar Routes', () => {
-  for (const route of seoRoutes) {
-    test(`Route ${route.path} meets all public-access and SEO criteria`, async ({ page }) => {
-      const response = await page.goto(route.path);
-      
-      expect(response).not.toBeNull();
-      // Ensure HTTP 200 OK
+test.describe("Quantara public website final audit", () => {
+  for (const route of requiredPublicRoutes) {
+    test(`${route.path} stays public, isolated and search-complete`, async ({ context, page }) => {
+      await context.clearCookies();
+      const consoleErrors: string[] = [];
+      const pageErrors: string[] = [];
+      page.on("console", (message) => {
+        if (message.type() === "error") consoleErrors.push(message.text());
+      });
+      page.on("pageerror", (error) => pageErrors.push(error.message));
+
+      const response = await page.goto(route.path, { waitUntil: "networkidle" });
       expect(response?.status()).toBe(200);
-      
-      // Ensure no redirect and URL does not contain /login
-      const url = new URL(page.url());
-      expect(url.pathname).toBe(route.path);
-      expect(url.pathname).not.toContain('/login');
-      
-      // Expected H1 is visible
-      await expect(page.locator(`h1:has-text("${route.h1}")`)).toBeVisible();
-      
-      // Public navigation is visible (check for "Features" or "Contact Sales" in header)
-      await expect(page.locator('header nav a:has-text("Features")')).toBeVisible();
-      
-      // Dashboard sidebar is absent (check for some sidebar locator, e.g., aside nav)
-      // We will assert that a link to "Dashboard" or typical authenticated menu does not exist
-      await expect(page.locator('text=Dashboard').first()).toBeHidden();
-      
-      // Footer is visible
-      await expect(page.locator('footer')).toBeVisible();
-      
-      // Canonical is self-referencing
-      const canonical = await page.locator('link[rel="canonical"]').getAttribute('href');
-      expect(canonical).toBe(`https://quantara.vistabylara.com${route.path}`);
-      
-      // Robots meta does not contain noindex
-      const robots = await page.locator('meta[name="robots"]').count();
-      if (robots > 0) {
-         const robotsContent = await page.locator('meta[name="robots"]').getAttribute('content');
-         expect(robotsContent).not.toContain('noindex');
+      expect(new URL(page.url()).pathname).toBe(route.path);
+
+      await expect(page.locator("h1")).toHaveCount(1);
+      await expect(page.locator("h1")).toHaveText(route.h1);
+      await expect(page.locator("main")).toHaveCount(1);
+      await expect(page.getByRole("banner")).toBeVisible();
+      await expect(page.getByRole("contentinfo")).toBeVisible();
+
+      for (const appPath of [
+        "/dashboard",
+        "/projects",
+        "/clients",
+        "/integrations",
+        "/data-library",
+        "/marketplace",
+        "/imports",
+        "/suppliers",
+        "/settings",
+      ]) {
+        await expect(page.locator(`aside a[href="${appPath}"]`)).toHaveCount(0);
       }
+
+      const canonicalPath = route.path === "/" ? "" : route.path;
+      await expect(page.locator('link[rel="canonical"]')).toHaveAttribute(
+        "href",
+        `https://quantara.vistabylara.com${canonicalPath}`,
+      );
+      await expect(page.locator('meta[name="description"]')).toHaveCount(1);
+      await expect(page.locator('meta[property="og:title"]')).toHaveCount(1);
+      await expect(page.locator('meta[name="twitter:card"]')).toHaveAttribute(
+        "content",
+        "summary_large_image",
+      );
+      const robots = await page.locator('meta[name="robots"]').getAttribute("content");
+      expect(robots ?? "").not.toContain("noindex");
+
+      const schemas = await page.locator('script[type="application/ld+json"]').allTextContents();
+      expect(schemas.length).toBeGreaterThan(0);
+      for (const schema of schemas) expect(() => JSON.parse(schema)).not.toThrow();
+
+      const hasHorizontalOverflow = await page.evaluate(
+        () => document.documentElement.scrollWidth > document.documentElement.clientWidth,
+      );
+      expect(hasHorizontalOverflow).toBe(false);
+      expect(consoleErrors).toEqual([]);
+      expect(pageErrors).toEqual([]);
     });
   }
+
+  test("navigation, footer, early-access CTA and theme remain functional", async ({ context, page }, testInfo) => {
+    await context.clearCookies();
+    await page.goto("/", { waitUntil: "networkidle" });
+
+    if (testInfo.project.name === "Mobile Chrome") {
+      await page.getByRole("button", { name: "Open menu" }).click();
+      const mobileNavigation = page.getByRole("dialog", { name: "Mobile Navigation" });
+      await mobileNavigation.getByRole("button", { name: "Platform", exact: true }).click();
+      await mobileNavigation.getByRole("link", { name: /^Features/ }).click();
+    } else {
+      await page.getByRole("button", { name: "Platform", exact: true }).click();
+      await page
+        .getByRole("region", { name: "Platform" })
+        .getByRole("link", { name: /^Features/ })
+        .click();
+    }
+
+    await expect(page).toHaveURL(/\/features$/);
+    await expect(page.locator("h1")).toHaveText("BOQ Workflow Features and Availability");
+
+    const footer = page.getByRole("contentinfo");
+    await footer.scrollIntoViewIfNeeded();
+    await footer.getByRole("link", { name: /Contact Sales/ }).first().click();
+    await expect(page).toHaveURL(/\/contact-sales$/);
+    await expect(page.getByLabel("Full name")).toBeVisible();
+
+    await page.goto("/", { waitUntil: "networkidle" });
+    if (testInfo.project.name === "Mobile Chrome") {
+      await page.getByRole("button", { name: "Open menu" }).click();
+      await page
+        .getByRole("dialog", { name: "Mobile Navigation" })
+        .getByRole("link", { name: "Request Early Access", exact: true })
+        .click();
+    } else {
+      await page.getByRole("banner").getByRole("link", { name: "Request Early Access", exact: true }).click();
+    }
+    await expect(page).toHaveURL(/\/register$/);
+
+    await page.goto("/", { waitUntil: "networkidle" });
+    await page.evaluate(() => window.localStorage.setItem("quantara-theme-mode", "dark"));
+    await page.reload({ waitUntil: "networkidle" });
+    await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+    const darkBackground = await page.locator("body").evaluate((body) => getComputedStyle(body).backgroundColor);
+
+    await page.evaluate(() => window.localStorage.setItem("quantara-theme-mode", "light"));
+    await page.reload({ waitUntil: "networkidle" });
+    await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
+    const lightBackground = await page.locator("body").evaluate((body) => getComputedStyle(body).backgroundColor);
+    expect(darkBackground).not.toBe(lightBackground);
+  });
+
+  test("dynamic industry workspace remains protected when signed out", async ({ context, page }) => {
+    await context.clearCookies();
+    const response = await page.goto("/industries/browser-audit", { waitUntil: "domcontentloaded" });
+
+    expect(response?.status()).toBe(200);
+    const finalUrl = new URL(page.url());
+    expect(finalUrl.pathname).toBe("/login");
+    expect(finalUrl.searchParams.get("next")).toBe("/industries/browser-audit");
+  });
 });

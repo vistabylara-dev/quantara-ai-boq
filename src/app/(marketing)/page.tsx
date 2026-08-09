@@ -41,7 +41,7 @@ const faqs = [
   {
     question: "Can Quantara process construction PDFs?",
     answer:
-      "Quantara can capture supported text and table information from text-based PDF files for professional review. Results depend on the file layout and must be checked against the original source.",
+      "Quantara stores extractable text from text-based PDFs and creates review candidates only from supported detected table rows. Plain paragraph text is not converted into BOQ candidates, and every table result must be checked against the original source.",
   },
   {
     question: "Does Quantara perform OCR on scanned PDFs?",
@@ -84,7 +84,7 @@ const workflowStages = [
   { title: "BOQ organization", description: "Structure sections, items, quantities, units and project revisions.", icon: FolderKanban },
   { title: "Professional review", description: "Review scope, descriptions, quantities, units, rates, assumptions and exceptions.", icon: ClipboardCheck },
   { title: "Validation", description: "Review supported validation findings before relying on an output.", icon: ShieldCheck },
-  { title: "Professional outputs", description: "Generate supported BOQ and technical-report documents from reviewed project data.", icon: FileOutput },
+  { title: "Professional outputs", description: "Generate supported BOQ outputs; DOCX technical reports remain limited to configured environments.", icon: FileOutput },
 ] as const;
 
 const featuredCapabilities = [

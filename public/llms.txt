@@ -4,6 +4,8 @@
 
 Quantara is operated by Vista By Lara and is offered through Controlled Early Access. Public capability statements must be read with their stated availability and limitations. Quantara does not claim automatic drawing measurement, OCR extraction from scanned PDFs, guaranteed accuracy, local authority approval, local market rates, or replacement of quantity surveyors and estimators.
 
+Current supported source workflows store extractable text from text-based PDFs, create review candidates only from supported detected table rows, and import structured XLSX or CSV files. Plain PDF paragraph text is not converted into BOQ candidates. Image-only pages can be detected but require manual transcription. Google Drive import requires an authorized controlled-access connection. BOQ documents can use supported PDF, XLSX, CSV, DOCX and HTML flows; technical-report generation is limited to DOCX in supported configured environments, and durable production storage must be confirmed during Controlled Early Access.
+
 ## Primary public pages
 
 - [Product overview](https://quantara.vistabylara.com/)

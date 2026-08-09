@@ -7,6 +7,7 @@ import {
   QUANTARA_ENTITY_DEFINITION,
   QUANTARA_WORKFLOW_TRUTH,
 } from "@/lib/public-site/product-truth";
+import { OCR_IMPLEMENTATION_STATUS } from "@/lib/files/pdf-text-extraction";
 
 const repoRoot = process.cwd();
 
@@ -33,6 +34,7 @@ function publicWebsiteSource(): string {
     ...publicLayoutFiles,
     ...collectSourceFiles(join(repoRoot, "src", "components", "legal")),
     join(repoRoot, "src", "config", "public-navigation.ts"),
+    join(repoRoot, "src", "config", "pricing.ts"),
     join(repoRoot, "src", "lib", "public-features.ts"),
     join(repoRoot, "src", "lib", "config", "features.ts"),
   ];
@@ -74,6 +76,44 @@ describe("public product truth", () => {
     expect(byId.get("google-drive-import")?.status).toBe("CONTROLLED_ACCESS");
     expect(byId.get("voice-proposals")?.status).toBe("CONTROLLED_ACCESS");
     expect(byId.get("commercial-access")?.limitation).toContain("does not offer verified self-serve");
+    expect(byId.get("technical-report-generation")?.status).toBe("LIMITED");
+    expect(byId.get("model-file-import")?.status).toBe("NOT_AVAILABLE");
+    expect(OCR_IMPLEMENTATION_STATUS).toBe("NOT_IMPLEMENTED");
+  });
+
+  it("derives public availability badges from Product Truth instead of page-local status strings", () => {
+    const source = publicWebsiteSource();
+    const seoTemplate = readFileSync(
+      join(repoRoot, "src", "components", "layout", "seo-landing-page.tsx"),
+      "utf8",
+    );
+    const navigation = readFileSync(join(repoRoot, "src", "config", "public-navigation.ts"), "utf8");
+
+    expect(source).not.toMatch(/\bstatus\s*:\s*["'](?:Available|Controlled access|Limited|Not available)["']/);
+    expect(seoTemplate).toContain("getPublicCapability(capabilityId).status");
+    expect(seoTemplate).toContain("getPublicStatus(feature.capabilityId)");
+    expect(navigation).toContain("PUBLIC_CAPABILITY_STATUS_LABELS[googleDriveImport.status]");
+  });
+
+  it("cannot present OCR as available while the implementation reports it missing", () => {
+    const source = publicWebsiteSource();
+
+    expect(OCR_IMPLEMENTATION_STATUS).toBe("NOT_IMPLEMENTED");
+    expect(source).not.toMatch(/Quantara[^.\n]{0,120}\b(?:supports|provides|performs|includes)\b[^.\n]{0,80}\bOCR\b/i);
+    expect(source).not.toMatch(/\b(?:OCR|Scanned PDF OCR)[^\n]{0,80}\bstatus\s*:\s*["']Available["']/i);
+  });
+
+  it("keeps stored PDF text separate from supported table-row candidates", () => {
+    const source = publicWebsiteSource();
+    const textPdfCapability = PUBLIC_CAPABILITIES.find(
+      (capability) => capability.id === "text-pdf-extraction",
+    );
+
+    expect(textPdfCapability?.summary).toContain("supported detected table rows");
+    expect(textPdfCapability?.limitation).toContain("Plain paragraph text is not automatically converted");
+    expect(source).not.toMatch(/captures supported text and table information into a reviewable structure/i);
+    expect(source).not.toMatch(/supported information[^.\n]{0,100}captured into a review queue/i);
+    expect(source).not.toMatch(/Durable production storage is confirmed/i);
   });
 
   it("does not publish unverified self-serve prices or conversion claims", () => {
@@ -83,5 +123,12 @@ describe("public product truth", () => {
     expect(source).not.toMatch(/AED\s*15,?000/i);
     expect(source).not.toMatch(/\bBuy Now\b/i);
     expect(source).not.toMatch(/\bSubscribe\b/i);
+    expect(source).not.toMatch(/\bStarter\b[^\n]{0,100}\b1\s+project\b/i);
+    expect(source).not.toMatch(/\bProfessional\b[^\n]{0,100}\b5\s+projects\b/i);
+    expect(source).not.toMatch(/\bEnterprise\b[^\n]{0,100}\b(?:AED\s*)?15,?000\b/i);
+    expect(source).not.toMatch(/\bFull Source Traceability\b/i);
+    expect(source).not.toMatch(/\b24\s*\/\s*7 support\b/i);
+    expect(source).toContain("Controlled Early Access");
+    expect(source).toContain("does not currently offer public self-service subscription plans or checkout");
   });
 });

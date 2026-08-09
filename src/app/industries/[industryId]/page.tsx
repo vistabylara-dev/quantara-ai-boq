@@ -1,6 +1,7 @@
 import { demoIndustries } from "@/config/industries";
 import type { Metadata } from "next";
 import Link from "next/link";
+import { createPrivateUtilityMetadata } from "@/lib/public-site/search-registry";
 
 type PageProps = {
   params: Promise<{ industryId: string }>;
@@ -9,9 +10,10 @@ type PageProps = {
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
   const { industryId } = await params;
   const industry = demoIndustries.find((item) => item.id === industryId);
-  return {
-    title: industry ? `${industry.name} Engine | Quantara BOQ` : "Industry Engine | Quantara BOQ",
-  };
+  return createPrivateUtilityMetadata(
+    industry ? `${industry.name} Engine | Quantara BOQ` : "Industry Engine | Quantara BOQ",
+    "Authenticated Quantara industry-engine workspace.",
+  );
 }
 
 export default async function IndustryDetailPage({ params }: PageProps) {

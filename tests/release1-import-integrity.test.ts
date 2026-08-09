@@ -7,6 +7,7 @@ import {
 } from "@prisma/client";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import type { CurrentActor } from "../src/lib/auth/current-actor";
+import { hashPassword } from "../src/lib/auth/password";
 import { prisma } from "../src/lib/db/prisma";
 import { createClient } from "../src/lib/repositories/client-repository";
 import { createProjectWithDefaultBoq } from "../src/lib/services/project-service";
@@ -170,7 +171,7 @@ describe("Release 1 entity-to-BOQ import integrity", () => {
       data: {
         companyId,
         email: `import-integrity-${RUN_ID}@example.com`,
-        passwordHash: "test-fixture-not-a-real-hash",
+        passwordHash: await hashPassword("Release1IntegrityTestPassword!123"),
         fullName: "Import Integrity Owner",
         role: UserRole.COMPANY_OWNER,
         isActive: true,

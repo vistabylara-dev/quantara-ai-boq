@@ -1,6 +1,7 @@
 import { ExtractedEntityType, ExtractionMethod, Prisma, UserRole } from "@prisma/client";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { CurrentActor } from "../src/lib/auth/current-actor";
+import { hashPassword } from "../src/lib/auth/password";
 import {
   getRequiredDimensions,
   type DimensionValue,
@@ -243,7 +244,7 @@ describe("Release 1 quantity integrity - persistence and atomic audit", () => {
       data: {
         companyId,
         email: `quantity-integrity-${RUN_ID}@example.com`,
-        passwordHash: "test-fixture-not-a-real-hash",
+        passwordHash: await hashPassword("Release1IntegrityTestPassword!123"),
         fullName: "Quantity Integrity Owner",
         role: UserRole.COMPANY_OWNER,
         isActive: true,

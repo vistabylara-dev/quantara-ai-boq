@@ -5,7 +5,6 @@ import { requireCapability } from "@/lib/auth/rbac";
 import { AppError } from "@/lib/errors/app-error";
 import {
   createExtractedEntity,
-  getExtractedEntityRecord,
   listExtractedEntities,
   toExtractedEntityDTO,
   type CreateExtractedEntityInput,
@@ -33,13 +32,28 @@ function assertExtractedEntityIsReviewable(status: ExtractedEntityStatus): void 
   }
 }
 
+async function getExtractedEntityInTransaction(
+  tx: Prisma.TransactionClient,
+  companyId: string,
+  entityId: string,
+): Promise<ExtractedEntity> {
+  const entity = await tx.extractedEntity.findFirst({
+    where: { id: entityId, companyId },
+  });
+  if (!entity) {
+    throw new AppError("NOT_FOUND", "Extracted entity not found.", 404);
+  }
+  return entity;
+}
+
 async function applyExtractedEntityReviewDecision(
+  tx: Prisma.TransactionClient,
   actor: CurrentActor,
   entity: ExtractedEntity,
   data: Prisma.ExtractedEntityUpdateManyMutationInput,
 ): Promise<ExtractedEntity> {
   assertExtractedEntityIsReviewable(entity.status);
-  const claimed = await prisma.extractedEntity.updateMany({
+  const claimed = await tx.extractedEntity.updateMany({
     where: {
       id: entity.id,
       companyId: actor.companyId,
@@ -49,12 +63,12 @@ async function applyExtractedEntityReviewDecision(
   });
 
   if (claimed.count !== 1) {
-    const current = await getExtractedEntityRecord(actor.companyId, entity.id);
+    const current = await getExtractedEntityInTransaction(tx, actor.companyId, entity.id);
     assertExtractedEntityIsReviewable(current.status);
     throw new AppError("ENTITY_REVIEW_CONFLICT", "This entity could not be claimed for professional review.", 409);
   }
 
-  return getExtractedEntityRecord(actor.companyId, entity.id);
+  return getExtractedEntityInTransaction(tx, actor.companyId, entity.id);
 }
 
 export async function manuallyAddExtractedEntity(actor: CurrentActor, input: CreateExtractedEntityInput) {
@@ -81,43 +95,51 @@ export async function listEntitiesForProject(actor: CurrentActor, projectId: str
 /** Human verification workflow (spec section 25): confirm/correct/reject, always preserving the original value and requiring a reason for corrections. Confirmed values are never overwritten by later reprocessing. */
 export async function confirmExtractedEntity(actor: CurrentActor, entityId: string) {
   requireCapability(actor, "verification:manage");
-  const entity = await getExtractedEntityRecord(actor.companyId, entityId);
-  const updated = await applyExtractedEntityReviewDecision(actor, entity, {
-    status: "CONFIRMED",
-    confirmedByUserId: actor.userId,
-    confirmedAt: new Date(),
+  const updated = await prisma.$transaction(async (tx) => {
+    const entity = await getExtractedEntityInTransaction(tx, actor.companyId, entityId);
+    const decided = await applyExtractedEntityReviewDecision(tx, actor, entity, {
+      status: "CONFIRMED",
+      confirmedByUserId: actor.userId,
+      confirmedAt: new Date(),
+    });
+    await createAuditLog(actor.companyId, { entityType: "ExtractedEntity", entityId, action: "ENTITY_CONFIRMED", payload: {} }, tx);
+    return decided;
   });
-  await createAuditLog(actor.companyId, { entityType: "ExtractedEntity", entityId, action: "ENTITY_CONFIRMED", payload: {} });
   return toExtractedEntityDTO(updated);
 }
 
 export async function correctExtractedEntity(actor: CurrentActor, entityId: string, corrections: { label?: string; quantity?: number; unit?: string; reason: string }) {
   requireCapability(actor, "verification:manage");
-  const entity = await getExtractedEntityRecord(actor.companyId, entityId);
-
-  const original = { label: entity.label, quantity: entity.quantity?.toNumber() ?? null, unit: entity.unit };
-  const updated = await applyExtractedEntityReviewDecision(actor, entity, {
-    label: corrections.label ?? entity.label,
-    quantity: corrections.quantity ?? entity.quantity,
-    unit: corrections.unit ?? entity.unit,
-    status: "CORRECTED",
-    confirmedByUserId: actor.userId,
-    confirmedAt: new Date(),
-    correctionJson: { original, corrected: corrections, correctedByUserId: actor.userId, correctedAt: new Date().toISOString(), reason: corrections.reason },
+  const updated = await prisma.$transaction(async (tx) => {
+    const entity = await getExtractedEntityInTransaction(tx, actor.companyId, entityId);
+    const original = { label: entity.label, quantity: entity.quantity?.toNumber() ?? null, unit: entity.unit };
+    const decided = await applyExtractedEntityReviewDecision(tx, actor, entity, {
+      label: corrections.label ?? entity.label,
+      quantity: corrections.quantity ?? entity.quantity,
+      unit: corrections.unit ?? entity.unit,
+      status: "CORRECTED",
+      confirmedByUserId: actor.userId,
+      confirmedAt: new Date(),
+      correctionJson: { original, corrected: corrections, correctedByUserId: actor.userId, correctedAt: new Date().toISOString(), reason: corrections.reason },
+    });
+    await createAuditLog(actor.companyId, { entityType: "ExtractedEntity", entityId, action: "ENTITY_CORRECTED", payload: { original, corrected: corrections, reason: corrections.reason } }, tx);
+    return decided;
   });
-  await createAuditLog(actor.companyId, { entityType: "ExtractedEntity", entityId, action: "ENTITY_CORRECTED", payload: { original, corrected: corrections, reason: corrections.reason } });
   return toExtractedEntityDTO(updated);
 }
 
 export async function rejectExtractedEntity(actor: CurrentActor, entityId: string, reason: string) {
   requireCapability(actor, "verification:manage");
-  const entity = await getExtractedEntityRecord(actor.companyId, entityId);
-  const updated = await applyExtractedEntityReviewDecision(actor, entity, {
-    status: "REJECTED",
-    rejectedByUserId: actor.userId,
-    rejectedAt: new Date(),
-    correctionJson: { reason },
+  const updated = await prisma.$transaction(async (tx) => {
+    const entity = await getExtractedEntityInTransaction(tx, actor.companyId, entityId);
+    const decided = await applyExtractedEntityReviewDecision(tx, actor, entity, {
+      status: "REJECTED",
+      rejectedByUserId: actor.userId,
+      rejectedAt: new Date(),
+      correctionJson: { reason },
+    });
+    await createAuditLog(actor.companyId, { entityType: "ExtractedEntity", entityId, action: "ENTITY_REJECTED", payload: { reason } }, tx);
+    return decided;
   });
-  await createAuditLog(actor.companyId, { entityType: "ExtractedEntity", entityId, action: "ENTITY_REJECTED", payload: { reason } });
   return toExtractedEntityDTO(updated);
 }

@@ -97,6 +97,7 @@ export async function confirmCalculatedQuantityForItem(actor: CurrentActor, item
       unit: calculation.resultUnit,
     },
     {
+      expectedCurrent: { field: "quantity", value: previousQuantity },
       additionalAudit: {
         action: "BOQ_QUANTITY_UPDATED_FROM_CALCULATION",
         payload: {

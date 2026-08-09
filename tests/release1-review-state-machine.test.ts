@@ -6,6 +6,7 @@ import {
 } from "@prisma/client";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { CurrentActor } from "../src/lib/auth/current-actor";
+import { hashPassword } from "../src/lib/auth/password";
 import { prisma } from "../src/lib/db/prisma";
 import { createClient } from "../src/lib/repositories/client-repository";
 import {
@@ -115,7 +116,7 @@ describe("Release 1 extracted-entity professional review state machine", () => {
       data: {
         companyId,
         email: `review-state-owner-${RUN_ID}@example.com`,
-        passwordHash: "test-fixture-not-a-real-hash",
+        passwordHash: await hashPassword("Release1IntegrityTestPassword!123"),
         fullName: "Review State Owner",
         role: UserRole.COMPANY_OWNER,
         isActive: true,

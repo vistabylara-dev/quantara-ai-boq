@@ -5,14 +5,14 @@ Scope: `feat/website-product-truth-seo-geo-aeo` public website, search discovery
 
 ## Executive summary
 
-The branch replaces the obsolete AI-proposal-first website story with a review-led professional BOQ workflow. Product capability, search metadata, canonical URLs, schema entities, sitemap entries and public-route ownership use central sources. The final re-audit also corrects two implementation mismatches: plain PDF paragraph text is not represented as a BOQ candidate, and technical-report generation is limited rather than unqualified availability.
+The branch replaces the obsolete AI-proposal-first website story with a review-led professional BOQ workflow. Product capability, search metadata, canonical URLs, schema entities, sitemap entries and public-route ownership use central sources. The final re-audit corrects implementation mismatches for PDF candidates, technical-report limits, unenforced output review state and unavailable self-service billing. It also removes an internal editorial instruction that had reached the public Privacy page.
 
 ## Branch/base SHAs
 
 - Original website commit: `5a64f6eae532c8e78357c2292bdb048bb642804b`.
 - Original merge base: `b8deae0d58d853ac273651e78654e296a2148b13`.
-- Current main incorporated: `06ee5d2a8394fae522ea252225b359da157a3a59`.
-- Conflict-free integration merge: `e945896`.
+- Current main incorporated: `61a7431bce34e66a3b4a132a1c3fd63da408d431`.
+- Conflict-free integration merges: `e945896` and `43d1fff`.
 - The final repair commit SHA is recorded in the draft PR and final certification because a commit cannot truthfully include its own SHA.
 
 ## Files changed
@@ -47,7 +47,7 @@ The former Speak / AI proposal / approve-AI-change narrative is not the homepage
 
 ## Features corrections
 
-The Features page renders the central capability register. Text PDF, spreadsheet import, reviewed extraction, BOQ management and supported BOQ outputs are available within their stated review boundaries. Google Drive and voice remain controlled access. Calculations, source attribution, scanned-page detection and technical-report generation are limited. OCR, automatic drawing takeoff, model-file import, typed multi-change/selective approval and SSO are unavailable.
+The Features page renders the central capability register. Text PDF, spreadsheet import, reviewed extraction, BOQ management and supported BOQ outputs are available within their stated review boundaries. Google Drive, voice and commercial access review remain controlled access. Calculations, source attribution, scanned-page detection and technical-report generation are limited. OCR, automatic drawing takeoff, model-file import, typed multi-change/selective approval, SSO and self-service billing are unavailable.
 
 ## OCR corrections
 
@@ -67,11 +67,15 @@ Quantara retains supported source identity/evidence, calculation inputs/formulas
 
 ## Pricing corrections
 
-The public site states that self-service subscription checkout is not currently offered. Controlled Early Access scope, entitlements and commercial terms are confirmed separately in writing. Obsolete Starter, Professional and AED 15,000 Enterprise offers, Buy/Subscribe CTAs and unverified entitlements are absent and regression-tested.
+The public site states that self-service subscription checkout is not currently offered. The capability register separates the controlled commercial access-review process from unavailable checkout, subscription activation, payment-webhook activation and customer billing portal functions. Controlled Early Access scope, entitlements and commercial terms are confirmed separately in writing. Obsolete Starter, Professional and AED 15,000 Enterprise offers, Buy/Subscribe CTAs and unverified entitlements are absent and regression-tested.
+
+## Output review-state correction
+
+Document and template generation can operate on stored draft or otherwise unreviewed BOQ records. Public copy therefore no longer presents prior professional review as a software-enforced prerequisite. Generated outputs are reviewable artifacts, not approval evidence, and must be checked before issue.
 
 ## Technical report wording
 
-Current technical-report generation accepts DOCX and uses local filesystem storage. It is now `LIMITED`: supported only in configured environments, and durable production storage must be confirmed during Controlled Early Access. Other technical-report formats and voice/typed AI report editing are not published as available. Separate BOQ document generation supports PDF, XLSX, CSV, DOCX and HTML workflows subject to review and format-specific controls.
+Current technical-report generation accepts DOCX and uses local filesystem storage. It is `LIMITED`: supported only in configured environments, can contain unreviewed stored records and requires professional checking. Durable production storage must be confirmed during Controlled Early Access. Other technical-report formats and voice/typed AI report editing are not published as available. Separate BOQ document generation supports PDF, XLSX, CSV, DOCX and HTML workflows subject to review and format-specific controls.
 
 ## BOQ educational corrections
 
@@ -103,7 +107,9 @@ Static marketing routes use PublicHeader/PublicFooter and bypass AppShell throug
 
 ## Tests
 
-Focused guardrails pass 28/28 checks covering route/registry equality, signed-out middleware behavior, OCR implementation-to-public-status consistency, PDF text-versus-table-candidate boundaries, capability-ID status centralization, exact sitemap inclusion, account/private utility noindex metadata, public shell ownership, canonical schema entity IDs, visible FAQ/schema coupling and obsolete pricing regressions. The final public Playwright audit passes 28/28 desktop/mobile checks for the 12 required routes, one H1/main, public header/footer, app-shell absence, metadata, JSON-LD, horizontal overflow, console/page errors, navigation, footer and CTA links, theme persistence and protected dynamic-industry routing.
+Focused guardrails pass 37/37 checks across Product Truth, the public registry, structured data and route ownership. The final public Playwright audit passes 50/50 serial Chromium and Mobile Chrome checks for signed-out routes, the 12 required pillar pages, one H1/main, public header/footer, app-shell absence, metadata, JSON-LD, horizontal overflow, console/page errors, navigation, footer and CTA links, theme persistence and protected dynamic-industry routing. Mobile Safari is not claimed because the required local WebKit binary is not installed.
+
+The exact `npx tsc --noEmit` command remains red with 16 errors in one catalogue script and four older E2E files; an extracted `origin/main` snapshot produces the identical errors. Lint passes with no warnings or errors. The complete database-backed Vitest suite remains red with 19 failed assertions plus suite/setup failures caused by the existing local test database's migration/reference-package/auth state and a queue timeout; none of the failure files differ from `origin/main`. `npm run build` exits 0 and generates the site, while the repository's existing Next configuration explicitly skips type and lint validation during build.
 
 ## Remaining limitations
 
@@ -116,7 +122,12 @@ Focused guardrails pass 28/28 checks covering route/registry equality, signed-ou
 - Voice is controlled, narrow and confirmation-gated; typed multi-change/selective approval is unavailable.
 - Google Drive depends on authorization, entitlement and supported files; generic connected apps are not represented as live.
 - Live checkout, payment webhook activation and customer billing portal are unavailable.
+- Generated documents can include draft or otherwise unreviewed records; generation does not certify review completion.
 - SSO, guaranteed accuracy, local rates, tax calculation, regulatory validation and data-residency commitments are not published.
+
+## Out-of-scope authenticated product discrepancy
+
+The authenticated BOQ creation-method selector still presents automatic PDF/IFC/CAD measurement and live Archicad, Revit and Autodesk Construction Cloud streaming, while the implementation marks those paths unsupported, coming soon or plugin-dependent. This website branch does not edit authenticated product UI. The public website correctly marks automatic drawing takeoff and CAD/BIM/IFC model import unavailable; the authenticated selector requires a separate product-core correction.
 
 ## Claims deliberately NOT published
 

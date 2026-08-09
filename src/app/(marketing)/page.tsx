@@ -253,8 +253,8 @@ export default function HomePage() {
           <div className="rounded-3xl border border-slate-200 p-8 dark:border-slate-800">
             <h2 className="mb-5 text-3xl font-bold">Supported Output Types</h2>
             <p className="mb-6 leading-relaxed text-slate-600 dark:text-slate-400">
-              Supported document flows generate CSV, XLSX, PDF, DOCX or HTML outputs from reviewed
-              project records and templates. Output availability depends on the selected workflow.
+              Supported document flows generate CSV, XLSX, PDF, DOCX or HTML outputs from stored
+              project records and templates for professional review. Draft or unreviewed records can be present.
             </p>
             <div className="mb-6 flex flex-wrap gap-3">
               {["CSV", "XLSX", "PDF", "DOCX", "HTML"].map((format) => (

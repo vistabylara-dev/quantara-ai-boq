@@ -84,7 +84,7 @@ export default function Page() {
   },
   {
     "question": "Can I export a professional proposal?",
-    "answer": "A supported PDF output can be generated from reviewed BOQ data and an available template. It still requires professional checking before issue."
+    "answer": "A supported PDF output can be generated from stored BOQ data and an available template. Draft or unreviewed records can be present, so it requires professional checking before issue."
   }
 ],
     relatedPages: [

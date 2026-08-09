@@ -1,30 +1,16 @@
+import { createPublicPageMetadata } from "@/lib/public-site/search-registry";
 import React from "react";
-import { Metadata } from "next";
 import Link from "next/link";
 import SeoLandingPage, { SeoLandingPageContent } from "@/components/layout/seo-landing-page";
 
-export const metadata: Metadata = {
-  title: "AI BOQ Software for Structured Construction Workflows",
-  description: "Explore how Quantara uses AI-assisted document extraction and structured workflows to help construction teams organize, review and generate professional BOQ records.",
-  alternates: {
-    canonical: "https://quantara.vistabylara.com/ai-boq-software",
-  },
-  openGraph: {
-    title: "AI BOQ Software for Structured Construction Workflows | Quantara",
-    description: "Explore how Quantara uses AI-assisted document extraction and structured workflows to help construction teams organize, review and generate professional BOQ records.",
-    url: "https://quantara.vistabylara.com/ai-boq-software",
-    siteName: "Quantara",
-  },
-  twitter: {
-    title: "AI BOQ Software for Structured Construction Workflows | Quantara",
-    description: "Explore how Quantara uses AI-assisted document extraction and structured workflows to help construction teams organize, review and generate professional BOQ records.",
-  }
-};
+export const metadata = createPublicPageMetadata("/ai-boq-software");
+
+
 
 const content: SeoLandingPageContent = {
   breadcrumbLabel: "AI BOQ Software",
   h1: "AI BOQ Software for Structured, Human-Reviewed Project Workflows",
-  directDefinition: "AI BOQ software integrates artificial intelligence to assist construction professionals in extracting, structuring, and organizing project records from source documents, significantly reducing manual data entry while maintaining strict requirements for human review.",
+  directDefinition: "AI BOQ software can assist construction professionals with supported capture, structuring and organization of project records. It may reduce repeated transcription, but corrections, additions and strict human review remain part of the workflow.",
   audience: {
     heading: "Who Uses AI BOQ Software?",
     content: "Quantara is built for professionals who require structured project records and controlled documentation.",
@@ -33,79 +19,27 @@ const content: SeoLandingPageContent = {
   workflowProblem: {
     heading: "The Challenge of Manual BOQ Workflows",
     paragraphs: [
-      <>Construction projects begin with complex, unstructured documents. Traditionally, estimating teams spend countless hours manually copying data from text-based PDFs or scanned files into spreadsheets. This process is not only tedious but prone to data entry errors that can cascade into significant commercial risks. Many firms are now weighing <Link href="/ai-boq-vs-manual-boq-preparation" className="text-blue-600 hover:underline font-medium">AI BOQ vs manual BOQ preparation</Link> to resolve this.</>,
-      <>Furthermore, <Link href="/ocr-vs-structured-boq-extraction" className="text-blue-600 hover:underline font-medium">basic OCR tools</Link> often fail to understand the complex hierarchy and nested structure of a true Bill of Quantities, leaving teams with disjointed data that still requires massive manual reformatting.</>
+      <>Construction projects often begin with complex documents. Estimating teams may manually copy data from text-based PDFs or scanned files into spreadsheets, creating repeated work and opportunities for entry errors. Teams can compare <Link href="/ai-boq-vs-manual-boq-preparation" className="text-blue-600 hover:underline font-medium">AI-assisted and manual BOQ preparation</Link> before choosing a workflow.</>,
+      <>Furthermore, <Link href="/ocr-vs-structured-boq-extraction" className="text-blue-600 hover:underline font-medium">basic OCR tools</Link> recognize image text but do not by themselves establish the intended BOQ hierarchy. Captured content still requires structuring and professional review.</>
     ]
   },
   quantaraSupport: {
-    heading: "How Quantara Transforms the Workflow",
-    paragraphs: ["Quantara acts as an AI-assisted workflow bridge. It extracts tabular data and item descriptions from supported formats and helps organize them into a structured BOQ database.","Instead of replacing the professional estimator, Quantara removes the manual data entry phase, allowing the human expert to focus immediately on commercial review, rate application, and project strategy."]
+    heading: "How Quantara Supports the Workflow",
+    paragraphs: ["Quantara acts as an AI-assisted workflow bridge. It captures tabular data and item descriptions from supported formats and helps organize them into a structured BOQ database.","Quantara does not replace the professional estimator or eliminate manual entry. It can reduce repeated transcription for supported content while the user handles corrections, additions, rate application and commercial review."]
   },
-  relevantFeatures: [{"name":"Document Extraction","status":"Live","description":"Extract tables and items from text-based PDFs and spreadsheets."},{"name":"Scanned/Image-Only PDF Detection","status":"Live","description":"Identifies scanned/image-based pages and flags them as requiring OCR; no text is extracted from them yet."},{"name":"Scanned PDF OCR","status":"Planned","description":"Automated text recognition for image-based PDFs is not yet implemented."},{"name":"Structured Workspaces","status":"Live","description":"Organize items into hierarchical sections and trades."}],
+  relevantFeatures: [{"name":"Document Extraction","status":"Available","description":"Capture supported text and table candidates from text-based PDFs and spreadsheets for review."},{"name":"Scanned/Image-Only PDF Detection","status":"Limited","description":"Detects image-only pages and reports that text extraction is unavailable; manual transcription is required."},{"name":"Scanned PDF OCR","status":"Not available","description":"Automated text recognition for image-based PDFs is not currently implemented."},{"name":"Structured Workspaces","status":"Available","description":"Organize confirmed items into hierarchical sections and trades."}],
   workflowExample: {
     heading: "Practical AI Extraction Workflow",
     introduction: "A typical workflow for processing a consultant’s tender package:",
-    steps: [{"title":"Upload Source","description":"The estimator uploads a 50-page text-based PDF containing the structural BOQ."},{"title":"AI Extraction","description":"Quantara identifies tables, item descriptions, quantities, and units."},{"title":"Human Review","description":"The estimator reviews the extracted data line-by-line for accuracy."},{"title":"Structuring","description":"Items are organized into the company's standard template."},{"title":"Output Generation","description":"A structured XLSX file is exported for final pricing."}]
+    steps: [{"title":"Upload Source","description":"The estimator uploads a supported text-based PDF containing BOQ information."},{"title":"Supported Capture","description":"Quantara presents available text and table candidates for review."},{"title":"Human Review","description":"The estimator verifies, corrects or rejects each relevant field against the source."},{"title":"Structuring","description":"Confirmed items are organized into supported BOQ sections."},{"title":"Output Generation","description":"A structured XLSX file is exported for further professional processing."}]
   },
-  supportedInputs: [{"name":"Text-based PDF","status":"Live","description":"Standard PDFs with selectable text and defined tables."},{"name":"Scanned/Image-Only PDF — Detection","status":"Live","description":"Identifies scanned/image-based documents and flags them as requiring OCR; no text is extracted from them yet."},{"name":"Scanned/Image-Only PDF — OCR","status":"Planned","description":"Automated text recognition for image-based documents is not yet implemented.","limitation":"Scanned documents currently require manual transcription."},{"name":"XLSX / CSV","status":"Live","description":"Standard spreadsheet formats."},{"name":"CAD / BIM / IFC","status":"Planned","description":"Model-based extraction.","limitation":"Capability and processing method to be confirmed after technical validation."}],
-  supportedOutputs: [{"name":"XLSX Export","status":"Live","description":"Structured spreadsheet output."},{"name":"PDF Generation","status":"Live","description":"Professional document generation."},{"name":"Technical Reports","status":"Live","description":"Formatted project summaries."}],
-  limitations: ["Quantara does not automatically calculate final project costs.","It does not perform visual drawing measurement or automatic takeoff from floor plans.","AI extraction requires clear, legible source documents for optimal results."],
-  faqs: [{"question":"What is AI BOQ software?","answer":"AI BOQ software uses artificial intelligence to help extract and organize construction data from unstructured documents like PDFs into a structured database format."},{"question":"Can AI create a BOQ?","answer":"AI can assist in extracting and structuring information from source documents, but a qualified professional must always review, refine, and approve the final BOQ."},{"question":"Can AI read scanned BOQ files?","answer":"Not yet. Quantara detects scanned or image-based PDFs and flags them as requiring OCR today, but automated OCR text recognition is planned and not yet implemented. Scanned content currently requires manual transcription."},{"question":"Is AI BOQ software the same as quantity takeoff software?","answer":"No. Quantity takeoff software typically focuses on measuring dimensions from drawings. Quantara focuses on extracting and managing structured data and text from specification and BOQ documents."},{"question":"Can AI replace a quantity surveyor?","answer":"No. Quantara is designed to support quantity surveyors by reducing manual data entry, not to replace their professional judgment, commercial context, or strategic decision-making."},{"question":"How should AI-extracted quantities be reviewed?","answer":"All extracted quantities, units, and descriptions must be manually verified against the original source documents by a qualified professional."},{"question":"Does Quantara measure drawings automatically?","answer":"No, Quantara does not currently support automatic drawing measurement or object counting."},{"question":"Which files can Quantara currently process?","answer":"Quantara currently extracts data from text-based PDFs, XLSX, and CSV files. Scanned/image-only PDFs can be uploaded and are automatically detected and flagged as requiring OCR, but automated OCR text extraction is planned and not yet available."}],
-  relatedPages: [{"href":"/boq-software","label":"BOQ Software","description":"Learn about structured BOQ management and revisions."},{"href":"/pdf-boq-extraction","label":"PDF BOQ Extraction","description":"Deep dive into processing text-based PDF documents."},{"href":"/scanned-pdf-boq","label":"Scanned PDF Processing","description":"How Quantara detects image-based documents today and the OCR roadmap."},{"href":"/boq-management","label":"BOQ Management","description":"Controlling project records and templates."},{"href":"/features","label":"Product Features","description":"View the complete list of live and planned features."}]
+  supportedInputs: [{"name":"Text-based PDF","status":"Available","description":"Supported PDFs with selectable text and reviewable table content."},{"name":"Scanned/Image-Only PDF — Detection","status":"Limited","description":"Detects image-only pages and reports that text extraction is unavailable.","limitation":"Quantara does not provide OCR; manual transcription is required."},{"name":"Scanned/Image-Only PDF — OCR","status":"Not available","description":"Automated text recognition for image-based documents is not currently implemented.","limitation":"Scanned documents require manual transcription."},{"name":"XLSX / CSV","status":"Available","description":"Supported structured spreadsheet formats, subject to mapping and review."},{"name":"CAD / BIM / IFC","status":"Not available","description":"Model-based extraction.","limitation":"Capability and processing method to be confirmed after technical validation."}],
+  supportedOutputs: [{"name":"XLSX Export","status":"Available","description":"Structured spreadsheet output for further professional use."},{"name":"PDF Generation","status":"Available","description":"Reviewable documents generated from stored data and available templates."},{"name":"Technical Reports","status":"Available","description":"Supported reports generated from reviewed project records and templates."}],
+  limitations: ["Quantara does not automatically determine final project costs.","It does not perform visual drawing measurement or automatic takeoff from floor plans.","Results vary with the clarity and structure of supported source documents."],
+  faqs: [{"question":"What is AI BOQ software?","answer":"AI BOQ software uses artificial intelligence to help capture and organize supported construction data from sources such as text-based PDFs into a structured format."},{"question":"Can AI create a BOQ?","answer":"AI can assist with supported capture and structuring, but a qualified professional must review, refine and approve the final BOQ."},{"question":"Can AI read scanned BOQ files?","answer":"Not yet. Quantara detects scanned or image-based PDFs and flags them as requiring OCR, but OCR text recognition is not currently available. Scanned content currently requires manual transcription."},{"question":"Is AI BOQ software the same as quantity takeoff software?","answer":"No. Quantity takeoff software typically focuses on measuring dimensions from drawings. Quantara focuses on supported capture and management of structured text and BOQ data."},{"question":"Can AI replace a quantity surveyor?","answer":"No. Quantara supports quantity surveyors with structured workflows; it does not replace professional judgment, commercial context or strategic decision-making."},{"question":"How should AI-extracted quantities be reviewed?","answer":"All captured quantities, units and descriptions must be manually verified against the original source documents by a qualified professional."},{"question":"Does Quantara measure drawings automatically?","answer":"No. Quantara does not currently support automatic drawing measurement or object counting."},{"question":"Which files can Quantara currently process?","answer":"Quantara currently captures supported data from text-based PDFs, XLSX and CSV files. Scanned or image-only PDFs are detected and flagged as requiring OCR, but OCR text extraction is not currently available."}],
+  relatedPages: [{"href":"/boq-software","label":"BOQ Software","description":"Learn about structured BOQ management and revisions."},{"href":"/pdf-boq-extraction","label":"PDF BOQ Extraction","description":"Deep dive into processing text-based PDF documents."},{"href":"/scanned-pdf-boq","label":"Scanned PDF Processing","description":"How Quantara detects image-based documents today and the current OCR limitation."},{"href":"/boq-management","label":"BOQ Management","description":"Controlling project records and templates."},{"href":"/features","label":"Product Features","description":"View the complete list of available and unavailable capabilities."}]
 };
 
 export default function Page() {
-  return (
-    <>
-      <SeoLandingPage content={content} currentPath="/ai-boq-software" />
-      <script
-        type="application/ld+json"
-        dangerouslySetInnerHTML={{
-          __html: JSON.stringify({
-            "@context": "https://schema.org",
-            "@graph": [
-              {
-                "@type": "WebPage",
-                "@id": "https://quantara.vistabylara.com/ai-boq-software#webpage",
-                "url": "https://quantara.vistabylara.com/ai-boq-software",
-                "name": "AI BOQ Software for Structured Construction Workflows | Quantara",
-                "description": "Explore how Quantara uses AI-assisted document extraction and structured workflows to help construction teams organize, review and generate professional BOQ records.",
-                "isPartOf": { "@id": "https://quantara.vistabylara.com/#website" },
-                "about": { "@id": "https://quantara.vistabylara.com/#organization" }
-              },
-              {
-                "@type": "BreadcrumbList",
-                "@id": "https://quantara.vistabylara.com/ai-boq-software#breadcrumb",
-                "itemListElement": [
-                  {
-                    "@type": "ListItem",
-                    "position": 1,
-                    "name": "Home",
-                    "item": "https://quantara.vistabylara.com/"
-                  },
-                  {
-                    "@type": "ListItem",
-                    "position": 2,
-                    "name": "AI BOQ Software"
-                  }
-                ]
-              },
-              {
-                "@type": "FAQPage",
-                "@id": "https://quantara.vistabylara.com/ai-boq-software#faq",
-                "mainEntity": content.faqs.map(faq => ({
-                  "@type": "Question",
-                  "name": faq.question,
-                  "acceptedAnswer": {
-                    "@type": "Answer",
-                    "text": faq.answer
-                  }
-                }))
-              }
-            ]
-          })
-        }}
-      />
-    </>
-  );
+  return <SeoLandingPage content={content} currentPath="/ai-boq-software" />;
 }

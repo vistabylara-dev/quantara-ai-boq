@@ -1,24 +1,9 @@
-import { Metadata } from 'next';
+import { createPublicPageMetadata } from "@/lib/public-site/search-registry";
 import { ComparisonPage } from '@/components/layout/comparison-page';
 
-export const metadata: Metadata = {
-  title: 'Construction Estimating Software vs Excel | Workflow Comparison',
-  description: 'Compare construction-estimating software with Excel across BOQs, rates, assumptions, revisions, templates and professional review.',
-  alternates: {
-    canonical: 'https://quantara.vistabylara.com/construction-estimating-software-vs-excel'
-  },
-  openGraph: {
-    title: 'Construction Estimating Software vs Excel | Workflow Comparison',
-    description: 'Compare construction-estimating software with Excel across BOQs, rates, assumptions, revisions, templates and professional review.',
-    url: 'https://quantara.vistabylara.com/construction-estimating-software-vs-excel',
-    type: 'article'
-  },
-  twitter: {
-    card: 'summary_large_image',
-    title: 'Construction Estimating Software vs Excel | Workflow Comparison',
-    description: 'Compare construction-estimating software with Excel across BOQs, rates, assumptions, revisions, templates and professional review.'
-  }
-};
+export const metadata = createPublicPageMetadata("/construction-estimating-software-vs-excel");
+
+
 
 export default function Page() {
   return (
@@ -26,22 +11,22 @@ export default function Page() {
       slug="construction-estimating-software-vs-excel"
       title="Construction Estimating Software vs Excel | Workflow Comparison"
       h1="Construction Estimating Software vs Excel for Project Workflows"
-      directAnswer="Estimating software provides structured databases for rates, resources, and project history, while Excel offers a blank canvas for highly flexible, custom pricing calculations."
+      directAnswer="Estimating products may provide structured rates, resources and project records, depending on configuration. Excel provides flexible cells and formulas that teams must govern through their own templates and controls."
       approachAName="Estimating Software"
       approachBName="Microsoft Excel"
       whenToChooseA={["You need a centralized database of labor, material, and plant rates","Multiple estimators are working on the same project simultaneously","You want to standardize the estimating process across the company","You require detailed resource analysis and reporting"]}
       whenToChooseB={["You are building a unique, one-off financial model","The company is small and does not have standard rate databases","You need to quickly test pricing scenarios using complex custom formulas","The client requires the submission in a very specific, non-standard format"]}
       whenToUseBoth={["Using estimating software to build the core estimate and resource lists, then exporting to Excel for final commercial adjustments and margin analysis."]}
-      approachADefinition={"Construction estimating software is a database-driven application used to compile resource costs, apply markups, and generate accurate bids based on structured BOQ data."}
+      approachADefinition={"Construction estimating software is a structured application used to compile supported resource costs, markups and estimate records. Its output still depends on reviewed data, configuration and professional judgement."}
       approachBDefinition={"Excel is a spreadsheet tool that uses cells, rows, and formulas to perform calculations, offering total flexibility but lacking inherent construction-specific structure."}
-      comparisonCriteria={[{"label":"Rate Management","approachAValue":"Centralized database","approachBValue":"Manual entry or VLOOKUPs"},{"label":"Standardization","approachAValue":"High (enforced workflows)","approachBValue":"Low (depends on user discipline)"},{"label":"Collaboration","approachAValue":"Multi-user access","approachBValue":"File sharing (potential conflicts)"},{"label":"Reporting","approachAValue":"Built-in resource reports","approachBValue":"Requires custom pivot tables"},{"label":"Flexibility","approachAValue":"Structured","approachBValue":"Unlimited"},{"label":"Error Risk","approachAValue":"Lower (protected logic)","approachBValue":"Higher (broken formulas)"}]}
-      approachAStrengths={["Maintains consistent pricing across projects","Protects core calculation logic from accidental changes","Generates detailed breakdowns for procurement","Provides a clear audit trail of the estimate"]}
+      comparisonCriteria={[{"label":"Rate Management","approachAValue":"Depends on the product and configured data","approachBValue":"User-built tables and formulas"},{"label":"Standardization","approachAValue":"Defined workflow and configuration","approachBValue":"Template and team dependent"},{"label":"Collaboration","approachAValue":"Product and permission dependent","approachBValue":"Spreadsheet-platform dependent"},{"label":"Reporting","approachAValue":"Depends on the product","approachBValue":"User-built reports or pivot tables"},{"label":"Flexibility","approachAValue":"Structured","approachBValue":"Highly flexible"},{"label":"Review Risk","approachAValue":"Inputs and configuration require review","approachBValue":"Inputs and formulas require review"}]}
+      approachAStrengths={["Can provide defined estimating records","Can limit formula editing through product permissions","May support structured resource breakdowns","Can retain identifiable estimate versions"]}
       approachALimitations={["Can be rigid if a project requires a totally unique pricing structure","Requires upfront investment to build the rate database","Learning curve for new employees"]}
-      approachBStrengths={["Everyone knows how to use it","Can model any pricing scenario imaginable","Easy to share with external parties","Zero setup time for basic lists"]}
-      approachBLimitations={["\"Spaghetti\" formulas become impossible to audit","No central database; rates become outdated quickly","High risk of catastrophic errors from a single bad cell reference"]}
-      workflowExample={"An estimator receives a BOQ. In Excel, they might spend hours linking cells and hoping formulas don't break. In estimating software, they apply a standard \"Concrete Slab\" assembly from their database, which automatically pulls the current labor and material rates, instantly building the cost."}
-      quantaraRole={"Quantara focuses on the structured BOQ organization and extraction phase. It organizes the data so that it can be cleanly exported to Excel or integrating estimating software for final pricing."}
-      faqs={[{"question":"Can Quantara calculate rates automatically?","answer":"No. Quantara focuses on BOQ structure and document extraction. Rate application and estimating logic require professional judgment and are typically handled in Excel or specialized estimating tools."},{"question":"Is Excel obsolete for estimating?","answer":"Not at all. Excel remains the most widely used tool for commercial analysis, even alongside dedicated software."},{"question":"Why do companies move to estimating software?","answer":"To reduce risk, speed up the process with rate databases, and ensure consistency when multiple estimators are involved."},{"question":"Can I use both?","answer":"Yes, this is very common. Software handles the heavy lifting and structure, while Excel handles the final commercial tweaks."},{"question":"What is the biggest risk of using Excel?","answer":"Hidden formula errors. A missing sum range can easily result in a drastically underpriced bid."},{"question":"Does software guarantee an accurate estimate?","answer":"No. Software only calculates what you input. Professional review is always required."},{"question":"How hard is it to transition?","answer":"Moving from Excel to database software requires a significant effort to standardize rates and processes."}]}
+      approachBStrengths={["Widely used by construction teams","Supports highly flexible custom formulas","Straightforward file-based exchange","Basic lists can be created quickly"]}
+      approachBLimitations={["Complex linked formulas can be difficult to review","Rate currency depends on the team's maintenance process","A bad cell reference can affect dependent totals"]}
+      workflowExample={"An estimator receives a BOQ. In Excel, the team may build and maintain its own linked pricing model. In estimating software, the team may use governed assemblies or rate records where those capabilities and reviewed data are available."}
+      quantaraRole={"Quantara captures supported BOQ information for review and exports structured data to XLSX or CSV. Compatibility with another estimating product depends on that product's import requirements."}
+      faqs={[{"question":"Can Quantara calculate rates automatically?","answer":"No. Quantara does not invent commercial rates; rate application and estimating logic require professional judgement."},{"question":"Is Excel obsolete for estimating?","answer":"No. Excel remains useful for flexible formulas, pricing analysis and data exchange alongside structured systems."},{"question":"Why do companies consider estimating software?","answer":"Teams may want centralized records, defined workflows or consistent templates. Benefits depend on product capability, configuration and adoption."},{"question":"Can I use both?","answer":"Yes. A structured system may organize BOQ records while Excel supports company-specific analysis and data exchange."},{"question":"What should be reviewed in an Excel estimate?","answer":"Inputs, units, formulas, named ranges, linked cells, exclusions and totals should all be checked before reliance."},{"question":"Does software guarantee an accurate estimate?","answer":"No. Inputs, rates, formulas, assumptions and outputs require professional review."},{"question":"How hard is it to transition?","answer":"Transition effort varies with data quality, templates, user roles, integrations and required process changes."}]}
       relatedLinks={[{"url":"/construction-estimating-software","label":"Estimating Software"},{"url":"/quantara-vs-excel-for-boq","label":"Quantara vs Excel"},{"url":"/boq-vs-construction-estimate","label":"BOQ vs Estimate"},{"url":"/boq-review-checklist","label":"Review Checklist"},{"url":"/features","label":"Features"}]}
       breadcrumbCurrent="Construction Estimating Software vs Excel for Project Workflows"
     />

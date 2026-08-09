@@ -1,9 +1,9 @@
+import { createPublicPageMetadata } from "@/lib/public-site/search-registry";
 import LegalPlaceholder from "@/components/legal/LegalPlaceholder";
-import { Metadata } from "next";
 
-export const metadata: Metadata = {
-  title: "Data Processing Addendum",
-};
+export const metadata = createPublicPageMetadata("/data-processing");
+
+
 
 export default function DataProcessingPage() {
   return <LegalPlaceholder title="Data Processing Addendum" />;

@@ -1,9 +1,9 @@
+import { createPublicPageMetadata } from "@/lib/public-site/search-registry";
 import LegalPlaceholder from "@/components/legal/LegalPlaceholder";
-import { Metadata } from "next";
 
-export const metadata: Metadata = {
-  title: "Subprocessor List",
-};
+export const metadata = createPublicPageMetadata("/subprocessors");
+
+
 
 export default function SubprocessorsPage() {
   return <LegalPlaceholder title="Subprocessor List" />;

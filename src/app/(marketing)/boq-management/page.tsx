@@ -1,33 +1,19 @@
+import { createPublicPageMetadata } from "@/lib/public-site/search-registry";
 import React from "react";
-import { Metadata } from "next";
 import Link from "next/link";
 import SeoLandingPage, { SeoLandingPageContent } from "@/components/layout/seo-landing-page";
 
-export const metadata: Metadata = {
-  title: "BOQ Management Software for Projects, Revisions and Templates",
-  description: "Structure BOQ sections, items, quantities, revisions and governed templates within controlled project and client workspaces using Quantara.",
-  alternates: {
-    canonical: "https://quantara.vistabylara.com/boq-management",
-  },
-  openGraph: {
-    title: "BOQ Management Software for Projects, Revisions and Templates | Quantara",
-    description: "Structure BOQ sections, items, quantities, revisions and governed templates within controlled project and client workspaces using Quantara.",
-    url: "https://quantara.vistabylara.com/boq-management",
-    siteName: "Quantara",
-  },
-  twitter: {
-    title: "BOQ Management Software for Projects, Revisions and Templates | Quantara",
-    description: "Structure BOQ sections, items, quantities, revisions and governed templates within controlled project and client workspaces using Quantara.",
-  }
-};
+export const metadata = createPublicPageMetadata("/boq-management");
+
+
 
 const content: SeoLandingPageContent = {
   breadcrumbLabel: "BOQ Management",
   h1: "BOQ Management for Controlled Project Records and Revisions",
-  directDefinition: "BOQ management is the systematic administration of Bill of Quantities data throughout a project lifecycle, ensuring that item hierarchies, quantities, revisions, and templates remain strictly governed and securely stored.",
+  directDefinition: "BOQ management is the structured administration of sections, items, quantities, rates, revision records and outputs. Controls can support consistency, but professional review and company procedures remain essential.",
   audience: {
     heading: "Who Needs Strict BOQ Management?",
-    content: "Governance over project records is essential for teams handling complex or long-term construction projects.",
+    content: "Defined records and review responsibilities help teams manage complex or long-term construction projects.",
     items: ["Commercial Directors ensuring standardization","Project Managers tracking scope changes","Quantity Surveyors maintaining audit trails","Estimating Departments managing central templates"]
   },
   workflowProblem: {
@@ -39,73 +25,21 @@ const content: SeoLandingPageContent = {
   },
   quantaraSupport: {
     heading: "Centralized Control and Governance",
-    paragraphs: ["Quantara solves this by enforcing a centralized, cloud-based database structure. Every project, client, and template exists within a controlled workspace. Revisions are tracked as distinct states, not just renamed files.","This structured approach ensures that everyone in the organization works from the same governed templates, and that the history of every BOQ is preserved and auditable."]
+    paragraphs: ["Quantara organizes authorized project files and BOQ records within company and project workspaces. BOQ revisions are retained as distinct records rather than relying only on renamed files.","Available templates and structured fields can support consistent records. Users must still control access, compare revisions and verify the history required by their own procedures."]
   },
-  relevantFeatures: [{"name":"Project & Client Workspaces","status":"Live","description":"Organize records securely by client and project."},{"name":"Template Governance","status":"Live","description":"Enforce standard section and item formatting."},{"name":"Revision Snapshots","status":"Preview UI","description":"Capture and compare distinct versions of a BOQ."}],
+  relevantFeatures: [{"name":"Project and Client Workspaces","status":"Available","description":"Organize authorized records by client and project."},{"name":"Available Templates","status":"Available","description":"Apply supported section and item formatting where configured."},{"name":"BOQ Revision Records","status":"Available","description":"Keep distinct BOQ revisions and status records for professional review."}],
   workflowExample: {
     heading: "Managing a Major Revision",
     introduction: "How a team handles a major design change mid-tender:",
-    steps: [{"title":"Snapshot Original","description":"The current BOQ state is saved as a secure revision."},{"title":"Import Addendum","description":"New quantities are extracted from the client's revised documents."},{"title":"Update Structure","description":"The governed BOQ is updated with the new items and quantities."},{"title":"Compare & Review","description":"Management reviews the variance between the original and revised scope."},{"title":"Generate Update","description":"A revised proposal is generated from the controlled data."}]
+    steps: [{"title":"Retain Original","description":"The reviewed BOQ is retained as a distinct revision record."},{"title":"Review Addendum","description":"Supported information from revised text-based sources is captured for professional review."},{"title":"Update Structure","description":"Confirmed items and quantities are entered into the new BOQ revision."},{"title":"Compare and Review","description":"The professional team compares the records and interprets the scope differences."},{"title":"Generate Update","description":"A supported output is generated from reviewed data and checked before issue."}]
   },
-  supportedInputs: [{"name":"XLSX / CSV","status":"Live","description":"Standard formats for bulk data management."},{"name":"Text-based PDF","status":"Live","description":"Extracting data into the managed environment."},{"name":"Scanned/Image-Only PDF — Detection","status":"Live","description":"Identifies scanned legacy records and flags them as requiring OCR; no text is extracted from them yet."},{"name":"Scanned/Image-Only PDF — OCR","status":"Planned","description":"Automated text recognition for scanned legacy records is not yet implemented.","limitation":"Scanned records currently require manual transcription."},{"name":"CAD / BIM","status":"Planned","description":"Future integration with managed model data.","limitation":"Capability and processing method to be confirmed after technical validation."}],
-  supportedOutputs: [{"name":"Structured Database","status":"Live","description":"Secure, cloud-based relational storage."},{"name":"XLSX Export","status":"Live","description":"Exporting managed data for external use."},{"name":"PDF Generation","status":"Live","description":"Creating governed, standardized documents."}],
+  supportedInputs: [{"name":"XLSX / CSV","status":"Available","description":"Supported structured spreadsheet formats, subject to mapping and review."},{"name":"Text-based PDF","status":"Available","description":"Capture supported information for professional review."},{"name":"Scanned/Image-Only PDF — Detection","status":"Limited","description":"Detects image-only pages and reports that text extraction is unavailable.","limitation":"Quantara does not provide OCR; manual transcription is required."},{"name":"Scanned/Image-Only PDF — OCR","status":"Not available","description":"Automated text recognition for scanned records is not currently implemented.","limitation":"Scanned records require manual transcription."},{"name":"CAD / BIM","status":"Not available","description":"Model-based extraction is not currently available.","limitation":"Capability and processing method to be confirmed after technical validation."}],
+  supportedOutputs: [{"name":"Structured Project Records","status":"Available","description":"Authorized company and project workspaces for supported records."},{"name":"XLSX Export","status":"Available","description":"Structured data export for further professional use."},{"name":"PDF Generation","status":"Available","description":"Reviewable documents generated from stored data and available templates."}],
   limitations: ["Quantara requires users to adhere to its hierarchical structure; it is not a free-form canvas.","Governance relies on proper user management and internal company procedures.","Final commercial responsibility always remains with the human professional."],
-  faqs: [{"question":"What is BOQ management?","answer":"It is the process of securely storing, structuring, revising, and standardizing Bill of Quantities data within a controlled database environment."},{"question":"Why are BOQ revisions important?","answer":"Revisions provide a critical audit trail of how a project's scope and quantities have changed over time, which is essential for commercial control."},{"question":"How should BOQ sections be structured?","answer":"They should follow a logical hierarchy (e.g., Trades, Sub-trades, Items) that aligns with industry standards or specific company templates."},{"question":"Can BOQ items be grouped?","answer":"Yes, items can be grouped into sections and subsections to create a deeply structured hierarchy."},{"question":"How are project and client records connected?","answer":"Quantara organizes data hierarchically: Clients contain Projects, and Projects contain BOQs and Proposals."},{"question":"What is template governance?","answer":"It is the ability to enforce standard layouts, section names, and formatting across all projects to ensure company-wide consistency."},{"question":"Can previous revisions be reviewed?","answer":"Yes, the system is designed to track changes so previous states can be audited."},{"question":"Who is responsible for final approval?","answer":"A qualified professional must always review and approve the managed data before it is used for any contractual purpose."}],
-  relatedPages: [{"href":"/boq-software","label":"BOQ Software","description":"The core technology behind structured BOQs."},{"href":"/construction-estimating-software","label":"Estimating Software","description":"Applying managed data to commercial estimates."},{"href":"/boq-document-generation","label":"Document Generation","description":"Exporting governed data into professional formats."},{"href":"/quantity-surveying-software","label":"Quantity Surveying","description":"Software tools for QS professionals."},{"href":"/features","label":"Product Features","description":"View all Quantara management capabilities."}]
+  faqs: [{"question":"What is BOQ management?","answer":"It is the structured organization of BOQ sections, items, quantities, rates, revision records and outputs within a defined workflow."},{"question":"Why are BOQ revisions important?","answer":"Distinct revisions preserve historical states for comparison. Users still need to document and interpret what changed and why."},{"question":"How should BOQ sections be structured?","answer":"They should follow a logical hierarchy, such as trades, sub-trades and items, aligned with the project method or an available company template."},{"question":"Can BOQ items be grouped?","answer":"Yes. Supported BOQ items can be grouped into sections and subsections."},{"question":"How are project records organized?","answer":"Quantara keeps supported files and BOQ records within authorized company and project workspaces."},{"question":"What is template governance?","answer":"It is the controlled use of available layouts, section names and formatting rules. Configuration and every resulting document still require review."},{"question":"Can previous revisions be reviewed?","answer":"Yes. Distinct BOQ revision records can be opened for professional comparison, but Quantara does not claim a complete automated line-by-line change analysis."},{"question":"Who is responsible for final approval?","answer":"A qualified professional must review and approve managed data before contractual, tender, procurement or construction use."}],
+  relatedPages: [{"href":"/boq-software","label":"BOQ Software","description":"The core technology behind structured BOQs."},{"href":"/construction-estimating-software","label":"Estimating Software","description":"Applying managed data to commercial estimates."},{"href":"/boq-document-generation","label":"Document Generation","description":"Exporting reviewed data into supported professional formats."},{"href":"/quantity-surveying-software","label":"Quantity Surveying","description":"Software tools for QS professionals."},{"href":"/features","label":"Product Features","description":"View all Quantara management capabilities."}]
 };
 
 export default function Page() {
-  return (
-    <>
-      <SeoLandingPage content={content} currentPath="/boq-management" />
-      <script
-        type="application/ld+json"
-        dangerouslySetInnerHTML={{
-          __html: JSON.stringify({
-            "@context": "https://schema.org",
-            "@graph": [
-              {
-                "@type": "WebPage",
-                "@id": "https://quantara.vistabylara.com/boq-management#webpage",
-                "url": "https://quantara.vistabylara.com/boq-management",
-                "name": "BOQ Management Software for Projects, Revisions and Templates | Quantara",
-                "description": "Structure BOQ sections, items, quantities, revisions and governed templates within controlled project and client workspaces using Quantara.",
-                "isPartOf": { "@id": "https://quantara.vistabylara.com/#website" },
-                "about": { "@id": "https://quantara.vistabylara.com/#organization" }
-              },
-              {
-                "@type": "BreadcrumbList",
-                "@id": "https://quantara.vistabylara.com/boq-management#breadcrumb",
-                "itemListElement": [
-                  {
-                    "@type": "ListItem",
-                    "position": 1,
-                    "name": "Home",
-                    "item": "https://quantara.vistabylara.com/"
-                  },
-                  {
-                    "@type": "ListItem",
-                    "position": 2,
-                    "name": "BOQ Management"
-                  }
-                ]
-              },
-              {
-                "@type": "FAQPage",
-                "@id": "https://quantara.vistabylara.com/boq-management#faq",
-                "mainEntity": content.faqs.map(faq => ({
-                  "@type": "Question",
-                  "name": faq.question,
-                  "acceptedAnswer": {
-                    "@type": "Answer",
-                    "text": faq.answer
-                  }
-                }))
-              }
-            ]
-          })
-        }}
-      />
-    </>
-  );
+  return <SeoLandingPage content={content} currentPath="/boq-management" />;
 }

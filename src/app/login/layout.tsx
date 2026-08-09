@@ -1,12 +1,10 @@
-import type { Metadata } from "next";
+import { createPublicUtilityMetadata } from "@/lib/public-site/search-registry";
 
-export const metadata: Metadata = {
-  title: "Login",
-  description: "Sign in to your Quantara workspace.",
-  alternates: {
-    canonical: "/login"
-  }
-};
+export const metadata = createPublicUtilityMetadata(
+  "/login",
+  "Sign In to Quantara",
+  "Sign in to an existing Quantara workspace.",
+);
 
 export default function LoginLayout({
   children,
@@ -14,8 +12,8 @@ export default function LoginLayout({
   children: React.ReactNode;
 }) {
   return (
-    <div data-theme="dark" className="min-h-screen bg-[#030508] text-white">
+    <main data-theme="dark" className="min-h-screen bg-[#030508] text-white">
       {children}
-    </div>
+    </main>
   );
 }

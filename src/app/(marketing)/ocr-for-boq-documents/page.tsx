@@ -1,42 +1,32 @@
-import { Metadata } from "next";
+import { createPublicPageMetadata, PUBLIC_CONTENT_REVIEW_DATE } from "@/lib/public-site/search-registry";
 import KnowledgePage, { KnowledgePageContent } from "@/components/layout/knowledge-page";
 
-export const metadata: Metadata = {
-  title: "OCR for BOQ Documents: Capabilities and Limitations",
-  description: "Learn how OCR can assist with scanned BOQ documents, which errors may occur, and what professionals should review before using extracted content.",
-  alternates: {
-    canonical: "https://quantara.vistabylara.com/ocr-for-boq-documents",
-  },
-  openGraph: {
-    title: "OCR for BOQ Documents: Capabilities and Limitations | Quantara",
-    description: "Learn how OCR can assist with scanned BOQ documents, which errors may occur, and what professionals should review before using extracted content.",
-    url: "https://quantara.vistabylara.com/ocr-for-boq-documents",
-    type: "article",
-  },
-};
+export const metadata = createPublicPageMetadata("/ocr-for-boq-documents");
+
+
 
 export default function Page() {
   const content: KnowledgePageContent = {
     breadcrumbLabel: "OCR for BOQ Documents",
     title: "OCR for BOQ Documents: What It Can and Cannot Do",
-    summary: "Optical Character Recognition (OCR) is the technology used to convert scanned, image-based Bills of Quantities into editable, structured text. While modern OCR significantly reduces manual data entry, the complexity of BOQ tables, technical symbols, and numbers means it is an assistive tool, not a perfect replacement for human review.",
-    reviewedDate: new Date().toISOString().split("T")[0],
+    summary: "Optical Character Recognition (OCR) converts images of text into machine-readable text. BOQ tables, technical symbols and numbers can still be misread, so OCR results require human review; Quantara does not currently provide OCR text extraction.",
+    reviewedDate: PUBLIC_CONTENT_REVIEW_DATE,
     sections: [
   {
     "id": "why-it-matters",
     "heading": "Why OCR Understanding Matters",
     "paragraphs": [
-      "For commercial teams processing legacy documents or consultant scans, OCR is essential. However, blindly trusting OCR outputs can lead to devastating estimating errors.",
-      "Knowing exactly where OCR struggles allows estimators to focus their quality-control checks on high-risk areas."
+      "For commercial teams processing legacy documents or consultant scans, OCR can be useful. Unreviewed OCR output can still introduce estimating errors.",
+      "Understanding common OCR failure patterns helps estimators focus quality-control checks, although errors vary by document and tool."
     ]
   },
   {
     "id": "capabilities",
     "heading": "What OCR Does Well",
     "bullets": [
-      "High-Resolution Text: Clean, high-DPI scans of standard fonts are recognized with near-perfect accuracy.",
+      "High-Resolution Text: Cleaner, higher-resolution scans generally reduce recognition ambiguity, but results still require checking.",
       "Standard Layouts: Simple, grid-based tables without complex merged cells are generally reconstructed well.",
-      "Bulk Processing: OCR can read a 200-page scanned document infinitely faster than a human can type it."
+      "Bulk Processing: OCR can process multiple scanned pages, but processing time, recognition quality and review effort vary."
     ]
   },
   {
@@ -49,7 +39,7 @@ export default function Page() {
       "Similar Characters: Confusing a capital \"I\" with a lowercase \"l\" or the number \"1\".",
       "Decimal Points: Faded or small decimal points in quantities may be completely ignored (turning 10.5 into 105).",
       "Technical Symbols: Specialized engineering symbols (e.g., diameter Ø) may be translated as strange text characters.",
-      "Skew and Noise: Crooked pages, staple marks, or coffee stains can confuse the table reconstruction algorithms.",
+      "Skew and Noise: Crooked, blurred or low-contrast pages can introduce recognition and table-reconstruction errors.",
       "Handwriting: Handwritten annotations or corrections are notoriously difficult for standard OCR to parse accurately."
     ]
   },
@@ -65,7 +55,7 @@ export default function Page() {
     "id": "quantara-workflow",
     "heading": "Quantara's Current OCR Status",
     "paragraphs": [
-      "Automated OCR is planned but not yet implemented in Quantara. Today, Quantara detects scanned and image-only PDF pages and flags them as requiring OCR — it does not invent or guess text for them. Scanned BOQ content currently requires manual transcription.",
+      "OCR text extraction is not currently available in Quantara. Today, Quantara detects scanned and image-only PDF pages and flags them as requiring OCR — it does not invent or guess text for them. Scanned BOQ content currently requires manual transcription.",
       "Quantara currently focuses on supported document extraction (text-based PDFs, XLSX, CSV), BOQ structuring, project organization, templates, revisions, and professional outputs. It does not perform professional measurement or scope interpretation."
     ]
   }
@@ -81,7 +71,7 @@ export default function Page() {
   },
   {
     "question": "How can I improve OCR accuracy?",
-    "answer": "Ensure the original documents are scanned straight (no skew), at a high resolution (minimum 300 DPI), and without handwritten marks over the text."
+    "answer": "Use a straight, legible scan at the highest practical resolution and avoid handwritten marks over the text. Review the recognized content against the original."
   },
   {
     "question": "Can OCR read tables?",
@@ -89,7 +79,7 @@ export default function Page() {
   },
   {
     "question": "Does OCR understand construction terminology?",
-    "answer": "Basic OCR only reads letters; construction-specific context typically needs to be applied afterward to improve structuring. Quantara does not yet run OCR — this kind of context-aware structuring is part of the planned OCR roadmap, not a current feature."
+    "answer": "Basic OCR only reads letters; construction-specific context typically needs to be applied afterward to improve structuring. Quantara does not yet run OCR — this kind of context-aware structuring is part of a capability Quantara does not currently provide, not a current feature."
   }
 ],
     relatedReading: [
@@ -106,15 +96,7 @@ export default function Page() {
     "label": "Reviewing AI-Extracted BOQs"
   }
 ],
-    schema: {
-      "@context": "https://schema.org",
-      "@type": "TechArticle",
-      "headline": "OCR for BOQ Documents: What It Can and Cannot Do",
-      "description": "Learn how OCR can assist with scanned BOQ documents, which errors may occur, and what professionals should review before using extracted content.",
-      "url": "https://quantara.vistabylara.com/ocr-for-boq-documents",
-      "publisher": { "@id": "https://quantara.vistabylara.com/#organization" },
-      "mainEntityOfPage": { "@id": "https://quantara.vistabylara.com/#website" }
-    }
+    path: "/ocr-for-boq-documents"
   };
 
   return <KnowledgePage content={content} />;

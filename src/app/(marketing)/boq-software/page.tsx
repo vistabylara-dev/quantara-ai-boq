@@ -1,107 +1,41 @@
+import { createPublicPageMetadata } from "@/lib/public-site/search-registry";
 import React from "react";
-import { Metadata } from "next";
 import SeoLandingPage, { SeoLandingPageContent } from "@/components/layout/seo-landing-page";
 
-export const metadata: Metadata = {
-  title: "BOQ Software for Contractors, Estimators and Quantity Surveyors",
-  description: "Manage structured BOQs, project records, revisions, templates and supported outputs using Quantara’s AI-assisted construction workflow platform.",
-  alternates: {
-    canonical: "https://quantara.vistabylara.com/boq-software",
-  },
-  openGraph: {
-    title: "BOQ Software for Contractors, Estimators and Quantity Surveyors | Quantara",
-    description: "Manage structured BOQs, project records, revisions, templates and supported outputs using Quantara’s AI-assisted construction workflow platform.",
-    url: "https://quantara.vistabylara.com/boq-software",
-    siteName: "Quantara",
-  },
-  twitter: {
-    title: "BOQ Software for Contractors, Estimators and Quantity Surveyors | Quantara",
-    description: "Manage structured BOQs, project records, revisions, templates and supported outputs using Quantara’s AI-assisted construction workflow platform.",
-  }
-};
+export const metadata = createPublicPageMetadata("/boq-software");
+
+
 
 const content: SeoLandingPageContent = {
   breadcrumbLabel: "BOQ Software",
   h1: "BOQ Software for Controlled Construction and Estimating Workflows",
-  directDefinition: "BOQ software provides a structured, hierarchical database environment designed specifically to manage Bills of Quantities, replacing fragile spreadsheets with controlled project records, revision tracking, and standardized templates.",
+  directDefinition: "BOQ software provides a structured environment for Bills of Quantities, with controlled project records, revision handling and templates alongside supported spreadsheet import and export workflows.",
   audience: {
     heading: "Who Relies on BOQ Software?",
-    content: "Professional BOQ software is essential for teams managing complex project scopes and commercial data.",
+    content: "BOQ software can help teams manage complex project scopes and commercial data in a structured workspace.",
     items: ["Commercial Managers overseeing project budgets","Estimators requiring stable calculation environments","Quantity Surveyors tracking variations","Contractors standardizing their bidding process"]
   },
   workflowProblem: {
     heading: "The Limitations of Spreadsheets",
-    paragraphs: ["While spreadsheets are universally accessible, they lack the structural integrity required for complex construction projects. Formulas can be easily overwritten, rows accidentally hidden, and version control quickly becomes a chaotic exchange of renamed files.","When managing a BOQ with thousands of items across multiple trades, the lack of a strict hierarchy and audit trail creates immense commercial risk. Teams need a system that understands the specific relationship between sections, items, quantities, and rates."]
+    paragraphs: ["Spreadsheets offer flexible formulas and formatting, while structure, access and revision visibility depend on workbook design and team controls.","For large multi-trade BOQs, teams may need a system that stores defined relationships between sections, items, quantities and rates. Professional review remains necessary whichever workflow is used."]
   },
   quantaraSupport: {
     heading: "Structured BOQ Management with Quantara",
-    paragraphs: ["Quantara provides a purpose-built environment for BOQ administration. It enforces a logical hierarchy where projects contain sections, and sections contain items with specific attributes like descriptions, units, and quantities.","By moving from a flat spreadsheet to a relational structure, teams can apply standardized templates, track revisions with confidence, and generate professional outputs without fear of broken formatting."]
+    paragraphs: ["Quantara provides a purpose-built environment for BOQ administration. It uses a logical hierarchy where projects contain sections and sections contain items with attributes such as descriptions, units and quantities.","Teams can keep core BOQ records in this structure while continuing to use spreadsheet import and export where appropriate. Revisions, templates and generated outputs still require professional review."]
   },
-  relevantFeatures: [{"name":"Hierarchical Structure","status":"Live","description":"Manage complex nesting of sections and line items."},{"name":"Revision Tracking","status":"Preview UI","description":"Maintain a history of changes across the project lifecycle."},{"name":"Template Governance","status":"Live","description":"Apply standardized formats across all projects."}],
+  relevantFeatures: [{"name":"Hierarchical Structure","status":"Available","description":"Manage nested sections and line items."},{"name":"BOQ Revision Records","status":"Available","description":"Keep distinct revision records; users review and interpret the changes."},{"name":"Available Templates","status":"Available","description":"Apply supported formats where configured and review every result."}],
   workflowExample: {
     heading: "BOQ Standardization Workflow",
     introduction: "How a contractor standardizes an incoming, messy BOQ:",
-    steps: [{"title":"Import Data","description":"The raw BOQ data is imported via text-based PDF extraction or CSV."},{"title":"Apply Structure","description":"Items are organized into the contractor's standard trade packages."},{"title":"Rate Application","description":"The estimator applies standard rates within the controlled environment."},{"title":"Peer Review","description":"A commercial manager reviews the structured data."},{"title":"Client Export","description":"A clean, formatted PDF is generated for the final bid."}]
+    steps: [{"title":"Import Data","description":"Supported BOQ data is captured from a text-based PDF or imported spreadsheet."},{"title":"Apply Structure","description":"Items are organized into the required BOQ sections."},{"title":"Rate Application","description":"The estimator applies reviewed rates within the BOQ record."},{"title":"Peer Review","description":"A responsible professional reviews the structured data."},{"title":"Output Review","description":"A generated PDF is checked before any bid submission."}]
   },
-  supportedInputs: [{"name":"XLSX / CSV","status":"Live","description":"Direct import of existing spreadsheet data."},{"name":"Text-based PDF","status":"Live","description":"AI-assisted extraction from PDFs."},{"name":"Scanned/Image-Only PDF — Detection","status":"Live","description":"Identifies scanned/image-only pages and flags them as requiring OCR; no text is extracted from them yet."},{"name":"Scanned/Image-Only PDF — OCR","status":"Planned","description":"Automated text recognition for image-based documents is not yet implemented.","limitation":"Scanned pages currently require manual transcription."},{"name":"IFC","status":"Planned","description":"Model data integration.","limitation":"Capability and processing method to be confirmed after technical validation."}],
-  supportedOutputs: [{"name":"XLSX Export","status":"Live","description":"Structured spreadsheet output."},{"name":"PDF Generation","status":"Live","description":"Professional document generation."},{"name":"Technical Reports","status":"Live","description":"Formatted project summaries."}],
+  supportedInputs: [{"name":"XLSX / CSV","status":"Available","description":"Import supported structured spreadsheet data for review."},{"name":"Text-based PDF","status":"Available","description":"Capture supported text and table candidates for professional review."},{"name":"Scanned/Image-Only PDF — Detection","status":"Limited","description":"Detects image-only pages and reports that text extraction is unavailable.","limitation":"Quantara does not provide OCR; manual transcription is required."},{"name":"Scanned/Image-Only PDF — OCR","status":"Not available","description":"Automated text recognition for image-based documents is not currently implemented.","limitation":"Scanned pages require manual transcription."},{"name":"IFC","status":"Not available","description":"Model data integration.","limitation":"Capability and processing method to be confirmed after technical validation."}],
+  supportedOutputs: [{"name":"XLSX Export","status":"Available","description":"Structured spreadsheet output."},{"name":"PDF Generation","status":"Available","description":"Professional document generation."},{"name":"Technical Reports","status":"Available","description":"Formatted project summaries."}],
   limitations: ["Quantara is a BOQ management tool, not a full ERP or accounting system.","It does not automatically generate pricing data without user input.","All structural changes and rate applications require professional review."],
-  faqs: [{"question":"What does BOQ software do?","answer":"BOQ software provides a structured database environment to manage the hierarchy, items, quantities, and revisions of a Bill of Quantities, replacing unstructured spreadsheets."},{"question":"Who uses BOQ software?","answer":"It is primarily used by contractors, estimators, quantity surveyors, and commercial managers in the construction industry."},{"question":"Can BOQ software replace Excel?","answer":"Yes, for the specific task of managing BOQs, dedicated software offers much stronger data integrity, version control, and template governance than Excel."},{"question":"What information is stored in a BOQ?","answer":"A BOQ typically stores hierarchical sections, item descriptions, quantities, units of measure, rates, and total amounts."},{"question":"How are BOQ revisions managed?","answer":"In a structured system like Quantara, revisions are tracked as distinct project states, allowing teams to maintain a clear audit trail of changes."},{"question":"Can multiple projects be managed?","answer":"Yes, Quantara provides a centralized workspace to manage multiple projects, clients, and templates simultaneously."},{"question":"Does BOQ software calculate rates automatically?","answer":"While the software calculates totals based on user-provided rates and quantities, it does not invent or automatically determine the commercial rates."},{"question":"How does Quantara handle professional review?","answer":"Quantara requires that all extracted and structured data be reviewed and approved by a qualified professional before any commercial use."}],
+  faqs: [{"question":"What does BOQ software do?","answer":"BOQ software provides a structured environment to manage the hierarchy, items, quantities and revisions of a Bill of Quantities."},{"question":"Who uses BOQ software?","answer":"It is primarily used by contractors, estimators, quantity surveyors and commercial managers in the construction industry."},{"question":"Can BOQ software replace Excel?","answer":"Not entirely. Quantara can hold structured BOQ records and supports spreadsheet import and export, while Excel may remain useful for bespoke calculations, pricing analysis and data exchange."},{"question":"What information is stored in a BOQ?","answer":"A BOQ typically stores hierarchical sections, item descriptions, quantities, units of measure, rates and total amounts."},{"question":"How are BOQ revisions managed?","answer":"In Quantara, revisions are retained as distinct project records. Users must still review and interpret what changed between versions."},{"question":"Can multiple projects be managed?","answer":"Quantara provides a centralized workspace for authorized project records, subject to current access and entitlement."},{"question":"Does BOQ software calculate rates automatically?","answer":"The software can calculate supported totals from user-provided rates and quantities, but it does not invent or automatically determine commercial rates."},{"question":"How does Quantara handle professional review?","answer":"All captured and structured data must be reviewed and approved by a qualified professional before commercial use."}],
   relatedPages: [{"href":"/boq-management","label":"BOQ Management","description":"Deep dive into project control and governance."},{"href":"/construction-estimating-software","label":"Estimating Software","description":"Understand how BOQs support the estimating workflow."},{"href":"/quantity-surveying-software","label":"Quantity Surveying","description":"Software support for professional QS workflows."},{"href":"/boq-document-generation","label":"Document Generation","description":"Creating professional outputs from structured data."},{"href":"/about","label":"About Quantara","description":"Learn about the Vista By Lara team behind Quantara."}]
 };
 
 export default function Page() {
-  return (
-    <>
-      <SeoLandingPage content={content} currentPath="/boq-software" />
-      <script
-        type="application/ld+json"
-        dangerouslySetInnerHTML={{
-          __html: JSON.stringify({
-            "@context": "https://schema.org",
-            "@graph": [
-              {
-                "@type": "WebPage",
-                "@id": "https://quantara.vistabylara.com/boq-software#webpage",
-                "url": "https://quantara.vistabylara.com/boq-software",
-                "name": "BOQ Software for Contractors, Estimators and Quantity Surveyors | Quantara",
-                "description": "Manage structured BOQs, project records, revisions, templates and supported outputs using Quantara’s AI-assisted construction workflow platform.",
-                "isPartOf": { "@id": "https://quantara.vistabylara.com/#website" },
-                "about": { "@id": "https://quantara.vistabylara.com/#organization" }
-              },
-              {
-                "@type": "BreadcrumbList",
-                "@id": "https://quantara.vistabylara.com/boq-software#breadcrumb",
-                "itemListElement": [
-                  {
-                    "@type": "ListItem",
-                    "position": 1,
-                    "name": "Home",
-                    "item": "https://quantara.vistabylara.com/"
-                  },
-                  {
-                    "@type": "ListItem",
-                    "position": 2,
-                    "name": "BOQ Software"
-                  }
-                ]
-              },
-              {
-                "@type": "FAQPage",
-                "@id": "https://quantara.vistabylara.com/boq-software#faq",
-                "mainEntity": content.faqs.map(faq => ({
-                  "@type": "Question",
-                  "name": faq.question,
-                  "acceptedAnswer": {
-                    "@type": "Answer",
-                    "text": faq.answer
-                  }
-                }))
-              }
-            ]
-          })
-        }}
-      />
-    </>
-  );
+  return <SeoLandingPage content={content} currentPath="/boq-software" />;
 }

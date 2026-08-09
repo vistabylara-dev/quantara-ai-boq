@@ -1,115 +1,66 @@
+import {
+  createPublicPageMetadata,
+  getPublicSearchPage,
+} from "@/lib/public-site/search-registry";
 import React from "react";
 import Link from "next/link";
-import { Metadata } from "next";
 import PublicBreadcrumb from "@/components/ui/public-breadcrumb";
+import PublicJsonLd from "@/components/seo/public-json-ld";
 import { Calculator, ArrowRight, BookOpen } from "lucide-react";
+import { buildPublicPageGraph } from "@/lib/public-site/schema";
 
-export const metadata: Metadata = {
-  title: "BOQ Calculation Formulas and Quantity Guide",
-  description: "Review practical formulas for earthworks, concrete, blockwork, finishes, reinforcement, roofing, asphalt and BOQ pricing, then use the free Vista By Lara BOQ Calculator.",
-  alternates: {
-    canonical: "https://quantara.vistabylara.com/boq-calculation-formulas",
+export const metadata = createPublicPageMetadata("/boq-calculation-formulas");
+
+const formulaFaqs = [
+  {
+    question: "Is there one formula for calculating a BOQ?",
+    answer: "No. A BOQ combines different measurement methods. Each construction element is measured using an appropriate length, area, volume, weight or count formula, then multiplied by its reviewed unit rate.",
   },
-};
+  {
+    question: "What is the basic BOQ cost formula?",
+    answer: "The basic item formula is Quantity × Unit Rate. The BOQ total is the sum of all item amounts.",
+  },
+  {
+    question: "Does a BOQ calculator replace a quantity surveyor?",
+    answer: "No. A calculator can assist with arithmetic and planning, but drawings, dimensions, measurement rules, rates, specifications, assumptions and contractual requirements must be reviewed by qualified professionals.",
+  },
+  {
+    question: "Can I use the Vista By Lara calculator for UAE projects?",
+    answer: "The external calculator can support preliminary quantity and cost planning. Users must replace illustrative values with project-specific dimensions and approved rates and complete professional review.",
+  },
+  {
+    question: "Does the calculator send results into Quantara?",
+    answer: "No automatic transfer is represented. The Vista By Lara BOQ Calculator is a separate educational planning tool.",
+  },
+] as const;
+
+const searchEntry = getPublicSearchPage("/boq-calculation-formulas");
+const pageSchema = buildPublicPageGraph({
+  path: "/boq-calculation-formulas",
+  title: searchEntry.title,
+  description: searchEntry.description,
+  breadcrumbs: [
+    { name: "Home", path: "/" },
+    { name: "Resources", path: "/resources" },
+    { name: "BOQ Calculation Formulas", path: "/boq-calculation-formulas" },
+  ],
+  faqs: formulaFaqs,
+  kind: "tech-article",
+});
 
 export default function BOQCalculationFormulasPage() {
-  const jsonLd = {
-    "@context": "https://schema.org",
-    "@graph": [
-      {
-        "@type": "WebPage",
-        "@id": "https://quantara.vistabylara.com/boq-calculation-formulas/#webpage",
-        "url": "https://quantara.vistabylara.com/boq-calculation-formulas",
-        "name": "BOQ Calculation Formulas and Quantity Guide | Quantara",
-        "description": "Review practical formulas for earthworks, concrete, blockwork, finishes, reinforcement, roofing, asphalt and BOQ pricing, then use the free Vista By Lara BOQ Calculator.",
-        "isPartOf": {
-          "@id": "https://quantara.vistabylara.com/#website"
-        }
-      },
-      {
-        "@type": "BreadcrumbList",
-        "@id": "https://quantara.vistabylara.com/boq-calculation-formulas/#breadcrumb",
-        "itemListElement": [
-          {
-            "@type": "ListItem",
-            "position": 1,
-            "name": "Home",
-            "item": "https://quantara.vistabylara.com/"
-          },
-          {
-            "@type": "ListItem",
-            "position": 2,
-            "name": "Resources",
-            "item": "https://quantara.vistabylara.com/resources"
-          },
-          {
-            "@type": "ListItem",
-            "position": 3,
-            "name": "BOQ Calculation Formulas",
-            "item": "https://quantara.vistabylara.com/boq-calculation-formulas"
-          }
-        ]
-      },
-      {
-        "@type": "FAQPage",
-        "@id": "https://quantara.vistabylara.com/boq-calculation-formulas/#faq",
-        "mainEntity": [
-          {
-            "@type": "Question",
-            "name": "Is there one formula for calculating a BOQ?",
-            "acceptedAnswer": {
-              "@type": "Answer",
-              "text": "No. A BOQ combines different measurement methods. Each construction element is measured using an appropriate length, area, volume, weight or count formula, then multiplied by its reviewed unit rate."
-            }
-          },
-          {
-            "@type": "Question",
-            "name": "What is the basic BOQ cost formula?",
-            "acceptedAnswer": {
-              "@type": "Answer",
-              "text": "The basic item formula is Quantity × Unit Rate. The BOQ total is the sum of all item amounts."
-            }
-          },
-          {
-            "@type": "Question",
-            "name": "Does a BOQ calculator replace a quantity surveyor?",
-            "acceptedAnswer": {
-              "@type": "Answer",
-              "text": "No. A calculator can assist with arithmetic and planning, but drawings, dimensions, measurement rules, rates, specifications, assumptions and contractual requirements must be reviewed by qualified professionals."
-            }
-          },
-          {
-            "@type": "Question",
-            "name": "Can I use the Vista By Lara calculator for UAE projects?",
-            "acceptedAnswer": {
-              "@type": "Answer",
-              "text": "The external calculator can support preliminary quantity and cost planning. Users must replace illustrative values with project-specific dimensions and approved rates and complete professional review."
-            }
-          },
-          {
-            "@type": "Question",
-            "name": "Does the calculator send results into Quantara?",
-            "acceptedAnswer": {
-              "@type": "Answer",
-              "text": "Not automatically. The Vista By Lara BOQ Calculator is an external educational tool unless a verified integration is introduced in the future."
-            }
-          }
-        ]
-      }
-    ]
-  };
 
   return (
     <>
-      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
+      <PublicJsonLd data={pageSchema} />
       <div className="flex flex-col min-h-screen bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100">
         <PublicBreadcrumb items={[
-          { label: "Home", href: "/" },
-          { label: "Resources", href: "/resources" },
-          { label: "BOQ Formulas", href: "/boq-calculation-formulas" }
+          { name: "Home", item: "/" },
+          { name: "Resources", item: "/resources" },
+          { name: "BOQ Formulas", item: "/boq-calculation-formulas" }
         ]} />
 
-        <main className="flex-1 py-12 md:py-20 lg:py-24 max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 w-full">
+        <div className="flex-1 py-12 md:py-20 lg:py-24 max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 w-full">
           <header className="mb-12">
             <div className="inline-flex items-center rounded-full border border-blue-200 bg-blue-50 px-3 py-1 text-sm font-medium text-blue-800 dark:border-blue-900 dark:bg-blue-900/30 dark:text-blue-300 mb-6">
               <BookOpen className="mr-2 h-4 w-4" />
@@ -127,6 +78,18 @@ export default function BOQCalculationFormulasPage() {
             <div className="bg-slate-50 dark:bg-slate-900/50 p-6 rounded-xl border border-slate-200 dark:border-slate-800 mt-8 text-sm">
               <p className="text-slate-500 dark:text-slate-400">
                 <strong>Measurement Rules Note:</strong> Measurement rules vary by country, contract and project. Professionals may be required to follow a specified method of measurement, such as an applicable NRM, CESMM, POMI, SMM or project-specific framework. Users must confirm the required standard independently.
+              </p>
+              <p className="mt-3 text-slate-500 dark:text-slate-400">
+                Authoritative reference: the{" "}
+                <a
+                  href="https://www.rics.org/content/dam/ricsglobal/documents/standards/nrm_2_detailed_measurement_for_building_works_1st_edition_rics.pdf"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="font-medium text-blue-700 underline dark:text-blue-300"
+                >
+                  RICS NRM 2 measurement standard
+                </a>{" "}
+                is one example of a formal measurement framework. This link does not imply RICS approval, certification or endorsement of Quantara.
               </p>
             </div>
           </header>
@@ -426,11 +389,12 @@ export default function BOQCalculationFormulasPage() {
                     <div>
                       <h4 className="font-semibold mb-2 mt-0">Illustrative Pitch Factors</h4>
                       <table className="w-full text-sm text-left border-collapse">
+                        <caption className="sr-only">Illustrative roof pitch factors</caption>
                         <tbody>
-                          <tr className="border-b border-slate-200 dark:border-slate-800"><th className="py-2 font-medium">Flat</th><td className="py-2 text-right font-mono">1.00</td></tr>
-                          <tr className="border-b border-slate-200 dark:border-slate-800"><th className="py-2 font-medium">15°</th><td className="py-2 text-right font-mono">approx. 1.04</td></tr>
-                          <tr className="border-b border-slate-200 dark:border-slate-800"><th className="py-2 font-medium">30°</th><td className="py-2 text-right font-mono">approx. 1.15</td></tr>
-                          <tr><th className="py-2 font-medium">45°</th><td className="py-2 text-right font-mono">approx. 1.41</td></tr>
+                          <tr className="border-b border-slate-200 dark:border-slate-800"><th scope="row" className="py-2 font-medium">Flat</th><td className="py-2 text-right font-mono">1.00</td></tr>
+                          <tr className="border-b border-slate-200 dark:border-slate-800"><th scope="row" className="py-2 font-medium">15°</th><td className="py-2 text-right font-mono">approx. 1.04</td></tr>
+                          <tr className="border-b border-slate-200 dark:border-slate-800"><th scope="row" className="py-2 font-medium">30°</th><td className="py-2 text-right font-mono">approx. 1.15</td></tr>
+                          <tr><th scope="row" className="py-2 font-medium">45°</th><td className="py-2 text-right font-mono">approx. 1.41</td></tr>
                         </tbody>
                       </table>
                     </div>
@@ -566,39 +530,40 @@ export default function BOQCalculationFormulasPage() {
             <h2 className="text-3xl mt-16 mb-8 border-b border-slate-200 dark:border-slate-800 pb-2">Worked BOQ Example</h2>
             <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-800 mb-4">
               <table className="w-full text-sm text-left m-0 border-collapse">
+                <caption className="sr-only">Illustrative worked BOQ item and amount example</caption>
                 <thead className="bg-slate-50 dark:bg-slate-900 text-slate-700 dark:text-slate-300">
                   <tr>
-                    <th className="px-6 py-3 font-semibold border-b border-slate-200 dark:border-slate-800">Item</th>
-                    <th className="px-6 py-3 font-semibold border-b border-slate-200 dark:border-slate-800 text-right">Quantity</th>
-                    <th className="px-6 py-3 font-semibold border-b border-slate-200 dark:border-slate-800">Unit</th>
-                    <th className="px-6 py-3 font-semibold border-b border-slate-200 dark:border-slate-800 text-right">Illustrative Rate</th>
-                    <th className="px-6 py-3 font-semibold border-b border-slate-200 dark:border-slate-800 text-right">Amount</th>
+                    <th scope="col" className="px-6 py-3 font-semibold border-b border-slate-200 dark:border-slate-800">Item</th>
+                    <th scope="col" className="px-6 py-3 font-semibold border-b border-slate-200 dark:border-slate-800 text-right">Quantity</th>
+                    <th scope="col" className="px-6 py-3 font-semibold border-b border-slate-200 dark:border-slate-800">Unit</th>
+                    <th scope="col" className="px-6 py-3 font-semibold border-b border-slate-200 dark:border-slate-800 text-right">Illustrative Rate</th>
+                    <th scope="col" className="px-6 py-3 font-semibold border-b border-slate-200 dark:border-slate-800 text-right">Amount</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
                   <tr className="bg-white dark:bg-slate-950">
-                    <td className="px-6 py-4 font-medium">Excavation</td>
+                    <th scope="row" className="px-6 py-4 text-left font-medium">Excavation</th>
                     <td className="px-6 py-4 text-right font-mono">48</td>
                     <td className="px-6 py-4">m³</td>
                     <td className="px-6 py-4 text-right font-mono">AED 20</td>
                     <td className="px-6 py-4 text-right font-mono">AED 960</td>
                   </tr>
                   <tr className="bg-slate-50 dark:bg-slate-900/50">
-                    <td className="px-6 py-4 font-medium">Concrete</td>
+                    <th scope="row" className="px-6 py-4 text-left font-medium">Concrete</th>
                     <td className="px-6 py-4 text-right font-mono">18</td>
                     <td className="px-6 py-4">m³</td>
                     <td className="px-6 py-4 text-right font-mono">AED 140</td>
                     <td className="px-6 py-4 text-right font-mono">AED 2,520</td>
                   </tr>
                   <tr className="bg-white dark:bg-slate-950">
-                    <td className="px-6 py-4 font-medium">Reinforcement</td>
+                    <th scope="row" className="px-6 py-4 text-left font-medium">Reinforcement</th>
                     <td className="px-6 py-4 text-right font-mono">3,200</td>
                     <td className="px-6 py-4">kg</td>
                     <td className="px-6 py-4 text-right font-mono">AED 1.50</td>
                     <td className="px-6 py-4 text-right font-mono">AED 4,800</td>
                   </tr>
                   <tr className="bg-slate-50 dark:bg-slate-900/50">
-                    <td className="px-6 py-4 font-medium">Blockwork</td>
+                    <th scope="row" className="px-6 py-4 text-left font-medium">Blockwork</th>
                     <td className="px-6 py-4 text-right font-mono">240</td>
                     <td className="px-6 py-4">m²</td>
                     <td className="px-6 py-4 text-right font-mono">AED 35</td>
@@ -607,7 +572,7 @@ export default function BOQCalculationFormulasPage() {
                 </tbody>
                 <tfoot className="bg-slate-100 dark:bg-slate-900 font-bold">
                   <tr>
-                    <td colSpan={4} className="px-6 py-4 text-right text-base">Total:</td>
+                    <th scope="row" colSpan={4} className="px-6 py-4 text-right text-base">Total:</th>
                     <td className="px-6 py-4 text-right text-base text-blue-600 dark:text-blue-400 font-mono">AED 16,680</td>
                   </tr>
                 </tfoot>
@@ -627,7 +592,7 @@ export default function BOQCalculationFormulasPage() {
                 <li>Apply approved unit rates that reflect the agreed cost components.</li>
                 <li>Review every quantity and rate professionally.</li>
                 <li>Sum the item amounts to produce the BOQ total.</li>
-                <li>Preserve revision and source traceability.</li>
+                <li>Preserve revision identifiers and available source references.</li>
               </ol>
             </div>
 
@@ -657,40 +622,16 @@ export default function BOQCalculationFormulasPage() {
 
             <h2 className="text-3xl mt-16 mb-8 border-b border-slate-200 dark:border-slate-800 pb-2">Frequently Asked Questions</h2>
             <div className="space-y-8">
-              <div>
-                <h3 className="text-xl font-bold mb-3 mt-0">Is there one formula for calculating a BOQ?</h3>
-                <p className="m-0 text-slate-700 dark:text-slate-300">
-                  No. A BOQ combines different measurement methods. Each construction element is measured using an appropriate length, area, volume, weight or count formula, then multiplied by its reviewed unit rate.
-                </p>
-              </div>
-              <div>
-                <h3 className="text-xl font-bold mb-3 mt-0">What is the basic BOQ cost formula?</h3>
-                <p className="m-0 text-slate-700 dark:text-slate-300">
-                  The basic item formula is Quantity × Unit Rate. The BOQ total is the sum of all item amounts.
-                </p>
-              </div>
-              <div>
-                <h3 className="text-xl font-bold mb-3 mt-0">Does a BOQ calculator replace a quantity surveyor?</h3>
-                <p className="m-0 text-slate-700 dark:text-slate-300">
-                  No. A calculator can assist with arithmetic and planning, but drawings, dimensions, measurement rules, rates, specifications, assumptions and contractual requirements must be reviewed by qualified professionals.
-                </p>
-              </div>
-              <div>
-                <h3 className="text-xl font-bold mb-3 mt-0">Can I use the Vista By Lara calculator for UAE projects?</h3>
-                <p className="m-0 text-slate-700 dark:text-slate-300">
-                  The external calculator can support preliminary quantity and cost planning. Users must replace illustrative values with project-specific dimensions and approved rates and complete professional review.
-                </p>
-              </div>
-              <div>
-                <h3 className="text-xl font-bold mb-3 mt-0">Does the calculator send results into Quantara?</h3>
-                <p className="m-0 text-slate-700 dark:text-slate-300">
-                  Not automatically. The Vista By Lara BOQ Calculator is an external educational tool unless a verified integration is introduced in the future.
-                </p>
-              </div>
+              {formulaFaqs.map((faq) => (
+                <div key={faq.question}>
+                  <h3 className="text-xl font-bold mb-3 mt-0">{faq.question}</h3>
+                  <p className="m-0 text-slate-700 dark:text-slate-300">{faq.answer}</p>
+                </div>
+              ))}
             </div>
 
           </article>
-        </main>
+        </div>
       </div>
     </>
   );

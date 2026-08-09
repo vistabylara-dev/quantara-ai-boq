@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useRef, useCallback } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Menu, X, ChevronDown } from "lucide-react";
@@ -14,8 +15,16 @@ export default function PublicHeader() {
   const headerRef = useRef<HTMLElement>(null);
   const desktopMenuRef = useRef<HTMLDivElement>(null);
   const mobileMenuRef = useRef<HTMLDivElement>(null);
+  const mobileMenuTriggerRef = useRef<HTMLButtonElement>(null);
 
   const pathname = usePathname();
+
+  const closeMobileMenu = useCallback((restoreFocus = true) => {
+    setMobileMenuOpen(false);
+    if (restoreFocus) {
+      requestAnimationFrame(() => mobileMenuTriggerRef.current?.focus());
+    }
+  }, []);
 
   // Close menus on route change
   useEffect(() => {
@@ -43,12 +52,15 @@ export default function PublicHeader() {
     function handleKeyDown(event: KeyboardEvent) {
       if (event.key === "Escape") {
         if (activeDesktopSection !== null) setActiveDesktopSection(null);
-        if (mobileMenuOpen) setMobileMenuOpen(false);
+        if (mobileMenuOpen) {
+          event.preventDefault();
+          closeMobileMenu();
+        }
       }
     }
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [activeDesktopSection, mobileMenuOpen]);
+  }, [activeDesktopSection, closeMobileMenu, mobileMenuOpen]);
 
   // Lock body scroll when mobile menu is open
   useEffect(() => {
@@ -107,7 +119,14 @@ export default function PublicHeader() {
       <div className="container mx-auto px-4 h-16 flex items-center justify-between">
         {/* Logo */}
         <Link href="/" className="font-bold text-xl tracking-tight text-slate-900 dark:text-white flex items-center gap-2" aria-label="Quantara Home">
-          <img src="/logo.png" alt="Quantara Logo" className="h-12 w-12 shrink-0 object-contain" />
+          <Image
+            src="/logo.png"
+            alt=""
+            width={48}
+            height={48}
+            className="h-12 w-12 shrink-0 object-contain"
+            priority
+          />
           Quantara
         </Link>
 
@@ -151,8 +170,13 @@ export default function PublicHeader() {
                                 href={item.href}
                                 className="block group/link rounded-lg p-2 -mx-2 hover:bg-slate-50 dark:hover:bg-slate-900/50 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500"
                               >
-                                <div className="font-medium text-sm text-slate-900 dark:text-slate-100 group-hover/link:text-blue-600 dark:group-hover/link:text-blue-400">
-                                  {item.label}
+                                <div className="flex items-center gap-2 font-medium text-sm text-slate-900 dark:text-slate-100 group-hover/link:text-blue-600 dark:group-hover/link:text-blue-400">
+                                  <span>{item.label}</span>
+                                  {item.status ? (
+                                    <span className="rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-bold text-blue-800 dark:bg-blue-950 dark:text-blue-200">
+                                      {item.status}
+                                    </span>
+                                  ) : null}
                                 </div>
                                 {item.description && (
                                   <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 line-clamp-2">
@@ -184,12 +208,16 @@ export default function PublicHeader() {
 
         {/* Mobile Menu Trigger */}
         <button
+          ref={mobileMenuTriggerRef}
           type="button"
           aria-expanded={mobileMenuOpen}
           aria-controls="mobile-navigation"
           aria-label={mobileMenuOpen ? "Close menu" : "Open menu"}
           className="lg:hidden p-2 -mr-2 text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 rounded-md"
-          onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+          onClick={() => {
+            if (mobileMenuOpen) closeMobileMenu();
+            else setMobileMenuOpen(true);
+          }}
         >
           {mobileMenuOpen ? <X className="h-6 w-6" aria-hidden="true" /> : <Menu className="h-6 w-6" aria-hidden="true" />}
         </button>
@@ -237,7 +265,12 @@ export default function PublicHeader() {
                                   href={item.href}
                                   className="block text-base text-slate-600 dark:text-slate-300 hover:text-blue-600 dark:hover:text-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500 rounded-md py-1"
                                 >
-                                  {item.label}
+                                  <span>{item.label}</span>
+                                  {item.status ? (
+                                    <span className="ml-2 rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-bold text-blue-800 dark:bg-blue-950 dark:text-blue-200">
+                                      {item.status}
+                                    </span>
+                                  ) : null}
                                 </Link>
                               </li>
                             ))}

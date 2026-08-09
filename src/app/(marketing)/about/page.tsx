@@ -1,37 +1,29 @@
+import { createPublicPageMetadata } from "@/lib/public-site/search-registry";
 import React from "react";
 import Link from "next/link";
-import { Metadata } from "next";
 import { siteConfig } from "@/config/site";
+import PublicJsonLd from "@/components/seo/public-json-ld";
+import { QUANTARA_ENTITY_DEFINITION } from "@/lib/public-site/product-truth";
+import { buildPublicPageGraph } from "@/lib/public-site/schema";
+import { getPublicSearchPage } from "@/lib/public-site/search-registry";
 
-export const metadata: Metadata = {
-  title: "About Quantara | Vista By Lara",
-  description: "Learn about Quantara, an AI-assisted BOQ software for construction professionals, developed by Vista By Lara.",
-  alternates: { canonical: "https://quantara.vistabylara.com/about" },
-};
+export const metadata = createPublicPageMetadata("/about");
+
+const searchEntry = getPublicSearchPage("/about");
+const pageSchema = buildPublicPageGraph({
+  path: "/about",
+  title: searchEntry.title,
+  description: searchEntry.description,
+  breadcrumbs: [
+    { name: "Home", path: "/" },
+    { name: "About", path: "/about" },
+  ],
+});
 
 export default function AboutPage() {
-  const jsonLd = {
-    "@context": "https://schema.org",
-    "@type": "BreadcrumbList",
-    "itemListElement": [
-      {
-        "@type": "ListItem",
-        "position": 1,
-        "name": "Home",
-        "item": "https://quantara.vistabylara.com"
-      },
-      {
-        "@type": "ListItem",
-        "position": 2,
-        "name": "About",
-        "item": "https://quantara.vistabylara.com/about"
-      }
-    ]
-  };
-
   return (
     <>
-      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
+      <PublicJsonLd data={pageSchema} />
       <div className="max-w-3xl mx-auto py-24 px-4 flex-1">
         <nav className="mb-8 text-sm" aria-label="Breadcrumb">
           <ol className="flex items-center space-x-2 text-slate-500">
@@ -46,7 +38,9 @@ export default function AboutPage() {
         <div className="mb-12">
           <h1 className="text-4xl font-bold text-slate-900 dark:text-white mb-4">About Quantara</h1>
           <p className="text-lg text-slate-700 dark:text-slate-300">
-            Quantara is a software solution designed to support quantity surveyors, estimators, and construction professionals by bringing structured data workflows to Bill of Quantities (BOQ) management.
+            {QUANTARA_ENTITY_DEFINITION} It helps project teams move through supported sources,
+            reviewed extraction, dimensions, visible calculations, BOQ organization, validation
+            and professional outputs.
           </p>
         </div>
 
@@ -54,14 +48,16 @@ export default function AboutPage() {
           <section>
             <h2 className="text-2xl font-bold text-slate-900 dark:text-white mb-4">Developed by Vista By Lara</h2>
             <p className="text-slate-700 dark:text-slate-300">
-              Quantara is developed by Vista By Lara. Our mission is to reduce the massive administrative burden placed on construction professionals, allowing them to focus on commercial analysis, risk management, and strategic decision-making.
+              Quantara is developed by Vista By Lara. The product is intended to reduce avoidable
+              administrative work while keeping commercial analysis, risk decisions and
+              professional judgement with the responsible construction team.
             </p>
           </section>
 
           <section>
             <h2 className="text-2xl font-bold text-slate-900 dark:text-white mb-4">Our Approach</h2>
             <p className="text-slate-700 dark:text-slate-300">
-              We believe that software should support the professional, not replace them. Construction pricing is complex and carries high commercial risk. Quantara focuses on extracting, organizing, and securing project records while strictly requiring human review and professional judgment before any data is used for commercial purposes.
+              We believe that software should support the professional, not replace them. Construction pricing is complex and carries commercial risk. Quantara focuses on capturing supported information and organizing project records in authorized workspaces. Current security terms apply, and professional review remains required before commercial use.
             </p>
           </section>
           

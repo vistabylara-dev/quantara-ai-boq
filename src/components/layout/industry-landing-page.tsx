@@ -1,7 +1,16 @@
 import React from "react";
 import Link from "next/link";
 import { ArrowRight, CheckCircle2, AlertCircle } from "lucide-react";
+import PublicJsonLd from "@/components/seo/public-json-ld";
 import PublicBreadcrumb from "@/components/ui/public-breadcrumb";
+import {
+  buildPublicPageGraph,
+  inferPublicPathFromSchema,
+} from "@/lib/public-site/schema";
+import {
+  getPublicSearchPage,
+  type PublicSearchPath,
+} from "@/lib/public-site/search-registry";
 
 export interface IndustryFAQ {
   question: string;
@@ -9,6 +18,7 @@ export interface IndustryFAQ {
 }
 
 export interface IndustryLandingPageContent {
+  path?: string;
   breadcrumbLabel: string;
   title: string;
   audienceDescription: string;
@@ -26,18 +36,36 @@ export interface IndustryLandingPageContent {
   limitations: string[];
   faqs: IndustryFAQ[];
   relatedPages: { label: string; href: string }[];
-  schema: any;
+  /** @deprecated Kept only to infer the route while callers migrate to `path`. */
+  schema?: Record<string, unknown>;
 }
 
 export default function IndustryLandingPage({ content }: { content: IndustryLandingPageContent }) {
+  const path = content.path ?? inferPublicPathFromSchema(content.schema);
+  const searchPage = path ? getPublicSearchPage(path as PublicSearchPath) : null;
+  const breadcrumbItems = [
+    { name: "Home", item: "/" },
+    { name: "Industries", item: "/industries" },
+    { name: content.breadcrumbLabel, item: path ?? undefined },
+  ];
+  const jsonLd = searchPage
+    ? buildPublicPageGraph({
+        path: searchPage.path,
+        title: searchPage.title,
+        description: searchPage.description,
+        breadcrumbs: breadcrumbItems.map((item) => ({
+          name: item.name,
+          path: item.item,
+        })),
+        faqs: content.faqs,
+      })
+    : null;
+
   return (
     <div className="w-full bg-white text-slate-900 font-sans">
+      {jsonLd && <PublicJsonLd data={jsonLd} />}
       <div className="flex-1 w-full max-w-5xl mx-auto px-4 py-12 md:py-16">
-        <PublicBreadcrumb items={[
-          { name: "Home", item: "/" },
-          { name: "Industries", item: "/industries" },
-          { name: content.breadcrumbLabel }
-        ]} />
+        <PublicBreadcrumb items={breadcrumbItems} tone="light" />
 
         <header className="mb-12">
           <h1 className="text-4xl md:text-5xl font-bold tracking-tight text-slate-900 mb-6">
@@ -90,11 +118,11 @@ export default function IndustryLandingPage({ content }: { content: IndustryLand
                   </li>
                 ))}
               </ul>
-              <h4 className="font-semibold text-slate-900 mt-6 mb-3 text-sm text-slate-500">Planned Inputs</h4>
+              <h4 className="font-semibold text-slate-900 mt-6 mb-3 text-sm text-slate-500">Not Currently Supported</h4>
               <ul className="space-y-2 text-sm text-slate-500">
                 {content.plannedInputs.map((input, idx) => (
                   <li key={idx} className="flex items-center gap-2">
-                    <span className="w-1.5 h-1.5 rounded-full bg-slate-300"></span> {input} (Planned)
+                    <span className="w-1.5 h-1.5 rounded-full bg-slate-300"></span> {input} (Not available)
                   </li>
                 ))}
               </ul>
@@ -184,10 +212,6 @@ export default function IndustryLandingPage({ content }: { content: IndustryLand
         </section>
       </div>
 
-      <script
-        type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(content.schema) }}
-      />
     </div>
   );
 }

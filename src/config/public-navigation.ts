@@ -1,4 +1,8 @@
-export type NavigationItemStatus = "Live" | "Planned";
+export type NavigationItemStatus =
+  | "Available"
+  | "Controlled access"
+  | "Limited"
+  | "Not available";
 
 export interface NavigationItem {
   label: string;
@@ -27,31 +31,31 @@ export const publicNavigation: NavigationSection[] = [
         label: "Core Platform",
         items: [
           { label: "Features", href: "/features", description: "Explore Quantara’s project, source, BOQ, revision, document and integration capabilities with clear status labels." },
-          { label: "AI BOQ Software", href: "/ai-boq-software", description: "Bring supported project data into one workspace, review structured AI proposals and create governed BOQ revisions." },
-          { label: "BOQ Software", href: "/boq-software", description: "Professional software for modern BOQ preparation." },
-          { label: "Construction Estimating Software", href: "/construction-estimating-software", description: "Organize supported documents into structured estimates." },
-          { label: "BOQ Management", href: "/boq-management", description: "Organize sections, items, source records, revisions, approvals and professional outputs." }
+          { label: "AI BOQ Software", href: "/ai-boq-software", description: "Capture supported project information for professional review and structured BOQ work." },
+          { label: "BOQ Software", href: "/boq-software", description: "Organize supported BOQ records, calculations, revisions and outputs." },
+          { label: "Construction Estimating Software", href: "/construction-estimating-software", description: "Organize reviewed estimating inputs and BOQ records while professionals retain pricing decisions." },
+          { label: "BOQ Management", href: "/boq-management", description: "Organize sections, items, source records, distinct revisions, review steps and professional outputs." }
         ]
       },
       {
         label: "Extraction and Documents",
         items: [
           { label: "PDF BOQ Extraction", href: "/pdf-boq-extraction", description: "Extract and review supported information from text-based PDF BOQ documents." },
-          { label: "Scanned PDF BOQ", href: "/scanned-pdf-boq", description: "Detect scanned and image-only PDF BOQs today; automated OCR is planned." },
+          { label: "Scanned PDF BOQ", href: "/scanned-pdf-boq", description: "Detect scanned and image-only PDF BOQs; OCR text extraction is not currently available." },
           { label: "BOQ Document Generation", href: "/boq-document-generation", description: "Generate professional outputs from verified project data." }
         ]
       },
       {
         label: "Integrations",
         items: [
-          { label: "Connected Sources", href: "/integrations", description: "Bring permitted files or records from verified external applications into the appropriate project when the integration is available.", status: "Planned" }
+          { label: "Google Drive Sources", href: "/features#google-drive-import", description: "Google Drive import requires configuration, authorization and the relevant access.", status: "Controlled access" }
         ]
       },
       {
         label: "Professional Workflows",
         items: [
-          { label: "Quantity Surveying Software", href: "/quantity-surveying-software", description: "Streamlined tools for professional quantity surveyors." },
-          { label: "Security", href: "/security", description: "Enterprise-grade security and data protection." },
+          { label: "Quantity Surveying Software", href: "/quantity-surveying-software", description: "Reviewed BOQ workflow support for quantity surveyors without replacing professional judgement." },
+          { label: "Security", href: "/security", description: "Review Quantara's current authenticated-access, data-handling and Controlled Early Access security limitations." },
           { label: "About Quantara", href: "/about", description: "Learn about our mission and the team behind Quantara." }
         ]
       }

@@ -1,26 +1,16 @@
-import { Metadata } from "next";
+import { createPublicPageMetadata, PUBLIC_CONTENT_REVIEW_DATE } from "@/lib/public-site/search-registry";
 import KnowledgePage, { KnowledgePageContent } from "@/components/layout/knowledge-page";
 
-export const metadata: Metadata = {
-  title: "BOQ vs Construction Estimate: Key Differences Explained",
-  description: "Understand the difference between a Bill of Quantities and a construction estimate, including scope, quantities, rates, assumptions and project use.",
-  alternates: {
-    canonical: "https://quantara.vistabylara.com/boq-vs-construction-estimate",
-  },
-  openGraph: {
-    title: "BOQ vs Construction Estimate: Key Differences Explained | Quantara",
-    description: "Understand the difference between a Bill of Quantities and a construction estimate, including scope, quantities, rates, assumptions and project use.",
-    url: "https://quantara.vistabylara.com/boq-vs-construction-estimate",
-    type: "article",
-  },
-};
+export const metadata = createPublicPageMetadata("/boq-vs-construction-estimate");
+
+
 
 export default function Page() {
   const content: KnowledgePageContent = {
     breadcrumbLabel: "BOQ vs Construction Estimate",
     title: "BOQ vs Construction Estimate: What Is the Difference?",
     summary: "While both a Bill of Quantities (BOQ) and a construction estimate deal with the costs and scope of a project, they serve different purposes. A BOQ is typically a formal tender document defining exact quantities for contractors to price, whereas an estimate is an internal calculation of costs, overheads, margins, and risk used to determine a final bid or project budget.",
-    reviewedDate: new Date().toISOString().split("T")[0],
+    reviewedDate: PUBLIC_CONTENT_REVIEW_DATE,
     sections: [
   {
     "id": "why-it-matters",
@@ -95,8 +85,8 @@ export default function Page() {
     "id": "quantara-workflow",
     "heading": "How Quantara Supports Estimating Workflows",
     "paragraphs": [
-      "Quantara helps estimating teams by rapidly structuring the raw BOQ documents issued by clients. By turning unstructured PDFs into controlled, manageable datasets, estimators can spend less time typing and more time building accurate cost buildups.",
-      "Quantara currently focuses on supported document extraction, BOQ structuring, project organization, templates, revisions, and professional outputs."
+      "Quantara captures supported BOQ information from text-based PDFs and spreadsheets into a review workflow. Coverage, correction effort and review time depend on the source.",
+      "Confirmed information can be organized in BOQ records and exported for further estimating work. Estimate accuracy remains dependent on professional quantities, rates and assumptions."
     ]
   }
 ],
@@ -136,15 +126,7 @@ export default function Page() {
     "label": "Construction Estimating Software"
   }
 ],
-    schema: {
-      "@context": "https://schema.org",
-      "@type": "TechArticle",
-      "headline": "BOQ vs Construction Estimate: What Is the Difference?",
-      "description": "Understand the difference between a Bill of Quantities and a construction estimate, including scope, quantities, rates, assumptions and project use.",
-      "url": "https://quantara.vistabylara.com/boq-vs-construction-estimate",
-      "publisher": { "@id": "https://quantara.vistabylara.com/#organization" },
-      "mainEntityOfPage": { "@id": "https://quantara.vistabylara.com/#website" }
-    }
+    path: "/boq-vs-construction-estimate"
   };
 
   return <KnowledgePage content={content} />;

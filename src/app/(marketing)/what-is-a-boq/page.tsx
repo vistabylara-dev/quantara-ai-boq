@@ -1,21 +1,10 @@
-import { Metadata } from "next";
+import { createPublicPageMetadata, PUBLIC_CONTENT_REVIEW_DATE } from "@/lib/public-site/search-registry";
 import Link from "next/link";
 import KnowledgePage, { KnowledgePageContent } from "@/components/layout/knowledge-page";
-import PublicBreadcrumb from "@/components/ui/public-breadcrumb";
 
-export const metadata: Metadata = {
-  title: "What Is a BOQ? Bill of Quantities Explained",
-  description: "Learn what a Bill of Quantities is, what it contains, who prepares it, how it supports estimating and tendering, and why professional review matters.",
-  alternates: {
-    canonical: "https://quantara.vistabylara.com/what-is-a-boq",
-  },
-  openGraph: {
-    title: "What Is a BOQ? Bill of Quantities Explained | Quantara",
-    description: "Learn what a Bill of Quantities is, what it contains, who prepares it, how it supports estimating and tendering, and why professional review matters.",
-    url: "https://quantara.vistabylara.com/what-is-a-boq",
-    type: "article",
-  },
-};
+export const metadata = createPublicPageMetadata("/what-is-a-boq");
+
+
 
 export default function Page() {
   const content: KnowledgePageContent = {
@@ -28,14 +17,14 @@ export default function Page() {
       "It contains preliminaries, measured works, and provisional sums.",
       "The BOQ forms a critical part of traditional construction contracts."
     ],
-    reviewedDate: new Date().toISOString().split("T")[0],
+    reviewedDate: PUBLIC_CONTENT_REVIEW_DATE,
     sections: [
   {
     "id": "understanding-boqs",
     "heading": "Why the BOQ Matters in Construction",
     "paragraphs": [
       <>For contractors, <Link href="/boq-software-for-quantity-surveyors" className="text-blue-600 hover:underline font-medium">quantity surveyors</Link>, and estimators, the Bill of Quantities is the foundation of competitive tendering. It translates complex architectural and engineering drawings into a readable, line-by-line list of tasks.</>,
-      "Instead of every contractor interpreting the drawings differently and measuring their own quantities, the BOQ provides a standardized measurement. This standardization allows clients to compare bids \"apples to apples.\"",
+      "A BOQ can give tenderers a common list of descriptions, units and stated quantities. Clients must still reconcile qualifications, exclusions, rates and any contractor measurement responsibility when comparing bids.",
       <>For procurement professionals, understanding how this differs from a <Link href="/boq-vs-bill-of-materials" className="text-blue-600 hover:underline font-medium">Bill of Materials</Link> is essential for proper supply chain planning.</>
     ]
   },
@@ -145,27 +134,8 @@ export default function Page() {
     "label": "AI BOQ Software"
   }
 ],
-    schema: {
-      "@context": "https://schema.org",
-      "@type": "TechArticle",
-      "headline": "What Is a BOQ? A Practical Guide to Bills of Quantities",
-      "description": "Learn what a Bill of Quantities is, what it contains, who prepares it, how it supports estimating and tendering, and why professional review matters.",
-      "url": "https://quantara.vistabylara.com/what-is-a-boq",
-      "publisher": { "@id": "https://quantara.vistabylara.com/#organization" },
-      "mainEntityOfPage": { "@id": "https://quantara.vistabylara.com/#website" }
-    }
+    path: "/what-is-a-boq"
   };
 
-  return (
-    <>
-      <PublicBreadcrumb
-        items={[
-          { name: "Home", item: "/" },
-          { name: "Resources", item: "/resources" },
-          { name: "What Is a BOQ?", item: "/what-is-a-boq" }
-        ]}
-      />
-      <KnowledgePage content={content} />
-    </>
-  );
+  return <KnowledgePage content={content} />;
 }

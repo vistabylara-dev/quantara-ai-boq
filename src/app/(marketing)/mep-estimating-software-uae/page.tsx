@@ -1,28 +1,9 @@
-import { Metadata } from "next";
+import { createPublicPageMetadata } from "@/lib/public-site/search-registry";
 import RegionalLandingPage, { RegionalLandingPageContent } from "@/components/layout/regional-landing-page";
 
-export const metadata: Metadata = {
-  title: "MEP Estimating Software UAE for Structured BOQ Workflows",
-  description: "Organize UAE mechanical, electrical and plumbing BOQ workflows, documents, revisions and professional outputs using Quantara.",
-  alternates: {
-    canonical: "https://quantara.vistabylara.com/mep-estimating-software-uae",
-  },
-  openGraph: {
-    title: "MEP Estimating Software UAE for Structured BOQ Workflows | Quantara",
-    description: "Organize UAE mechanical, electrical and plumbing BOQ workflows, documents, revisions and professional outputs using Quantara.",
-    url: "https://quantara.vistabylara.com/mep-estimating-software-uae",
-    type: "website",
-  },
-  twitter: {
-    card: "summary_large_image",
-    title: "MEP Estimating Software UAE for Structured BOQ Workflows | Quantara",
-    description: "Organize UAE mechanical, electrical and plumbing BOQ workflows, documents, revisions and professional outputs using Quantara.",
-  },
-  robots: {
-    index: true,
-    follow: true,
-  }
-};
+export const metadata = createPublicPageMetadata("/mep-estimating-software-uae");
+
+
 
 export default function Page() {
   const content: RegionalLandingPageContent = {
@@ -34,7 +15,7 @@ export default function Page() {
     challenges: [
   {
     "title": "Multi-Discipline Complexity",
-    "description": "Separating HVAC, plumbing, drainage, and electrical scope from a massive consultant BOQ is tedious and error-prone."
+    "description": "Separating HVAC, plumbing, drainage and electrical scope from a multidisciplinary consultant BOQ requires careful review."
   },
   {
     "title": "Technical Schedule Extraction",
@@ -42,7 +23,7 @@ export default function Page() {
   }
 ],
     workflowDescription: "Quantara provides the structure to manage distinct MEP scopes, including HVAC, fire fighting, controls, and testing & commissioning. Users can organize revisions and technical schedules into a unified BOQ, preparing the data for professional review.",
-    workflowExample: "An MEP estimator in the UAE uses Quantara to extract equipment schedules from a consultant's text-based PDF, organizing the AHUs and FCUs into a structured HVAC section while keeping the lighting fixtures in a separate Electrical section. A scanned version of the same schedule would be detected and flagged for manual transcription, since OCR is planned but not yet available.",
+    workflowExample: "An MEP estimator in the UAE uses Quantara to extract equipment schedules from a consultant's text-based PDF, organizing the AHUs and FCUs into a structured HVAC section while keeping the lighting fixtures in a separate Electrical section. A scanned version of the same schedule would be detected and flagged for manual transcription, since OCR text extraction is not currently available.",
     typicalCategories: [
   "HVAC",
   "Plumbing and Drainage",
@@ -52,7 +33,7 @@ export default function Page() {
 ],
     supportedInputs: [
   "Text-based PDF",
-  "Scanned PDF (detection only — OCR planned)",
+  "Scanned PDF (detection only — OCR not currently available)",
   "XLSX",
   "CSV"
 ],
@@ -78,11 +59,11 @@ export default function Page() {
   },
   {
     "question": "Does Quantara measure pipe or cable lengths automatically?",
-    "answer": "No, automated drawing measurement is a Planned feature and is not currently active."
+    "answer": "No, automatic drawing measurement is not currently available."
   },
   {
     "question": "Can I extract HVAC equipment schedules?",
-    "answer": "Yes, you can extract technical schedules from text-based PDFs and structure them today, though manual verification is required. Scanned schedules are detected and flagged for manual transcription; OCR is planned but not yet available."
+    "answer": "Yes, you can extract technical schedules from text-based PDFs and structure them today, though manual verification is required. Scanned schedules are detected and flagged for manual transcription; OCR text extraction is not currently available."
   },
   {
     "question": "Does it validate MEP engineering compliance?",
@@ -127,110 +108,7 @@ export default function Page() {
     "label": "Features"
   }
 ],
-    schema: {
-      "@context": "https://schema.org",
-      "@graph": [
-        {
-          "@type": "WebPage",
-          "@id": "https://quantara.vistabylara.com/mep-estimating-software-uae",
-          "url": "https://quantara.vistabylara.com/mep-estimating-software-uae",
-          "name": "MEP Estimating Software UAE for Structured BOQ Workflows | Quantara",
-          "description": "Organize UAE mechanical, electrical and plumbing BOQ workflows, documents, revisions and professional outputs using Quantara."
-        },
-        {
-          "@type": "BreadcrumbList",
-          "itemListElement": [
-            {
-              "@type": "ListItem",
-              "position": 1,
-              "name": "Home",
-              "item": "https://quantara.vistabylara.com/"
-            },
-            {
-              "@type": "ListItem",
-              "position": 2,
-              "name": "GCC BOQ Software",
-              "item": "https://quantara.vistabylara.com/gcc-boq-software"
-            },
-            {
-              "@type": "ListItem",
-              "position": 3,
-              "name": "UAE MEP Estimating Software",
-              "item": "https://quantara.vistabylara.com/mep-estimating-software-uae"
-            }
-          ]
-        },
-        {
-          "@type": "FAQPage",
-          "mainEntity": [
-  {
-    "@type": "Question",
-    "name": "Can I manage electrical and mechanical scope separately?",
-    "acceptedAnswer": {
-      "@type": "Answer",
-      "text": "Yes, you can create distinct sections within Quantara to cleanly separate different MEP disciplines."
-    }
-  },
-  {
-    "@type": "Question",
-    "name": "Does Quantara measure pipe or cable lengths automatically?",
-    "acceptedAnswer": {
-      "@type": "Answer",
-      "text": "No, automated drawing measurement is a Planned feature and is not currently active."
-    }
-  },
-  {
-    "@type": "Question",
-    "name": "Can I extract HVAC equipment schedules?",
-    "acceptedAnswer": {
-      "@type": "Answer",
-      "text": "Yes, you can extract technical schedules from text-based PDFs and structure them today, though manual verification is required. Scanned schedules are detected and flagged for manual transcription; OCR is planned but not yet available."
-    }
-  },
-  {
-    "@type": "Question",
-    "name": "Does it validate MEP engineering compliance?",
-    "acceptedAnswer": {
-      "@type": "Answer",
-      "text": "No, Quantara is a workflow tool and provides no engineering approval or compliance validation."
-    }
-  },
-  {
-    "@type": "Question",
-    "name": "Can I track testing and commissioning items?",
-    "acceptedAnswer": {
-      "@type": "Answer",
-      "text": "Yes, testing, balancing, and commissioning can be organized as structured items in your BOQ."
-    }
-  },
-  {
-    "@type": "Question",
-    "name": "How are MEP revisions handled?",
-    "acceptedAnswer": {
-      "@type": "Answer",
-      "text": "You can use revision control to track updates to specific MEP sections as consultant addenda are issued."
-    }
-  },
-  {
-    "@type": "Question",
-    "name": "Does it include UAE MEP rates?",
-    "acceptedAnswer": {
-      "@type": "Answer",
-      "text": "No, Quantara does not include pricing databases or local rates."
-    }
-  },
-  {
-    "@type": "Question",
-    "name": "What formats can I export to?",
-    "acceptedAnswer": {
-      "@type": "Answer",
-      "text": "You can export your structured MEP BOQ to XLSX, CSV, or formatted PDF proposals."
-    }
-  }
-]
-        }
-      ]
-    }
+    path: "/mep-estimating-software-uae"
   };
 
   return <RegionalLandingPage content={content} />;

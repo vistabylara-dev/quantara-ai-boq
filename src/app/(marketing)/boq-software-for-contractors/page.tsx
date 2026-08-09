@@ -1,35 +1,16 @@
-import { Metadata } from "next";
+import { createPublicPageMetadata } from "@/lib/public-site/search-registry";
 import IndustryLandingPage, { IndustryLandingPageContent } from "@/components/layout/industry-landing-page";
 
-export const metadata: Metadata = {
-  title: "BOQ Software for Contractors and Construction Teams",
-  description: "Organize project documents, BOQ sections, quantities, revisions, templates and professional outputs with Quantara’s contractor-focused BOQ workflow platform.",
-  alternates: {
-    canonical: "https://quantara.vistabylara.com/boq-software-for-contractors",
-  },
-  openGraph: {
-    title: "BOQ Software for Contractors and Construction Teams | Quantara",
-    description: "Organize project documents, BOQ sections, quantities, revisions, templates and professional outputs with Quantara’s contractor-focused BOQ workflow platform.",
-    url: "https://quantara.vistabylara.com/boq-software-for-contractors",
-    type: "website",
-  },
-  twitter: {
-    card: "summary_large_image",
-    title: "BOQ Software for Contractors and Construction Teams | Quantara",
-    description: "Organize project documents, BOQ sections, quantities, revisions, templates and professional outputs with Quantara’s contractor-focused BOQ workflow platform.",
-  },
-  robots: {
-    index: true,
-    follow: true,
-  }
-};
+export const metadata = createPublicPageMetadata("/boq-software-for-contractors");
+
+
 
 export default function Page() {
   const content: IndustryLandingPageContent = {
     breadcrumbLabel: "BOQ Software for Contractors",
     title: "BOQ Software for Contractors Managing Complex Project Information",
-    audienceDescription: "Designed for general contractors and subcontractors looking for structured BOQ and estimating workflows to manage project documentation effectively.",
-    directAnswer: "Quantara provides contractors with a structured BOQ workflow platform to organize tender documents, subcontractor packages, and project revisions in one place.",
+    audienceDescription: "For general contractors and subcontractors evaluating structured BOQ and project-source workflows.",
+    directAnswer: "Quantara helps contractors organize supported tender sources, reviewed BOQ records and distinct project revisions within an authorized workspace.",
     challenges: [
   {
     "title": "Fragmented Tender Documents",
@@ -37,11 +18,11 @@ export default function Page() {
   },
   {
     "title": "Scope Coordination",
-    "description": "Managing multiple subcontractor packages and ensuring no scope overlaps or omissions occur is difficult without a centralized, version-controlled BOQ."
+    "description": "Managing multiple subcontractor packages and checking for scope overlaps or omissions can become difficult across separate files."
   }
 ],
-    workflowDescription: "Quantara allows contractors to import tender documents and organize them into structured BOQ records. From handling item descriptions and units to tracking assumptions and exclusions, contractors can build a reliable foundation for internal review, proposal generation, and tender preparation.",
-    workflowExample: "A general contractor receives a mixed PDF and Excel tender package for a commercial build. Instead of manually retyping the data into a master pricing spreadsheet, they use Quantara to extract the PDF items, merge them with the Excel data, and organize the BOQ into distinct trade packages for their subcontractors.",
+    workflowDescription: "Quantara captures supported information from text-based tender PDFs and spreadsheets for review, then organizes confirmed descriptions, units and quantities in BOQ sections. Contractors must still reconcile scope, assumptions, exclusions and pricing.",
+    workflowExample: "A general contractor receives a text-based PDF and spreadsheet tender package. Supported information is captured for review, reconciled by the estimating team and organized into BOQ trade sections before subcontractor issue.",
     typicalCategories: [
   "Preliminaries",
   "Civil Works",
@@ -54,7 +35,7 @@ export default function Page() {
 ],
     supportedInputs: [
   "Text-based PDF",
-  "Scanned PDF (detection only — OCR planned)",
+  "Scanned PDF (detection only — OCR not currently available)",
   "XLSX",
   "CSV"
 ],
@@ -65,12 +46,12 @@ export default function Page() {
 ],
     supportedOutputs: [
   "Structured Excel (XLSX)",
-  "Formatted PDF Proposals",
+  "Reviewable PDF Outputs",
   "CSV Exports"
 ],
     limitations: [
   "Quantara does not currently perform automated visual quantity takeoff or drawing measurement.",
-  "BIM and CAD integrations remain in the Planned phase.",
+  "BIM and CAD integrations are not currently available.",
   "Quantara does not provide pre-built cost databases or universal category structures."
 ],
     faqs: [
@@ -80,19 +61,19 @@ export default function Page() {
   },
   {
     "question": "Does Quantara measure quantities from drawings?",
-    "answer": "No, automated drawing measurement and visual quantity takeoff are currently Planned features and not active."
+    "answer": "No, automatic drawing measurement and visual quantity takeoff are not currently available."
   },
   {
     "question": "How are assumptions and exclusions handled?",
-    "answer": "Contractors can document assumptions and exclusions directly alongside the relevant BOQ sections to ensure clarity during internal review."
+    "answer": "Contractors can document relevant assumptions and exclusions in supported project records and reports, then check them during internal review."
   },
   {
     "question": "Can I export a priced proposal for a client?",
-    "answer": "Yes, Quantara supports generating professional PDF proposals and structured Excel files from your managed BOQ data."
+    "answer": "Quantara supports reviewable PDF and structured XLSX outputs from reviewed BOQ data. A professional must check them before client issue."
   },
   {
     "question": "Does it support scanned tender documents?",
-    "answer": "Scanned tender documents can be uploaded and are automatically detected and flagged as requiring OCR. Automated OCR text extraction is planned and not yet available, so scanned content currently requires manual transcription and professional review."
+    "answer": "Scanned tender documents can be uploaded and are automatically detected and flagged as requiring OCR. OCR text extraction is not currently available, so scanned content currently requires manual transcription and professional review."
   },
   {
     "question": "Is there a pre-built category structure?",
@@ -100,7 +81,7 @@ export default function Page() {
   },
   {
     "question": "How are BOQ revisions tracked?",
-    "answer": "Quantara maintains a revision history, allowing contractors to track changes to quantities and scope as new tender addenda are issued."
+    "answer": "Quantara retains distinct BOQ revision records. Contractors must compare the records and interpret quantity or scope changes from tender addenda."
   },
   {
     "question": "Does Quantara replace our estimating software?",
@@ -129,110 +110,7 @@ export default function Page() {
     "label": "Features"
   }
 ],
-    schema: {
-      "@context": "https://schema.org",
-      "@graph": [
-        {
-          "@type": "WebPage",
-          "@id": "https://quantara.vistabylara.com/boq-software-for-contractors",
-          "url": "https://quantara.vistabylara.com/boq-software-for-contractors",
-          "name": "BOQ Software for Contractors and Construction Teams | Quantara",
-          "description": "Organize project documents, BOQ sections, quantities, revisions, templates and professional outputs with Quantara’s contractor-focused BOQ workflow platform."
-        },
-        {
-          "@type": "BreadcrumbList",
-          "itemListElement": [
-            {
-              "@type": "ListItem",
-              "position": 1,
-              "name": "Home",
-              "item": "https://quantara.vistabylara.com/"
-            },
-            {
-              "@type": "ListItem",
-              "position": 2,
-              "name": "Industries",
-              "item": "https://quantara.vistabylara.com/industries"
-            },
-            {
-              "@type": "ListItem",
-              "position": 3,
-              "name": "BOQ Software for Contractors",
-              "item": "https://quantara.vistabylara.com/boq-software-for-contractors"
-            }
-          ]
-        },
-        {
-          "@type": "FAQPage",
-          "mainEntity": [
-  {
-    "@type": "Question",
-    "name": "Can contractors organize subcontractor scope with Quantara?",
-    "acceptedAnswer": {
-      "@type": "Answer",
-      "text": "Yes, contractors can structure their BOQ into distinct packages, making it easier to manage subcontractor scopes and pricing."
-    }
-  },
-  {
-    "@type": "Question",
-    "name": "Does Quantara measure quantities from drawings?",
-    "acceptedAnswer": {
-      "@type": "Answer",
-      "text": "No, automated drawing measurement and visual quantity takeoff are currently Planned features and not active."
-    }
-  },
-  {
-    "@type": "Question",
-    "name": "How are assumptions and exclusions handled?",
-    "acceptedAnswer": {
-      "@type": "Answer",
-      "text": "Contractors can document assumptions and exclusions directly alongside the relevant BOQ sections to ensure clarity during internal review."
-    }
-  },
-  {
-    "@type": "Question",
-    "name": "Can I export a priced proposal for a client?",
-    "acceptedAnswer": {
-      "@type": "Answer",
-      "text": "Yes, Quantara supports generating professional PDF proposals and structured Excel files from your managed BOQ data."
-    }
-  },
-  {
-    "@type": "Question",
-    "name": "Does it support scanned tender documents?",
-    "acceptedAnswer": {
-      "@type": "Answer",
-      "text": "Scanned tender documents can be uploaded and are automatically detected and flagged as requiring OCR. Automated OCR text extraction is planned and not yet available, so scanned content currently requires manual transcription and professional review."
-    }
-  },
-  {
-    "@type": "Question",
-    "name": "Is there a pre-built category structure?",
-    "acceptedAnswer": {
-      "@type": "Answer",
-      "text": "No, categories are user-defined. Quantara provides the structure, but you define the specific trades and packages."
-    }
-  },
-  {
-    "@type": "Question",
-    "name": "How are BOQ revisions tracked?",
-    "acceptedAnswer": {
-      "@type": "Answer",
-      "text": "Quantara maintains a revision history, allowing contractors to track changes to quantities and scope as new tender addenda are issued."
-    }
-  },
-  {
-    "@type": "Question",
-    "name": "Does Quantara replace our estimating software?",
-    "acceptedAnswer": {
-      "@type": "Answer",
-      "text": "Quantara focuses on the BOQ structuring and document workflow. It is designed to complement your existing pricing and estimating tools."
-    }
-  }
-]
-        }
-      ]
-    }
+    path: "/boq-software-for-contractors"
   };
 
   return <IndustryLandingPage content={content} />;

@@ -1,23 +1,24 @@
-import { Metadata } from 'next';
-import Link from 'next/link';
-export const metadata: Metadata = {
-  title: 'BOQ and Construction Workflow Comparisons',
-  description: 'Compare BOQ software, spreadsheets, Excel, OCR, manual preparation, document management and quantity takeoff workflows.',
-  alternates: {
-    canonical: 'https://quantara.vistabylara.com/comparisons'
-  },
-  openGraph: {
-    title: 'BOQ and Construction Workflow Comparisons | Quantara',
-    description: 'Compare BOQ software, spreadsheets, Excel, OCR, manual preparation, document management and quantity takeoff workflows.',
-    url: 'https://quantara.vistabylara.com/comparisons',
-    type: 'website'
-  },
-  twitter: {
-    card: 'summary_large_image',
-    title: 'BOQ and Construction Workflow Comparisons | Quantara',
-    description: 'Compare BOQ software, spreadsheets, Excel, OCR, manual preparation, document management and quantity takeoff workflows.'
-  }
-};
+import Link from "next/link";
+import PublicJsonLd from "@/components/seo/public-json-ld";
+import PublicBreadcrumb from "@/components/ui/public-breadcrumb";
+import { buildPublicPageGraph } from "@/lib/public-site/schema";
+import {
+  createPublicPageMetadata,
+  getPublicSearchPage,
+} from "@/lib/public-site/search-registry";
+
+export const metadata = createPublicPageMetadata("/comparisons");
+
+const searchEntry = getPublicSearchPage("/comparisons");
+const pageSchema = buildPublicPageGraph({
+  path: "/comparisons",
+  title: searchEntry.title,
+  description: searchEntry.description,
+  breadcrumbs: [
+    { name: "Home", path: "/" },
+    { name: "Comparisons", path: "/comparisons" },
+  ],
+});
 
 const CATEGORIES = [
   {
@@ -46,41 +47,12 @@ const CATEGORIES = [
 ];
 
 export default function ComparisonsHubPage() {
-  const jsonLd = {
-    "@context": "https://schema.org",
-    "@graph": [
-      {
-        "@type": "WebPage",
-        "@id": "https://quantara.vistabylara.com/comparisons#webpage",
-        "url": "https://quantara.vistabylara.com/comparisons",
-        "name": "BOQ and Construction Workflow Comparisons | Quantara",
-        "isPartOf": { "@id": "https://quantara.vistabylara.com/#website" }
-      },
-      {
-        "@type": "BreadcrumbList",
-        "itemListElement": [
-          {
-            "@type": "ListItem",
-            "position": 1,
-            "name": "Home",
-            "item": "https://quantara.vistabylara.com/"
-          },
-          {
-            "@type": "ListItem",
-            "position": 2,
-            "name": "Comparisons",
-            "item": "https://quantara.vistabylara.com/comparisons"
-          }
-        ]
-      }
-    ]
-  };
-
   return (
-    <div className="container mx-auto px-4 py-16 md:py-24 max-w-7xl">
-      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
+    <div className="min-h-screen bg-white text-slate-900">
+      <div className="container mx-auto px-4 py-16 md:py-24 max-w-7xl">
+      <PublicJsonLd data={pageSchema} />
+      <PublicBreadcrumb items={[{ name: "Home", item: "/" }, { name: "Comparisons" }]} tone="light" />
 
-      
         <header className="mb-12 text-center">
           <h1 className="text-4xl md:text-5xl font-extrabold text-slate-900 tracking-tight mb-6">
             BOQ and Construction Workflow Comparisons
@@ -116,5 +88,6 @@ export default function ComparisonsHubPage() {
         </section>
       
       </div>
+    </div>
   );
 }

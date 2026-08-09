@@ -1,20 +1,20 @@
-import React from "react";
-import Link from "next/link";
-import { Metadata } from "next";
-export const metadata: Metadata = {
-  alternates: { canonical: "/security" },
-  title: "Security and Controlled Early Access",
-  description: "Security information for Quantara Early Access.",
-};
+import { createPublicPageMetadata } from "@/lib/public-site/search-registry";
+import { PublicPageJsonLd } from "@/components/seo/public-json-ld";
+import PublicBreadcrumb from "@/components/ui/public-breadcrumb";
+
+export const metadata = createPublicPageMetadata("/security");
+
+
 
 export default function SecurityPage() {
   return (
-    <div className="max-w-3xl mx-auto py-24 px-4 min-h-[70vh]">
-      <div className="mb-8">
-        <Link href="/" className="text-blue-600 hover:underline flex items-center gap-2 text-sm font-medium">
-          ← Back to Home
-        </Link>
-      </div>
+    <>
+      <PublicPageJsonLd
+        path="/security"
+        breadcrumbs={[{ name: "Home", path: "/" }, { name: "Security", path: "/security" }]}
+      />
+      <div className="max-w-3xl mx-auto py-24 px-4 min-h-[70vh]">
+      <PublicBreadcrumb items={[{ name: "Home", item: "/" }, { name: "Security" }]} />
       
       <div className="mb-12">
         <h1 className="text-4xl font-bold text-slate-900 dark:text-white mb-4">Security and Controlled Early Access</h1>
@@ -76,5 +76,6 @@ export default function SecurityPage() {
         </section>
       </div>
       </div>
+    </>
   );
 }

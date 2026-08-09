@@ -1,33 +1,23 @@
-import { Metadata } from "next";
+import { createPublicPageMetadata, PUBLIC_CONTENT_REVIEW_DATE } from "@/lib/public-site/search-registry";
 import KnowledgePage, { KnowledgePageContent } from "@/components/layout/knowledge-page";
 
-export const metadata: Metadata = {
-  title: "Quantity Takeoff vs BOQ Management Software",
-  description: "Compare quantity takeoff with BOQ management, including measurement, document structure, revisions, templates and professional project workflows.",
-  alternates: {
-    canonical: "https://quantara.vistabylara.com/quantity-takeoff-vs-boq-management",
-  },
-  openGraph: {
-    title: "Quantity Takeoff vs BOQ Management Software | Quantara",
-    description: "Compare quantity takeoff with BOQ management, including measurement, document structure, revisions, templates and professional project workflows.",
-    url: "https://quantara.vistabylara.com/quantity-takeoff-vs-boq-management",
-    type: "article",
-  },
-};
+export const metadata = createPublicPageMetadata("/quantity-takeoff-vs-boq-management");
+
+
 
 export default function Page() {
   const content: KnowledgePageContent = {
     breadcrumbLabel: "Quantity Takeoff vs BOQ Management",
     title: "Quantity Takeoff vs BOQ Management: Different Construction Workflows",
     summary: "Quantity Takeoff and BOQ Management are two distinct, sequential phases of construction estimating. Takeoff involves measuring physical dimensions from drawings or models. BOQ Management involves organizing those measurements, along with descriptions and rates, into structured, contract-ready documents.",
-    reviewedDate: new Date().toISOString().split("T")[0],
+    reviewedDate: PUBLIC_CONTENT_REVIEW_DATE,
     sections: [
   {
     "id": "why-it-matters",
     "heading": "Why the Distinction Matters",
     "paragraphs": [
       "For contractors and quantity surveyors, confusing these two software categories leads to inefficient workflows. Buying a takeoff tool won't help you manage complex tender revisions, and buying a BOQ tool won't help you measure a PDF drawing.",
-      "Understanding the boundary ensures you deploy the right tools for the right job."
+      "Understanding the boundary helps teams choose an appropriate workflow for each task."
     ]
   },
   {
@@ -85,7 +75,7 @@ export default function Page() {
     "heading": "The Quantara Product Boundary",
     "paragraphs": [
       "It is vital to understand category boundaries to manage expectations.",
-      "Quantara currently focuses on supported document extraction and structured BOQ management. Automated visual quantity takeoff, drawing measurement, CAD, BIM and IFC processing remain Planned unless explicitly marked otherwise."
+      "Quantara currently focuses on supported document extraction and structured BOQ management. Automatic visual quantity takeoff, drawing measurement, CAD, BIM and IFC processing are not currently available."
     ],
     "note": "Quantara organizes your data; it does not measure the drawings for you at this stage."
   }
@@ -126,15 +116,7 @@ export default function Page() {
     "label": "What Is a BOQ?"
   }
 ],
-    schema: {
-      "@context": "https://schema.org",
-      "@type": "TechArticle",
-      "headline": "Quantity Takeoff vs BOQ Management: Different Construction Workflows",
-      "description": "Compare quantity takeoff with BOQ management, including measurement, document structure, revisions, templates and professional project workflows.",
-      "url": "https://quantara.vistabylara.com/quantity-takeoff-vs-boq-management",
-      "publisher": { "@id": "https://quantara.vistabylara.com/#organization" },
-      "mainEntityOfPage": { "@id": "https://quantara.vistabylara.com/#website" }
-    }
+    path: "/quantity-takeoff-vs-boq-management"
   };
 
   return <KnowledgePage content={content} />;

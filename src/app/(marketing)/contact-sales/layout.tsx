@@ -1,23 +1,20 @@
-import type { Metadata } from "next";
+import { createPublicPageMetadata } from "@/lib/public-site/search-registry";
+import { PublicPageJsonLd } from "@/components/seo/public-json-ld";
 
-export const metadata: Metadata = {
-  title: "Contact Sales | Quantara BOQ",
-  description: "Contact the Quantara team for information about the AI-assisted BOQ and construction-estimating platform.",
-  alternates: {
-    canonical: "/contact-sales"
-  },
-  openGraph: {
-    title: "Contact Sales | Quantara BOQ",
-    description: "Contact the Quantara team for information about the AI-assisted BOQ and construction-estimating platform.",
-    url: "https://quantara.vistabylara.com/contact-sales",
-    siteName: "Quantara",
-  },
-};
+export const metadata = createPublicPageMetadata("/contact-sales");
 
 export default function ContactSalesLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  return <>{children}</>;
+  return (
+    <>
+      <PublicPageJsonLd
+        path="/contact-sales"
+        breadcrumbs={[{ name: "Home", path: "/" }, { name: "Contact Sales", path: "/contact-sales" }]}
+      />
+      {children}
+    </>
+  );
 }

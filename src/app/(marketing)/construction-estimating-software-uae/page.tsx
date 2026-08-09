@@ -1,28 +1,9 @@
-import { Metadata } from "next";
+import { createPublicPageMetadata } from "@/lib/public-site/search-registry";
 import RegionalLandingPage, { RegionalLandingPageContent } from "@/components/layout/regional-landing-page";
 
-export const metadata: Metadata = {
-  title: "Construction Estimating Software UAE and BOQ Workflows",
-  description: "Organize UAE construction scope, BOQ items, revisions, templates, assumptions and professional estimating outputs using Quantara.",
-  alternates: {
-    canonical: "https://quantara.vistabylara.com/construction-estimating-software-uae",
-  },
-  openGraph: {
-    title: "Construction Estimating Software UAE and BOQ Workflows | Quantara",
-    description: "Organize UAE construction scope, BOQ items, revisions, templates, assumptions and professional estimating outputs using Quantara.",
-    url: "https://quantara.vistabylara.com/construction-estimating-software-uae",
-    type: "website",
-  },
-  twitter: {
-    card: "summary_large_image",
-    title: "Construction Estimating Software UAE and BOQ Workflows | Quantara",
-    description: "Organize UAE construction scope, BOQ items, revisions, templates, assumptions and professional estimating outputs using Quantara.",
-  },
-  robots: {
-    index: true,
-    follow: true,
-  }
-};
+export const metadata = createPublicPageMetadata("/construction-estimating-software-uae");
+
+
 
 export default function Page() {
   const content: RegionalLandingPageContent = {
@@ -34,15 +15,15 @@ export default function Page() {
     challenges: [
   {
     "title": "Unstructured Estimating Data",
-    "description": "Estimators frequently waste hours re-typing BOQ descriptions from PDFs into pricing spreadsheets, risking critical omissions."
+    "description": "Repeated transcription from PDFs into pricing spreadsheets can consume estimator time and introduce omission risk."
   },
   {
     "title": "Tracking Assumptions",
     "description": "Failing to clearly link commercial assumptions and exclusions to specific BOQ items often leads to disputes post-award."
   }
 ],
-    workflowDescription: "Quantara clarifies the BOQ-to-estimate relationship by allowing teams to structure quantities, units, rates, and explicit assumptions. Users can apply company templates to supported project documents, ensuring a clean baseline for professional pricing review.",
-    workflowExample: "A UAE estimator imports a text-based PDF BOQ into Quantara. They structure the items, add specific notes for their commercial exclusions, and export the clean, organized list to Excel for final rate application. A scanned version of the same document would be detected and flagged for manual transcription, since OCR is planned but not yet available.",
+    workflowDescription: "Quantara organizes reviewed quantities, units, rates and assumptions in BOQ records. Available company templates can support a reviewable baseline for professional pricing work.",
+    workflowExample: "A UAE estimator captures supported information from a text-based PDF BOQ, verifies the items, documents relevant exclusions and exports the reviewed list to XLSX for further rate application. A scanned version is detected and requires manual transcription because OCR text extraction is not currently available.",
     typicalCategories: [
   "Site Preparation",
   "Concrete Works",
@@ -52,7 +33,7 @@ export default function Page() {
 ],
     supportedInputs: [
   "Text-based PDF",
-  "Scanned PDF (detection only — OCR planned)",
+  "Scanned PDF (detection only — OCR not currently available)",
   "XLSX",
   "CSV"
 ],
@@ -74,7 +55,7 @@ export default function Page() {
     faqs: [
   {
     "question": "How does Quantara assist UAE estimators?",
-    "answer": "It accelerates the pre-pricing phase by structuring BOQ documents, allowing estimators to focus on applying rates rather than data entry."
+    "answer": "It captures supported information for review and organizes confirmed BOQ records before pricing. No fixed time saving is promised, and estimators still provide rates and commercial judgement."
   },
   {
     "question": "Does it include a UAE pricing database?",
@@ -102,7 +83,7 @@ export default function Page() {
   },
   {
     "question": "Does Quantara perform visual quantity takeoff?",
-    "answer": "No, automated drawing measurement and visual takeoff are Planned features."
+    "answer": "No, automatic drawing measurement and visual takeoff are not currently available."
   }
 ],
     relatedPages: [
@@ -127,110 +108,7 @@ export default function Page() {
     "label": "Features"
   }
 ],
-    schema: {
-      "@context": "https://schema.org",
-      "@graph": [
-        {
-          "@type": "WebPage",
-          "@id": "https://quantara.vistabylara.com/construction-estimating-software-uae",
-          "url": "https://quantara.vistabylara.com/construction-estimating-software-uae",
-          "name": "Construction Estimating Software UAE and BOQ Workflows | Quantara",
-          "description": "Organize UAE construction scope, BOQ items, revisions, templates, assumptions and professional estimating outputs using Quantara."
-        },
-        {
-          "@type": "BreadcrumbList",
-          "itemListElement": [
-            {
-              "@type": "ListItem",
-              "position": 1,
-              "name": "Home",
-              "item": "https://quantara.vistabylara.com/"
-            },
-            {
-              "@type": "ListItem",
-              "position": 2,
-              "name": "GCC BOQ Software",
-              "item": "https://quantara.vistabylara.com/gcc-boq-software"
-            },
-            {
-              "@type": "ListItem",
-              "position": 3,
-              "name": "UAE Estimating Software",
-              "item": "https://quantara.vistabylara.com/construction-estimating-software-uae"
-            }
-          ]
-        },
-        {
-          "@type": "FAQPage",
-          "mainEntity": [
-  {
-    "@type": "Question",
-    "name": "How does Quantara assist UAE estimators?",
-    "acceptedAnswer": {
-      "@type": "Answer",
-      "text": "It accelerates the pre-pricing phase by structuring BOQ documents, allowing estimators to focus on applying rates rather than data entry."
-    }
-  },
-  {
-    "@type": "Question",
-    "name": "Does it include a UAE pricing database?",
-    "acceptedAnswer": {
-      "@type": "Answer",
-      "text": "No, Quantara does not provide pre-built rate libraries. Estimators must use their own commercial rates."
-    }
-  },
-  {
-    "@type": "Question",
-    "name": "Can I track estimating assumptions?",
-    "acceptedAnswer": {
-      "@type": "Answer",
-      "text": "Yes, assumptions and exclusions can be documented directly against specific BOQ sections or items."
-    }
-  },
-  {
-    "@type": "Question",
-    "name": "Does Quantara guarantee final project costs?",
-    "acceptedAnswer": {
-      "@type": "Answer",
-      "text": "No, Quantara is a workflow tool. Final cost guarantees are entirely the responsibility of the estimating professional."
-    }
-  },
-  {
-    "@type": "Question",
-    "name": "Does it support VAT calculation?",
-    "acceptedAnswer": {
-      "@type": "Answer",
-      "text": "No, Quantara does not handle tax calculations like VAT."
-    }
-  },
-  {
-    "@type": "Question",
-    "name": "Can I export the structured BOQ to my estimating software?",
-    "acceptedAnswer": {
-      "@type": "Answer",
-      "text": "Yes, you can export the data to CSV or XLSX for import into your primary financial or estimating system."
-    }
-  },
-  {
-    "@type": "Question",
-    "name": "Are standard company templates supported?",
-    "acceptedAnswer": {
-      "@type": "Answer",
-      "text": "Yes, you can save your preferred BOQ structure as a template for future use."
-    }
-  },
-  {
-    "@type": "Question",
-    "name": "Does Quantara perform visual quantity takeoff?",
-    "acceptedAnswer": {
-      "@type": "Answer",
-      "text": "No, automated drawing measurement and visual takeoff are Planned features."
-    }
-  }
-]
-        }
-      ]
-    }
+    path: "/construction-estimating-software-uae"
   };
 
   return <RegionalLandingPage content={content} />;

@@ -9,6 +9,12 @@ import {
 } from "@/lib/calculations/required-dimensions-registry";
 import type { FormulaResult } from "@/lib/calculations/quantity-formulas";
 import {
+  assertValidCalculatedResult,
+  assertValidDimensionValues,
+  assertValidFormulaResult,
+  assertValidOverrideResult,
+} from "@/lib/calculations/quantity-domain-validator";
+import {
   confirmQuantityCalculation as confirmQuantityCalculationRecord,
   createQuantityCalculation,
   getQuantityCalculationRecord,
@@ -142,6 +148,7 @@ export type CalculationPreview = {
  * (spec section 5).
  */
 export function previewCalculation(calculationType: QuantityCalculationType, dimensionValues: DimensionValue[]): CalculationPreview {
+  assertValidDimensionValues(dimensionValues);
   const definition = getRequiredDimensions(calculationType);
   if (!definition) {
     return { calculationType, dimensionValues, missingRequiredDimensions: [], result: null };
@@ -152,6 +159,7 @@ export function previewCalculation(calculationType: QuantityCalculationType, dim
   }
   const values = Object.fromEntries(dimensionValues.filter((d) => d.value !== null).map((d) => [d.key, d.value as number]));
   const result = definition.compute(values);
+  assertValidFormulaResult(result);
   return { calculationType, dimensionValues, missingRequiredDimensions: [], result };
 }
 
@@ -179,6 +187,7 @@ export async function createCalculation(actor: CurrentActor, input: CreateCalcul
   if (!definition) {
     throw new AppError("CALCULATION_TYPE_NOT_SUPPORTED", `No deterministic formula is registered for calculation type "${input.calculationType}".`, 400);
   }
+  assertValidDimensionValues(input.dimensionValues);
   const missing = getMissingRequiredDimensions(definition, input.dimensionValues);
   if (missing.length > 0) {
     throw new AppError(
@@ -201,6 +210,7 @@ export async function createCalculation(actor: CurrentActor, input: CreateCalcul
 
   const values = Object.fromEntries(input.dimensionValues.filter((d) => d.value !== null).map((d) => [d.key, d.value as number]));
   const result = definition.compute(values);
+  assertValidFormulaResult(result);
 
   const providedConfidences = input.dimensionValues.map((d) => d.confidence).filter((c): c is number => c !== null);
   // Confidence reflects the weakest evidence actually used — never a fabricated blanket
@@ -252,6 +262,8 @@ export async function getCalculation(actor: CurrentActor, calculationId: string)
 /** Human confirmation (spec section 6) — records confirmedBy/confirmedAt, matching confirmExtractedEntity's pattern exactly. */
 export async function confirmCalculation(actor: CurrentActor, calculationId: string) {
   requireCapability(actor, "verification:manage");
+  const current = await getQuantityCalculationRecord(actor.companyId, calculationId);
+  assertValidCalculatedResult(current.resultValue.toNumber());
   const updated = await confirmQuantityCalculationRecord(actor.companyId, calculationId, actor.userId);
   await createAuditLog(actor.companyId, { entityType: "QuantityCalculation", entityId: calculationId, action: "CALCULATION_CONFIRMED", payload: {} });
   return toQuantityCalculationDTO(updated);
@@ -269,6 +281,7 @@ export async function overrideCalculationResult(actor: CurrentActor, calculation
   if (!reason || !reason.trim()) {
     throw new AppError("OVERRIDE_REASON_REQUIRED", "A reason is required to override a calculated quantity.", 400);
   }
+  assertValidOverrideResult(newResultValue);
   const current = await getQuantityCalculationRecord(actor.companyId, calculationId);
   const updated = await overrideQuantityCalculationRecord(actor.companyId, calculationId, newResultValue, reason);
   await createAuditLog(actor.companyId, {

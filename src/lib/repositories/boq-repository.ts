@@ -692,8 +692,8 @@ export type SectionWriteInput = {
   sortOrder?: number;
 };
 
-async function getSectionRecord(companyId: string, sectionId: string) {
-  const section = await prisma.bOQSection.findFirst({
+async function getSectionRecord(companyId: string, sectionId: string, db: DbClient = prisma) {
+  const section = await db.bOQSection.findFirst({
     where: { id: sectionId, companyId },
     include: { boq: true, items: { orderBy: { sortOrder: "asc" }, include: { options: true } } },
   });
@@ -811,6 +811,104 @@ export type BOQItemMutationContext = {
   };
 };
 
+/**
+ * Immutable, pre-mutation context for one BOQ item creation. Preparing this
+ * context performs every section/editability check and the existing
+ * commercial calculation without writing anything. A workflow that needs an
+ * outer transaction can therefore validate first, claim its workflow record,
+ * then persist the already-prepared item without repeating reads or pricing
+ * logic after that claim.
+ */
+export async function prepareBOQItemCreation(
+  companyId: string,
+  sectionId: string,
+  input: BOQItemWriteInput,
+  database: DbClient = prisma,
+  expectedBoqId?: string,
+) {
+  const section = await getSectionRecord(companyId, sectionId, database);
+  if (expectedBoqId && section.boqId !== expectedBoqId) {
+    throw new AppError(
+      "SECTION_BOQ_MISMATCH",
+      "The selected BOQ section does not belong to the target BOQ.",
+      400,
+    );
+  }
+  assertBOQEditable(section.boq, "edit");
+  const marginMode = input.marginMode ?? MarginMode.MARKUP;
+  const amounts = calculateBOQItem({
+    quantity: input.quantity,
+    unitCost: input.unitCost,
+    freightCost: input.freightCost ?? 0,
+    installationCost: input.installationCost ?? 0,
+    additionalCost: input.additionalCost ?? 0,
+    marginMode,
+    marginPercentage: input.marginPercentage,
+  });
+  return { section, input, marginMode, amounts };
+}
+
+export type PreparedBOQItemCreation = Awaited<ReturnType<typeof prepareBOQItemCreation>>;
+
+/** Persist a context produced by prepareBOQItemCreation inside its caller's transaction. */
+export async function createPreparedBOQItem(
+  companyId: string,
+  prepared: PreparedBOQItemCreation,
+  tx: Prisma.TransactionClient,
+) {
+  const { section, input, marginMode, amounts } = prepared;
+  await claimEditableBOQ(tx, companyId, section.boqId, section.boq.version);
+  const item = await tx.bOQItem.create({
+    data: {
+      companyId,
+      sectionId: section.id,
+      itemNumber: input.itemNumber,
+      itemCode: input.itemCode,
+      category: input.category,
+      description: input.description,
+      specification: input.specification ?? "",
+      quantity: new Prisma.Decimal(input.quantity),
+      unit: input.unit,
+      unitCost: new Prisma.Decimal(input.unitCost),
+      freightCost: new Prisma.Decimal(input.freightCost ?? 0),
+      installationCost: new Prisma.Decimal(input.installationCost ?? 0),
+      additionalCost: new Prisma.Decimal(input.additionalCost ?? 0),
+      ...amounts,
+      marginMode,
+      marginPercentage: new Prisma.Decimal(input.marginPercentage),
+      wastagePercentage: new Prisma.Decimal(input.wastagePercentage ?? 0),
+      taxApplicable: input.taxApplicable ?? true,
+      sourceReference: input.sourceReference ?? "",
+      roomOrZone: input.roomOrZone ?? "",
+      drawingReference: input.drawingReference ?? "",
+      confidenceScore: new Prisma.Decimal(input.confidenceScore ?? 100),
+      status: input.status ?? BOQItemStatus.DRAFT,
+      notes: input.notes ?? "",
+      sortOrder: input.sortOrder ?? section.items.length + 1,
+      options: input.options
+        ? {
+            create: input.options.map((option) => ({
+              companyId,
+              label: option.label,
+              description: option.description ?? "",
+              specification: option.specification ?? "",
+              rate: new Prisma.Decimal(option.rate ?? 0),
+              isSelected: option.isSelected ?? false,
+            })),
+          }
+        : undefined,
+    },
+    include: { options: true },
+  });
+  await createAuditLog(companyId, {
+    entityType: "BOQItem",
+    entityId: item.id,
+    action: "ITEM_ADDED",
+    payload: { boqId: section.boqId, sectionId: section.id, itemCode: item.itemCode },
+  }, tx);
+  return item;
+}
+
 async function getItemRecord(companyId: string, itemId: string) {
   const item = await prisma.bOQItem.findFirst({
     where: { id: itemId, companyId },
@@ -839,76 +937,15 @@ export async function getBOQItemRecord(companyId: string, itemId: string) {
  * finding-to-BOQ imports).
  */
 export async function createBOQItem(companyId: string, sectionId: string, input: BOQItemWriteInput, externalTx?: Prisma.TransactionClient) {
-  const section = await getSectionRecord(companyId, sectionId);
-  assertBOQEditable(section.boq, "edit");
-  const marginMode = input.marginMode ?? MarginMode.MARKUP;
-  const amounts = calculateBOQItem({
-    quantity: input.quantity,
-    unitCost: input.unitCost,
-    freightCost: input.freightCost ?? 0,
-    installationCost: input.installationCost ?? 0,
-    additionalCost: input.additionalCost ?? 0,
-    marginMode,
-    marginPercentage: input.marginPercentage,
-  });
-  const run = async (tx: Prisma.TransactionClient) => {
-    await claimEditableBOQ(tx, companyId, section.boqId, section.boq.version);
-    const item = await tx.bOQItem.create({
-      data: {
-        companyId,
-        sectionId: section.id,
-        itemNumber: input.itemNumber,
-        itemCode: input.itemCode,
-        category: input.category,
-        description: input.description,
-        specification: input.specification ?? "",
-        quantity: new Prisma.Decimal(input.quantity),
-        unit: input.unit,
-        unitCost: new Prisma.Decimal(input.unitCost),
-        freightCost: new Prisma.Decimal(input.freightCost ?? 0),
-        installationCost: new Prisma.Decimal(input.installationCost ?? 0),
-        additionalCost: new Prisma.Decimal(input.additionalCost ?? 0),
-        ...amounts,
-        marginMode,
-        marginPercentage: new Prisma.Decimal(input.marginPercentage),
-        wastagePercentage: new Prisma.Decimal(input.wastagePercentage ?? 0),
-        taxApplicable: input.taxApplicable ?? true,
-        sourceReference: input.sourceReference ?? "",
-        roomOrZone: input.roomOrZone ?? "",
-        drawingReference: input.drawingReference ?? "",
-        confidenceScore: new Prisma.Decimal(input.confidenceScore ?? 100),
-        status: input.status ?? BOQItemStatus.DRAFT,
-        notes: input.notes ?? "",
-        sortOrder: input.sortOrder ?? section.items.length + 1,
-        options: input.options
-          ? {
-              create: input.options.map((option) => ({
-                companyId,
-                label: option.label,
-                description: option.description ?? "",
-                specification: option.specification ?? "",
-                rate: new Prisma.Decimal(option.rate ?? 0),
-                isSelected: option.isSelected ?? false,
-              })),
-            }
-          : undefined,
-      },
-      include: { options: true },
-    });
-    await createAuditLog(companyId, {
-      entityType: "BOQItem",
-      entityId: item.id,
-      action: "ITEM_ADDED",
-      payload: { boqId: section.boqId, sectionId: section.id, itemCode: item.itemCode },
-    }, tx);
-    return item;
-  };
-  const created = externalTx ? await run(externalTx) : await prisma.$transaction(run);
+  const prepared = await prepareBOQItemCreation(companyId, sectionId, input, externalTx ?? prisma);
+  const created = externalTx
+    ? await createPreparedBOQItem(companyId, prepared, externalTx)
+    : await prisma.$transaction((tx) => createPreparedBOQItem(companyId, prepared, tx));
   // When called with an externally-managed transaction, the caller reads the
   // final BOQ state itself after that transaction commits — reading it here
   // via the top-level `prisma` client would see pre-commit state.
   if (externalTx) return { item: created };
-  return { item: created, boq: await getBOQ(companyId, section.boqId) };
+  return { item: created, boq: await getBOQ(companyId, prepared.section.boqId) };
 }
 
 export async function updateBOQItem(

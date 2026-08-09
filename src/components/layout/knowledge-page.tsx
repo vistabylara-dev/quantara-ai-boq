@@ -1,7 +1,16 @@
 import React, { ReactNode } from "react";
 import Link from "next/link";
 import { ArrowRight, CheckCircle2 } from "lucide-react";
+import PublicJsonLd from "@/components/seo/public-json-ld";
 import PublicBreadcrumb from "@/components/ui/public-breadcrumb";
+import {
+  buildPublicPageGraph,
+  inferPublicPathFromSchema,
+} from "@/lib/public-site/schema";
+import {
+  getPublicSearchPage,
+  type PublicSearchPath,
+} from "@/lib/public-site/search-registry";
 
 export interface KnowledgeFaq {
   question: string;
@@ -33,6 +42,7 @@ export interface KnowledgeSection {
 }
 
 export interface KnowledgePageContent {
+  path?: string;
   breadcrumbLabel: string;
   title: string;
   summary: string;
@@ -42,28 +52,40 @@ export interface KnowledgePageContent {
   sections: KnowledgeSection[];
   faqs: KnowledgeFaq[];
   relatedReading: KnowledgeLink[];
+  /** @deprecated Kept only to infer the route while callers migrate to `path`. */
   schema?: Record<string, unknown>;
 }
 
 export default function KnowledgePage({ content }: { content: KnowledgePageContent }) {
-  const schemaString = content.schema ? JSON.stringify(content.schema) : null;
+  const path = content.path ?? inferPublicPathFromSchema(content.schema);
+  const searchPage = path ? getPublicSearchPage(path as PublicSearchPath) : null;
+  const answerFirst = content.directAnswer ?? content.summary;
+  const breadcrumbItems = [
+    { name: "Home", item: "/" },
+    { name: "Resources", item: "/resources" },
+    { name: content.breadcrumbLabel, item: path ?? undefined },
+  ];
+  const jsonLd = searchPage
+    ? buildPublicPageGraph({
+        path: searchPage.path,
+        title: searchPage.title,
+        description: searchPage.description,
+        breadcrumbs: breadcrumbItems.map((item) => ({
+          name: item.name,
+          path: item.item,
+        })),
+        faqs: content.faqs,
+        kind: "tech-article",
+      })
+    : null;
 
   return (
     <div className="w-full bg-white text-slate-900 font-sans">
-      {schemaString && (
-        <script
-          type="application/ld+json"
-          dangerouslySetInnerHTML={{ __html: schemaString }}
-        />
-      )}
+      {jsonLd && <PublicJsonLd data={jsonLd} />}
       
       {/* Basic header placeholder that matches the public design (this assumes public header is injected or we just rely on standard navigation styles) */}
       <div className="flex-1 w-full max-w-4xl mx-auto px-4 py-12 md:py-20">
-        <PublicBreadcrumb items={[
-          { name: "Home", item: "/" },
-          { name: "Resources", item: "/resources" },
-          { name: content.breadcrumbLabel }
-        ]} />
+        <PublicBreadcrumb items={breadcrumbItems} tone="light" />
 
         <article>
           <header className="mb-12">
@@ -71,11 +93,9 @@ export default function KnowledgePage({ content }: { content: KnowledgePageConte
               {content.title}
             </h1>
             
-            {content.directAnswer && (
-              <div className="text-lg text-slate-800 leading-relaxed border-l-4 border-blue-600 pl-5 py-2 bg-slate-50 mb-8 rounded-r-lg">
-                {content.directAnswer}
-              </div>
-            )}
+            <div className="text-lg text-slate-800 leading-relaxed border-l-4 border-blue-600 pl-5 py-2 bg-slate-50 mb-8 rounded-r-lg">
+              {answerFirst}
+            </div>
 
             {content.keyTakeaways && content.keyTakeaways.length > 0 && (
               <div className="bg-blue-50/50 border border-blue-100 rounded-xl p-6 mb-8">
@@ -93,11 +113,13 @@ export default function KnowledgePage({ content }: { content: KnowledgePageConte
               </div>
             )}
 
-            <div className="bg-slate-50 border border-slate-100 rounded-xl p-6 md:p-8">
-              <p className="text-lg text-slate-700 leading-relaxed font-medium">
-                {content.summary}
-              </p>
-            </div>
+            {content.directAnswer && content.summary !== content.directAnswer && (
+              <div className="bg-slate-50 border border-slate-100 rounded-xl p-6 md:p-8">
+                <p className="text-lg text-slate-700 leading-relaxed font-medium">
+                  {content.summary}
+                </p>
+              </div>
+            )}
           </header>
 
           <div className="prose prose-slate prose-lg max-w-none">
@@ -144,10 +166,11 @@ export default function KnowledgePage({ content }: { content: KnowledgePageConte
                   {section.table && (
                     <div className="overflow-x-auto mb-6">
                       <table className="w-full text-left border-collapse">
+                        <caption className="sr-only">{section.heading} reference table</caption>
                         <thead>
                           <tr className="bg-slate-50 border-y border-slate-200">
                             {section.table.headers.map((h, i) => (
-                              <th key={i} className="px-4 py-3 font-semibold text-slate-900 border-x border-slate-200">{h}</th>
+                              <th key={i} scope="col" className="px-4 py-3 font-semibold text-slate-900 border-x border-slate-200">{h}</th>
                             ))}
                           </tr>
                         </thead>
@@ -155,7 +178,11 @@ export default function KnowledgePage({ content }: { content: KnowledgePageConte
                           {section.table.rows.map((row, i) => (
                             <tr key={i} className="border-b border-slate-200 hover:bg-slate-50/50">
                               {row.map((cell, j) => (
-                                <td key={j} className="px-4 py-3 text-slate-600 border-x border-slate-200">{cell}</td>
+                                j === 0 ? (
+                                  <th key={j} scope="row" className="px-4 py-3 text-left font-medium text-slate-700 border-x border-slate-200">{cell}</th>
+                                ) : (
+                                  <td key={j} className="px-4 py-3 text-slate-600 border-x border-slate-200">{cell}</td>
+                                )
                               ))}
                             </tr>
                           ))}
@@ -230,7 +257,7 @@ export default function KnowledgePage({ content }: { content: KnowledgePageConte
 
           {/* CTA */}
           <section className="bg-blue-900 rounded-2xl p-8 md:p-12 text-center text-white">
-            <h2 className="text-3xl font-bold mb-4">Improve Your BOQ Workflows</h2>
+            <h2 className="text-3xl font-bold mb-4">Explore Related BOQ Workflows</h2>
             <p className="text-blue-100 mb-8 max-w-2xl mx-auto text-lg">
               Quantara helps construction teams turn supported project documents into structured BOQ records, controlled templates, revisions and professional outputs.
             </p>

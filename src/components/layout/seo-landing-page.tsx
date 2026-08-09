@@ -1,11 +1,26 @@
-"use client";
-
-import React, { useState, type ReactNode } from "react";
+import React, { type ReactNode } from "react";
 import Link from "next/link";
-import { ChevronRight, ChevronDown, CheckCircle2, FileText, Settings, ShieldCheck, ArrowRight, Zap, FolderKanban } from "lucide-react";
-import PublicBreadcrumb, { generateBreadcrumbSchema } from "@/components/ui/public-breadcrumb";
+import { CheckCircle2, ChevronDown } from "lucide-react";
+import PublicJsonLd from "@/components/seo/public-json-ld";
+import PublicBreadcrumb from "@/components/ui/public-breadcrumb";
+import {
+  PUBLIC_CAPABILITY_STATUS_LABELS,
+  getPublicCapability,
+  type PublicCapabilityId,
+  type PublicCapabilityStatus,
+} from "@/lib/public-site/product-truth";
+import {
+  getPublicSearchPage,
+  type PublicSearchPath,
+} from "@/lib/public-site/search-registry";
+import { buildPublicPageGraph } from "@/lib/public-site/schema";
 
-export type FeatureStatus = "Live" | "Preview UI" | "In Development" | "Planned";
+type SeoCapabilityItem = {
+  capabilityId: PublicCapabilityId;
+  name: string;
+  description: string;
+  limitation?: string;
+};
 
 export interface SeoLandingPageContent {
   breadcrumbLabel: string;
@@ -25,11 +40,7 @@ export interface SeoLandingPageContent {
     heading: string;
     paragraphs: (string | ReactNode)[];
   };
-  relevantFeatures: Array<{
-    name: string;
-    status: FeatureStatus;
-    description: string;
-  }>;
+  relevantFeatures: SeoCapabilityItem[];
   workflowExample: {
     heading: string;
     introduction: string;
@@ -38,17 +49,8 @@ export interface SeoLandingPageContent {
       description: string;
     }>;
   };
-  supportedInputs: Array<{
-    name: string;
-    status: FeatureStatus;
-    description: string;
-    limitation?: string;
-  }>;
-  supportedOutputs: Array<{
-    name: string;
-    status: FeatureStatus;
-    description: string;
-  }>;
+  supportedInputs: SeoCapabilityItem[];
+  supportedOutputs: SeoCapabilityItem[];
   limitations: string[];
   faqs: Array<{
     question: string;
@@ -62,25 +64,54 @@ export interface SeoLandingPageContent {
   }>;
 }
 
-const statusColors = {
-  "Live": "bg-green-500",
-  "Preview UI": "bg-amber-400",
-  "In Development": "bg-amber-500 animate-pulse",
-  "Planned": "bg-slate-300 dark:bg-slate-700",
+const statusColors: Record<PublicCapabilityStatus, string> = {
+  AVAILABLE: "bg-green-500",
+  CONTROLLED_ACCESS: "bg-blue-500",
+  LIMITED: "bg-amber-400",
+  NOT_AVAILABLE: "bg-slate-300 dark:bg-slate-700",
 };
 
+const statusBadgeColors: Record<PublicCapabilityStatus, string> = {
+  AVAILABLE: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400",
+  CONTROLLED_ACCESS: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400",
+  LIMITED: "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400",
+  NOT_AVAILABLE: "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300",
+};
+
+function getPublicStatus(capabilityId: PublicCapabilityId) {
+  const canonicalStatus = getPublicCapability(capabilityId).status;
+  return {
+    canonicalStatus,
+    label: PUBLIC_CAPABILITY_STATUS_LABELS[canonicalStatus],
+  };
+}
+
 export default function SeoLandingPage({ content, currentPath }: { content: SeoLandingPageContent; currentPath: string }) {
-  const [openFaq, setOpenFaq] = useState<number | null>(0);
+  const searchPage = getPublicSearchPage(currentPath as PublicSearchPath);
+  const breadcrumbItems = [
+    { name: "Home", item: "/" },
+    { name: content.breadcrumbLabel, item: currentPath },
+  ];
+  const schemaFaqs = content.faqs.flatMap((faq) => {
+    const answer = faq.schemaAnswer ?? (typeof faq.answer === "string" ? faq.answer : null);
+    return answer ? [{ question: faq.question, answer }] : [];
+  });
+  const jsonLd = buildPublicPageGraph({
+    path: searchPage.path,
+    title: searchPage.title,
+    description: searchPage.description,
+    breadcrumbs: breadcrumbItems.map((item) => ({ name: item.name, path: item.item })),
+    faqs: schemaFaqs,
+  });
 
   return (
     <div className="flex flex-col min-h-screen bg-white dark:bg-[#030508] text-slate-900 dark:text-slate-100">
+      <PublicJsonLd data={jsonLd} />
       <div className="flex-1 pb-24">
         {/* Breadcrumb */}
-        <div className="bg-slate-50 dark:bg-slate-900/30 border-b border-slate-100 dark:border-slate-800/50 py-4 px-4">
-          <div className="container mx-auto max-w-4xl text-sm font-medium flex items-center gap-2 text-slate-500 dark:text-slate-400">
-            <Link href="/" className="hover:text-slate-900 dark:hover:text-white transition-colors">Home</Link>
-            <ChevronRight className="w-4 h-4 opacity-50" />
-            <span className="text-slate-900 dark:text-slate-200">{content.breadcrumbLabel}</span>
+        <div className="border-b border-slate-100 bg-slate-50 px-4 py-4 dark:border-slate-800/50 dark:bg-slate-900/30">
+          <div className="container mx-auto max-w-4xl">
+            <PublicBreadcrumb items={breadcrumbItems} className="text-sm" />
           </div>
         </div>
 
@@ -146,18 +177,21 @@ export default function SeoLandingPage({ content, currentPath }: { content: SeoL
             <section>
               <h2 className="text-2xl font-bold mb-6">Relevant Features</h2>
               <div className="grid gap-6">
-                {content.relevantFeatures.map((f, idx) => (
-                  <div key={idx} className="p-6 bg-white dark:bg-slate-900/50 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
-                    <div>
-                      <h3 className="text-lg font-bold mb-2 text-slate-900 dark:text-white">{f.name}</h3>
-                      <p className="text-slate-600 dark:text-slate-400">{f.description}</p>
+                {content.relevantFeatures.map((feature) => {
+                  const status = getPublicStatus(feature.capabilityId);
+                  return (
+                    <div key={feature.name} className="p-6 bg-white dark:bg-slate-900/50 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
+                      <div>
+                        <h3 className="text-lg font-bold mb-2 text-slate-900 dark:text-white">{feature.name}</h3>
+                        <p className="text-slate-600 dark:text-slate-400">{feature.description}</p>
+                      </div>
+                      <div className="flex items-center gap-2 px-3 py-1.5 bg-slate-50 dark:bg-slate-800/50 rounded-full text-sm font-medium border border-slate-200 dark:border-slate-700 shrink-0">
+                        <span className={`w-2 h-2 rounded-full ${statusColors[status.canonicalStatus]}`} aria-hidden="true" />
+                        {status.label}
+                      </div>
                     </div>
-                    <div className="flex items-center gap-2 px-3 py-1.5 bg-slate-50 dark:bg-slate-800/50 rounded-full text-sm font-medium border border-slate-200 dark:border-slate-700 shrink-0">
-                      <span className={`w-2 h-2 rounded-full ${statusColors[f.status]}`} />
-                      {f.status}
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </section>
 
@@ -186,43 +220,46 @@ export default function SeoLandingPage({ content, currentPath }: { content: SeoL
               <section>
                 <h2 className="text-2xl font-bold mb-6">Supported Inputs</h2>
                 <div className="space-y-4">
-                  {content.supportedInputs.map((input, idx) => (
-                    <div key={idx} className="p-4 bg-white dark:bg-slate-900/50 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
-                      <div className="flex items-center justify-between mb-2">
-                        <h3 className="font-semibold">{input.name}</h3>
-                        <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
-                          input.status === 'Live' ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' :
-                          'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300'
-                        }`}>
-                          {input.status}
-                        </span>
+                  {content.supportedInputs.map((input) => {
+                    const status = getPublicStatus(input.capabilityId);
+                    return (
+                      <div key={input.name} className="p-4 bg-white dark:bg-slate-900/50 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
+                        <div className="flex items-center justify-between mb-2">
+                          <h3 className="font-semibold">{input.name}</h3>
+                          <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${statusBadgeColors[status.canonicalStatus]}`}>
+                            {status.label}
+                          </span>
+                        </div>
+                        <p className="text-sm text-slate-600 dark:text-slate-400">{input.description}</p>
+                        {input.limitation && (
+                          <p className="text-xs text-amber-600 dark:text-amber-400 mt-2 font-medium">Note: {input.limitation}</p>
+                        )}
                       </div>
-                      <p className="text-sm text-slate-600 dark:text-slate-400">{input.description}</p>
-                      {input.limitation && (
-                        <p className="text-xs text-amber-600 dark:text-amber-400 mt-2 font-medium">Note: {input.limitation}</p>
-                      )}
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </section>
 
               <section>
                 <h2 className="text-2xl font-bold mb-6">Supported Outputs</h2>
                 <div className="space-y-4">
-                  {content.supportedOutputs.map((output, idx) => (
-                    <div key={idx} className="p-4 bg-white dark:bg-slate-900/50 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
-                      <div className="flex items-center justify-between mb-2">
-                        <h3 className="font-semibold">{output.name}</h3>
-                        <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
-                          output.status === 'Live' ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' :
-                          'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300'
-                        }`}>
-                          {output.status}
-                        </span>
+                  {content.supportedOutputs.map((output) => {
+                    const status = getPublicStatus(output.capabilityId);
+                    return (
+                      <div key={output.name} className="p-4 bg-white dark:bg-slate-900/50 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
+                        <div className="flex items-center justify-between mb-2">
+                          <h3 className="font-semibold">{output.name}</h3>
+                          <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${statusBadgeColors[status.canonicalStatus]}`}>
+                            {status.label}
+                          </span>
+                        </div>
+                        <p className="text-sm text-slate-600 dark:text-slate-400">{output.description}</p>
+                        {output.limitation && (
+                          <p className="text-xs text-amber-600 dark:text-amber-400 mt-2 font-medium">Note: {output.limitation}</p>
+                        )}
                       </div>
-                      <p className="text-sm text-slate-600 dark:text-slate-400">{output.description}</p>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </section>
             </div>
@@ -252,26 +289,18 @@ export default function SeoLandingPage({ content, currentPath }: { content: SeoL
             <section>
               <h2 className="text-3xl font-bold mb-8 text-center">Frequently Asked Questions</h2>
               <div className="max-w-3xl mx-auto space-y-4">
-                {content.faqs.map((faq, index) => (
-                  <div key={index} className="border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden bg-white dark:bg-slate-950">
-                    <button
-                      onClick={() => setOpenFaq(openFaq === index ? null : index)}
-                      className="w-full px-6 py-4 flex items-center justify-between text-left focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-inset"
-                      aria-expanded={openFaq === index}
-                    >
+                {content.faqs.map((faq) => (
+                  <details key={faq.question} className="group overflow-hidden rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-950">
+                    <summary className="flex w-full cursor-pointer list-none items-center justify-between px-6 py-4 text-left focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-inset [&::-webkit-details-marker]:hidden">
                       <span className="font-semibold text-slate-900 dark:text-slate-100 pr-4">{faq.question}</span>
-                      <ChevronDown className={`w-5 h-5 text-slate-500 transition-transform duration-200 shrink-0 ${openFaq === index ? "rotate-180" : ""}`} />
-                    </button>
-                    <div
-                      className={`px-6 overflow-hidden transition-all duration-200 ease-in-out ${
-                        openFaq === index ? "max-h-96 pb-4 opacity-100" : "max-h-0 opacity-0"
-                      }`}
-                    >
+                      <ChevronDown className="h-5 w-5 shrink-0 text-slate-500 transition-transform duration-200 group-open:rotate-180" aria-hidden="true" />
+                    </summary>
+                    <div className="px-6 pb-4">
                       <p className="text-slate-600 dark:text-slate-400 text-sm leading-relaxed">
                         {faq.answer}
                       </p>
                     </div>
-                  </div>
+                  </details>
                 ))}
               </div>
             </section>
@@ -295,7 +324,7 @@ export default function SeoLandingPage({ content, currentPath }: { content: SeoL
       {/* CTA Section */}
       <section className="py-24 px-4 bg-blue-600 mt-auto">
         <div className="container mx-auto max-w-4xl text-center">
-          <h2 className="text-3xl md:text-4xl font-bold text-white mb-8">Ready to streamline your BOQ workflows?</h2>
+          <h2 className="text-3xl md:text-4xl font-bold text-white mb-8">Ready to review a structured BOQ workflow?</h2>
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
             <Link href="/register" className="inline-flex items-center justify-center rounded-lg text-base font-bold bg-white text-blue-700 hover:bg-slate-50 h-14 px-8 py-4 shadow-lg w-full sm:w-auto">
               Request Early Access

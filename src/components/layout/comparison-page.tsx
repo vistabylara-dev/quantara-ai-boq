@@ -1,7 +1,13 @@
-"use client";
-import React from 'react';
-import Link from 'next/link';
-import PublicBreadcrumb, { generateBreadcrumbSchema } from "@/components/ui/public-breadcrumb";
+import React from "react";
+import Link from "next/link";
+import PublicJsonLd from "@/components/seo/public-json-ld";
+import PublicBreadcrumb from "@/components/ui/public-breadcrumb";
+import { PROFESSIONAL_REVIEW_NOTICE } from "@/lib/public-site/product-truth";
+import {
+  getPublicSearchPage,
+  type PublicSearchPath,
+} from "@/lib/public-site/search-registry";
+import { buildPublicPageGraph } from "@/lib/public-site/schema";
 
 export interface ComparisonCriteria {
   label: string;
@@ -39,45 +45,43 @@ export interface ComparisonPageProps {
 }
 
 export function ComparisonPage(props: ComparisonPageProps) {
+  const path = `/${props.slug}` as PublicSearchPath;
+  const searchPage = getPublicSearchPage(path);
   const breadcrumbItems = [
     { name: "Home", item: "/" },
     { name: "Comparisons", item: "/comparisons" },
-    { name: props.breadcrumbCurrent, item: `/${props.slug}` }
+    { name: props.breadcrumbCurrent, item: path }
   ];
 
-  const breadcrumbSchema = generateBreadcrumbSchema(breadcrumbItems);
-
-  const jsonLd = {
-    "@context": "https://schema.org",
-    "@graph": [
-      {
-        "@type": "WebPage",
-        "@id": `https://quantara.vistabylara.com/${props.slug}#webpage`,
-        "url": `https://quantara.vistabylara.com/${props.slug}`,
-        "name": props.title,
-        "isPartOf": { "@id": "https://quantara.vistabylara.com/#website" }
-      },
-      breadcrumbSchema,
-      {
-        "@type": "FAQPage",
-        "mainEntity": props.faqs.map(faq => ({
-          "@type": "Question",
-          "name": faq.question,
-          "acceptedAnswer": {
-            "@type": "Answer",
-            "text": faq.answer
-          }
-        }))
-      }
-    ]
-  };
+  const jsonLd = buildPublicPageGraph({
+    path: searchPage.path,
+    title: searchPage.title,
+    description: searchPage.description,
+    breadcrumbs: breadcrumbItems.map((item) => ({
+      name: item.name,
+      path: item.item,
+    })),
+    faqs: props.faqs,
+  });
 
   return (
     <div className="min-h-screen flex flex-col bg-white font-sans text-slate-900">
-      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
+      <PublicJsonLd data={jsonLd} />
 
       <div className="flex-1 max-w-5xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-12 md:py-20 mt-16">
-        <PublicBreadcrumb items={breadcrumbItems} />
+        <PublicBreadcrumb items={breadcrumbItems} tone="light" />
+
+        <header className="mb-16">
+          <h1 className="text-4xl font-bold tracking-tight text-slate-900 md:text-5xl">
+            {props.h1}
+          </h1>
+          <p className="mt-6 border-l-4 border-blue-600 bg-blue-50 px-5 py-4 text-lg leading-8 text-slate-700">
+            {props.directAnswer}
+          </p>
+          <p className="mt-4 text-sm leading-6 text-slate-500">
+            {PROFESSIONAL_REVIEW_NOTICE}
+          </p>
+        </header>
 
         <section className="mb-16">
           <h2 className="text-2xl font-bold text-slate-900 mb-6">Quick Decision Summary</h2>
@@ -135,17 +139,20 @@ export function ComparisonPage(props: ComparisonPageProps) {
         <section className="mb-16 overflow-x-auto">
           <h2 className="text-2xl font-bold text-slate-900 mb-6">Capability Comparison</h2>
           <table className="w-full text-left border-collapse min-w-[600px]">
+            <caption className="sr-only">
+              Capability comparison between {props.approachAName} and {props.approachBName}
+            </caption>
             <thead>
               <tr className="border-b-2 border-slate-200">
-                <th className="py-4 px-4 text-sm font-semibold text-slate-900 w-1/3">Criteria</th>
-                <th className="py-4 px-4 text-sm font-semibold text-slate-900 w-1/3 bg-slate-50">{props.approachAName}</th>
-                <th className="py-4 px-4 text-sm font-semibold text-slate-900 w-1/3 bg-slate-50">{props.approachBName}</th>
+                <th scope="col" className="py-4 px-4 text-sm font-semibold text-slate-900 w-1/3">Criteria</th>
+                <th scope="col" className="py-4 px-4 text-sm font-semibold text-slate-900 w-1/3 bg-slate-50">{props.approachAName}</th>
+                <th scope="col" className="py-4 px-4 text-sm font-semibold text-slate-900 w-1/3 bg-slate-50">{props.approachBName}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {props.comparisonCriteria.map((c, i) => (
                 <tr key={i} className="hover:bg-slate-50 transition-colors">
-                  <td className="py-4 px-4 text-sm font-medium text-slate-900">{c.label}</td>
+                  <th scope="row" className="py-4 px-4 text-sm font-medium text-slate-900">{c.label}</th>
                   <td className="py-4 px-4 text-sm text-slate-600">{c.approachAValue}</td>
                   <td className="py-4 px-4 text-sm text-slate-600">{c.approachBValue}</td>
                 </tr>

@@ -1,26 +1,16 @@
-import { Metadata } from "next";
+import { createPublicPageMetadata, PUBLIC_CONTENT_REVIEW_DATE } from "@/lib/public-site/search-registry";
 import KnowledgePage, { KnowledgePageContent } from "@/components/layout/knowledge-page";
 
-export const metadata: Metadata = {
-  title: "Common BOQ Errors and How to Review Them",
-  description: "Learn common Bill of Quantities errors involving scope, descriptions, units, quantities, duplicates, omissions, revisions and document formatting.",
-  alternates: {
-    canonical: "https://quantara.vistabylara.com/common-boq-errors",
-  },
-  openGraph: {
-    title: "Common BOQ Errors and How to Review Them | Quantara",
-    description: "Learn common Bill of Quantities errors involving scope, descriptions, units, quantities, duplicates, omissions, revisions and document formatting.",
-    url: "https://quantara.vistabylara.com/common-boq-errors",
-    type: "article",
-  },
-};
+export const metadata = createPublicPageMetadata("/common-boq-errors");
+
+
 
 export default function Page() {
   const content: KnowledgePageContent = {
     breadcrumbLabel: "Common BOQ Errors That Require Professional Review",
     title: "Common BOQ Errors That Require Professional Review",
     summary: "Bills of Quantities are highly detailed documents, making them susceptible to human error during preparation, extraction, and pricing. Identifying common BOQ errors—such as incorrect units, missed scope, and formula breakdowns—is a crucial skill for estimators and commercial teams to protect project profitability.",
-    reviewedDate: new Date().toISOString().split("T")[0],
+    reviewedDate: PUBLIC_CONTENT_REVIEW_DATE,
     sections: [
   {
     "id": "why-it-matters",
@@ -49,7 +39,7 @@ export default function Page() {
     "heading": "A Practical Example",
     "paragraphs": [
       "Consider a hypothetical excavation project. The BOQ lists the unit for soil removal as \"m2\" (square meters) instead of \"m3\" (cubic meters).",
-      "An estimator might price the area perfectly, but fail to account for the depth of the excavation. When the trucks arrive to haul the soil, the contractor realizes they have underpriced the haulage by a factor of ten due to a simple unit error."
+      "An estimator might price the measured area but fail to account for excavation depth. The resulting volume and haulage allowance can then be materially understated because of the unit error."
     ]
   },
   {
@@ -64,8 +54,8 @@ export default function Page() {
     "id": "quantara-workflow",
     "heading": "How Quantara Helps Mitigate Errors",
     "paragraphs": [
-      "Quantara reduces data-entry errors by structurally extracting PDF BOQs rather than forcing manual re-typing. It maintains a clean, structured database of your items, making it easier to spot inconsistencies.",
-      "Quantara currently focuses on supported document extraction, BOQ structuring, project organization, templates, revisions, and professional outputs."
+      "Quantara can reduce repeated transcription for supported text-based PDF and spreadsheet inputs by presenting captured candidates for review. It does not guarantee fewer errors or detect every inconsistency.",
+      "Confirmed information can be organized in BOQ sections and distinct revisions, with professional checking required throughout."
     ]
   }
 ],
@@ -105,15 +95,7 @@ export default function Page() {
     "label": "How to Review AI-Extracted BOQs"
   }
 ],
-    schema: {
-      "@context": "https://schema.org",
-      "@type": "TechArticle",
-      "headline": "Common BOQ Errors That Require Professional Review",
-      "description": "Learn common Bill of Quantities errors involving scope, descriptions, units, quantities, duplicates, omissions, revisions and document formatting.",
-      "url": "https://quantara.vistabylara.com/common-boq-errors",
-      "publisher": { "@id": "https://quantara.vistabylara.com/#organization" },
-      "mainEntityOfPage": { "@id": "https://quantara.vistabylara.com/#website" }
-    }
+    path: "/common-boq-errors"
   };
 
   return <KnowledgePage content={content} />;

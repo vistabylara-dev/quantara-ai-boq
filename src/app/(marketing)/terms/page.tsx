@@ -1,20 +1,22 @@
+import { createPublicPageMetadata } from "@/lib/public-site/search-registry";
 import React from "react";
-import Link from "next/link";
-import { Metadata } from "next";
-export const metadata: Metadata = {
-  alternates: { canonical: "/terms" },
-  title: "Terms of Controlled Early Access",
-  description: "Terms of Controlled Early Access for Quantara.",
-};
+import { QUANTARA_ENTITY_DEFINITION } from "@/lib/public-site/product-truth";
+import { PublicPageJsonLd } from "@/components/seo/public-json-ld";
+import PublicBreadcrumb from "@/components/ui/public-breadcrumb";
+
+export const metadata = createPublicPageMetadata("/terms");
+
+
 
 export default function TermsPage() {
   return (
-    <div className="max-w-3xl mx-auto py-24 px-4 min-h-[70vh]">
-      <div className="mb-8">
-        <Link href="/" className="text-blue-600 hover:underline flex items-center gap-2 text-sm font-medium">
-          ← Back to Home
-        </Link>
-      </div>
+    <>
+      <PublicPageJsonLd
+        path="/terms"
+        breadcrumbs={[{ name: "Home", path: "/" }, { name: "Terms", path: "/terms" }]}
+      />
+      <div className="max-w-3xl mx-auto py-24 px-4 min-h-[70vh]">
+      <PublicBreadcrumb items={[{ name: "Home", item: "/" }, { name: "Terms" }]} />
       
       <div className="mb-12">
         <h1 className="text-4xl font-bold text-slate-900 dark:text-white mb-4">Terms of Controlled Early Access</h1>
@@ -33,7 +35,7 @@ export default function TermsPage() {
         <section>
           <h2 className="text-2xl font-bold text-slate-900 dark:text-white mb-4">Product status</h2>
           <p className="text-slate-700 dark:text-slate-300">
-            Quantara is an AI-assisted BOQ and construction-estimating platform in Controlled Early Access.
+            {QUANTARA_ENTITY_DEFINITION} It is currently offered through Controlled Early Access.
           </p>
           <p className="text-slate-700 dark:text-slate-300 mt-4">
             Features may be incomplete, changed, limited, interrupted or removed during this stage.
@@ -41,10 +43,10 @@ export default function TermsPage() {
           <p className="text-slate-700 dark:text-slate-300 mt-4">
             Feature status may be shown as:</p>
           <ul className="list-disc pl-5 space-y-1 text-slate-700 dark:text-slate-300 mt-3">
-            <li>Live;</li>
-            <li>Preview UI;</li>
-            <li>In Development;</li>
-            <li>Planned.</li>
+            <li>Available;</li>
+            <li>Controlled access;</li>
+            <li>Limited;</li>
+            <li>Not available.</li>
           </ul>
         </section>
 
@@ -71,7 +73,7 @@ export default function TermsPage() {
           <p className="text-slate-700 dark:text-slate-300 mb-2">Early Access output may contain:</p>
           <ul className="list-disc pl-5 space-y-1 text-slate-700 dark:text-slate-300">
             <li>extraction errors;</li>
-            <li>OCR errors;</li>
+            <li>text or table extraction errors;</li>
             <li>omissions;</li>
             <li>duplicated items;</li>
             <li>incorrect grouping;</li>
@@ -85,10 +87,10 @@ export default function TermsPage() {
         <section>
           <h2 className="text-2xl font-bold text-slate-900 dark:text-white mb-4">Supported formats</h2>
           <p className="text-slate-700 dark:text-slate-300">
-            Only formats expressly marked Live should be treated as currently supported.
+            Only formats expressly marked Available should be treated as currently supported.
           </p>
           <p className="text-slate-700 dark:text-slate-300 mt-4">
-            CAD, BIM, IFC, DWG, Revit, visual quantity takeoff, drawing-scale measurement and automatic floor-plan interpretation must not be assumed to be available unless explicitly confirmed as Live.
+            CAD, BIM, IFC, DWG, Revit, visual quantity takeoff, drawing-scale measurement and automatic floor-plan interpretation must not be assumed to be available unless explicitly confirmed as Available.
           </p>
         </section>
 
@@ -160,5 +162,6 @@ export default function TermsPage() {
         </section>
       </div>
       </div>
+    </>
   );
 }

@@ -1,0 +1,32 @@
+# Quantara
+
+> Quantara is AI-assisted BOQ workflow software for construction professionals. It supports review-led project-source, calculation, BOQ, validation and document workflows while leaving professional judgement and approval with the responsible user.
+
+Quantara is operated by Vista By Lara and is offered through Controlled Early Access. Public capability statements must be read with their stated availability and limitations. Quantara does not claim automatic drawing measurement, OCR extraction from scanned PDFs, guaranteed accuracy, local authority approval, local market rates, or replacement of quantity surveyors and estimators.
+
+Current supported source workflows store extractable text from text-based PDFs, create review candidates only from supported detected table rows, and import structured XLSX or CSV files. Plain PDF paragraph text is not converted into BOQ candidates. Image-only pages can be detected but require manual transcription. Google Drive import requires an authorized controlled-access connection. BOQ documents can use supported PDF, XLSX, CSV, DOCX and HTML flows; technical-report generation is limited to DOCX in supported configured environments, and durable production storage must be confirmed during Controlled Early Access.
+
+## Primary public pages
+
+- [Product overview](https://quantara.vistabylara.com/)
+- [Feature availability and limitations](https://quantara.vistabylara.com/features)
+- [BOQ software workflow](https://quantara.vistabylara.com/boq-software)
+- [Text-based PDF BOQ extraction](https://quantara.vistabylara.com/pdf-boq-extraction)
+- [Scanned PDF and OCR status](https://quantara.vistabylara.com/scanned-pdf-boq)
+- [BOQ calculation formulas](https://quantara.vistabylara.com/boq-calculation-formulas)
+- [BOQ resources](https://quantara.vistabylara.com/resources)
+- [Workflow comparisons](https://quantara.vistabylara.com/comparisons)
+- [UAE and GCC project context](https://quantara.vistabylara.com/gcc-boq-software)
+- [Public HTML sitemap](https://quantara.vistabylara.com/site-map)
+
+## Commercial and policy information
+
+- [Controlled Early Access and commercial availability](https://quantara.vistabylara.com/pricing)
+- [Contact Quantara](https://quantara.vistabylara.com/contact-sales)
+- [Security boundaries](https://quantara.vistabylara.com/security)
+- [Privacy policy](https://quantara.vistabylara.com/privacy)
+- [Controlled Early Access terms](https://quantara.vistabylara.com/terms)
+
+## Citation guidance
+
+Use the public page that directly supports a statement. Do not infer unavailable capabilities, prices, certifications, regulatory compliance, hosting location, accuracy percentages or professional approval from general marketing language.

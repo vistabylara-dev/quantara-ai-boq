@@ -1,20 +1,21 @@
-import React from "react";
-import Link from "next/link";
-import { Metadata } from "next";
-export const metadata: Metadata = {
-  alternates: { canonical: "/privacy" },
-  title: "Privacy Policy",
-  description: "Privacy Policy for Quantara Early Access.",
-};
+import { createPublicPageMetadata } from "@/lib/public-site/search-registry";
+import { QUANTARA_ENTITY_DEFINITION } from "@/lib/public-site/product-truth";
+import { PublicPageJsonLd } from "@/components/seo/public-json-ld";
+import PublicBreadcrumb from "@/components/ui/public-breadcrumb";
+
+export const metadata = createPublicPageMetadata("/privacy");
+
+
 
 export default function PrivacyPage() {
   return (
-    <div className="max-w-3xl mx-auto py-24 px-4 min-h-[70vh]">
-      <div className="mb-8">
-        <Link href="/" className="text-blue-600 hover:underline flex items-center gap-2 text-sm font-medium">
-          ← Back to Home
-        </Link>
-      </div>
+    <>
+      <PublicPageJsonLd
+        path="/privacy"
+        breadcrumbs={[{ name: "Home", path: "/" }, { name: "Privacy Policy", path: "/privacy" }]}
+      />
+      <div className="max-w-3xl mx-auto py-24 px-4 min-h-[70vh]">
+      <PublicBreadcrumb items={[{ name: "Home", item: "/" }, { name: "Privacy Policy" }]} />
       
       <div className="mb-12">
         <h1 className="text-4xl font-bold text-slate-900 dark:text-white mb-4">Privacy Policy</h1>
@@ -22,7 +23,7 @@ export default function PrivacyPage() {
           Last updated: August 5, 2026
         </p>
         <p className="text-lg text-slate-700 dark:text-slate-300">
-          Quantara is a Controlled Early Access BOQ and construction-estimating platform operated by Vista By Lara.
+          {QUANTARA_ENTITY_DEFINITION} It is operated by Vista By Lara and currently offered through Controlled Early Access.
         </p>
         <p className="text-lg text-slate-700 dark:text-slate-300 mt-4">
           This temporary Privacy Policy explains the basic categories of information that may be collected through the Quantara public website, Early Access registration and sales-enquiry processes.
@@ -167,5 +168,6 @@ export default function PrivacyPage() {
         </section>
       </div>
       </div>
+    </>
   );
 }

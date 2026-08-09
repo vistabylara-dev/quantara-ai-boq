@@ -1,10 +1,82 @@
 "use client";
 
 import Link from "next/link";
-import { useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { CheckCircle2 } from "lucide-react";
 import { apiClient, getApiErrorMessage } from "@/lib/api/client";
-import { pricingTiers } from "@/config/pricing";
+import { publicAccessOptions } from "@/config/pricing";
+
+function AccessOptionsFieldset({
+  selectedOption,
+  onSelect,
+}: {
+  selectedOption: string;
+  onSelect: (option: string) => void;
+}) {
+  return (
+    <fieldset>
+      <legend className="text-3xl font-bold text-slate-900 dark:text-white mb-6">Choose How You Want to Start</legend>
+      <p id="access-options-help" className="text-slate-600 dark:text-slate-400 mb-8">
+        This selection records a preference only. It does not create a purchase, subscription, invoice, trial or product entitlement. Availability and any future commercial terms are confirmed separately in writing.
+      </p>
+
+      <div className="space-y-6">
+        {publicAccessOptions.map((option, index) => {
+          const optionId = `access-option-${index}`;
+          const descriptionId = `${optionId}-description`;
+          const featuresId = `${optionId}-features`;
+          const isSelected = selectedOption === option.name;
+
+          return (
+            <div
+              key={option.name}
+              className={`rounded-2xl p-6 ring-1 transition-all focus-within:ring-2 focus-within:ring-blue-500 ${
+                isSelected
+                  ? "ring-2 ring-blue-600 bg-blue-50/50 dark:bg-blue-900/20 shadow-md"
+                  : "ring-slate-200 dark:ring-slate-800 bg-white dark:bg-slate-900/50"
+              }`}
+            >
+              <div className="flex justify-between items-start gap-4 mb-4">
+                <div className="flex items-center gap-3">
+                  <input
+                    id={optionId}
+                    type="radio"
+                    name="accessOption"
+                    value={option.name}
+                    checked={isSelected}
+                    onChange={() => onSelect(option.name)}
+                    aria-describedby={`${descriptionId} ${featuresId}`}
+                    className="sr-only"
+                  />
+                  <label htmlFor={optionId} className="flex cursor-pointer items-center gap-3">
+                    <span aria-hidden="true" className={`w-5 h-5 rounded-full border flex items-center justify-center ${isSelected ? "border-blue-600" : "border-slate-300 dark:border-slate-600"}`}>
+                      {isSelected && <span className="w-3 h-3 rounded-full bg-blue-600" />}
+                    </span>
+                    <span className={`text-xl font-semibold ${isSelected ? "text-blue-600 dark:text-blue-400" : "text-slate-900 dark:text-white"}`}>
+                      {option.name}
+                    </span>
+                  </label>
+                </div>
+                <p className="max-w-48 text-right text-sm font-semibold text-slate-700 dark:text-slate-300">
+                  {option.commercialTerms}
+                </p>
+              </div>
+              <p id={descriptionId} className="text-sm text-slate-600 dark:text-slate-400 mb-4 pl-8">{option.description}</p>
+              <ul id={featuresId} className="space-y-2 text-sm text-slate-600 dark:text-slate-400 pl-8 grid sm:grid-cols-2 gap-x-4">
+                {option.features.map((feature) => (
+                  <li key={feature} className="flex gap-x-2">
+                    <CheckCircle2 className="h-5 w-4 flex-none text-blue-600" aria-hidden="true" />
+                    {feature}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          );
+        })}
+      </div>
+    </fieldset>
+  );
+}
 
 export default function RegisterPage() {
   const [companyName, setCompanyName] = useState("");
@@ -17,12 +89,17 @@ export default function RegisterPage() {
   const [primaryIndustry, setPrimaryIndustry] = useState("");
   const [intendedUse, setIntendedUse] = useState("");
   const [approximateVolume, setApproximateVolume] = useState("");
-  const [selectedPackage, setSelectedPackage] = useState("Professional");
+  const [selectedPackage, setSelectedPackage] = useState<string>(publicAccessOptions[0].name);
   const [consent, setConsent] = useState(false);
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [registered, setRegistered] = useState(false);
+  const successHeadingRef = useRef<HTMLHeadingElement>(null);
+
+  useEffect(() => {
+    if (registered) successHeadingRef.current?.focus();
+  }, [registered]);
 
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
@@ -45,15 +122,9 @@ export default function RegisterPage() {
     return (
       <div className="mx-auto max-w-md py-12">
         <div className="rounded-[32px] border border-slate-800 bg-slate-950 p-8">
-          <h1 className="text-2xl font-semibold text-white">Check your email</h1>
+          <h1 ref={successHeadingRef} tabIndex={-1} className="text-2xl font-semibold text-white outline-none">Check your email</h1>
           <p className="mt-3 text-sm text-slate-400">
-            We created your company workspace. In this development environment, no email is
-            actually sent — the verification link was printed to the server console instead.
-            Copy it from there and open it, or go to{" "}
-            <Link href="/verify-email" className="text-blue-400 underline hover:text-blue-300">
-              /verify-email
-            </Link>{" "}
-            and paste the token manually.
+            Your request was received. Follow any verification instructions sent to your business email. If none arrive, contact support before attempting to register again.
           </p>
           <Link
             href="/login"
@@ -69,53 +140,8 @@ export default function RegisterPage() {
   return (
     <div className="mx-auto max-w-7xl py-12 px-4">
       <div className="grid lg:grid-cols-2 gap-12 items-start">
-        
-        {/* Packages Section */}
-        <div className="order-2 lg:order-1">
-          <h2 className="text-3xl font-bold text-slate-900 dark:text-white mb-6">Choose Your Early Access Package</h2>
-          <p className="text-slate-600 dark:text-slate-400 mb-8">
-            Select the package that best fits your requirements. You will not be billed until your application is approved and your trial period concludes.
-          </p>
-          
-          <div className="space-y-6">
-            {pricingTiers.map((tier) => (
-              <div 
-                key={tier.name} 
-                onClick={() => setSelectedPackage(tier.name)}
-                className={`cursor-pointer rounded-2xl p-6 ring-1 transition-all ${
-                  selectedPackage === tier.name 
-                    ? 'ring-2 ring-blue-600 bg-blue-50/50 dark:bg-blue-900/20 shadow-md' 
-                    : 'ring-slate-200 dark:ring-slate-800 bg-white dark:bg-slate-900/50 hover:bg-slate-50 dark:hover:bg-slate-900'
-                }`}
-              >
-                <div className="flex justify-between items-center mb-4">
-                  <div className="flex items-center gap-3">
-                    <div className={`w-5 h-5 rounded-full border flex items-center justify-center ${selectedPackage === tier.name ? 'border-blue-600' : 'border-slate-300 dark:border-slate-600'}`}>
-                      {selectedPackage === tier.name && <div className="w-3 h-3 rounded-full bg-blue-600" />}
-                    </div>
-                    <h3 className={`text-xl font-semibold ${selectedPackage === tier.name ? 'text-blue-600 dark:text-blue-400' : 'text-slate-900 dark:text-white'}`}>{tier.name}</h3>
-                  </div>
-                  <div className="text-right">
-                    <span className="text-2xl font-bold text-slate-900 dark:text-white">{tier.price}</span>
-                    <span className="text-sm font-semibold text-slate-500 dark:text-slate-400"> AED / mo</span>
-                  </div>
-                </div>
-                <p className="text-sm text-slate-600 dark:text-slate-400 mb-4 pl-8">{tier.description}</p>
-                <ul className="space-y-2 text-sm text-slate-600 dark:text-slate-400 pl-8 grid sm:grid-cols-2 gap-x-4">
-                  {tier.features.map((feature) => (
-                    <li key={feature} className="flex gap-x-2">
-                      <CheckCircle2 className="h-5 w-4 flex-none text-blue-600" aria-hidden="true" />
-                      {feature}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ))}
-          </div>
-        </div>
-
         {/* Form Section */}
-        <div className="order-1 lg:order-2 rounded-[32px] border border-slate-800 bg-slate-950 p-8 lg:sticky lg:top-24 shadow-2xl">
+        <div className="rounded-[32px] border border-slate-800 bg-slate-950 p-8 lg:sticky lg:top-24 shadow-2xl">
           <p className="text-sm uppercase tracking-[0.28em] text-slate-500">Quantara</p>
           <h1 className="mt-2 text-2xl font-semibold text-white">Request Early Access</h1>
           <p className="mt-2 text-sm text-slate-400">
@@ -235,7 +261,7 @@ export default function RegisterPage() {
               </label>
             </div>
 
-            {error && <p className="text-sm text-rose-300">{error}</p>}
+            {error && <p role="alert" className="text-sm text-rose-300">{error}</p>}
 
             <div className="pt-2">
               <button
@@ -266,6 +292,8 @@ export default function RegisterPage() {
             <Link href="/login" className="text-blue-400 underline hover:text-blue-300">Sign in</Link>
           </div>
         </div>
+
+        <AccessOptionsFieldset selectedOption={selectedPackage} onSelect={setSelectedPackage} />
       </div>
     </div>
   );

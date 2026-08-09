@@ -30,16 +30,14 @@ test.describe('Anonymous Public Routes', () => {
     });
   }
   
-  test('Contact Sales page should submit successfully', async ({ page }) => {
+  test('Contact Sales page exposes the current requirements form without a fake purchase CTA', async ({ page }) => {
     await page.goto('/contact-sales');
-    
-    await page.fill('label:has-text("First Name") + input', 'John');
-    await page.fill('label:has-text("Last Name") + input', 'Doe');
-    await page.fill('label:has-text("Work Email") + input', 'test@example.com');
-    
-    await page.click('button:has-text("Talk to an Expert")');
-    
-    await expect(page.locator('text=Thank you.')).toBeVisible();
-    await expect(page.locator('text=Your request has been received.')).toBeVisible();
+
+    await expect(page.getByLabel('Full name')).toBeVisible();
+    await expect(page.getByLabel('Business email')).toBeVisible();
+    await expect(page.getByLabel('Company name')).toBeVisible();
+    await expect(page.getByLabel('Privacy consent')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Talk to an Expert' })).toBeVisible();
+    await expect(page.getByRole('button', { name: /buy|subscribe|checkout/i })).toHaveCount(0);
   });
 });

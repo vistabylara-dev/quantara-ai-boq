@@ -1,47 +1,28 @@
-import { Metadata } from "next";
+import { createPublicPageMetadata } from "@/lib/public-site/search-registry";
 import IndustryLandingPage, { IndustryLandingPageContent } from "@/components/layout/industry-landing-page";
 
-export const metadata: Metadata = {
-  title: "BOQ Software for Fit-Out Companies and Interior Contractors",
-  description: "Manage fit-out BOQs, finishes, joinery, partitions, ceilings, revisions, templates and professional proposals with Quantara.",
-  alternates: {
-    canonical: "https://quantara.vistabylara.com/boq-software-for-fit-out-companies",
-  },
-  openGraph: {
-    title: "BOQ Software for Fit-Out Companies and Interior Contractors | Quantara",
-    description: "Manage fit-out BOQs, finishes, joinery, partitions, ceilings, revisions, templates and professional proposals with Quantara.",
-    url: "https://quantara.vistabylara.com/boq-software-for-fit-out-companies",
-    type: "website",
-  },
-  twitter: {
-    card: "summary_large_image",
-    title: "BOQ Software for Fit-Out Companies and Interior Contractors | Quantara",
-    description: "Manage fit-out BOQs, finishes, joinery, partitions, ceilings, revisions, templates and professional proposals with Quantara.",
-  },
-  robots: {
-    index: true,
-    follow: true,
-  }
-};
+export const metadata = createPublicPageMetadata("/boq-software-for-fit-out-companies");
+
+
 
 export default function Page() {
   const content: IndustryLandingPageContent = {
     breadcrumbLabel: "BOQ Software for Fit-Out",
     title: "BOQ Software for Fit-Out Companies Managing Detailed Interior Scope",
-    audienceDescription: "Tailored for interior fit-out and renovation companies managing highly detailed project BOQs, finishes, and client variations.",
-    directAnswer: "Quantara gives fit-out companies a structured way to manage detailed interior BOQs, handle frequent client variations, and generate professional proposals.",
+    audienceDescription: "For interior fit-out and renovation companies evaluating structured BOQ, finishes and revision-record workflows.",
+    directAnswer: "Quantara helps fit-out companies organize supported interior project sources, reviewed BOQ items and distinct revision records.",
     challenges: [
   {
     "title": "High Volume of Revisions",
-    "description": "Interior fit-out projects are notorious for constant client design changes, resulting in heavy, difficult-to-track revision documentation."
+    "description": "Interior fit-out projects can involve frequent client design changes and multiple document revisions that teams must reconcile."
   },
   {
     "title": "Detailed Finishes Schedules",
     "description": "Managing complex schedules for joinery, flooring, and bespoke fixtures often leads to missed items during the estimating phase."
   }
 ],
-    workflowDescription: "Quantara allows fit-out teams to organize finishes, partitions, ceilings, flooring, joinery, doors, and fixtures. It simplifies MEP coordination, helps track variations, and streamlines the creation of client proposals by keeping all revision-heavy documentation in a controlled environment.",
-    workflowExample: "A fit-out company receives a tender for a commercial office. The package includes a text-based PDF scope of works and an Excel BOQ. They use Quantara to consolidate these inputs into a single structured BOQ, ensuring no joinery items are missed before submitting their proposal. Any scanned finishes schedules in the package are detected and flagged for manual transcription, since OCR is planned but not yet available.",
+    workflowDescription: "Fit-out teams can organize supported finishes, partitions, ceilings, flooring, joinery, doors and fixture items in BOQ sections. Teams must reconcile MEP coordination, variations, omissions and revision differences themselves.",
+    workflowExample: "A fit-out company receives a text-based PDF scope and an Excel BOQ for a commercial office. Supported information is captured for review, reconciled by the estimator and organized into BOQ sections before the output is checked. Scanned finishes schedules are detected and require manual transcription because OCR text extraction is not currently available.",
     typicalCategories: [
   "Demolition",
   "Partitions and Drylining",
@@ -53,7 +34,7 @@ export default function Page() {
 ],
     supportedInputs: [
   "Text-based PDF",
-  "Scanned PDF (detection only — OCR planned)",
+  "Scanned PDF (detection only — OCR not currently available)",
   "XLSX",
   "CSV"
 ],
@@ -64,7 +45,7 @@ export default function Page() {
 ],
     supportedOutputs: [
   "Structured Excel (XLSX)",
-  "Formatted PDF Proposals",
+  "Reviewable PDF Outputs",
   "CSV Exports"
 ],
     limitations: [
@@ -75,7 +56,7 @@ export default function Page() {
     faqs: [
   {
     "question": "How should fit-out revisions be controlled?",
-    "answer": "Revisions should be tracked sequentially within Quantara, ensuring that added or removed finishes are documented against the specific client variation."
+    "answer": "Keep distinct revision identifiers and issue notes, then compare each BOQ record with the relevant client instruction. Quantara does not automatically interpret every added or removed finish."
   },
   {
     "question": "Does it automatically detect rooms from floor plans?",
@@ -91,15 +72,15 @@ export default function Page() {
   },
   {
     "question": "Can I generate professional client proposals?",
-    "answer": "Yes, Quantara can output formatted PDF proposals based on your structured and priced BOQ data."
+    "answer": "Quantara can generate a reviewable PDF output from reviewed BOQ data and an available template. A professional must check it before client issue."
   },
   {
     "question": "How do I handle FF&E schedules?",
-    "answer": "FF&E schedules can be extracted from text-based PDFs or Excel and structured as a distinct section within the BOQ today. Scanned schedules are detected and flagged for manual transcription; OCR is planned but not yet available."
+    "answer": "Supported structured Excel schedules can be imported. For a text-based PDF, only supported detected table rows become review candidates; a professional must verify them and organize accepted FF&E items into a BOQ section. Scanned schedules require manual transcription because OCR text extraction is not currently available."
   },
   {
     "question": "Can I use templates for common fit-out types?",
-    "answer": "Yes, you can create and save reusable templates for common project types, like standard office or retail fit-outs."
+    "answer": "Available company templates can be applied where configured. Each template and generated result must be reviewed for the specific project."
   },
   {
     "question": "Does Quantara price the materials?",
@@ -128,110 +109,7 @@ export default function Page() {
     "label": "Features"
   }
 ],
-    schema: {
-      "@context": "https://schema.org",
-      "@graph": [
-        {
-          "@type": "WebPage",
-          "@id": "https://quantara.vistabylara.com/boq-software-for-fit-out-companies",
-          "url": "https://quantara.vistabylara.com/boq-software-for-fit-out-companies",
-          "name": "BOQ Software for Fit-Out Companies and Interior Contractors | Quantara",
-          "description": "Manage fit-out BOQs, finishes, joinery, partitions, ceilings, revisions, templates and professional proposals with Quantara."
-        },
-        {
-          "@type": "BreadcrumbList",
-          "itemListElement": [
-            {
-              "@type": "ListItem",
-              "position": 1,
-              "name": "Home",
-              "item": "https://quantara.vistabylara.com/"
-            },
-            {
-              "@type": "ListItem",
-              "position": 2,
-              "name": "Industries",
-              "item": "https://quantara.vistabylara.com/industries"
-            },
-            {
-              "@type": "ListItem",
-              "position": 3,
-              "name": "BOQ Software for Fit-Out",
-              "item": "https://quantara.vistabylara.com/boq-software-for-fit-out-companies"
-            }
-          ]
-        },
-        {
-          "@type": "FAQPage",
-          "mainEntity": [
-  {
-    "@type": "Question",
-    "name": "How should fit-out revisions be controlled?",
-    "acceptedAnswer": {
-      "@type": "Answer",
-      "text": "Revisions should be tracked sequentially within Quantara, ensuring that added or removed finishes are documented against the specific client variation."
-    }
-  },
-  {
-    "@type": "Question",
-    "name": "Does it automatically detect rooms from floor plans?",
-    "acceptedAnswer": {
-      "@type": "Answer",
-      "text": "No, automated room detection and drawing measurement are not currently available."
-    }
-  },
-  {
-    "@type": "Question",
-    "name": "Can I manage bespoke joinery items?",
-    "acceptedAnswer": {
-      "@type": "Answer",
-      "text": "Yes, bespoke items can be entered with detailed descriptions and specific units of measurement."
-    }
-  },
-  {
-    "@type": "Question",
-    "name": "Does it handle MEP coordination for fit-outs?",
-    "acceptedAnswer": {
-      "@type": "Answer",
-      "text": "You can create specific sections for MEP builders-work or coordination items within your master fit-out BOQ."
-    }
-  },
-  {
-    "@type": "Question",
-    "name": "Can I generate professional client proposals?",
-    "acceptedAnswer": {
-      "@type": "Answer",
-      "text": "Yes, Quantara can output formatted PDF proposals based on your structured and priced BOQ data."
-    }
-  },
-  {
-    "@type": "Question",
-    "name": "How do I handle FF&E schedules?",
-    "acceptedAnswer": {
-      "@type": "Answer",
-      "text": "FF&E schedules can be extracted from text-based PDFs or Excel and structured as a distinct section within the BOQ today. Scanned schedules are detected and flagged for manual transcription; OCR is planned but not yet available."
-    }
-  },
-  {
-    "@type": "Question",
-    "name": "Can I use templates for common fit-out types?",
-    "acceptedAnswer": {
-      "@type": "Answer",
-      "text": "Yes, you can create and save reusable templates for common project types, like standard office or retail fit-outs."
-    }
-  },
-  {
-    "@type": "Question",
-    "name": "Does Quantara price the materials?",
-    "acceptedAnswer": {
-      "@type": "Answer",
-      "text": "No, Quantara structures the BOQ. The user must provide their own rates and pricing information."
-    }
-  }
-]
-        }
-      ]
-    }
+    path: "/boq-software-for-fit-out-companies"
   };
 
   return <IndustryLandingPage content={content} />;

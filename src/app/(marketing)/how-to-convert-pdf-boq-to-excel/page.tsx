@@ -1,33 +1,23 @@
-import { Metadata } from "next";
+import { createPublicPageMetadata, PUBLIC_CONTENT_REVIEW_DATE } from "@/lib/public-site/search-registry";
 import KnowledgePage, { KnowledgePageContent } from "@/components/layout/knowledge-page";
 
-export const metadata: Metadata = {
-  title: "How to Convert a PDF BOQ to Excel Safely",
-  description: "Learn how to convert a BOQ from PDF to Excel while reviewing tables, quantities, units, merged cells, OCR issues and document structure.",
-  alternates: {
-    canonical: "https://quantara.vistabylara.com/how-to-convert-pdf-boq-to-excel",
-  },
-  openGraph: {
-    title: "How to Convert a PDF BOQ to Excel Safely | Quantara",
-    description: "Learn how to convert a BOQ from PDF to Excel while reviewing tables, quantities, units, merged cells, OCR issues and document structure.",
-    url: "https://quantara.vistabylara.com/how-to-convert-pdf-boq-to-excel",
-    type: "article",
-  },
-};
+export const metadata = createPublicPageMetadata("/how-to-convert-pdf-boq-to-excel");
+
+
 
 export default function Page() {
   const content: KnowledgePageContent = {
     breadcrumbLabel: "How to Convert a PDF BOQ to Excel with Structured Review",
     title: "How to Convert a PDF BOQ to Excel with Structured Review",
-    summary: "Contractors frequently receive Bills of Quantities in PDF format, making them impossible to price directly. Converting a PDF BOQ to an editable Excel or digital format is a necessary workflow, but doing it safely requires careful attention to table structures, text recognition, and human verification.",
-    reviewedDate: new Date().toISOString().split("T")[0],
+    summary: "Contractors frequently receive Bills of Quantities in PDF format, which can be inconvenient to edit or price in spreadsheet workflows. Conversion requires careful attention to table structure, text recognition, values and human verification.",
+    reviewedDate: PUBLIC_CONTENT_REVIEW_DATE,
     sections: [
   {
     "id": "why-it-matters",
     "heading": "Why Safe Conversion Matters",
     "paragraphs": [
-      "For estimating teams, blindly trusting a PDF-to-Excel conversion tool is a massive commercial risk. Automated converters often scramble merged cells, drop decimal points, or mix item descriptions with quantities.",
-      "A structured conversion and review process ensures the resulting pricing document is 100% faithful to the client's original intent."
+      "Estimating teams should not rely on a PDF-to-Excel conversion without review. Complex layouts can misalign merged cells, decimal values, descriptions or quantities.",
+      "A structured conversion and review process helps the team reconcile the resulting pricing document against the source before it is used."
     ]
   },
   {
@@ -51,7 +41,7 @@ export default function Page() {
     "id": "practical-example",
     "heading": "A Practical Example",
     "paragraphs": [
-      "A hypothetical contractor receives a 50-page PDF BOQ for a school construction project.",
+      "A hypothetical contractor receives a text-based PDF BOQ for a school construction project.",
       "Using a generic online converter, the text \"100.00\" in the quantity column is misread as \"10000\" because the decimal point was faded. Without the structured review workflow (Step 7 and 11), the contractor would overprice that item by 100x."
     ]
   },
@@ -59,27 +49,27 @@ export default function Page() {
     "id": "limitations",
     "heading": "Limitations of Conversion",
     "paragraphs": [
-      "Do not claim or expect perfect, instant conversion. Complex documents with nested tables, handwritten notes, or poor scan quality will always require manual intervention.",
-      "The goal of software is to do the heavy lifting, but human oversight is mandatory."
+      "Do not claim or expect perfect, instant conversion. Complex documents with nested tables, handwritten notes or poor scan quality can require substantial manual reconstruction and review.",
+      "Software can assist with supported capture, but a professional must reconcile the result with the source."
     ]
   },
   {
     "id": "quantara-workflow",
-    "heading": "How Quantara Enhances Extraction",
+    "heading": "How Quantara Supports Reviewable Extraction",
     "paragraphs": [
-      "Quantara is specifically designed to handle BOQ document extraction. Rather than just dumping unstructured text into Excel, it uses AI-assisted processing to understand the structure of construction items, drastically reducing the manual cleanup required.",
-      "Quantara currently focuses on supported document extraction, BOQ structuring, project organization, templates, revisions, and professional outputs."
+      "Quantara stores extractable text from supported text-based PDF BOQs and presents supported detected table rows as field-level review candidates. Plain paragraph text is not automatically converted into BOQ candidates; hierarchy, merged cells, units and values still require checking.",
+      "Confirmed information can be organized in BOQ sections and exported as XLSX. Cleanup and review effort vary, and no fixed saving is promised."
     ]
   }
 ],
     faqs: [
   {
     "question": "Why do clients send BOQs as PDFs?",
-    "answer": "Clients issue PDFs to prevent contractors from easily altering the item descriptions, quantities, or formulas, ensuring all bids are submitted on an identical baseline."
+    "answer": "Clients may issue PDFs to preserve a fixed presentation of item descriptions and quantities. Contractors must still confirm the revision, tender instructions and any permitted qualifications."
   },
   {
     "question": "Can all PDFs be converted?",
-    "answer": "Native text PDFs can usually be extracted cleanly. Scanned image PDFs require OCR and are much harder to convert accurately."
+    "answer": "Text-based PDFs expose an existing digital text layer, but tables and values still require review. Scanned PDFs require external OCR or manual transcription; Quantara does not currently provide OCR extraction."
   },
   {
     "question": "What is a merged cell error?",
@@ -87,7 +77,7 @@ export default function Page() {
   },
   {
     "question": "How long does manual conversion take?",
-    "answer": "Retyping a complex 100-page BOQ can take an estimator several days. Extraction software reduces this, but review time must still be scheduled."
+    "answer": "Manual conversion effort depends on page count, layout, handwriting, table complexity and the required checks. Supported capture may reduce some transcription steps, but no fixed saving is guaranteed."
   },
   {
     "question": "Do I need to rebuild formulas in Excel?",
@@ -108,15 +98,7 @@ export default function Page() {
     "label": "Reviewing AI-Extracted BOQs"
   }
 ],
-    schema: {
-      "@context": "https://schema.org",
-      "@type": "TechArticle",
-      "headline": "How to Convert a PDF BOQ to Excel with Structured Review",
-      "description": "Learn how to convert a BOQ from PDF to Excel while reviewing tables, quantities, units, merged cells, OCR issues and document structure.",
-      "url": "https://quantara.vistabylara.com/how-to-convert-pdf-boq-to-excel",
-      "publisher": { "@id": "https://quantara.vistabylara.com/#organization" },
-      "mainEntityOfPage": { "@id": "https://quantara.vistabylara.com/#website" }
-    }
+    path: "/how-to-convert-pdf-boq-to-excel"
   };
 
   return <KnowledgePage content={content} />;

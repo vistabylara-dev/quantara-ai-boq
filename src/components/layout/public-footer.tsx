@@ -1,7 +1,9 @@
 import React from "react";
+import Image from "next/image";
 import Link from "next/link";
 import { publicNavigation, legalNavigation } from "@/config/public-navigation";
 import { siteConfig } from "@/config/site";
+import { QUANTARA_ENTITY_DEFINITION } from "@/lib/public-site/product-truth";
 
 export default function PublicFooter() {
   const getSectionItems = (sectionLabel: string) => {
@@ -26,14 +28,20 @@ export default function PublicFooter() {
           {/* Brand Column */}
           <div className="col-span-2 md:col-span-4 lg:col-span-2">
             <Link href="/" className="font-bold text-xl tracking-tight text-slate-900 dark:text-white flex items-center gap-2 mb-6" aria-label="Quantara Home">
-              <img src="/logo.png" alt="Quantara Logo" className="h-12 w-12 shrink-0 object-contain" />
+              <Image
+                src="/logo.png"
+                alt=""
+                width={48}
+                height={48}
+                className="h-12 w-12 shrink-0 object-contain"
+              />
               Quantara
             </Link>
             <p className="text-sm text-slate-500 dark:text-slate-400 mb-4 font-medium max-w-sm">
               Quantara is developed and operated by Vista By Lara, a technology business focused on AI-assisted tools for construction, project, design and business workflows.
             </p>
             <p className="text-sm text-slate-500 dark:text-slate-400 mb-6 max-w-sm">
-              Quantara is an AI-assisted BOQ and construction-estimating platform in Controlled Early Access.
+              {QUANTARA_ENTITY_DEFINITION} It is offered through Controlled Early Access.
             </p>
             
             <div className="mt-8 space-y-2 text-sm text-slate-500 dark:text-slate-400">
@@ -93,15 +101,12 @@ export default function PublicFooter() {
           {/* Company & Legal */}
           <div className="col-span-1 lg:col-span-2 grid grid-cols-2 lg:grid-cols-1 gap-8">
             <div>
-              <h3 className="font-bold text-slate-900 dark:text-white mb-4">Enterprise Software</h3>
+              <h3 className="font-bold text-slate-900 dark:text-white mb-4">Workflow Requirements Review</h3>
               <p className="text-sm text-slate-500 dark:text-slate-400 mb-2">
-                Custom Quantara software implementation for companies requiring tailored workflows, integrations, branding, deployment, migration, onboarding or advanced operational requirements.
+                Organizations with workflow, source, output or rollout requirements can request a review before access or paid work is proposed.
               </p>
-              <p className="text-xs font-semibold text-slate-400 dark:text-slate-500 mb-2">
-                Custom implementation and onboarding starting from AED 15,000
-              </p>
-              <p className="text-xs text-slate-400 dark:text-slate-500 mb-4">
-                Final scope and pricing are provided through a custom quotation following a requirements review.
+              <p className="text-xs text-slate-400 mb-4">
+                Availability, implementation scope and commercial terms are confirmed separately in writing. No public self-service checkout is currently offered.
               </p>
               <Link href="/contact-sales" className="text-sm font-medium text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300">
                 Contact Sales &rarr;

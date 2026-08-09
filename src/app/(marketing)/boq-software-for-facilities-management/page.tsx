@@ -1,35 +1,16 @@
-import { Metadata } from "next";
+import { createPublicPageMetadata } from "@/lib/public-site/search-registry";
 import IndustryLandingPage, { IndustryLandingPageContent } from "@/components/layout/industry-landing-page";
 
-export const metadata: Metadata = {
-  title: "BOQ Software for Facilities Management and Service Projects",
-  description: "Organize maintenance, repair, refurbishment and service BOQ workflows, revisions, templates and project records using Quantara.",
-  alternates: {
-    canonical: "https://quantara.vistabylara.com/boq-software-for-facilities-management",
-  },
-  openGraph: {
-    title: "BOQ Software for Facilities Management and Service Projects | Quantara",
-    description: "Organize maintenance, repair, refurbishment and service BOQ workflows, revisions, templates and project records using Quantara.",
-    url: "https://quantara.vistabylara.com/boq-software-for-facilities-management",
-    type: "website",
-  },
-  twitter: {
-    card: "summary_large_image",
-    title: "BOQ Software for Facilities Management and Service Projects | Quantara",
-    description: "Organize maintenance, repair, refurbishment and service BOQ workflows, revisions, templates and project records using Quantara.",
-  },
-  robots: {
-    index: true,
-    follow: true,
-  }
-};
+export const metadata = createPublicPageMetadata("/boq-software-for-facilities-management");
+
+
 
 export default function Page() {
   const content: IndustryLandingPageContent = {
     breadcrumbLabel: "BOQ Software for Facilities Management",
     title: "BOQ Software for Facilities Management Projects and Service Scope",
-    audienceDescription: "Built for facilities-management (FM) companies handling project-based maintenance, repair, and refurbishment BOQs.",
-    directAnswer: "Quantara enables facilities-management companies to structure BOQs for refurbishment projects, maintenance works, and complex service packages.",
+    audienceDescription: "For facilities-management companies evaluating structured BOQ workflows for project-based maintenance, repair and refurbishment scope.",
+    directAnswer: "Quantara helps facilities-management teams organize supported maintenance, repair and refurbishment scope into reviewed BOQ records.",
     challenges: [
   {
     "title": "Ad-Hoc Project Scopes",
@@ -37,11 +18,11 @@ export default function Page() {
   },
   {
     "title": "Recurring Service Packages",
-    "description": "Recreating BOQs from scratch for similar reactive and planned maintenance tasks wastes significant administrative time."
+    "description": "Similar reactive and planned maintenance tasks can involve repeated BOQ organization and review work."
   }
 ],
-    workflowDescription: "Quantara supports FM workflows by organizing maintenance works, repairs, refurbishment, and both reactive and planned work. Teams can leverage recurring templates for service packages, structure asset-related scope, manage contractor comparisons, and maintain robust project records and revisions.",
-    workflowExample: "A facilities-management team is preparing a refurbishment BOQ based on raw site inspection notes and supplier pricing files. They use Quantara's templates to quickly structure a standard refurbishment BOQ, inputting the specific site quantities to generate a formal document for contractor bidding.",
+    workflowDescription: "Quantara can organize supported maintenance, repair, refurbishment and planned-work scope in BOQ sections. Available templates can support consistent formatting, while contractor comparisons and revision interpretation remain professional tasks.",
+    workflowExample: "A facilities-management team prepares a refurbishment BOQ from reviewed site notes and supplier files. It uses an available template, enters verified site quantities and checks the generated document before contractor issue.",
     typicalCategories: [
   "Planned Preventative Maintenance (PPM)",
   "Reactive Repairs",
@@ -53,7 +34,7 @@ export default function Page() {
 ],
     supportedInputs: [
   "Text-based PDF",
-  "Scanned PDF (detection only — OCR planned)",
+  "Scanned PDF (detection only — OCR not currently available)",
   "XLSX",
   "CSV"
 ],
@@ -64,7 +45,7 @@ export default function Page() {
 ],
     supportedOutputs: [
   "Structured Excel (XLSX)",
-  "Formatted PDF Proposals",
+  "Reviewable PDF Outputs",
   "CSV Exports"
 ],
     limitations: [
@@ -75,7 +56,7 @@ export default function Page() {
     faqs: [
   {
     "question": "Can facilities-management teams reuse BOQ templates?",
-    "answer": "Yes, Quantara allows FM teams to save standard BOQ structures as templates, which is ideal for recurring service or refurbishment packages."
+    "answer": "FM teams can use available BOQ templates where configured. The scope, quantities and output still require project-specific review."
   },
   {
     "question": "Is Quantara a CMMS?",
@@ -83,11 +64,11 @@ export default function Page() {
   },
   {
     "question": "Can I manage reactive repair BOQs?",
-    "answer": "Yes, you can rapidly structure ad-hoc scopes of work into professional BOQs for reactive repairs."
+    "answer": "Supported reactive-repair scope can be organized into BOQ sections. Review effort depends on the source and project requirements."
   },
   {
     "question": "How does it help with contractor comparisons?",
-    "answer": "By structuring a standardized BOQ, you can issue the same document to multiple contractors, ensuring an \"apples to apples\" comparison."
+    "answer": "A reviewed BOQ can present the same item structure to multiple contractors. The FM team must still reconcile qualifications, exclusions and returned pricing before comparison."
   },
   {
     "question": "Does it track physical assets?",
@@ -103,7 +84,7 @@ export default function Page() {
   },
   {
     "question": "Can I export the data to Excel?",
-    "answer": "Yes, structured data can be exported to Excel for integration with other FM or financial systems."
+    "answer": "Reviewed data can be exported as XLSX for manual use or import elsewhere. Compatibility with another FM or financial system is not guaranteed."
   }
 ],
     relatedPages: [
@@ -124,110 +105,7 @@ export default function Page() {
     "label": "About Quantara"
   }
 ],
-    schema: {
-      "@context": "https://schema.org",
-      "@graph": [
-        {
-          "@type": "WebPage",
-          "@id": "https://quantara.vistabylara.com/boq-software-for-facilities-management",
-          "url": "https://quantara.vistabylara.com/boq-software-for-facilities-management",
-          "name": "BOQ Software for Facilities Management and Service Projects | Quantara",
-          "description": "Organize maintenance, repair, refurbishment and service BOQ workflows, revisions, templates and project records using Quantara."
-        },
-        {
-          "@type": "BreadcrumbList",
-          "itemListElement": [
-            {
-              "@type": "ListItem",
-              "position": 1,
-              "name": "Home",
-              "item": "https://quantara.vistabylara.com/"
-            },
-            {
-              "@type": "ListItem",
-              "position": 2,
-              "name": "Industries",
-              "item": "https://quantara.vistabylara.com/industries"
-            },
-            {
-              "@type": "ListItem",
-              "position": 3,
-              "name": "BOQ Software for Facilities Management",
-              "item": "https://quantara.vistabylara.com/boq-software-for-facilities-management"
-            }
-          ]
-        },
-        {
-          "@type": "FAQPage",
-          "mainEntity": [
-  {
-    "@type": "Question",
-    "name": "Can facilities-management teams reuse BOQ templates?",
-    "acceptedAnswer": {
-      "@type": "Answer",
-      "text": "Yes, Quantara allows FM teams to save standard BOQ structures as templates, which is ideal for recurring service or refurbishment packages."
-    }
-  },
-  {
-    "@type": "Question",
-    "name": "Is Quantara a CMMS?",
-    "acceptedAnswer": {
-      "@type": "Answer",
-      "text": "No. Quantara is a BOQ and document workflow platform. It is not a Computerized Maintenance Management System for live ticketing."
-    }
-  },
-  {
-    "@type": "Question",
-    "name": "Can I manage reactive repair BOQs?",
-    "acceptedAnswer": {
-      "@type": "Answer",
-      "text": "Yes, you can rapidly structure ad-hoc scopes of work into professional BOQs for reactive repairs."
-    }
-  },
-  {
-    "@type": "Question",
-    "name": "How does it help with contractor comparisons?",
-    "acceptedAnswer": {
-      "@type": "Answer",
-      "text": "By structuring a standardized BOQ, you can issue the same document to multiple contractors, ensuring an \"apples to apples\" comparison."
-    }
-  },
-  {
-    "@type": "Question",
-    "name": "Does it track physical assets?",
-    "acceptedAnswer": {
-      "@type": "Answer",
-      "text": "No, Quantara manages the documents and BOQ items related to the assets, but it does not track live asset health or inventory."
-    }
-  },
-  {
-    "@type": "Question",
-    "name": "Can I structure PPM schedules?",
-    "acceptedAnswer": {
-      "@type": "Answer",
-      "text": "You can structure the commercial and pricing elements of a PPM schedule as a BOQ, but it does not execute the actual maintenance scheduling."
-    }
-  },
-  {
-    "@type": "Question",
-    "name": "How are refurbishment projects handled?",
-    "acceptedAnswer": {
-      "@type": "Answer",
-      "text": "Refurbishments are treated as standard construction BOQs, allowing you to organize demolition, finishes, and MEP works logically."
-    }
-  },
-  {
-    "@type": "Question",
-    "name": "Can I export the data to Excel?",
-    "acceptedAnswer": {
-      "@type": "Answer",
-      "text": "Yes, structured data can be exported to Excel for integration with other FM or financial systems."
-    }
-  }
-]
-        }
-      ]
-    }
+    path: "/boq-software-for-facilities-management"
   };
 
   return <IndustryLandingPage content={content} />;

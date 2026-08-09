@@ -1,18 +1,10 @@
-import type { Metadata } from "next";
+import { createPublicUtilityMetadata } from "@/lib/public-site/search-registry";
 
-export const metadata: Metadata = {
-  title: "Request Early Access | Quantara BOQ",
-  description: "Request Early Access to Quantara's AI-assisted BOQ and construction-estimating platform.",
-  alternates: {
-    canonical: "/register"
-  },
-  openGraph: {
-    title: "Request Early Access | Quantara BOQ",
-    description: "Request Early Access to Quantara's AI-assisted BOQ and construction-estimating platform.",
-    url: "https://quantara.vistabylara.com/register",
-    siteName: "Quantara",
-  },
-};
+export const metadata = createPublicUtilityMetadata(
+  "/register",
+  "Request Quantara Controlled Early Access",
+  "Submit a request to evaluate Quantara's AI-assisted BOQ workflow software.",
+);
 
 export default function RegisterLayout({
   children,

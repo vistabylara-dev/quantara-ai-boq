@@ -1,46 +1,27 @@
-import { Metadata } from "next";
+import { createPublicPageMetadata } from "@/lib/public-site/search-registry";
 import IndustryLandingPage, { IndustryLandingPageContent } from "@/components/layout/industry-landing-page";
-import PublicBreadcrumb from "@/components/ui/public-breadcrumb";
-export const metadata: Metadata = {
-  title: "BOQ Software for MEP Contractors and Estimators",
-  description: "Organize mechanical, electrical and plumbing BOQ workflows, project documents, revisions, templates and outputs using Quantara.",
-  alternates: {
-    canonical: "https://quantara.vistabylara.com/boq-software-for-mep-contractors",
-  },
-  openGraph: {
-    title: "BOQ Software for MEP Contractors and Estimators | Quantara",
-    description: "Organize mechanical, electrical and plumbing BOQ workflows, project documents, revisions, templates and outputs using Quantara.",
-    url: "https://quantara.vistabylara.com/boq-software-for-mep-contractors",
-    type: "website",
-  },
-  twitter: {
-    card: "summary_large_image",
-    title: "BOQ Software for MEP Contractors and Estimators | Quantara",
-    description: "Organize mechanical, electrical and plumbing BOQ workflows, project documents, revisions, templates and outputs using Quantara.",
-  },
-  robots: {
-    index: true,
-    follow: true,
-  }
-};
+
+export const metadata = createPublicPageMetadata("/boq-software-for-mep-contractors");
+
+
 
 export default function Page() {
   const content: IndustryLandingPageContent = {
     breadcrumbLabel: "BOQ Software for MEP Contractors",
     title: "BOQ Software for MEP Contractors Managing Multi-Discipline Scope",
-    audienceDescription: "Designed for mechanical, electrical, and plumbing (MEP) contractors managing complex, multi-discipline BOQs and technical equipment schedules.",
-    directAnswer: "Quantara helps MEP contractors structure multi-discipline BOQs, coordinate technical specifications, and manage equipment schedules in a unified workflow platform.",
+    audienceDescription: "For mechanical, electrical and plumbing contractors evaluating structured, multi-discipline BOQ and source-review workflows.",
+    directAnswer: "Quantara helps MEP contractors capture supported information for review and organize confirmed mechanical, electrical and plumbing items in BOQ sections.",
     challenges: [
   {
     "title": "Multi-Discipline Complexity",
-    "description": "MEP packages involve thousands of specialized items across mechanical, electrical, and plumbing trades, making scope separation extremely difficult."
+    "description": "MEP packages can contain many specialized items across mechanical, electrical and plumbing trades, so scope boundaries require careful review."
   },
   {
     "title": "Technical Document Coordination",
     "description": "Managing the relationship between the BOQ descriptions, equipment schedules, and supplier references often leads to misaligned pricing."
   }
 ],
-    workflowDescription: "Quantara provides a structured environment for MEP scope separation. Contractors can organize mechanical, electrical, and plumbing items, track technical specifications, manage quantities and units, and align supplier references across multiple project revisions to generate accurate proposal outputs.",
+    workflowDescription: "Quantara provides structured sections for supported mechanical, electrical and plumbing items, quantities, units and reference notes. Contractors must verify technical specifications, compare distinct revisions and check every output.",
     workflowExample: "An MEP estimator is working on a high-rise residential project. They use Quantara to separate the electrical lighting schedules from the mechanical HVAC scope, organizing each discipline into its own structured BOQ section for distinct subcontractor pricing.",
     typicalCategories: [
   "HVAC",
@@ -54,7 +35,7 @@ export default function Page() {
 ],
     supportedInputs: [
   "Text-based PDF",
-  "Scanned PDF (detection only — OCR planned)",
+  "Scanned PDF (detection only — OCR not currently available)",
   "XLSX",
   "CSV"
 ],
@@ -65,13 +46,13 @@ export default function Page() {
 ],
     supportedOutputs: [
   "Structured Excel (XLSX)",
-  "Formatted PDF Proposals",
+  "Reviewable PDF Outputs",
   "CSV Exports"
 ],
     limitations: [
   "Quantara does not provide verified discipline libraries or pre-built MEP item databases.",
   "Quantara does not provide engineering approval or code compliance certification.",
-  "Automated takeoff from MEP drawings is currently Planned."
+  "Automatic takeoff from MEP drawings is not currently available."
 ],
     faqs: [
   {
@@ -84,7 +65,7 @@ export default function Page() {
   },
   {
     "question": "Can I manage equipment schedules?",
-    "answer": "Yes, equipment schedules can be extracted from text-based PDFs or Excel and structured as specific items within the BOQ today. Scanned schedules are detected and flagged for manual transcription; OCR is planned but not yet available."
+    "answer": "Supported structured Excel schedules can be imported. For a text-based PDF, only supported detected table rows become review candidates, which a professional must verify and organize as BOQ items. Scanned schedules require manual transcription because OCR text extraction is not currently available."
   },
   {
     "question": "Does it validate MEP engineering compliance?",
@@ -100,11 +81,11 @@ export default function Page() {
   },
   {
     "question": "Does it measure pipe lengths automatically?",
-    "answer": "No, automated drawing measurement (including pipe or cable runs) is a Planned feature and not currently active."
+    "answer": "No, automatic drawing measurement, including pipe or cable runs, is not currently available."
   },
   {
     "question": "How are MEP revisions handled?",
-    "answer": "You can track revisions to specific sections, ensuring updates to the electrical scope don't overwrite the mechanical scope."
+    "answer": "Distinct BOQ revisions retain identifiable project states. Users must compare the records and verify that updates were applied to the intended discipline sections."
   }
 ],
     relatedPages: [
@@ -129,116 +110,8 @@ export default function Page() {
     "label": "Features"
   }
 ],
-    schema: {
-      "@context": "https://schema.org",
-      "@graph": [
-        {
-          "@type": "WebPage",
-          "@id": "https://quantara.vistabylara.com/boq-software-for-mep-contractors",
-          "url": "https://quantara.vistabylara.com/boq-software-for-mep-contractors",
-          "name": "BOQ Software for MEP Contractors and Estimators | Quantara",
-          "description": "Organize mechanical, electrical and plumbing BOQ workflows, project documents, revisions, templates and outputs using Quantara."
-        },
-        {
-          "@type": "BreadcrumbList",
-          "itemListElement": [
-            {
-              "@type": "ListItem",
-              "position": 1,
-              "name": "Home",
-              "item": "https://quantara.vistabylara.com/"
-            },
-            {
-              "@type": "ListItem",
-              "position": 2,
-              "name": "Industries",
-              "item": "https://quantara.vistabylara.com/industries"
-            },
-            {
-              "@type": "ListItem",
-              "position": 3,
-              "name": "BOQ Software for MEP Contractors",
-              "item": "https://quantara.vistabylara.com/boq-software-for-mep-contractors"
-            }
-          ]
-        },
-        {
-          "@type": "FAQPage",
-          "mainEntity": [
-  {
-    "@type": "Question",
-    "name": "Which BOQ sections are common in MEP projects?",
-    "acceptedAnswer": {
-      "@type": "Answer",
-      "text": "Typical sections include HVAC, Electrical, Plumbing, Drainage, Fire Fighting, Controls, and Testing & Commissioning."
-    }
-  },
-  {
-    "@type": "Question",
-    "name": "Does Quantara have pre-built MEP libraries?",
-    "acceptedAnswer": {
-      "@type": "Answer",
-      "text": "No, Quantara does not currently offer verified pre-built discipline libraries. Users must define their own categories and items."
-    }
-  },
-  {
-    "@type": "Question",
-    "name": "Can I manage equipment schedules?",
-    "acceptedAnswer": {
-      "@type": "Answer",
-      "text": "Yes, equipment schedules can be extracted from text-based PDFs or Excel and structured as specific items within the BOQ today. Scanned schedules are detected and flagged for manual transcription; OCR is planned but not yet available."
-    }
-  },
-  {
-    "@type": "Question",
-    "name": "Does it validate MEP engineering compliance?",
-    "acceptedAnswer": {
-      "@type": "Answer",
-      "text": "No. Quantara is a document and workflow platform. It does not provide engineering approval or design validation."
-    }
-  },
-  {
-    "@type": "Question",
-    "name": "How do you handle supplier references?",
-    "acceptedAnswer": {
-      "@type": "Answer",
-      "text": "Supplier references and technical specifications can be added as notes or descriptions to specific BOQ items."
-    }
-  },
-  {
-    "@type": "Question",
-    "name": "Can I separate mechanical and electrical scope?",
-    "acceptedAnswer": {
-      "@type": "Answer",
-      "text": "Yes, the platform allows you to create distinct sections and packages to cleanly separate multi-discipline scope."
-    }
-  },
-  {
-    "@type": "Question",
-    "name": "Does it measure pipe lengths automatically?",
-    "acceptedAnswer": {
-      "@type": "Answer",
-      "text": "No, automated drawing measurement (including pipe or cable runs) is a Planned feature and not currently active."
-    }
-  },
-  {
-    "@type": "Question",
-    "name": "How are MEP revisions handled?",
-    "acceptedAnswer": {
-      "@type": "Answer",
-      "text": "You can track revisions to specific sections, ensuring updates to the electrical scope don't overwrite the mechanical scope."
-    }
-  }
-]
-        }
-      ]
-    }
+    path: "/boq-software-for-mep-contractors"
   };
 
-  return (
-    <>
-      <PublicBreadcrumb items={[{ name: "Home", item: "/" }, { name: "Industries", item: "/industries" }, { name: "BOQ Software for MEP Contractors", item: "/boq-software-for-mep-contractors" }]} />
-      <IndustryLandingPage content={content} />
-    </>
-  );
+  return <IndustryLandingPage content={content} />;
 }

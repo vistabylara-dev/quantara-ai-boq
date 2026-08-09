@@ -1,178 +1,175 @@
-import React from "react";
 import Link from "next/link";
-import { Metadata } from "next";
-import PublicBreadcrumb from "@/components/ui/public-breadcrumb";
-import { publicFeatures } from "@/lib/config/features";
-import { ShieldCheck, CheckCircle2 } from "lucide-react";
+import { ArrowRight, CheckCircle2, Info, LockKeyhole, XCircle } from "lucide-react";
 
-export const metadata: Metadata = {
-  title: "Features & Status Matrix | Quantara AI BOQ",
-  description: "Explore the complete feature status matrix for Quantara's AI-assisted BOQ platform.",
-  alternates: {
-    canonical: "https://quantara.vistabylara.com/features",
+import PublicBreadcrumb from "@/components/ui/public-breadcrumb";
+import { PublicPageJsonLd } from "@/components/seo/public-json-ld";
+import {
+  PROFESSIONAL_REVIEW_NOTICE,
+  PUBLIC_CAPABILITIES,
+  PUBLIC_CAPABILITY_STATUS_DESCRIPTIONS,
+  PUBLIC_CAPABILITY_STATUS_LABELS,
+  QUANTARA_ENTITY_DEFINITION,
+  QUANTARA_WORKFLOW_TRUTH,
+  type PublicCapabilityStatus,
+} from "@/lib/public-site/product-truth";
+import { createPublicPageMetadata } from "@/lib/public-site/search-registry";
+
+export const metadata = createPublicPageMetadata("/features");
+
+const statusPresentation: Record<
+  PublicCapabilityStatus,
+  { icon: typeof CheckCircle2; badge: string; card: string }
+> = {
+  AVAILABLE: {
+    icon: CheckCircle2,
+    badge: "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200",
+    card: "border-emerald-200 dark:border-emerald-900/70",
+  },
+  CONTROLLED_ACCESS: {
+    icon: LockKeyhole,
+    badge: "bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-200",
+    card: "border-blue-200 dark:border-blue-900/70",
+  },
+  LIMITED: {
+    icon: Info,
+    badge: "bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-100",
+    card: "border-amber-200 dark:border-amber-900/70",
+  },
+  NOT_AVAILABLE: {
+    icon: XCircle,
+    badge: "bg-slate-200 text-slate-800 dark:bg-slate-800 dark:text-slate-200",
+    card: "border-slate-300 dark:border-slate-700",
   },
 };
 
 export default function FeaturesPage() {
   return (
-    <div className="flex flex-col min-h-screen bg-white dark:bg-slate-950">
-      <PublicBreadcrumb 
+    <>
+      <PublicPageJsonLd
+        path="/features"
+        breadcrumbs={[{ name: "Home", path: "/" }, { name: "Features", path: "/features" }]}
+      />
+      <div className="min-h-screen bg-white text-slate-950 dark:bg-slate-950 dark:text-white">
+      <PublicBreadcrumb
         items={[
           { name: "Home", item: "/" },
-          { name: "Platform", item: "/features" },
-          { name: "Features", item: "/features" }
+          { name: "Features", item: "/features" },
         ]}
       />
-      
-      
-        <section className="pt-16 pb-12 px-4">
-          <div className="container mx-auto text-center max-w-4xl">
-            <h1 className="text-4xl md:text-5xl font-extrabold tracking-tight text-slate-900 dark:text-white mb-6">
-              Features and Status Matrix
-            </h1>
-            <p className="text-xl text-slate-600 dark:text-slate-400 mb-10 max-w-3xl mx-auto leading-relaxed">
-              Explore the complete set of capabilities available in Quantara&apos;s Controlled Early Access. Quantara provides project-first BOQ workflows with strict governance and professional review requirements.
+
+      <section className="px-4 pb-14 pt-16">
+        <div className="container mx-auto max-w-4xl text-center">
+          <p className="mb-4 text-sm font-semibold uppercase tracking-[0.22em] text-blue-700 dark:text-blue-300">
+            Current capability register
+          </p>
+          <h1 className="mb-6 text-4xl font-extrabold tracking-tight sm:text-5xl">
+            BOQ Workflow Features and Availability
+          </h1>
+          <p className="mx-auto mb-5 max-w-3xl text-lg leading-relaxed text-slate-700 dark:text-slate-300">
+            {QUANTARA_ENTITY_DEFINITION} This page distinguishes available, controlled-access,
+            limited and unavailable capabilities so construction teams can assess the product
+            without relying on roadmap language.
+          </p>
+          <p className="mx-auto max-w-3xl text-base leading-relaxed text-slate-600 dark:text-slate-400">
+            {QUANTARA_WORKFLOW_TRUTH}
+          </p>
+        </div>
+      </section>
+
+      <section className="border-y border-slate-200 bg-slate-50 px-4 py-8 dark:border-slate-800 dark:bg-slate-900/50">
+        <div className="container mx-auto grid max-w-6xl gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          {(Object.keys(PUBLIC_CAPABILITY_STATUS_LABELS) as PublicCapabilityStatus[]).map((status) => {
+            const presentation = statusPresentation[status];
+            const Icon = presentation.icon;
+            return (
+              <div key={status} className="rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-950">
+                <div className="mb-2 flex items-center gap-2 font-semibold">
+                  <Icon className="h-4 w-4" aria-hidden="true" />
+                  {PUBLIC_CAPABILITY_STATUS_LABELS[status]}
+                </div>
+                <p className="text-sm leading-relaxed text-slate-600 dark:text-slate-400">
+                  {PUBLIC_CAPABILITY_STATUS_DESCRIPTIONS[status]}
+                </p>
+              </div>
+            );
+          })}
+        </div>
+      </section>
+
+      <section className="px-4 py-16" aria-labelledby="feature-register-heading">
+        <div className="container mx-auto max-w-6xl">
+          <div className="mb-10 max-w-3xl">
+            <h2 id="feature-register-heading" className="mb-3 text-3xl font-bold">
+              Verified Public Capability Register
+            </h2>
+            <p className="leading-relaxed text-slate-600 dark:text-slate-400">
+              Statuses describe the public product truth as reviewed on 9 August 2026. Controlled
+              access does not mean every account has the feature enabled. Limited capabilities
+              should be read together with their stated boundary.
             </p>
           </div>
-        </section>
 
-        <section className="py-12 px-4 bg-slate-50 dark:bg-slate-900/30">
-          <div className="container mx-auto max-w-6xl">
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-              
-              <div className="bg-white dark:bg-slate-950 p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm relative">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="font-bold text-slate-900 dark:text-white">Project-first workspace</h3>
-                  <span className="px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400">Live</span>
-                </div>
-                <p className="text-sm text-slate-600 dark:text-slate-400">Manage all BOQ tasks securely within dedicated project workspaces.</p>
-              </div>
-
-              <div className="bg-white dark:bg-slate-950 p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm relative">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="font-bold text-slate-900 dark:text-white">Manual uploads</h3>
-                  <span className="px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400">Live</span>
-                </div>
-                <p className="text-sm text-slate-600 dark:text-slate-400">Upload text-based and scanned PDF BOQ documents directly into your project.</p>
-              </div>
-
-              <div className="bg-white dark:bg-slate-950 p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm relative">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="font-bold text-slate-900 dark:text-white">Structured imports</h3>
-                  <span className="px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400">Live</span>
-                </div>
-                <p className="text-sm text-slate-600 dark:text-slate-400">Import structured BOQ data efficiently via XLSX and CSV formats.</p>
-              </div>
-
-              <div className="bg-white dark:bg-slate-950 p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm relative">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="font-bold text-slate-900 dark:text-white">Connected applications</h3>
-                  <span className="px-2 py-1 text-xs font-semibold rounded-full bg-slate-200 text-slate-700 dark:bg-slate-800 dark:text-slate-400">Planned</span>
-                </div>
-                <p className="text-sm text-slate-600 dark:text-slate-400">Directly sync project data from authorized external applications.</p>
-              </div>
-              
-              <div className="bg-white dark:bg-slate-950 p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm relative">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="font-bold text-slate-900 dark:text-white">Hybrid-source projects</h3>
-                  <span className="px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400">Live</span>
-                </div>
-                <p className="text-sm text-slate-600 dark:text-slate-400">Combine supported PDFs, spreadsheets and manually imported project data in one workspace. Connected application integrations are planned.</p>
-              </div>
-
-              <div className="bg-white dark:bg-slate-950 p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm relative">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="font-bold text-slate-900 dark:text-white">Source normalization</h3>
-                  <span className="px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400">Live</span>
-                </div>
-                <p className="text-sm text-slate-600 dark:text-slate-400">Automatically map varied external formats into standard, reviewable items.</p>
-              </div>
-
-              <div className="bg-white dark:bg-slate-950 p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm relative">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="font-bold text-slate-900 dark:text-white">Project Source Centre</h3>
-                  <span className="px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400">Live</span>
-                </div>
-                <p className="text-sm text-slate-600 dark:text-slate-400">Manage all ingested project documents and data versions from a central hub.</p>
-              </div>
-
-              <div className="bg-white dark:bg-slate-950 p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm relative">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="font-bold text-slate-900 dark:text-white">Source versions</h3>
-                  <span className="px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400">Live</span>
-                </div>
-                <p className="text-sm text-slate-600 dark:text-slate-400">Maintain distinct, traceable versions of all documents uploaded to a project.</p>
-              </div>
-
-              <div className="bg-white dark:bg-slate-950 p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm relative">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="font-bold text-slate-900 dark:text-white">Voice instructions</h3>
-                  <span className="px-2 py-1 text-xs font-semibold rounded-full bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">In Development</span>
-                </div>
-                <p className="text-sm text-slate-600 dark:text-slate-400">Provide natural spoken instructions for structuring and updating BOQs.</p>
-              </div>
-              
-              <div className="bg-white dark:bg-slate-950 p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm relative">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="font-bold text-slate-900 dark:text-white">Typed instructions</h3>
-                  <span className="px-2 py-1 text-xs font-semibold rounded-full bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">In Development</span>
-                </div>
-                <p className="text-sm text-slate-600 dark:text-slate-400">Command the AI securely through text queries and typed BOQ update instructions.</p>
-              </div>
-
-              <div className="bg-white dark:bg-slate-950 p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm relative">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="font-bold text-slate-900 dark:text-white">Structured AI proposals</h3>
-                  <span className="px-2 py-1 text-xs font-semibold rounded-full bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">In Development</span>
-                </div>
-                <p className="text-sm text-slate-600 dark:text-slate-400">Quantara proposes governed changes to your records for review, rather than modifying directly.</p>
-              </div>
-
-              <div className="bg-white dark:bg-slate-950 p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm relative">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="font-bold text-slate-900 dark:text-white">Selective approval</h3>
-                  <span className="px-2 py-1 text-xs font-semibold rounded-full bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">In Development</span>
-                </div>
-                <p className="text-sm text-slate-600 dark:text-slate-400">Approve or reject individual proposed changes from the AI.</p>
-              </div>
-
-              <div className="bg-white dark:bg-slate-950 p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm relative">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="font-bold text-slate-900 dark:text-white">Governed revision creation</h3>
-                  <span className="px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400">Live</span>
-                </div>
-                <p className="text-sm text-slate-600 dark:text-slate-400">Every approved change applies exclusively to a securely recorded project revision.</p>
-              </div>
-
-              <div className="bg-white dark:bg-slate-950 p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm relative">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="font-bold text-slate-900 dark:text-white">BOQ source traceability</h3>
-                  <span className="px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400">Live</span>
-                </div>
-                <p className="text-sm text-slate-600 dark:text-slate-400">Trace generated BOQ records directly back to the original source document.</p>
-              </div>
-
-              <div className="bg-white dark:bg-slate-950 p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm relative">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="font-bold text-slate-900 dark:text-white">Technical-report assistant</h3>
-                  <span className="px-2 py-1 text-xs font-semibold rounded-full bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">In Development</span>
-                </div>
-                <p className="text-sm text-slate-600 dark:text-slate-400">Draft, organize and revise structured technical reports alongside the BOQ.</p>
-              </div>
-
-              <div className="bg-white dark:bg-slate-950 p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm relative">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="font-bold text-slate-900 dark:text-white">Output generation</h3>
-                  <span className="px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400">Live</span>
-                </div>
-                <p className="text-sm text-slate-600 dark:text-slate-400">Generate professional, branded PDFs and detailed XLSX spreadsheets.</p>
-              </div>
-              
-            </div>
+          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+            {PUBLIC_CAPABILITIES.map((capability) => {
+              const presentation = statusPresentation[capability.status];
+              const Icon = presentation.icon;
+              return (
+                <article
+                  key={capability.id}
+                  id={capability.id}
+                  className={`rounded-2xl border bg-white p-6 shadow-sm dark:bg-slate-950 ${presentation.card}`}
+                >
+                  <div className="mb-4 flex items-start justify-between gap-4">
+                    <h3 className="text-lg font-bold">{capability.name}</h3>
+                    <span className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-bold ${presentation.badge}`}>
+                      <Icon className="h-3.5 w-3.5" aria-hidden="true" />
+                      {PUBLIC_CAPABILITY_STATUS_LABELS[capability.status]}
+                    </span>
+                  </div>
+                  <p className="text-sm leading-relaxed text-slate-700 dark:text-slate-300">
+                    {capability.summary}
+                  </p>
+                  {capability.limitation ? (
+                    <p className="mt-4 border-l-2 border-slate-300 pl-3 text-sm leading-relaxed text-slate-600 dark:border-slate-700 dark:text-slate-400">
+                      <strong>Boundary:</strong> {capability.limitation}
+                    </p>
+                  ) : null}
+                </article>
+              );
+            })}
           </div>
-        </section>
-      
-      
+        </div>
+      </section>
+
+      <section className="border-y border-amber-200 bg-amber-50 px-4 py-10 dark:border-amber-900/60 dark:bg-amber-950/20">
+        <div className="container mx-auto max-w-4xl">
+          <h2 className="mb-3 text-2xl font-bold text-amber-950 dark:text-amber-100">
+            Professional review remains mandatory
+          </h2>
+          <p className="leading-relaxed text-amber-900/90 dark:text-amber-100/80">
+            {PROFESSIONAL_REVIEW_NOTICE}
+          </p>
+        </div>
+      </section>
+
+      <section className="px-4 py-16 text-center">
+        <div className="container mx-auto max-w-3xl rounded-3xl bg-slate-950 px-6 py-12 text-white dark:border dark:border-slate-800">
+          <h2 className="mb-4 text-3xl font-bold">Discuss a Supported Quantara Workflow</h2>
+          <p className="mx-auto mb-8 max-w-2xl text-slate-300">
+            Tell us about your project sources, BOQ process and review requirements. We will confirm
+            current fit and controlled-access dependencies before access is discussed.
+          </p>
+          <div className="flex flex-col justify-center gap-3 sm:flex-row">
+            <Link href="/contact-sales" className="inline-flex h-12 items-center justify-center rounded-lg bg-blue-600 px-6 font-semibold hover:bg-blue-500">
+              Discuss Your Requirements <ArrowRight className="ml-2 h-4 w-4" aria-hidden="true" />
+            </Link>
+            <Link href="/register" className="inline-flex h-12 items-center justify-center rounded-lg border border-slate-600 px-6 font-semibold hover:bg-slate-800">
+              Request Early Access
+            </Link>
+          </div>
+        </div>
+      </section>
       </div>
+    </>
   );
 }

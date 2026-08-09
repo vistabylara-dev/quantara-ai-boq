@@ -1,55 +1,30 @@
-export const pricingTiers = [
+export const publicAccessOptions = [
   {
-    name: "Starter",
-    price: "149",
-    description: "Essential BOQ tools for small teams.",
+    name: "Controlled Early Access",
+    commercialTerms: "Access reviewed before activation",
+    description: "Request access to Quantara's currently supported BOQ workflows.",
     features: [
-      "1 Project Workspace",
-      "Manual PDF & XLSX Uploads",
-      "Basic AI Document Extraction",
-      "Standard BOQ Generation",
-      "Email Support"
+      "Supported text-based PDF, XLSX and CSV workflows",
+      "Structured BOQ review and project records",
+      "Professional review required before commercial use",
+      "Workspace and feature availability confirmed during review"
     ],
-    href: "/contact-sales"
-  },
-  {
-    name: "Professional",
-    price: "399",
-    description: "Advanced tools for growing teams.",
-    features: [
-      "5 Project Workspaces",
-      "Structured Import & Export",
-      "Advanced AI Extraction",
-      "Custom Templates",
-      "Priority Support"
-    ],
-    href: "/contact-sales",
+    href: "/register",
+    ctaLabel: "Request Early Access",
     featured: true
   },
   {
-    name: "Business",
-    price: "899",
-    description: "Comprehensive solution for large projects.",
+    name: "Requirements and Commercial Review",
+    commercialTerms: "Custom written scope and quotation",
+    description: "Discuss organizational requirements before access or paid services are proposed.",
     features: [
-      "Unlimited Projects",
-      "Hybrid-Source Management",
-      "Governed AI Change Proposals",
-      "Advanced Role-Based Access",
-      "Dedicated Account Manager"
+      "Workflow and supported-format review",
+      "Configuration and integration availability check",
+      "Implementation scope documented before commitment",
+      "Commercial terms confirmed separately in writing"
     ],
-    href: "/contact-sales"
-  },
-  {
-    name: "Enterprise",
-    price: "15,000",
-    description: "Custom deployment for enterprise needs.",
-    features: [
-      "Custom Deployments",
-      "SSO & Advanced Security",
-      "Custom API Integrations",
-      "Full Source-Linked Traceability",
-      "24/7 Dedicated Support"
-    ],
-    href: "/contact-sales"
+    href: "/contact-sales",
+    ctaLabel: "Discuss Requirements",
+    featured: false
   }
-];
+] as const;

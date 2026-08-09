@@ -1,28 +1,9 @@
-import { Metadata } from "next";
+import { createPublicPageMetadata } from "@/lib/public-site/search-registry";
 import RegionalLandingPage, { RegionalLandingPageContent } from "@/components/layout/regional-landing-page";
 
-export const metadata: Metadata = {
-  title: "BOQ Software UAE for Contractors and Quantity Surveyors",
-  description: "Organize UAE construction BOQ workflows, supported project documents, revisions, templates and professional outputs using Quantara.",
-  alternates: {
-    canonical: "https://quantara.vistabylara.com/boq-software-uae",
-  },
-  openGraph: {
-    title: "BOQ Software UAE for Contractors and Quantity Surveyors | Quantara",
-    description: "Organize UAE construction BOQ workflows, supported project documents, revisions, templates and professional outputs using Quantara.",
-    url: "https://quantara.vistabylara.com/boq-software-uae",
-    type: "website",
-  },
-  twitter: {
-    card: "summary_large_image",
-    title: "BOQ Software UAE for Contractors and Quantity Surveyors | Quantara",
-    description: "Organize UAE construction BOQ workflows, supported project documents, revisions, templates and professional outputs using Quantara.",
-  },
-  robots: {
-    index: true,
-    follow: true,
-  }
-};
+export const metadata = createPublicPageMetadata("/boq-software-uae");
+
+
 
 export default function Page() {
   const content: RegionalLandingPageContent = {
@@ -30,7 +11,7 @@ export default function Page() {
     breadcrumbParent: {"href":"/gcc-boq-software","label":"GCC BOQ Software"},
     title: "BOQ Software for UAE Construction and Estimating Teams",
     audienceDescription: "For UAE contractors, estimators and quantity surveyors requiring structured BOQ and project document workflows.",
-    directAnswer: "Quantara provides UAE construction teams with a structured platform to organize tender documents, manage consultant revisions, and build project BOQ records.",
+    directAnswer: "Quantara is AI-assisted BOQ workflow software that helps UAE construction teams organize supported project sources, reviewed information and distinct BOQ revision records.",
     challenges: [
   {
     "title": "Mixed Tender Formats",
@@ -41,8 +22,8 @@ export default function Page() {
     "description": "Managing frequent consultant, contractor, and subcontractor revisions during the tender phase requires strict document control."
   }
 ],
-    workflowDescription: "Quantara supports teams in structuring BOQs from supported documents. It provides version control for revisions, centralizes project templates, and generates professional outputs. While multilingual documents may occur on UAE projects, users manage their own descriptions and records.",
-    workflowExample: "A UAE main contractor receives a complex text-based PDF BOQ from a project consultant. They use Quantara to extract the document, structure the items, and apply their company’s controlled template before issuing distinct packages to local subcontractors for pricing. A scanned version of the same document would be detected and flagged for manual transcription, since OCR is planned but not yet available.",
+    workflowDescription: "Quantara captures supported information from text-based PDFs and spreadsheets for review, organizes confirmed BOQ records and retains distinct revisions. Available templates can support reviewed outputs. Users remain responsible for multilingual descriptions, commercial data and final issue decisions.",
+    workflowExample: "A UAE main contractor receives a text-based PDF BOQ from a consultant. Supported information is captured for review, confirmed items are organized in a BOQ record and an available company template is applied to a reviewable output. A scanned version is detected and flagged for manual transcription because OCR text extraction is not currently available.",
     typicalCategories: [
   "Preliminaries",
   "Civil and Structural",
@@ -52,7 +33,7 @@ export default function Page() {
 ],
     supportedInputs: [
   "Text-based PDF",
-  "Scanned PDF (detection only — OCR planned)",
+  "Scanned PDF (detection only — OCR not currently available)",
   "XLSX",
   "CSV"
 ],
@@ -63,7 +44,7 @@ export default function Page() {
 ],
     supportedOutputs: [
   "Structured Excel (XLSX)",
-  "Formatted PDF Proposals",
+  "Reviewable PDF Outputs",
   "CSV Exports"
 ],
     limitations: [
@@ -74,7 +55,7 @@ export default function Page() {
     faqs: [
   {
     "question": "Is Quantara available to UAE construction companies?",
-    "answer": "Yes, Quantara is available for UAE-based contractors, estimators, and quantity surveyors to manage their BOQ workflows."
+    "answer": "Quantara is offered through Controlled Early Access. UAE contractors, estimators and quantity surveyors can request access, subject to current onboarding and capability availability."
   },
   {
     "question": "Does Quantara include UAE construction rates?",
@@ -86,11 +67,11 @@ export default function Page() {
   },
   {
     "question": "Can Quantara process Arabic BOQ documents?",
-    "answer": "Currently, Quantara is optimized for English documents. It does not claim native Arabic OCR or translation support unless explicitly verified."
+    "answer": "Current public capability information does not verify Arabic OCR or translation. Language support should be confirmed for the source and workflow before use."
   },
   {
     "question": "Is Quantara hosted in the UAE?",
-    "answer": "Quantara utilizes global cloud infrastructure and does not guarantee specific local data residency in the UAE at this time."
+    "answer": "Quantara does not publish a verified UAE data-residency commitment. Hosting, storage location and contractual data requirements must be confirmed for the specific Controlled Early Access arrangement."
   },
   {
     "question": "Does it comply with Dubai Municipality regulations?",
@@ -98,15 +79,15 @@ export default function Page() {
   },
   {
     "question": "Can I manage consultant revisions?",
-    "answer": "Yes, Quantara includes revision tracking to manage updates from consultants or clients during the tender phase."
+    "answer": "Quantara retains distinct BOQ revision records. Users must compare them and interpret updates from consultants or clients."
   },
   {
     "question": "What does Controlled Early Access mean for regional users?",
-    "answer": "It means the platform is active but access is managed to ensure high performance and dedicated support for early adopters."
+    "answer": "It means access and feature availability are managed while the product is evaluated and improved. Current capability, account access and any commercial terms must be confirmed separately."
   },
   {
     "question": "Which file formats are currently supported?",
-    "answer": "Quantara extracts data from Text-based PDF, XLSX, and CSV files today. Scanned/image-only PDFs can be uploaded and are automatically detected and flagged for manual transcription; OCR is planned and not yet available."
+    "answer": "Quantara imports supported structured XLSX and CSV data. For text-based PDFs, it stores extractable text and creates review candidates only from supported detected table rows. Scanned/image-only PDFs are detected and flagged for manual transcription; OCR text extraction is not currently available."
   },
   {
     "question": "Does Quantara replace a local quantity surveyor?",
@@ -135,126 +116,7 @@ export default function Page() {
     "label": "BOQ Software"
   }
 ],
-    schema: {
-      "@context": "https://schema.org",
-      "@graph": [
-        {
-          "@type": "WebPage",
-          "@id": "https://quantara.vistabylara.com/boq-software-uae",
-          "url": "https://quantara.vistabylara.com/boq-software-uae",
-          "name": "BOQ Software UAE for Contractors and Quantity Surveyors | Quantara",
-          "description": "Organize UAE construction BOQ workflows, supported project documents, revisions, templates and professional outputs using Quantara."
-        },
-        {
-          "@type": "BreadcrumbList",
-          "itemListElement": [
-            {
-              "@type": "ListItem",
-              "position": 1,
-              "name": "Home",
-              "item": "https://quantara.vistabylara.com/"
-            },
-            {
-              "@type": "ListItem",
-              "position": 2,
-              "name": "GCC BOQ Software",
-              "item": "https://quantara.vistabylara.com/gcc-boq-software"
-            },
-            {
-              "@type": "ListItem",
-              "position": 3,
-              "name": "BOQ Software UAE",
-              "item": "https://quantara.vistabylara.com/boq-software-uae"
-            }
-          ]
-        },
-        {
-          "@type": "FAQPage",
-          "mainEntity": [
-  {
-    "@type": "Question",
-    "name": "Is Quantara available to UAE construction companies?",
-    "acceptedAnswer": {
-      "@type": "Answer",
-      "text": "Yes, Quantara is available for UAE-based contractors, estimators, and quantity surveyors to manage their BOQ workflows."
-    }
-  },
-  {
-    "@type": "Question",
-    "name": "Does Quantara include UAE construction rates?",
-    "acceptedAnswer": {
-      "@type": "Answer",
-      "text": "No, Quantara does not provide pre-built UAE market rates or pricing databases. Users must apply their own rates to the structured BOQ."
-    }
-  },
-  {
-    "@type": "Question",
-    "name": "Does Quantara support UAE VAT calculations?",
-    "acceptedAnswer": {
-      "@type": "Answer",
-      "text": "No, Quantara does not calculate VAT or other local taxes. It focuses purely on structuring the BOQ items and quantities."
-    }
-  },
-  {
-    "@type": "Question",
-    "name": "Can Quantara process Arabic BOQ documents?",
-    "acceptedAnswer": {
-      "@type": "Answer",
-      "text": "Currently, Quantara is optimized for English documents. It does not claim native Arabic OCR or translation support unless explicitly verified."
-    }
-  },
-  {
-    "@type": "Question",
-    "name": "Is Quantara hosted in the UAE?",
-    "acceptedAnswer": {
-      "@type": "Answer",
-      "text": "Quantara utilizes global cloud infrastructure and does not guarantee specific local data residency in the UAE at this time."
-    }
-  },
-  {
-    "@type": "Question",
-    "name": "Does it comply with Dubai Municipality regulations?",
-    "acceptedAnswer": {
-      "@type": "Answer",
-      "text": "Quantara is a document workflow tool and does not provide engineering approval or regulatory compliance validation."
-    }
-  },
-  {
-    "@type": "Question",
-    "name": "Can I manage consultant revisions?",
-    "acceptedAnswer": {
-      "@type": "Answer",
-      "text": "Yes, Quantara includes revision tracking to manage updates from consultants or clients during the tender phase."
-    }
-  },
-  {
-    "@type": "Question",
-    "name": "What does Controlled Early Access mean for regional users?",
-    "acceptedAnswer": {
-      "@type": "Answer",
-      "text": "It means the platform is active but access is managed to ensure high performance and dedicated support for early adopters."
-    }
-  },
-  {
-    "@type": "Question",
-    "name": "Which file formats are currently supported?",
-    "acceptedAnswer": {
-      "@type": "Answer",
-      "text": "Quantara extracts data from Text-based PDF, XLSX, and CSV files today. Scanned/image-only PDFs can be uploaded and are automatically detected and flagged for manual transcription; OCR is planned and not yet available."
-    }
-  },
-  {
-    "@type": "Question",
-    "name": "Does Quantara replace a local quantity surveyor?",
-    "acceptedAnswer": {
-      "@type": "Answer",
-      "text": "No, professional review by a qualified QS or estimator is always required."
-    }
-  }
-]
-        }
-      ]
-    }
+    path: "/boq-software-uae"
   };
 
   return <RegionalLandingPage content={content} />;

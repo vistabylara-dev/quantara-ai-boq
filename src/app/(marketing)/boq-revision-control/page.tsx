@@ -1,33 +1,23 @@
-import { Metadata } from "next";
+import { createPublicPageMetadata, PUBLIC_CONTENT_REVIEW_DATE } from "@/lib/public-site/search-registry";
 import KnowledgePage, { KnowledgePageContent } from "@/components/layout/knowledge-page";
 
-export const metadata: Metadata = {
-  title: "BOQ Revision Control and Version Management",
-  description: "Learn how to manage BOQ revisions, document versions, change records, approvals and controlled project outputs.",
-  alternates: {
-    canonical: "https://quantara.vistabylara.com/boq-revision-control",
-  },
-  openGraph: {
-    title: "BOQ Revision Control and Version Management | Quantara",
-    description: "Learn how to manage BOQ revisions, document versions, change records, approvals and controlled project outputs.",
-    url: "https://quantara.vistabylara.com/boq-revision-control",
-    type: "article",
-  },
-};
+export const metadata = createPublicPageMetadata("/boq-revision-control");
+
+
 
 export default function Page() {
   const content: KnowledgePageContent = {
     breadcrumbLabel: "BOQ Revision Control for Clear Project and Commercial Records",
     title: "BOQ Revision Control for Clear Project and Commercial Records",
-    summary: "BOQ revision control is the systematic management of changes to a Bill of Quantities over a project's lifecycle. As designs evolve, drawings are updated, and client requirements shift, maintaining a strict version history ensures all parties know exactly which scope is currently active and priced.",
-    reviewedDate: new Date().toISOString().split("T")[0],
+    summary: "BOQ revision control retains identifiable versions of a Bill of Quantities as project information changes. Clear issue records help teams determine which scope was reviewed, priced or superseded, but they still need to compare and interpret each revision.",
+    reviewedDate: PUBLIC_CONTENT_REVIEW_DATE,
     sections: [
   {
     "id": "why-it-matters",
     "heading": "Why Version Management Matters",
     "paragraphs": [
       "For commercial teams and estimators, working from an outdated BOQ is a direct path to financial loss. If a contractor prices Revision 1 while the client expects delivery of Revision 3, disputes are inevitable.",
-      "Proper revision control provides an audit trail of what changed, when it changed, who approved it, and why."
+      "A complete revision process should record identifiers, dates, issue notes and responsible reviewers. Teams still need to compare the issued documents and verify the recorded changes."
     ]
   },
   {
@@ -48,7 +38,7 @@ export default function Page() {
     "paragraphs": [
       "A hypothetical consultant issues a BOQ (Rev 0) for a commercial building.",
       "A week later, the architect adds a security fence. The consultant updates the BOQ, changes the identifier to Rev 1, logs \"Added security fence per Drawing A-102 Rev B,\" and issues it to the bidding contractors.",
-      "The contractors now know exactly what changed without having to manually compare every single line of the two documents."
+      "The issue note identifies the intended addition, but contractors should still review the revised BOQ and referenced drawing before pricing."
     ]
   },
   {
@@ -63,7 +53,7 @@ export default function Page() {
     "id": "quantara-workflow",
     "heading": "How Quantara Handles Revisions",
     "paragraphs": [
-      "Quantara provides structured BOQ management, allowing teams to maintain a single source of truth. Revisions and updates are managed within the platform, reducing the risk of scattered, outdated spreadsheet files.",
+      "Quantara retains distinct BOQ revision records within a project workspace. This can reduce reliance on renamed spreadsheet files, but users must still identify the current issue and compare the records themselves.",
       "Quantara currently focuses on supported document extraction, BOQ structuring, project organization, templates, revisions, and professional outputs."
     ]
   }
@@ -75,7 +65,7 @@ export default function Page() {
   },
   {
     "question": "How do you compare two BOQ revisions?",
-    "answer": "Manually, this involves tedious side-by-side checking. Digitally, software can run a variance analysis to highlight added, removed, or modified items and quantities."
+    "answer": "Teams can compare revision identifiers, issue notes, sections, items and quantities side by side. Dedicated automated variance analysis is product-specific and is not represented as a current Quantara feature."
   },
   {
     "question": "What happens to older BOQ versions?",
@@ -104,15 +94,7 @@ export default function Page() {
     "label": "BOQ Review Checklist"
   }
 ],
-    schema: {
-      "@context": "https://schema.org",
-      "@type": "TechArticle",
-      "headline": "BOQ Revision Control for Clear Project and Commercial Records",
-      "description": "Learn how to manage BOQ revisions, document versions, change records, approvals and controlled project outputs.",
-      "url": "https://quantara.vistabylara.com/boq-revision-control",
-      "publisher": { "@id": "https://quantara.vistabylara.com/#organization" },
-      "mainEntityOfPage": { "@id": "https://quantara.vistabylara.com/#website" }
-    }
+    path: "/boq-revision-control"
   };
 
   return <KnowledgePage content={content} />;

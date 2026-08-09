@@ -1,8 +1,9 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { siteConfig } from "@/config/site";
+import PublicBreadcrumb from "@/components/ui/public-breadcrumb";
 
 export default function ContactSalesPage() {
   const [formData, setFormData] = useState({
@@ -25,6 +26,11 @@ export default function ContactSalesPage() {
   
   const [status, setStatus] = useState<"idle" | "submitting" | "success" | "error">("idle");
   const [errorMessage, setErrorMessage] = useState("");
+  const successHeadingRef = useRef<HTMLHeadingElement>(null);
+
+  useEffect(() => {
+    if (status === "success") successHeadingRef.current?.focus();
+  }, [status]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -55,7 +61,7 @@ export default function ContactSalesPage() {
       <div className="min-h-[70vh] flex items-center justify-center py-24 px-4">
         <div className="max-w-md w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-8 text-center shadow-lg">
           <div className="w-16 h-16 bg-emerald-100 dark:bg-emerald-900/50 text-emerald-600 dark:text-emerald-400 rounded-full flex items-center justify-center mx-auto mb-6 text-3xl font-bold">✓</div>
-          <h2 className="text-2xl font-bold text-slate-900 dark:text-white mb-4">Thank you. Your request has been received.</h2>
+          <h1 ref={successHeadingRef} tabIndex={-1} className="text-2xl font-bold text-slate-900 dark:text-white mb-4 outline-none">Thank you. Your request has been received.</h1>
           <p className="text-slate-600 dark:text-slate-400 mb-8">
             Our team will review the information and contact you using the details provided.
           </p>
@@ -70,11 +76,7 @@ export default function ContactSalesPage() {
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-[#030508] py-24">
       <div className="max-w-6xl mx-auto px-4">
-        <div className="mb-8">
-          <Link href="/" className="text-blue-600 hover:underline flex items-center gap-2 text-sm font-medium">
-            ← Back to Home
-          </Link>
-        </div>
+        <PublicBreadcrumb items={[{ name: "Home", item: "/" }, { name: "Contact Sales" }]} />
 
         <div className="grid md:grid-cols-2 gap-12 items-start">
           <div>
@@ -209,7 +211,7 @@ export default function ContactSalesPage() {
               </div>
 
               {status === "error" && (
-                <div className="text-rose-500 text-sm font-medium p-3 bg-rose-50 dark:bg-rose-900/20 rounded-lg mt-2">
+                <div role="alert" className="text-rose-500 text-sm font-medium p-3 bg-rose-50 dark:bg-rose-900/20 rounded-lg mt-2">
                   {errorMessage}
                 </div>
               )}

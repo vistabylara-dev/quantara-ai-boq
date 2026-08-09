@@ -1,7 +1,16 @@
 import React from "react";
 import Link from "next/link";
 import { ArrowRight, CheckCircle2, AlertTriangle, MapPin } from "lucide-react";
-import PublicBreadcrumb, { generateBreadcrumbSchema } from "@/components/ui/public-breadcrumb";
+import PublicJsonLd from "@/components/seo/public-json-ld";
+import PublicBreadcrumb from "@/components/ui/public-breadcrumb";
+import {
+  buildPublicPageGraph,
+  inferPublicPathFromSchema,
+} from "@/lib/public-site/schema";
+import {
+  getPublicSearchPage,
+  type PublicSearchPath,
+} from "@/lib/public-site/search-registry";
 
 export interface RegionalFAQ {
   question: string;
@@ -9,6 +18,7 @@ export interface RegionalFAQ {
 }
 
 export interface RegionalLandingPageContent {
+  path?: string;
   breadcrumbLabel: string;
   breadcrumbParent: { label: string; href: string };
   title: string;
@@ -27,20 +37,38 @@ export interface RegionalLandingPageContent {
   limitations: string[];
   faqs: RegionalFAQ[];
   relatedPages: { label: string; href: string }[];
-  schema: any;
+  /** @deprecated Kept only to infer the route while callers migrate to `path`. */
+  schema?: Record<string, unknown>;
 }
 
 export default function RegionalLandingPage({ content }: { content: RegionalLandingPageContent }) {
+  const path = content.path ?? inferPublicPathFromSchema(content.schema);
+  const searchPage = path ? getPublicSearchPage(path as PublicSearchPath) : null;
+  const breadcrumbItems = [
+    { name: "Home", item: "/" },
+    { name: content.breadcrumbParent.label, item: content.breadcrumbParent.href },
+    { name: content.breadcrumbLabel, item: path ?? undefined },
+  ];
+  const jsonLd = searchPage
+    ? buildPublicPageGraph({
+        path: searchPage.path,
+        title: searchPage.title,
+        description: searchPage.description,
+        breadcrumbs: breadcrumbItems.map((item) => ({
+          name: item.name,
+          path: item.item,
+        })),
+        faqs: content.faqs,
+      })
+    : null;
+
   return (
     <div className="flex flex-col min-h-screen bg-slate-50 text-slate-900 font-sans">
+      {jsonLd && <PublicJsonLd data={jsonLd} />}
       <div className="flex-1 w-full max-w-5xl mx-auto px-4 py-12 md:py-16 bg-white shadow-sm border-x border-slate-200">
         
         <div className="px-4 md:px-8">
-          <PublicBreadcrumb items={[
-            { name: "Home", item: "/" },
-            { name: "Regional", item: "/gcc-boq-software" },
-            { name: content.breadcrumbLabel }
-          ]} />
+          <PublicBreadcrumb items={breadcrumbItems} tone="light" />
         </div>
 
         <header className="mb-14 px-4 md:px-8">
@@ -102,7 +130,7 @@ export default function RegionalLandingPage({ content }: { content: RegionalLand
                 ))}
               </ul>
               
-              <h4 className="font-semibold text-slate-700 mb-3 text-sm uppercase tracking-wider">Planned Integration</h4>
+              <h4 className="font-semibold text-slate-700 mb-3 text-sm uppercase tracking-wider">Not Currently Supported</h4>
               <ul className="space-y-2 text-sm text-slate-500 opacity-75">
                 {content.plannedInputs.map((input, idx) => (
                   <li key={idx} className="flex items-center gap-2">
@@ -207,10 +235,6 @@ export default function RegionalLandingPage({ content }: { content: RegionalLand
         </section>
       </div>
 
-      <script
-        type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(content.schema) }}
-      />
     </div>
   );
 }

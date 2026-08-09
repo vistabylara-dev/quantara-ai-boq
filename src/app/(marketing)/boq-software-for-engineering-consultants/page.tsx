@@ -1,35 +1,16 @@
-import { Metadata } from "next";
+import { createPublicPageMetadata } from "@/lib/public-site/search-registry";
 import IndustryLandingPage, { IndustryLandingPageContent } from "@/components/layout/industry-landing-page";
 
-export const metadata: Metadata = {
-  title: "BOQ Software for Engineering Consultants and Project Teams",
-  description: "Support consultant BOQ preparation, revisions, controlled templates, project records and professionally reviewed outputs using Quantara.",
-  alternates: {
-    canonical: "https://quantara.vistabylara.com/boq-software-for-engineering-consultants",
-  },
-  openGraph: {
-    title: "BOQ Software for Engineering Consultants and Project Teams | Quantara",
-    description: "Support consultant BOQ preparation, revisions, controlled templates, project records and professionally reviewed outputs using Quantara.",
-    url: "https://quantara.vistabylara.com/boq-software-for-engineering-consultants",
-    type: "website",
-  },
-  twitter: {
-    card: "summary_large_image",
-    title: "BOQ Software for Engineering Consultants and Project Teams | Quantara",
-    description: "Support consultant BOQ preparation, revisions, controlled templates, project records and professionally reviewed outputs using Quantara.",
-  },
-  robots: {
-    index: true,
-    follow: true,
-  }
-};
+export const metadata = createPublicPageMetadata("/boq-software-for-engineering-consultants");
+
+
 
 export default function Page() {
   const content: IndustryLandingPageContent = {
     breadcrumbLabel: "BOQ Software for Consultants",
     title: "BOQ Software for Engineering Consultants Managing Controlled Project Information",
     audienceDescription: "For engineering consultants and client-side project teams managing BOQ preparation, multidisciplinary coordination, and tender issue workflows.",
-    directAnswer: "Quantara supports engineering consultants in structuring BOQ preparation, managing controlled templates, and maintaining a clear audit trail for tender documents.",
+    directAnswer: "Quantara helps engineering consultants organize supported project sources, BOQ sections, available templates and distinct revision records for professional review.",
     challenges: [
   {
     "title": "Multidisciplinary Coordination",
@@ -40,8 +21,8 @@ export default function Page() {
     "description": "Issuing the correct, verified revision of a BOQ to clients and contractors requires rigorous document control and tracking."
   }
 ],
-    workflowDescription: "Quantara streamlines consultant BOQ preparation by managing technical schedules, document revisions, and controlled templates. It provides a robust framework for issue records, client review, tender documentation, and multidisciplinary coordination, culminating in professional approval workflows.",
-    workflowExample: "A consultant team is consolidating revised BOQ sections from their structural and MEP departments before tender release. They use Quantara to merge the disciplines into a single controlled project record, update the revision number to Rev 3, and export a finalized PDF for client review.",
+    workflowDescription: "Quantara stores extractable PDF text and creates review candidates only from supported detected table rows, then organizes professionally reviewed BOQ sections, distinct revisions and available templates. Consultants remain responsible for multidisciplinary coordination, issue records and professional approval.",
+    workflowExample: "A consultant team reviews revised BOQ sections from structural and MEP departments before tender release. Supported table-row candidates are checked against their source, confirmed items are organized in a distinct revision record and a reviewable PDF is generated for checking.",
     typicalCategories: [
   "General Preliminaries",
   "Substructure",
@@ -53,7 +34,7 @@ export default function Page() {
 ],
     supportedInputs: [
   "Text-based PDF",
-  "Scanned PDF (detection only — OCR planned)",
+  "Scanned PDF (detection only — OCR not currently available)",
   "XLSX",
   "CSV"
 ],
@@ -64,18 +45,18 @@ export default function Page() {
 ],
     supportedOutputs: [
   "Structured Excel (XLSX)",
-  "Formatted PDF Proposals",
+  "Reviewable PDF Outputs",
   "CSV Exports"
 ],
     limitations: [
   "Quantara does not claim formal design validation, compliance approval, or certification.",
   "Quantara does not automate the professional judgment required to prepare a BOQ.",
-  "Automated extraction of quantities directly from engineering models is Planned."
+  "Automatic quantity extraction from engineering models is not currently available."
 ],
     faqs: [
   {
     "question": "Can consultants manage multiple project revisions?",
-    "answer": "Yes, Quantara’s revision control ensures that multiple iterations of a BOQ are tracked and securely managed before tender issue."
+    "answer": "Quantara retains multiple BOQ revisions as distinct project records. Consultants must identify the current issue and compare the records before tender release."
   },
   {
     "question": "Does Quantara perform design validation?",
@@ -83,11 +64,11 @@ export default function Page() {
   },
   {
     "question": "How is multidisciplinary coordination handled?",
-    "answer": "Consultants can create distinct sections for each discipline within a master project BOQ, ensuring all scope is consolidated cleanly."
+    "answer": "Consultants can create distinct sections for supported disciplines within a project BOQ. They must still check scope boundaries, overlaps and omissions."
   },
   {
     "question": "Can I use controlled templates?",
-    "answer": "Yes, consultancy firms can establish controlled BOQ templates to ensure consistency across different projects and offices."
+    "answer": "Available company templates can support consistent BOQ layouts. Each template and generated result still requires configuration and review."
   },
   {
     "question": "Does it replace traditional measurement software?",
@@ -95,11 +76,11 @@ export default function Page() {
   },
   {
     "question": "How are issue records maintained?",
-    "answer": "By locking revisions, the platform maintains a clear history of what was issued, when, and what changed."
+    "answer": "Distinct revision records preserve identifiable BOQ states. Users must maintain issue notes and interpret what changed between them."
   },
   {
     "question": "Can I export documents for client review?",
-    "answer": "Yes, structured BOQs can be exported as professional PDFs or Excel files for formal client presentation and review."
+    "answer": "Supported BOQ data can be exported as reviewable PDF or XLSX files. A professional must check the file before client presentation or issue."
   },
   {
     "question": "Is it suitable for client-side project teams?",
@@ -128,110 +109,7 @@ export default function Page() {
     "label": "About Quantara"
   }
 ],
-    schema: {
-      "@context": "https://schema.org",
-      "@graph": [
-        {
-          "@type": "WebPage",
-          "@id": "https://quantara.vistabylara.com/boq-software-for-engineering-consultants",
-          "url": "https://quantara.vistabylara.com/boq-software-for-engineering-consultants",
-          "name": "BOQ Software for Engineering Consultants and Project Teams | Quantara",
-          "description": "Support consultant BOQ preparation, revisions, controlled templates, project records and professionally reviewed outputs using Quantara."
-        },
-        {
-          "@type": "BreadcrumbList",
-          "itemListElement": [
-            {
-              "@type": "ListItem",
-              "position": 1,
-              "name": "Home",
-              "item": "https://quantara.vistabylara.com/"
-            },
-            {
-              "@type": "ListItem",
-              "position": 2,
-              "name": "Industries",
-              "item": "https://quantara.vistabylara.com/industries"
-            },
-            {
-              "@type": "ListItem",
-              "position": 3,
-              "name": "BOQ Software for Consultants",
-              "item": "https://quantara.vistabylara.com/boq-software-for-engineering-consultants"
-            }
-          ]
-        },
-        {
-          "@type": "FAQPage",
-          "mainEntity": [
-  {
-    "@type": "Question",
-    "name": "Can consultants manage multiple project revisions?",
-    "acceptedAnswer": {
-      "@type": "Answer",
-      "text": "Yes, Quantara’s revision control ensures that multiple iterations of a BOQ are tracked and securely managed before tender issue."
-    }
-  },
-  {
-    "@type": "Question",
-    "name": "Does Quantara perform design validation?",
-    "acceptedAnswer": {
-      "@type": "Answer",
-      "text": "No, Quantara does not provide formal design validation, code compliance, or engineering certification."
-    }
-  },
-  {
-    "@type": "Question",
-    "name": "How is multidisciplinary coordination handled?",
-    "acceptedAnswer": {
-      "@type": "Answer",
-      "text": "Consultants can create distinct sections for each discipline within a master project BOQ, ensuring all scope is consolidated cleanly."
-    }
-  },
-  {
-    "@type": "Question",
-    "name": "Can I use controlled templates?",
-    "acceptedAnswer": {
-      "@type": "Answer",
-      "text": "Yes, consultancy firms can establish controlled BOQ templates to ensure consistency across different projects and offices."
-    }
-  },
-  {
-    "@type": "Question",
-    "name": "Does it replace traditional measurement software?",
-    "acceptedAnswer": {
-      "@type": "Answer",
-      "text": "Quantara focuses on document structure, extraction, and revision control. It does not currently replace dedicated visual measurement tools."
-    }
-  },
-  {
-    "@type": "Question",
-    "name": "How are issue records maintained?",
-    "acceptedAnswer": {
-      "@type": "Answer",
-      "text": "By locking revisions, the platform maintains a clear history of what was issued, when, and what changed."
-    }
-  },
-  {
-    "@type": "Question",
-    "name": "Can I export documents for client review?",
-    "acceptedAnswer": {
-      "@type": "Answer",
-      "text": "Yes, structured BOQs can be exported as professional PDFs or Excel files for formal client presentation and review."
-    }
-  },
-  {
-    "@type": "Question",
-    "name": "Is it suitable for client-side project teams?",
-    "acceptedAnswer": {
-      "@type": "Answer",
-      "text": "Yes, client representatives can use the platform to structure their requirements and review consultant-issued documents."
-    }
-  }
-]
-        }
-      ]
-    }
+    path: "/boq-software-for-engineering-consultants"
   };
 
   return <IndustryLandingPage content={content} />;

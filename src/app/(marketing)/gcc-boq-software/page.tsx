@@ -1,23 +1,12 @@
-import { Metadata } from "next";
+import { createPublicPageMetadata } from "@/lib/public-site/search-registry";
 import Link from "next/link";
 import { ArrowRight, Globe } from "lucide-react";
-export const metadata: Metadata = {
-  title: "GCC BOQ Software for Construction and Estimating Teams",
-  description: "Explore how Quantara supports structured BOQ, document, revision and professional-review workflows for construction teams across the GCC.",
-  alternates: {
-    canonical: "https://quantara.vistabylara.com/gcc-boq-software",
-  },
-  openGraph: {
-    title: "GCC BOQ Software for Construction and Estimating Teams | Quantara",
-    description: "Explore how Quantara supports structured BOQ, document, revision and professional-review workflows for construction teams across the GCC.",
-    url: "https://quantara.vistabylara.com/gcc-boq-software",
-    type: "website",
-  },
-  robots: {
-    index: true,
-    follow: true,
-  }
-};
+import { PublicPageJsonLd } from "@/components/seo/public-json-ld";
+import PublicBreadcrumb from "@/components/ui/public-breadcrumb";
+
+export const metadata = createPublicPageMetadata("/gcc-boq-software");
+
+
 
 const regionalLinks = [
   { href: "/boq-software-uae", name: "UAE BOQ Software", desc: "For UAE contractors, estimators and quantity surveyors." },
@@ -32,8 +21,15 @@ const regionalLinks = [
 
 export default function GCCIndexPage() {
   return (
-    <div className="container mx-auto px-4 py-16 md:py-24 max-w-7xl">
-      
+    <>
+      <PublicPageJsonLd
+        path="/gcc-boq-software"
+        breadcrumbs={[{ name: "Home", path: "/" }, { name: "GCC BOQ Software", path: "/gcc-boq-software" }]}
+      />
+      <div className="min-h-screen bg-white text-slate-900">
+      <div className="container mx-auto px-4 py-16 md:py-24 max-w-7xl">
+        <PublicBreadcrumb items={[{ name: "Home", item: "/" }, { name: "GCC BOQ Software" }]} tone="light" />
+
         <header className="mb-16 text-center max-w-4xl mx-auto">
           <div className="inline-flex items-center gap-2 px-3 py-1 bg-blue-50 text-blue-700 rounded-full text-xs font-semibold mb-6 uppercase tracking-wider">
             <Globe className="w-4 h-4" /> Regional Workflows
@@ -43,10 +39,10 @@ export default function GCCIndexPage() {
           </h1>
           <div className="prose prose-lg text-slate-600 mx-auto leading-relaxed">
             <p>
-              The GCC contains diverse markets, contract practices, and project requirements. Quantara supports these document-heavy tender and revision workflows across the region.
+              GCC markets have different contract practices and project requirements. Quantara offers a review-led BOQ workflow through Controlled Early Access, subject to current access and capability availability.
             </p>
             <p>
-              Whether handling contractor packages, consultant documentation, or MEP coordination, Quantara helps structure BOQ records from supported document formats into controlled templates. All outputs require professional review, and country-specific regulatory requirements must be assessed independently.
+              For supported contractor packages, consultant documents or MEP schedules, Quantara captures information for review and organizes confirmed BOQ records. Available templates can support outputs, while country-specific contractual and regulatory requirements must be assessed independently.
             </p>
           </div>
         </header>
@@ -76,11 +72,13 @@ export default function GCCIndexPage() {
 
         <section className="mt-16 p-5 bg-slate-100 border border-slate-200 rounded-xl text-center max-w-4xl mx-auto">
           <p className="text-sm text-slate-600 font-medium leading-relaxed">
-            Quantara assists with supported document extraction, BOQ organization, project records, templates, revisions and document-generation workflows. Regional project requirements, contractual obligations, measurement methods, rates, tax treatment, regulations and professional responsibilities vary. All quantities, units, descriptions, specifications, rates, assumptions, exclusions and generated outputs must be reviewed by appropriately qualified local construction professionals before tender, procurement, contractual or construction use.
+            Quantara assists with supported source capture, BOQ organization, project records, available templates, revisions and document-generation workflows. Regional project requirements, contractual obligations, measurement methods, rates, tax treatment, regulations and professional responsibilities vary. All quantities, units, descriptions, specifications, rates, assumptions, exclusions and generated outputs must be reviewed by appropriately qualified local construction professionals before tender, procurement, contractual or construction use.
           </p>
         </section>
       
 
       </div>
+      </div>
+    </>
   );
 }

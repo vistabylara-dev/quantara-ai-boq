@@ -1,32 +1,22 @@
-import { Metadata } from "next";
+import { createPublicPageMetadata, PUBLIC_CONTENT_REVIEW_DATE } from "@/lib/public-site/search-registry";
 import KnowledgePage, { KnowledgePageContent } from "@/components/layout/knowledge-page";
 
-export const metadata: Metadata = {
-  title: "BOQ vs Bill of Materials: Construction Workflow Differences",
-  description: "Compare a Bill of Quantities with a Bill of Materials, including their structure, purpose, users, quantities and role in construction projects.",
-  alternates: {
-    canonical: "https://quantara.vistabylara.com/boq-vs-bill-of-materials",
-  },
-  openGraph: {
-    title: "BOQ vs Bill of Materials: Construction Workflow Differences | Quantara",
-    description: "Compare a Bill of Quantities with a Bill of Materials, including their structure, purpose, users, quantities and role in construction projects.",
-    url: "https://quantara.vistabylara.com/boq-vs-bill-of-materials",
-    type: "article",
-  },
-};
+export const metadata = createPublicPageMetadata("/boq-vs-bill-of-materials");
+
+
 
 export default function Page() {
   const content: KnowledgePageContent = {
     breadcrumbLabel: "BOQ vs Bill of Materials",
     title: "BOQ vs Bill of Materials: Purpose, Structure and Use",
     summary: "A Bill of Quantities (BOQ) and a Bill of Materials (BOM) are often confused, but they serve different industries and phases of a project. A BOQ is a construction document detailing the labor, materials, and methodology required to complete works. A BOM is a manufacturing or procurement document that lists only the physical parts and raw materials required to assemble a product.",
-    reviewedDate: new Date().toISOString().split("T")[0],
+    reviewedDate: PUBLIC_CONTENT_REVIEW_DATE,
     sections: [
   {
     "id": "why-it-matters",
     "heading": "Why the Distinction Matters",
     "paragraphs": [
-      "For MEP teams, fit-out contractors, and procurement managers, understanding when to use a BOQ versus a BOM ensures that labor and installation costs are not accidentally ignored during estimating.",
+      "For MEP teams, fit-out contractors and procurement managers, understanding when to use a BOQ versus a BOM helps teams distinguish and check material, labor and installation cost categories.",
       "A BOM tells you what to buy. A BOQ tells you what to buy, how to install it, and what the overall construction activity entails."
     ]
   },
@@ -93,8 +83,8 @@ export default function Page() {
     "id": "quantara-workflow",
     "heading": "How Quantara Supports the Workflow",
     "paragraphs": [
-      "Quantara is built for construction workflows. It handles the extraction and structuring of BOQs, allowing estimators to organize work items, revisions, and project documents efficiently.",
-      "Quantara currently focuses on supported document extraction, BOQ structuring, project organization, templates, revisions, and professional outputs. It is not a manufacturing BOM or inventory management system."
+      "Quantara is AI-assisted BOQ workflow software. It captures supported project information for review and organizes confirmed work items, revisions and project records.",
+      "Quantara supports BOQ records and professional outputs; it is not a manufacturing BOM or inventory-management system."
     ]
   }
 ],
@@ -134,15 +124,7 @@ export default function Page() {
     "label": "BOQ Software"
   }
 ],
-    schema: {
-      "@context": "https://schema.org",
-      "@type": "TechArticle",
-      "headline": "BOQ vs Bill of Materials: Purpose, Structure and Use",
-      "description": "Compare a Bill of Quantities with a Bill of Materials, including their structure, purpose, users, quantities and role in construction projects.",
-      "url": "https://quantara.vistabylara.com/boq-vs-bill-of-materials",
-      "publisher": { "@id": "https://quantara.vistabylara.com/#organization" },
-      "mainEntityOfPage": { "@id": "https://quantara.vistabylara.com/#website" }
-    }
+    path: "/boq-vs-bill-of-materials"
   };
 
   return <KnowledgePage content={content} />;

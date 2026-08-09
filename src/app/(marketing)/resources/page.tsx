@@ -1,13 +1,12 @@
-import { Metadata } from "next";
+import { createPublicPageMetadata } from "@/lib/public-site/search-registry";
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
-export const metadata: Metadata = {
-  title: "BOQ Resources and Educational Guides",
-  description: "Explore our knowledge base on Bill of Quantities fundamentals, extraction workflows, document review, and estimating best practices.",
-  alternates: {
-    canonical: "https://quantara.vistabylara.com/resources",
-  }
-};
+import { PublicPageJsonLd } from "@/components/seo/public-json-ld";
+import PublicBreadcrumb from "@/components/ui/public-breadcrumb";
+
+export const metadata = createPublicPageMetadata("/resources");
+
+
 
 const categories = [
   {
@@ -24,7 +23,7 @@ const categories = [
     links: [
       { href: "/boq-review-checklist", label: "BOQ Review Checklist", desc: "Quality-control checklist for estimators." },
       { href: "/common-boq-errors", label: "Common BOQ Errors", desc: "Errors that require professional review." },
-      { href: "/boq-revision-control", label: "BOQ Revision Control", desc: "Manage document versions and approvals." },
+      { href: "/boq-revision-control", label: "BOQ Revision Control", desc: "Review document versions and issue records." },
       { href: "/how-to-review-ai-extracted-boq", label: "How to Review an AI-Extracted BOQ", desc: "Source-to-output quality control workflow." }
     ]
   },
@@ -48,8 +47,15 @@ const categories = [
 
 export default function ResourcesPage() {
   return (
-    <div className="container mx-auto px-4 py-16 md:py-24 max-w-7xl">
-      
+    <>
+      <PublicPageJsonLd
+        path="/resources"
+        breadcrumbs={[{ name: "Home", path: "/" }, { name: "Resources", path: "/resources" }]}
+      />
+      <div className="min-h-screen bg-white text-slate-900">
+      <div className="container mx-auto px-4 py-16 md:py-24 max-w-7xl">
+        <PublicBreadcrumb items={[{ name: "Home", item: "/" }, { name: "Resources" }]} tone="light" />
+
         <header className="mb-16 text-center max-w-3xl mx-auto">
           <h1 className="text-4xl md:text-5xl font-bold text-slate-900 tracking-tight mb-6">BOQ Resources & Knowledge Base</h1>
           <p className="text-lg text-slate-600 leading-relaxed">
@@ -78,5 +84,7 @@ export default function ResourcesPage() {
       
 
       </div>
+      </div>
+    </>
   );
 }

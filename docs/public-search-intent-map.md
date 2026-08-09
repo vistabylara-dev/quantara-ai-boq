@@ -1,0 +1,83 @@
+# Quantara public search intent map
+
+Reviewed: 2026-08-09
+Scope: the 58 indexable website routes in `src/lib/public-site/search-registry.ts`. Auth, account recovery, thin legal placeholders, token-sharing pages and authenticated SaaS routes are intentionally excluded.
+
+## Cannibalization rules
+
+- `/ai-boq-software` owns AI-assisted workflow intent; `/boq-software` owns the broad category; `/` owns the Quantara/UAE brand-category combination.
+- `/construction-estimating-software` explains estimating workflow context, not automatic pricing or full takeoff. `/boq-management` owns structured record/revision intent.
+- `/pdf-boq-extraction` owns supported text-PDF product intent. `/scanned-pdf-boq` owns current scan/OCR status. `/ocr-for-boq-documents` owns educational OCR intent. `/how-to-convert-pdf-boq-to-excel` owns the conversion task.
+- `/quantity-takeoff-vs-boq-management` explains the process distinction; `/quantity-takeoff-vs-boq-software` owns software-category comparison. Neither redefines Quantara as takeoff software.
+- `/quantara-vs-excel-for-boq` is the branded comparison. `/boq-software-vs-spreadsheets` is category-level. `/construction-estimating-software-vs-excel` is estimating-specific.
+- `/gcc-boq-software` is the regional hub. Country/city pages require genuinely different workflow context and explicit local-rates/compliance/approval limitations.
+- Audience pages answer role-specific workflow questions and should link back to `/industries`, not compete with the broad `/boq-software` page.
+
+| Page | Primary Query Intent | Primary Keyword Theme | Supporting Questions | Audience | Funnel Stage | Cannibalization Risk |
+| --- | --- | --- | --- | --- | --- | --- |
+| `/` | Find an AI-assisted BOQ platform for UAE work | AI-assisted BOQ workflow software UAE | What is Quantara? What does it support? What still needs professional review? | UAE construction professionals | Commercial discovery | High: distinguish from `/ai-boq-software` and `/boq-software-uae` with brand/entity overview |
+| `/features` | Verify current product availability | Quantara BOQ workflow features | Which features are available, limited, controlled or unavailable? | Evaluators and prospective users | Evaluation | Medium: status source, not a duplicate product pitch |
+| `/about` | Verify company and software identity | About Quantara | Who operates Quantara? Who is it for? What is its scope? | Buyers, partners, answer engines | Trust | Low |
+| `/security` | Assess published security boundaries | Quantara security and Early Access | What access controls are described? Is UAE hosting, SSO or certification claimed? | Security reviewers and buyers | Risk review | Low: keep separate from privacy/legal content |
+| `/terms` | Read access terms | Quantara Controlled Early Access terms | What use is permitted? What professional duties remain? | Users and legal reviewers | Decision/support | Low |
+| `/privacy` | Read privacy practices | Quantara privacy policy | Who operates the service? What personal data contexts are covered? | Visitors and users | Trust/support | Low |
+| `/contact-sales` | Start a requirements conversation | Contact Quantara Early Access | How do I discuss workflow fit? Is there self-serve checkout? | Qualified prospects | Conversion | Low |
+| `/ai-boq-software` | Evaluate AI-assisted BOQ workflow | AI BOQ software | What does AI assist with? Is review required? Does it replace judgement? | Contractors, estimators, QS teams | Evaluation | High: owns AI workflow, not broad BOQ category |
+| `/boq-software` | Understand/buy BOQ software | BOQ software | What records are managed? How are revisions and outputs handled? | Construction commercial teams | Evaluation | High: broad category owner; avoid duplicating AI/estimating pages |
+| `/construction-estimating-software` | Compare estimating workflow software | construction estimating and BOQ software | Does it set rates? Does it calculate final prices? How does BOQ fit? | Estimators and commercial managers | Evaluation | High: distinguish from BOQ management and takeoff |
+| `/boq-management` | Manage BOQ records and revisions | BOQ management software | How are items, quantities, versions and outputs controlled? | QS, estimators, contractors | Evaluation | Medium: record/revision intent, not broad software definition |
+| `/pdf-boq-extraction` | Evaluate text-PDF extraction | PDF BOQ extraction software | Which PDFs are supported? What must be reviewed? What about scans? | Estimators and document teams | Evaluation | High: product intent; separate from OCR education/conversion task |
+| `/scanned-pdf-boq` | Check scanned-PDF capability | scanned PDF BOQ detection and OCR status | Are scans detected? Does Quantara run OCR? What is the manual path? | Teams holding image-only BOQs | Evaluation | High: no-OCR status page, not an OCR product page |
+| `/quantity-surveying-software` | Evaluate software support for QS work | quantity surveying BOQ workflow software | Which QS steps are supported? Are dimensions/calculations reviewable? Does it replace a QS? | Quantity surveyors and cost consultants | Evaluation | High: role workflow, not broad `/boq-software` duplicate |
+| `/boq-document-generation` | Generate BOQ outputs from reviewed records | BOQ document generation | Which outputs are supported? Is generation professional approval? | Estimators, QS and contractors | Evaluation | Medium: output intent, not BOQ management generally |
+| `/resources` | Browse BOQ learning material | BOQ resources and guides | Where are definitions, checklists, extraction and comparison guides? | Learners and practitioners | Awareness | Low: hub only |
+| `/what-is-a-boq` | Learn the definition of BOQ | what is a Bill of Quantities | What does a BOQ contain? Who prepares it? How is it used? | Students, clients, construction professionals | Awareness | Low |
+| `/boq-vs-construction-estimate` | Compare two construction documents | BOQ vs construction estimate | How do scope, quantities and rates differ? When is each used? | Clients, estimators, learners | Awareness | Medium: keep distinct from software-vs-Excel comparisons |
+| `/boq-vs-bill-of-materials` | Compare BOQ and BOM | BOQ vs bill of materials | Does each include labour? Who uses each? | Construction and procurement teams | Awareness | Low |
+| `/how-to-prepare-a-boq` | Follow a preparation method | how to prepare a BOQ | How are sources, scope, items, measurements, rates and checks handled? | Estimators, QS trainees, contractors | Education | Medium: process guide, not product feature page |
+| `/boq-review-checklist` | Check a BOQ before issue | BOQ review checklist | Have scope, units, quantities, rates, assumptions and revisions been checked? | Reviewers and commercial teams | Education/use | Low |
+| `/common-boq-errors` | Diagnose common BOQ defects | common BOQ errors | What omissions, duplicates, units and revision failures occur? | Estimators and reviewers | Education | Low |
+| `/boq-revision-control` | Learn version-control practice | BOQ revision control | How are changes, approvals and issue states recorded? | QS, estimators, document controllers | Education/evaluation | Medium: avoid overlap with `/boq-management` by staying educational |
+| `/how-to-convert-pdf-boq-to-excel` | Complete a conversion task safely | convert PDF BOQ to Excel | Is text selectable? How are tables/scans/merged cells verified? | Estimators and document processors | Task/education | High: conversion intent, not product extraction landing |
+| `/text-pdf-vs-scanned-pdf` | Understand PDF input types | text PDF vs scanned PDF BOQ | How can I tell them apart? Why is OCR needed? What errors arise? | Document processors and estimators | Education | Medium |
+| `/ocr-for-boq-documents` | Learn OCR uses and limits | OCR for BOQ documents | What does OCR recognize? Where does it fail? Does Quantara currently use it? | Teams with scanned BOQs | Education | High: educational OCR, not a live Quantara OCR feature |
+| `/how-to-review-ai-extracted-boq` | Review assisted extraction | review AI-extracted BOQ | How are sources, units, quantities and exceptions checked? | Estimators, QS and reviewers | Task/education | Medium |
+| `/quantity-takeoff-vs-boq-management` | Distinguish two workflows | quantity takeoff vs BOQ management | Which process measures drawings? Which manages records/revisions? | Estimators, QS and buyers | Education | High: process distinction only |
+| `/industries` | Find a role/sector use case | BOQ workflow software by industry | Which audience page matches my work? What limitations apply? | Multi-sector construction buyers | Commercial discovery | Low: hub only |
+| `/boq-software-for-contractors` | Evaluate contractor workflow fit | BOQ software for contractors | How are tender sources, items and revisions handled? | Main/general contractors | Evaluation | Medium: contractor-specific scenario required |
+| `/boq-software-for-quantity-surveyors` | Evaluate QS workflow fit | BOQ software for quantity surveyors | How are dimensions, calculations and revisions reviewed? | Quantity surveyors | Evaluation | High: distinguish from `/quantity-surveying-software` with project-record use case |
+| `/boq-software-for-mep-contractors` | Evaluate MEP workflow fit | BOQ software for MEP contractors | Are schedules/items supported? Does it measure drawings or validate design? | MEP contractors and estimators | Evaluation | Medium |
+| `/boq-software-for-hvac-contractors` | Evaluate HVAC workflow fit | HVAC BOQ software | How are equipment/schedules organized? Is duct/pipe takeoff automatic? | HVAC contractors and estimators | Evaluation | Medium |
+| `/boq-software-for-fit-out-companies` | Evaluate fit-out workflow fit | fit-out BOQ software | How are finishes and revisions handled? Are rooms measured automatically? | Fit-out and interior contractors | Evaluation | Medium |
+| `/boq-software-for-fire-fighting-contractors` | Evaluate fire-protection workflow fit | fire-fighting BOQ software | How are schedules organized? Does software validate engineering compliance? | Fire-protection contractors | Evaluation | Medium |
+| `/boq-software-for-facilities-management` | Evaluate maintenance/refurbishment use | FM BOQ software | Does it handle service/refurbishment BOQs? Is it a CMMS? | Facilities-management teams | Evaluation | Medium |
+| `/boq-software-for-engineering-consultants` | Evaluate consultant workflow fit | BOQ software for engineering consultants | How are schedules and revisions organized? Does it validate design? | Engineering consultants | Evaluation | Medium |
+| `/gcc-boq-software` | Browse GCC workflow context | GCC BOQ workflow software | Which country page applies? Are local rates/compliance included? | GCC construction teams | Commercial discovery | High: regional hub must not duplicate country pages |
+| `/boq-software-uae` | Evaluate BOQ software for UAE projects | BOQ software UAE | What is supported? Are UAE rates, hosting, VAT or compliance included? | UAE contractors, QS and consultants | Evaluation | High: distinguish from homepage and Dubai/Abu Dhabi pages |
+| `/boq-software-dubai` | Evaluate Dubai project workflow | BOQ software Dubai | How do fit-out/MEP revisions fit? Are local rates/approval included? | Dubai project teams | Evaluation | High: unique Dubai context required |
+| `/boq-software-abu-dhabi` | Evaluate Abu Dhabi project workflow | BOQ software Abu Dhabi | How do consultant exchanges fit? Are local rates/approval included? | Abu Dhabi project teams | Evaluation | High: unique consultant context required |
+| `/construction-estimating-software-uae` | Evaluate UAE estimating workflow | construction estimating software UAE | Does it generate rates/prices? How is BOQ review handled? | UAE estimators and commercial managers | Evaluation | High: distinguish from `/boq-software-uae` by estimating-input intent |
+| `/mep-estimating-software-uae` | Evaluate UAE MEP estimating workflow | MEP estimating software UAE | Does it perform takeoff, supply rates or validate design? | UAE MEP estimators | Evaluation | High: distinguish from MEP audience page by UAE context |
+| `/boq-software-saudi-arabia` | Evaluate Saudi project workflow | BOQ software Saudi Arabia | How are large packages/revisions handled? Are local rates/compliance included? | Saudi project teams | Evaluation | High: unique country context required |
+| `/boq-software-qatar` | Evaluate Qatar project workflow | BOQ software Qatar | How are MEP/tender revisions handled? Are local rates/approval included? | Qatar contractors and consultants | Evaluation | High: unique country context required |
+| `/boq-software-oman` | Evaluate Oman project workflow | BOQ software Oman | How is contractor/consultant exchange handled? Are local rates/approval included? | Oman project teams | Evaluation | High: unique country context required |
+| `/comparisons` | Browse decision comparisons | BOQ software comparisons | Which comparison matches Excel, OCR, takeoff or document management? | Software evaluators | Awareness/evaluation | Low: hub only |
+| `/quantara-vs-excel-for-boq` | Compare the brand with Excel | Quantara vs Excel for BOQ | Which tool handles structure, formulas, revisions and validation? Can both be used? | Quantara evaluators | Decision | High: branded comparison owner |
+| `/boq-software-vs-spreadsheets` | Compare category with spreadsheets | BOQ software vs spreadsheets | What control/flexibility trade-offs exist? | Construction software buyers | Evaluation | High: non-branded category comparison |
+| `/ai-boq-vs-manual-boq-preparation` | Compare assisted and manual workflow | AI-assisted vs manual BOQ preparation | Where can assistance help? Which review/judgement remains manual? | Estimators and QS teams | Evaluation | Medium |
+| `/ocr-vs-structured-boq-extraction` | Compare recognition and structured extraction | OCR vs structured BOQ extraction | Is OCR enough? What mapping/review is added? Does Quantara run OCR? | Document-processing evaluators | Education/evaluation | High: keep current no-OCR limitation explicit |
+| `/quantity-takeoff-vs-boq-software` | Compare software categories | quantity takeoff vs BOQ software | Which measures drawings? Which manages BOQ records/calculations? | Software buyers and estimators | Evaluation | High: category comparison owner |
+| `/boq-software-vs-document-management` | Compare structured data with file storage | BOQ software vs document management | What is stored? How do item/revision workflows differ? | Operations and document teams | Evaluation | Medium |
+| `/construction-estimating-software-vs-excel` | Compare estimating software with Excel | construction estimating software vs Excel | How do rates, formulas, assumptions and revisions differ? | Estimators and commercial managers | Evaluation | High: estimating-specific, not branded comparison |
+| `/when-to-use-boq-software` | Decide whether workflow software is warranted | when to use BOQ software | Which volume, complexity and revision signals matter? | Small and growing construction teams | Evaluation | Medium |
+| `/site-map` | Navigate the public website | Quantara public sitemap | Where is each product, audience, regional, comparison or legal page? | Visitors and crawlers | Navigation | Low |
+| `/boq-calculation-formulas` | Find common BOQ formulas | BOQ calculation formulas | Which length/area/volume/weight/cost formulas apply? What inputs need review? | Estimators, QS and learners | Education/use | Medium: educational formulas, not automatic calculation promise |
+| `/pricing` | Understand commercial availability | Quantara Early Access pricing and availability | Is self-serve checkout live? Are prices published? How is scope confirmed? | Qualified buyers | Conversion | Medium: must not compete using invented plan/price data |
+
+## Excluded-intent notes
+
+- `/register` is a conversion utility, not an informational “free trial” or pricing page.
+- `/login` and recovery pages serve existing-account tasks and remain noindex.
+- The four incomplete legal placeholders remain linked for users but are noindex until substantive verified policies exist.
+- Dynamic industry-engine pages are authenticated product views. The public industry SEO cluster is the eight explicit audience landing pages.
+- Connected integrations are described only at a truthful availability level. Public navigation points to the relevant controlled-access feature section; the auth-only integrations screen is not a public search landing page.

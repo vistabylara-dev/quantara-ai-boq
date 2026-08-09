@@ -1,40 +1,30 @@
-import { Metadata } from "next";
+import { createPublicPageMetadata, PUBLIC_CONTENT_REVIEW_DATE } from "@/lib/public-site/search-registry";
 import Link from "next/link";
 import KnowledgePage, { KnowledgePageContent } from "@/components/layout/knowledge-page";
 
-export const metadata: Metadata = {
-  title: "How to Prepare a BOQ: Step-by-Step Construction Workflow",
-  description: "Follow a practical workflow for preparing a Bill of Quantities from project documents, including scope review, item structure, quantities and professional validation.",
-  alternates: {
-    canonical: "https://quantara.vistabylara.com/how-to-prepare-a-boq",
-  },
-  openGraph: {
-    title: "How to Prepare a BOQ: Step-by-Step Construction Workflow | Quantara",
-    description: "Follow a practical workflow for preparing a Bill of Quantities from project documents, including scope review, item structure, quantities and professional validation.",
-    url: "https://quantara.vistabylara.com/how-to-prepare-a-boq",
-    type: "article",
-  },
-};
+export const metadata = createPublicPageMetadata("/how-to-prepare-a-boq");
+
+
 
 export default function Page() {
   const content: KnowledgePageContent = {
     breadcrumbLabel: "How to Prepare a BOQ",
     title: "How to Prepare a BOQ: A Structured Step-by-Step Workflow",
-    summary: "Preparing a Bill of Quantities (BOQ) is a meticulous process that requires translating architectural, structural, and MEP drawings into a standardized, line-by-line list of measurable items. Following a structured workflow ensures that all project scope is captured, quantities are accurate, and the final document is ready for competitive tendering or pricing.",
+    summary: "Preparing a Bill of Quantities (BOQ) involves reviewing project information, defining scope, writing measurable item descriptions and recording quantities in a structured document. A defined workflow supports consistency, but qualified professionals must still verify completeness and accuracy.",
     directAnswer: "Preparing a BOQ requires systematically reviewing construction drawings, defining the scope of work, structuring sections by trade or element, drafting item descriptions, and measuring precise quantities. The final document must undergo professional validation before being issued for tender.",
     keyTakeaways: [
       "Review the latest 'Issued for Construction' or 'Tender' drawings.",
       "Use a logical hierarchy such as Substructure, Superstructure, and MEP.",
-      "Accurate quantities and clear item descriptions prevent future disputes."
+      "Accurate quantities and clear item descriptions can reduce ambiguity and dispute risk; contractual responsibility still varies."
     ],
-    reviewedDate: new Date().toISOString().split("T")[0],
+    reviewedDate: PUBLIC_CONTENT_REVIEW_DATE,
     sections: [
   {
     "id": "why-it-matters",
     "heading": "Why a Structured Workflow Matters",
     "paragraphs": [
-      "For quantity surveyors, consultants, and estimating teams, missing a scope item during BOQ preparation can lead to massive cost overruns or legal disputes during construction.",
-      <>A standardized preparation process minimizes omissions, reduces ambiguity, and produces a professional document that contractors can price with confidence. This is especially true when transitioning from <Link href="/ai-boq-vs-manual-boq-preparation" className="text-blue-600 hover:underline font-medium">manual preparation to software</Link>.</>
+      "For quantity surveyors, consultants and estimating teams, a missed scope item can affect pricing, tender qualifications and later commercial responsibility.",
+      <>A standardized preparation process can reduce omissions and ambiguity, but it does not remove the need for professional measurement and review. This also applies when moving from <Link href="/ai-boq-vs-manual-boq-preparation" className="text-blue-600 hover:underline font-medium">manual preparation to software-assisted work</Link>.</>
     ]
   },
   {
@@ -73,7 +63,7 @@ export default function Page() {
     "id": "limitations",
     "heading": "Common Mistakes and Limitations",
     "paragraphs": [
-      "The most dangerous mistake in preparing a BOQ is proceeding with outdated drawings. If a revision is missed, the BOQ is instantly incorrect.",
+      "A serious mistake in BOQ preparation is proceeding with outdated drawings. A missed revision can make the recorded scope or quantities unreliable.",
       "Additionally, failing to clearly define what is included in an item description (e.g., does the door item include the hinges and locks?) will lead to pricing variations and claims."
     ]
   },
@@ -81,8 +71,8 @@ export default function Page() {
     "id": "quantara-workflow",
     "heading": "How Quantara Connects to the Workflow",
     "paragraphs": [
-      "While consultants prepare the initial BOQ, contractors receive them in various formats (often PDF). Quantara helps contractors instantly structure these received documents back into a workable, digital format.",
-      "Quantara currently focuses on supported document extraction, BOQ structuring, project organization, templates, revisions, and professional outputs. Automated drawing measurement remains Planned unless explicitly marked otherwise."
+      "While consultants prepare the initial BOQ, contractors may receive it in formats such as PDF. Quantara can capture supported source information for review and BOQ organization.",
+      "Quantara currently focuses on supported document extraction, BOQ structuring, project organization, templates, revisions and professional outputs. Automatic drawing measurement is not currently available."
     ]
   }
 ],
@@ -122,15 +112,7 @@ export default function Page() {
     "label": "BOQ Revision Control"
   }
 ],
-    schema: {
-      "@context": "https://schema.org",
-      "@type": "TechArticle",
-      "headline": "How to Prepare a BOQ: A Structured Step-by-Step Workflow",
-      "description": "Follow a practical workflow for preparing a Bill of Quantities from project documents, including scope review, item structure, quantities and professional validation.",
-      "url": "https://quantara.vistabylara.com/how-to-prepare-a-boq",
-      "publisher": { "@id": "https://quantara.vistabylara.com/#organization" },
-      "mainEntityOfPage": { "@id": "https://quantara.vistabylara.com/#website" }
-    }
+    path: "/how-to-prepare-a-boq"
   };
 
   return <KnowledgePage content={content} />;

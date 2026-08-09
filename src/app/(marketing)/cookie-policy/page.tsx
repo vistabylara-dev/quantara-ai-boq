@@ -1,9 +1,9 @@
+import { createPublicPageMetadata } from "@/lib/public-site/search-registry";
 import LegalPlaceholder from "@/components/legal/LegalPlaceholder";
-import { Metadata } from "next";
 
-export const metadata: Metadata = {
-  title: "Cookie Policy",
-};
+export const metadata = createPublicPageMetadata("/cookie-policy");
+
+
 
 export default function CookiePolicyPage() {
   return <LegalPlaceholder title="Cookie Policy" />;

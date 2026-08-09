@@ -1,17 +1,12 @@
-import { Metadata } from "next";
+import { createPublicPageMetadata } from "@/lib/public-site/search-registry";
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
-export const metadata: Metadata = {
-  title: "BOQ Software by Industry",
-  description: "Explore how Quantara supports structured BOQ and estimating workflows across construction, MEP, fit-out, and consulting industries.",
-  alternates: {
-    canonical: "https://quantara.vistabylara.com/industries",
-  },
-  robots: {
-    index: true,
-    follow: true,
-  }
-};
+import { PublicPageJsonLd } from "@/components/seo/public-json-ld";
+import PublicBreadcrumb from "@/components/ui/public-breadcrumb";
+
+export const metadata = createPublicPageMetadata("/industries");
+
+
 
 const industryLinks = [
   {
@@ -35,7 +30,7 @@ const industryLinks = [
   {
     href: "/boq-software-for-hvac-contractors",
     name: "HVAC Contractors",
-    desc: "Organize equipment, ductwork, and piping schedules efficiently.",
+    desc: "Organize supported equipment, ductwork and piping records for review.",
     status: "No automated duct or pipe takeoff active."
   },
   {
@@ -66,8 +61,15 @@ const industryLinks = [
 
 export default function IndustriesIndexPage() {
   return (
-    <div className="container mx-auto px-4 py-16 md:py-24 max-w-7xl">
-      
+    <>
+      <PublicPageJsonLd
+        path="/industries"
+        breadcrumbs={[{ name: "Home", path: "/" }, { name: "Industries", path: "/industries" }]}
+      />
+      <div className="min-h-screen bg-white text-slate-900">
+      <div className="container mx-auto px-4 py-16 md:py-24 max-w-7xl">
+        <PublicBreadcrumb items={[{ name: "Home", item: "/" }, { name: "Industries" }]} tone="light" />
+
         <header className="mb-16 text-center max-w-3xl mx-auto">
           <h1 className="text-4xl md:text-5xl font-bold text-slate-900 tracking-tight mb-6">BOQ Software by Industry</h1>
           <p className="text-lg text-slate-600 leading-relaxed">
@@ -94,5 +96,7 @@ export default function IndustriesIndexPage() {
       
 
       </div>
+      </div>
+    </>
   );
 }

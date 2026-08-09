@@ -1,47 +1,28 @@
-import { Metadata } from "next";
+import { createPublicPageMetadata } from "@/lib/public-site/search-registry";
 import IndustryLandingPage, { IndustryLandingPageContent } from "@/components/layout/industry-landing-page";
 
-export const metadata: Metadata = {
-  title: "Fire-Fighting BOQ Software for Contractors and Estimators",
-  description: "Organize fire-fighting BOQ items, system components, project documents, revisions and professional outputs with Quantara.",
-  alternates: {
-    canonical: "https://quantara.vistabylara.com/boq-software-for-fire-fighting-contractors",
-  },
-  openGraph: {
-    title: "Fire-Fighting BOQ Software for Contractors and Estimators | Quantara",
-    description: "Organize fire-fighting BOQ items, system components, project documents, revisions and professional outputs with Quantara.",
-    url: "https://quantara.vistabylara.com/boq-software-for-fire-fighting-contractors",
-    type: "website",
-  },
-  twitter: {
-    card: "summary_large_image",
-    title: "Fire-Fighting BOQ Software for Contractors and Estimators | Quantara",
-    description: "Organize fire-fighting BOQ items, system components, project documents, revisions and professional outputs with Quantara.",
-  },
-  robots: {
-    index: true,
-    follow: true,
-  }
-};
+export const metadata = createPublicPageMetadata("/boq-software-for-fire-fighting-contractors");
+
+
 
 export default function Page() {
   const content: IndustryLandingPageContent = {
     breadcrumbLabel: "Fire-Fighting BOQ Software",
     title: "Fire-Fighting BOQ Software for Structured Project and Estimating Workflows",
     audienceDescription: "For fire-fighting and life-safety contractors managing highly technical equipment schedules, piping, and system BOQs.",
-    directAnswer: "Quantara provides fire-fighting contractors with a reliable platform to organize technical BOQs, system components, and equipment schedules.",
+    directAnswer: "Quantara helps fire-fighting contractors organize supported BOQ items, equipment schedules and revision records for professional review.",
     challenges: [
   {
     "title": "Technical Complexity",
-    "description": "Life-safety BOQs contain highly specific equipment, valves, and specialized piping that must be perfectly translated from consultant documents."
+    "description": "Life-safety BOQs contain specific equipment, valves and specialized piping that must be checked carefully against consultant documents."
   },
   {
     "title": "Strict Revision Management",
     "description": "Changes to fire-protection scope require rigorous documentation to ensure the final tender matches the approved safety strategy."
   }
 ],
-    workflowDescription: "Quantara helps teams organize pumps, sprinkler systems, specialized piping, valves, hose reels, extinguishers, and accessories. By managing technical schedules and revisions in a structured format, contractors can ensure their testing and commissioning items are correctly aligned with the scope.",
-    workflowExample: "A fire-fighting contractor is reviewing a consultant's BOQ alongside newly revised pump equipment schedules. They use Quantara to extract the updated schedules, structure the items into the master BOQ, and track the revision to ensure the final proposal reflects the latest requirements.",
+    workflowDescription: "Quantara helps teams organize supported items for pumps, sprinkler systems, specialized piping, valves, hose reels, extinguishers and accessories. Contractors must compare every technical schedule and revision with the source scope.",
+    workflowExample: "A fire-fighting contractor reviews a consultant BOQ alongside revised pump schedules. Supported information from text-based schedules is captured for review, organized into the BOQ and retained in a distinct revision record before the proposal is checked.",
     typicalCategories: [
   "Fire Pumps and Equipment",
   "Sprinkler Systems",
@@ -53,7 +34,7 @@ export default function Page() {
 ],
     supportedInputs: [
   "Text-based PDF",
-  "Scanned PDF (detection only — OCR planned)",
+  "Scanned PDF (detection only — OCR not currently available)",
   "XLSX",
   "CSV"
 ],
@@ -79,7 +60,7 @@ export default function Page() {
   },
   {
     "question": "Can I extract pump equipment schedules?",
-    "answer": "Yes, technical schedules can be extracted from text-based PDFs and structured as items today, but manual verification of technical specs is mandatory. Scanned schedules are detected and flagged for manual transcription; OCR is planned but not yet available."
+    "answer": "If a text-based PDF contains a supported detected table, its rows can become review candidates. A professional must verify the technical specifications and structure accepted items; scanned schedules require manual transcription because OCR text extraction is not currently available."
   },
   {
     "question": "How are valves and accessories managed?",
@@ -95,15 +76,15 @@ export default function Page() {
   },
   {
     "question": "Is it suitable for sprinkler system BOQs?",
-    "answer": "Yes, the platform can organize all components of a sprinkler system, including pipework and heads, into a structured format."
+    "answer": "The platform can organize supported sprinkler-system items, including pipework and heads, when they are present in supported source data or entered by a professional."
   },
   {
     "question": "How do you handle consultant revisions?",
-    "answer": "Quantara’s revision control allows you to update specific sections based on new consultant instructions while retaining an audit trail."
+    "answer": "Quantara retains distinct BOQ revision records. A professional must compare them and apply the relevant consultant instructions."
   },
   {
     "question": "Can I export a professional proposal?",
-    "answer": "Yes, you can generate formatted PDF proposals based on the finalized and priced BOQ."
+    "answer": "A supported PDF output can be generated from reviewed BOQ data and an available template. It still requires professional checking before issue."
   }
 ],
     relatedPages: [
@@ -128,110 +109,7 @@ export default function Page() {
     "label": "Features"
   }
 ],
-    schema: {
-      "@context": "https://schema.org",
-      "@graph": [
-        {
-          "@type": "WebPage",
-          "@id": "https://quantara.vistabylara.com/boq-software-for-fire-fighting-contractors",
-          "url": "https://quantara.vistabylara.com/boq-software-for-fire-fighting-contractors",
-          "name": "Fire-Fighting BOQ Software for Contractors and Estimators | Quantara",
-          "description": "Organize fire-fighting BOQ items, system components, project documents, revisions and professional outputs with Quantara."
-        },
-        {
-          "@type": "BreadcrumbList",
-          "itemListElement": [
-            {
-              "@type": "ListItem",
-              "position": 1,
-              "name": "Home",
-              "item": "https://quantara.vistabylara.com/"
-            },
-            {
-              "@type": "ListItem",
-              "position": 2,
-              "name": "Industries",
-              "item": "https://quantara.vistabylara.com/industries"
-            },
-            {
-              "@type": "ListItem",
-              "position": 3,
-              "name": "Fire-Fighting BOQ Software",
-              "item": "https://quantara.vistabylara.com/boq-software-for-fire-fighting-contractors"
-            }
-          ]
-        },
-        {
-          "@type": "FAQPage",
-          "mainEntity": [
-  {
-    "@type": "Question",
-    "name": "Does Quantara validate fire-protection compliance?",
-    "acceptedAnswer": {
-      "@type": "Answer",
-      "text": "No, Quantara is purely a document workflow tool. It does not provide code compliance certification or engineering approval."
-    }
-  },
-  {
-    "@type": "Question",
-    "name": "Can I extract pump equipment schedules?",
-    "acceptedAnswer": {
-      "@type": "Answer",
-      "text": "Yes, technical schedules can be extracted from text-based PDFs and structured as items today, but manual verification of technical specs is mandatory. Scanned schedules are detected and flagged for manual transcription; OCR is planned but not yet available."
-    }
-  },
-  {
-    "@type": "Question",
-    "name": "How are valves and accessories managed?",
-    "acceptedAnswer": {
-      "@type": "Answer",
-      "text": "They are managed as standard BOQ items with specific descriptions and quantities, organized within your chosen sections."
-    }
-  },
-  {
-    "@type": "Question",
-    "name": "Does Quantara perform hydraulic calculations?",
-    "acceptedAnswer": {
-      "@type": "Answer",
-      "text": "No, Quantara does not perform engineering calculations. It only manages the BOQ document structure."
-    }
-  },
-  {
-    "@type": "Question",
-    "name": "Can I track testing and commissioning?",
-    "acceptedAnswer": {
-      "@type": "Answer",
-      "text": "Yes, testing and commissioning should be structured as specific items or sections within the BOQ."
-    }
-  },
-  {
-    "@type": "Question",
-    "name": "Is it suitable for sprinkler system BOQs?",
-    "acceptedAnswer": {
-      "@type": "Answer",
-      "text": "Yes, the platform can organize all components of a sprinkler system, including pipework and heads, into a structured format."
-    }
-  },
-  {
-    "@type": "Question",
-    "name": "How do you handle consultant revisions?",
-    "acceptedAnswer": {
-      "@type": "Answer",
-      "text": "Quantara’s revision control allows you to update specific sections based on new consultant instructions while retaining an audit trail."
-    }
-  },
-  {
-    "@type": "Question",
-    "name": "Can I export a professional proposal?",
-    "acceptedAnswer": {
-      "@type": "Answer",
-      "text": "Yes, you can generate formatted PDF proposals based on the finalized and priced BOQ."
-    }
-  }
-]
-        }
-      ]
-    }
+    path: "/boq-software-for-fire-fighting-contractors"
   };
 
   return <IndustryLandingPage content={content} />;

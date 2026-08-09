@@ -1,32 +1,22 @@
-import { Metadata } from "next";
+import { createPublicPageMetadata, PUBLIC_CONTENT_REVIEW_DATE } from "@/lib/public-site/search-registry";
 import KnowledgePage, { KnowledgePageContent } from "@/components/layout/knowledge-page";
 
-export const metadata: Metadata = {
-  title: "Text PDF vs Scanned PDF for BOQ Extraction",
-  description: "Understand how text-based and scanned PDFs differ, how OCR affects extraction, and why document quality matters when processing BOQ files.",
-  alternates: {
-    canonical: "https://quantara.vistabylara.com/text-pdf-vs-scanned-pdf",
-  },
-  openGraph: {
-    title: "Text PDF vs Scanned PDF for BOQ Extraction | Quantara",
-    description: "Understand how text-based and scanned PDFs differ, how OCR affects extraction, and why document quality matters when processing BOQ files.",
-    url: "https://quantara.vistabylara.com/text-pdf-vs-scanned-pdf",
-    type: "article",
-  },
-};
+export const metadata = createPublicPageMetadata("/text-pdf-vs-scanned-pdf");
+
+
 
 export default function Page() {
   const content: KnowledgePageContent = {
     breadcrumbLabel: "Text PDF vs Scanned PDF",
     title: "Text PDF vs Scanned PDF: Why the Difference Matters for BOQs",
     summary: "When extracting a Bill of Quantities into a workable format, the type of PDF you receive determines the difficulty of the task. A native text PDF contains embedded digital characters, while a scanned PDF is merely a flat image of a page. Understanding this difference is crucial for estimating teams managing their workflow and accuracy expectations.",
-    reviewedDate: new Date().toISOString().split("T")[0],
+    reviewedDate: PUBLIC_CONTENT_REVIEW_DATE,
     sections: [
   {
     "id": "why-it-matters",
     "heading": "Why Document Quality Matters",
     "paragraphs": [
-      "For contractors and estimators, receiving a high-quality text PDF means fast, accurate extraction. Receiving a low-resolution scanned PDF means a higher risk of data loss, OCR errors, and increased hours required for manual review.",
+      "A text PDF exposes embedded characters for supported capture, but its tables and values still require review. A scanned PDF contains page images and needs OCR or manual transcription before its text can be processed.",
       "Identifying the document type immediately dictates the necessary quality control workflow."
     ]
   },
@@ -34,7 +24,7 @@ export default function Page() {
     "id": "core-differences",
     "heading": "Text PDFs vs Scanned PDFs",
     "bullets": [
-      "Native Text PDF: Generated directly from software (like Word or Excel) via \"Save as PDF\". You can click and highlight individual letters and numbers. Data extraction software can read the text with near 100% accuracy.",
+      "Native Text PDF: Generated directly from software (like Word or Excel) via \"Save as PDF\". You can usually select individual letters and numbers, allowing software to access the embedded text while still requiring structural and value checks.",
       "Scanned Image PDF: Created when a physical piece of paper is run through a scanner. It is essentially a photograph. You cannot highlight the text. Software must use Optical Character Recognition (OCR) to \"guess\" what the shapes mean."
     ]
   },
@@ -55,7 +45,7 @@ export default function Page() {
         ],
         [
           "Extraction Accuracy",
-          "Extremely High",
+          "Varies by layout; review required",
           "Variable (depends on scan quality)"
         ],
         [
@@ -65,8 +55,8 @@ export default function Page() {
         ],
         [
           "File Size",
-          "Typically small",
-          "Often very large"
+          "Varies with embedded content",
+          "Varies with resolution and compression"
         ],
         [
           "Review Requirement",
@@ -81,14 +71,14 @@ export default function Page() {
     "heading": "A Practical Example",
     "paragraphs": [
       "A hypothetical consultant prints a BOQ, signs it with a pen, and scans it back into the computer. This is now a scanned PDF.",
-      "If the page is skewed or the resolution is low, the OCR software might misread an \"8\" as a \"3\". If the document had simply been exported directly to PDF with a digital signature, the text would remain perfectly intact."
+      "If the page is skewed or the resolution is low, OCR software might misread an \"8\" as a \"3\". A digitally exported PDF would retain an embedded text layer, although its table structure and values would still require review."
     ]
   },
   {
     "id": "limitations",
     "heading": "Limitations of Scanned Documents",
     "paragraphs": [
-      "Scans often suffer from skew (crooked pages), compression artifacts (blurriness), and handwriting over text. These elements drastically reduce extraction confidence.",
+      "Scans often suffer from skew, compression artifacts and handwriting over text. These elements can reduce recognition confidence.",
       "No software can guarantee perfect extraction from a poor-quality scan. Human validation is always required."
     ]
   },
@@ -96,7 +86,7 @@ export default function Page() {
     "id": "quantara-workflow",
     "heading": "How Quantara Processes PDFs",
     "paragraphs": [
-      "Quantara accepts both document types. It extracts clean data directly from text-based PDFs today. Scanned/image-only documents are automatically detected and flagged as requiring OCR — automated OCR text extraction is planned and not yet implemented, so scanned content currently requires manual transcription.",
+      "Quantara accepts text-based and scanned PDFs. It stores extractable text from text-based PDFs and creates review candidates only from supported detected table rows; plain paragraph text does not become BOQ candidates. Scanned or image-only documents are detected and flagged as requiring OCR, but OCR text extraction is not currently available, so scanned content requires manual transcription.",
       "Quantara currently focuses on supported document extraction, BOQ structuring, project organization, templates, revisions, and professional outputs."
     ]
   }
@@ -116,7 +106,7 @@ export default function Page() {
   },
   {
     "question": "Why do scans result in larger file sizes?",
-    "answer": "A scan saves a high-resolution pixel image of every page, whereas a text PDF only saves the text characters and vector rendering instructions."
+    "answer": "A scan stores page imagery, while a text PDF can store characters and vector instructions. Actual file size varies with images, fonts, resolution, compression and other embedded content."
   },
   {
     "question": "Can I request a text PDF from the client?",
@@ -137,15 +127,7 @@ export default function Page() {
     "label": "Converting PDF BOQs to Excel"
   }
 ],
-    schema: {
-      "@context": "https://schema.org",
-      "@type": "TechArticle",
-      "headline": "Text PDF vs Scanned PDF: Why the Difference Matters for BOQs",
-      "description": "Understand how text-based and scanned PDFs differ, how OCR affects extraction, and why document quality matters when processing BOQ files.",
-      "url": "https://quantara.vistabylara.com/text-pdf-vs-scanned-pdf",
-      "publisher": { "@id": "https://quantara.vistabylara.com/#organization" },
-      "mainEntityOfPage": { "@id": "https://quantara.vistabylara.com/#website" }
-    }
+    path: "/text-pdf-vs-scanned-pdf"
   };
 
   return <KnowledgePage content={content} />;

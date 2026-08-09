@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/db/prisma";
+import type { ExtractedEntity, ExtractedEntityStatus, Prisma } from "@prisma/client";
 import type { CurrentActor } from "@/lib/auth/current-actor";
 import { requireCapability } from "@/lib/auth/rbac";
 import { AppError } from "@/lib/errors/app-error";
@@ -12,6 +13,49 @@ import {
 import { getProjectRecord } from "@/lib/repositories/project-repository";
 import { getProjectFileRecord } from "@/lib/repositories/project-file-repository";
 import { createAuditLog } from "@/lib/repositories/audit-repository";
+
+const REVIEWABLE_EXTRACTED_ENTITY_STATUSES: ReadonlySet<ExtractedEntityStatus> = new Set([
+  "EXTRACTED",
+  "NEEDS_REVIEW",
+]);
+
+/**
+ * A professional review decision is a one-way transition. Starting another review cycle for a
+ * finalized entity requires a separate, explicit workflow and must never happen implicitly here.
+ */
+function assertExtractedEntityIsReviewable(status: ExtractedEntityStatus): void {
+  if (!REVIEWABLE_EXTRACTED_ENTITY_STATUSES.has(status)) {
+    throw new AppError(
+      "ENTITY_ALREADY_FINALIZED",
+      "This entity has already received a professional decision and cannot be reviewed again without a new review cycle.",
+      409,
+    );
+  }
+}
+
+async function applyExtractedEntityReviewDecision(
+  actor: CurrentActor,
+  entity: ExtractedEntity,
+  data: Prisma.ExtractedEntityUpdateManyMutationInput,
+): Promise<ExtractedEntity> {
+  assertExtractedEntityIsReviewable(entity.status);
+  const claimed = await prisma.extractedEntity.updateMany({
+    where: {
+      id: entity.id,
+      companyId: actor.companyId,
+      status: { in: [...REVIEWABLE_EXTRACTED_ENTITY_STATUSES] },
+    },
+    data,
+  });
+
+  if (claimed.count !== 1) {
+    const current = await getExtractedEntityRecord(actor.companyId, entity.id);
+    assertExtractedEntityIsReviewable(current.status);
+    throw new AppError("ENTITY_REVIEW_CONFLICT", "This entity could not be claimed for professional review.", 409);
+  }
+
+  return getExtractedEntityRecord(actor.companyId, entity.id);
+}
 
 export async function manuallyAddExtractedEntity(actor: CurrentActor, input: CreateExtractedEntityInput) {
   requireCapability(actor, "files:manage");
@@ -38,9 +82,10 @@ export async function listEntitiesForProject(actor: CurrentActor, projectId: str
 export async function confirmExtractedEntity(actor: CurrentActor, entityId: string) {
   requireCapability(actor, "verification:manage");
   const entity = await getExtractedEntityRecord(actor.companyId, entityId);
-  const updated = await prisma.extractedEntity.update({
-    where: { id: entity.id },
-    data: { status: "CONFIRMED", confirmedByUserId: actor.userId, confirmedAt: new Date() },
+  const updated = await applyExtractedEntityReviewDecision(actor, entity, {
+    status: "CONFIRMED",
+    confirmedByUserId: actor.userId,
+    confirmedAt: new Date(),
   });
   await createAuditLog(actor.companyId, { entityType: "ExtractedEntity", entityId, action: "ENTITY_CONFIRMED", payload: {} });
   return toExtractedEntityDTO(updated);
@@ -50,22 +95,15 @@ export async function correctExtractedEntity(actor: CurrentActor, entityId: stri
   requireCapability(actor, "verification:manage");
   const entity = await getExtractedEntityRecord(actor.companyId, entityId);
 
-  if (entity.status === "CONFIRMED" || entity.status === "IMPORTED") {
-    throw new AppError("ENTITY_ALREADY_FINALIZED", "This entity has already been confirmed or imported and cannot be silently corrected further without a new review cycle.", 409);
-  }
-
   const original = { label: entity.label, quantity: entity.quantity?.toNumber() ?? null, unit: entity.unit };
-  const updated = await prisma.extractedEntity.update({
-    where: { id: entity.id },
-    data: {
-      label: corrections.label ?? entity.label,
-      quantity: corrections.quantity ?? entity.quantity,
-      unit: corrections.unit ?? entity.unit,
-      status: "CORRECTED",
-      confirmedByUserId: actor.userId,
-      confirmedAt: new Date(),
-      correctionJson: { original, corrected: corrections, correctedByUserId: actor.userId, correctedAt: new Date().toISOString(), reason: corrections.reason },
-    },
+  const updated = await applyExtractedEntityReviewDecision(actor, entity, {
+    label: corrections.label ?? entity.label,
+    quantity: corrections.quantity ?? entity.quantity,
+    unit: corrections.unit ?? entity.unit,
+    status: "CORRECTED",
+    confirmedByUserId: actor.userId,
+    confirmedAt: new Date(),
+    correctionJson: { original, corrected: corrections, correctedByUserId: actor.userId, correctedAt: new Date().toISOString(), reason: corrections.reason },
   });
   await createAuditLog(actor.companyId, { entityType: "ExtractedEntity", entityId, action: "ENTITY_CORRECTED", payload: { original, corrected: corrections, reason: corrections.reason } });
   return toExtractedEntityDTO(updated);
@@ -73,10 +111,12 @@ export async function correctExtractedEntity(actor: CurrentActor, entityId: stri
 
 export async function rejectExtractedEntity(actor: CurrentActor, entityId: string, reason: string) {
   requireCapability(actor, "verification:manage");
-  await getExtractedEntityRecord(actor.companyId, entityId);
-  const updated = await prisma.extractedEntity.update({
-    where: { id: entityId },
-    data: { status: "REJECTED", rejectedByUserId: actor.userId, rejectedAt: new Date(), correctionJson: { reason } },
+  const entity = await getExtractedEntityRecord(actor.companyId, entityId);
+  const updated = await applyExtractedEntityReviewDecision(actor, entity, {
+    status: "REJECTED",
+    rejectedByUserId: actor.userId,
+    rejectedAt: new Date(),
+    correctionJson: { reason },
   });
   await createAuditLog(actor.companyId, { entityType: "ExtractedEntity", entityId, action: "ENTITY_REJECTED", payload: { reason } });
   return toExtractedEntityDTO(updated);

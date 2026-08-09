@@ -1,9 +1,9 @@
 import type { CurrentActor } from "@/lib/auth/current-actor";
 import { requireCapability } from "@/lib/auth/rbac";
 import { AppError } from "@/lib/errors/app-error";
+import { assertValidCalculatedResult } from "@/lib/calculations/quantity-domain-validator";
 import { getBOQItemRecord, updateBOQItem } from "@/lib/repositories/boq-repository";
 import { getQuantityCalculationRecord } from "@/lib/repositories/quantity-calculation-repository";
-import { createAuditLog } from "@/lib/repositories/audit-repository";
 
 /**
  * Guided BOQ measurement workflow (Release 1), spec section 7 — a calculated
@@ -54,6 +54,7 @@ export async function proposeCalculatedQuantityForItem(actor: CurrentActor, item
   const item = await getBOQItemRecord(actor.companyId, itemId);
   const calculation = await getQuantityCalculationRecord(actor.companyId, calculationId);
   assertCalculationMatchesItemProject(calculation, item);
+  assertValidCalculatedResult(calculation.resultValue.toNumber());
   return {
     itemId: item.id,
     itemCode: item.itemCode,
@@ -83,28 +84,30 @@ export async function confirmCalculatedQuantityForItem(actor: CurrentActor, item
   if (calculation.status !== "CONFIRMED") {
     throw new AppError("CALCULATION_NOT_CONFIRMED", "This calculation must be professionally confirmed before its quantity can be applied to a BOQ item.", 409);
   }
+  assertValidCalculatedResult(calculation.resultValue.toNumber());
 
   const previousQuantity = item.quantity.toNumber();
   const proposedQuantity = calculation.resultValue.toNumber();
 
-  const result = await updateBOQItem(actor.companyId, itemId, {
-    quantity: proposedQuantity,
-    unit: calculation.resultUnit,
-  });
-
-  await createAuditLog(actor.companyId, {
-    entityType: "BOQItem",
-    entityId: itemId,
-    action: "BOQ_QUANTITY_UPDATED_FROM_CALCULATION",
-    payload: {
-      calculationId,
-      calculationType: calculation.calculationType,
-      formula: calculation.formula,
-      previousQuantity,
-      newQuantity: proposedQuantity,
+  return updateBOQItem(
+    actor.companyId,
+    itemId,
+    {
+      quantity: proposedQuantity,
       unit: calculation.resultUnit,
     },
-  });
-
-  return result;
+    {
+      additionalAudit: {
+        action: "BOQ_QUANTITY_UPDATED_FROM_CALCULATION",
+        payload: {
+          calculationId,
+          calculationType: calculation.calculationType,
+          formula: calculation.formula,
+          previousQuantity,
+          newQuantity: proposedQuantity,
+          unit: calculation.resultUnit,
+        },
+      },
+    },
+  );
 }

@@ -9,6 +9,8 @@ export const VOICE_COMMAND_TYPES = [
   "SET_BOQ_DESCRIPTION",
   "SET_BOQ_UNIT",
   "SET_BOQ_NOTES",
+  "ADD_BOQ_ITEM",
+  "DELETE_BOQ_ITEM",
 ] as const;
 
 export const voiceCommandTypeSchema = z.enum(VOICE_COMMAND_TYPES);
@@ -47,9 +49,15 @@ const boqItemContextSchema = z.object({
   itemId: z.string().uuid("A valid BOQ item ID is required."),
 }).strict();
 
+const boqSectionContextSchema = z.object({
+  type: z.literal("BOQ_SECTION"),
+  sectionId: z.string().uuid("A valid BOQ section ID is required."),
+}).strict();
+
 export const voiceCommandContextSchema = z.discriminatedUnion("type", [
   dimensionContextSchema,
   boqItemContextSchema,
+  boqSectionContextSchema,
 ]);
 
 export type VoiceCommandContext = z.infer<typeof voiceCommandContextSchema>;
@@ -123,34 +131,65 @@ const unsignedSetBoqNotesProposalSchema = z.object({
   newValue: z.string().trim().max(5_000),
 }).strict();
 
+export const voiceNewBoqItemDraftSchema = z.object({
+  itemNumber: z.number().int().positive(),
+  itemCode: z.string().trim().min(1).max(100),
+  category: z.string().trim().min(1).max(255),
+  description: z.string().trim().min(1).max(2_000),
+  quantity: z.number().finite().positive(),
+  unit: z.string().trim().min(1).max(50),
+  unitCost: z.number().finite().min(0),
+}).strict();
+
+export type VoiceNewBoqItemDraft = z.infer<typeof voiceNewBoqItemDraftSchema>;
+
+const unsignedAddBoqItemProposalSchema = z.object({
+  ...proposalBaseShape,
+  commandType: z.literal("ADD_BOQ_ITEM"),
+  targetType: z.literal("BOQ_SECTION"),
+  targetId: z.string().uuid(),
+  field: z.literal("item"),
+  oldValue: z.literal("No new BOQ item"),
+  newValue: z.string().trim().min(1).max(2_000),
+  expectedBoqVersion: z.number().int().nonnegative(),
+  itemDraft: voiceNewBoqItemDraftSchema,
+}).strict();
+
+const unsignedDeleteBoqItemProposalSchema = z.object({
+  ...proposalBaseShape,
+  commandType: z.literal("DELETE_BOQ_ITEM"),
+  targetType: z.literal("BOQ_ITEM"),
+  targetId: z.string().uuid(),
+  sectionId: z.string().uuid(),
+  field: z.literal("item"),
+  oldValue: z.string().trim().min(1).max(2_000),
+  newValue: z.literal("Deleted"),
+  expectedBoqVersion: z.number().int().nonnegative(),
+}).strict();
+
 export const unsignedBoqVoiceCommandProposalSchema = z.discriminatedUnion("commandType", [
   unsignedSetBoqQuantityProposalSchema,
   unsignedSetBoqDescriptionProposalSchema,
   unsignedSetBoqUnitProposalSchema,
   unsignedSetBoqNotesProposalSchema,
+  unsignedAddBoqItemProposalSchema,
+  unsignedDeleteBoqItemProposalSchema,
 ]);
 
-const setBoqQuantityProposalSchema = unsignedSetBoqQuantityProposalSchema.extend({
-  proposalToken: proposalTokenSchema,
-}).strict();
-
-const setBoqDescriptionProposalSchema = unsignedSetBoqDescriptionProposalSchema.extend({
-  proposalToken: proposalTokenSchema,
-}).strict();
-
-const setBoqUnitProposalSchema = unsignedSetBoqUnitProposalSchema.extend({
-  proposalToken: proposalTokenSchema,
-}).strict();
-
-const setBoqNotesProposalSchema = unsignedSetBoqNotesProposalSchema.extend({
-  proposalToken: proposalTokenSchema,
-}).strict();
+const setBoqQuantityProposalSchema = unsignedSetBoqQuantityProposalSchema.extend({ proposalToken: proposalTokenSchema }).strict();
+const setBoqDescriptionProposalSchema = unsignedSetBoqDescriptionProposalSchema.extend({ proposalToken: proposalTokenSchema }).strict();
+const setBoqUnitProposalSchema = unsignedSetBoqUnitProposalSchema.extend({ proposalToken: proposalTokenSchema }).strict();
+const setBoqNotesProposalSchema = unsignedSetBoqNotesProposalSchema.extend({ proposalToken: proposalTokenSchema }).strict();
+const addBoqItemProposalSchema = unsignedAddBoqItemProposalSchema.extend({ proposalToken: proposalTokenSchema }).strict();
+const deleteBoqItemProposalSchema = unsignedDeleteBoqItemProposalSchema.extend({ proposalToken: proposalTokenSchema }).strict();
 
 export const boqVoiceCommandProposalSchema = z.discriminatedUnion("commandType", [
   setBoqQuantityProposalSchema,
   setBoqDescriptionProposalSchema,
   setBoqUnitProposalSchema,
   setBoqNotesProposalSchema,
+  addBoqItemProposalSchema,
+  deleteBoqItemProposalSchema,
 ]);
 
 export const voiceCommandProposalSchema = z.union([

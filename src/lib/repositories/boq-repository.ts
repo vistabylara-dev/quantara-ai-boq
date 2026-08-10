@@ -701,6 +701,10 @@ async function getSectionRecord(companyId: string, sectionId: string, db: DbClie
   return section;
 }
 
+export async function getBOQSectionRecord(companyId: string, sectionId: string, db: DbClient = prisma) {
+  return getSectionRecord(companyId, sectionId, db);
+}
+
 export async function createBOQSection(companyId: string, boqId: string, input: SectionWriteInput) {
   const boq = await getBOQRecord(companyId, boqId);
   assertBOQEditable(boq, "edit");
@@ -811,6 +815,14 @@ export type BOQItemMutationContext = {
   };
 };
 
+export type BOQItemLifecycleMutationContext = {
+  expectedBoqVersion?: number;
+  additionalAudit?: {
+    action: string;
+    payload?: Prisma.InputJsonValue;
+  };
+};
+
 /**
  * Immutable, pre-mutation context for one BOQ item creation. Preparing this
  * context performs every section/editability check and the existing
@@ -825,6 +837,7 @@ export async function prepareBOQItemCreation(
   input: BOQItemWriteInput,
   database: DbClient = prisma,
   expectedBoqId?: string,
+  expectedBoqVersion?: number,
 ) {
   const section = await getSectionRecord(companyId, sectionId, database);
   if (expectedBoqId && section.boqId !== expectedBoqId) {
@@ -835,6 +848,12 @@ export async function prepareBOQItemCreation(
     );
   }
   assertBOQEditable(section.boq, "edit");
+  if (expectedBoqVersion !== undefined && section.boq.version !== expectedBoqVersion) {
+    throw new ConflictError(
+      "VOICE_PROPOSAL_STALE",
+      "This BOQ changed after the voice preview. Review the current revision and try again.",
+    );
+  }
   const marginMode = input.marginMode ?? MarginMode.MARKUP;
   const amounts = calculateBOQItem({
     quantity: input.quantity,
@@ -855,6 +874,7 @@ export async function createPreparedBOQItem(
   companyId: string,
   prepared: PreparedBOQItemCreation,
   tx: Prisma.TransactionClient,
+  additionalAudit?: BOQItemLifecycleMutationContext["additionalAudit"],
 ) {
   const { section, input, marginMode, amounts } = prepared;
   await claimEditableBOQ(tx, companyId, section.boqId, section.boq.version);
@@ -906,6 +926,14 @@ export async function createPreparedBOQItem(
     action: "ITEM_ADDED",
     payload: { boqId: section.boqId, sectionId: section.id, itemCode: item.itemCode },
   }, tx);
+  if (additionalAudit) {
+    await createAuditLog(companyId, {
+      entityType: "BOQItem",
+      entityId: item.id,
+      action: additionalAudit.action,
+      payload: additionalAudit.payload,
+    }, tx);
+  }
   return item;
 }
 
@@ -936,11 +964,24 @@ export async function getBOQItemRecord(companyId: string, itemId: string) {
  * callers (the direct "/api/sections/[sectionId]/items" route, extraction/
  * finding-to-BOQ imports).
  */
-export async function createBOQItem(companyId: string, sectionId: string, input: BOQItemWriteInput, externalTx?: Prisma.TransactionClient) {
-  const prepared = await prepareBOQItemCreation(companyId, sectionId, input, externalTx ?? prisma);
+export async function createBOQItem(
+  companyId: string,
+  sectionId: string,
+  input: BOQItemWriteInput,
+  externalTx?: Prisma.TransactionClient,
+  mutationContext?: BOQItemLifecycleMutationContext,
+) {
+  const prepared = await prepareBOQItemCreation(
+    companyId,
+    sectionId,
+    input,
+    externalTx ?? prisma,
+    undefined,
+    mutationContext?.expectedBoqVersion,
+  );
   const created = externalTx
-    ? await createPreparedBOQItem(companyId, prepared, externalTx)
-    : await prisma.$transaction((tx) => createPreparedBOQItem(companyId, prepared, tx));
+    ? await createPreparedBOQItem(companyId, prepared, externalTx, mutationContext?.additionalAudit)
+    : await prisma.$transaction((tx) => createPreparedBOQItem(companyId, prepared, tx, mutationContext?.additionalAudit));
   // When called with an externally-managed transaction, the caller reads the
   // final BOQ state itself after that transaction commits — reading it here
   // via the top-level `prisma` client would see pre-commit state.
@@ -1103,9 +1144,19 @@ export async function updateBOQItem(
   return getBOQ(companyId, current.section.boqId);
 }
 
-export async function deleteBOQItem(companyId: string, itemId: string) {
+export async function deleteBOQItem(
+  companyId: string,
+  itemId: string,
+  mutationContext?: BOQItemLifecycleMutationContext,
+) {
   const item = await getItemRecord(companyId, itemId);
   assertBOQEditable(item.section.boq, "edit");
+  if (mutationContext?.expectedBoqVersion !== undefined && item.section.boq.version !== mutationContext.expectedBoqVersion) {
+    throw new ConflictError(
+      "VOICE_PROPOSAL_STALE",
+      "This BOQ changed after the voice preview. Review the current revision and try again.",
+    );
+  }
   await prisma.$transaction(async (tx) => {
     await claimEditableBOQ(tx, companyId, item.section.boqId, item.section.boq.version);
     await tx.bOQItem.delete({ where: { id: item.id, companyId } });
@@ -1115,6 +1166,14 @@ export async function deleteBOQItem(companyId: string, itemId: string) {
       action: "ITEM_DELETED",
       payload: { boqId: item.section.boqId, sectionId: item.sectionId, itemCode: item.itemCode },
     }, tx);
+    if (mutationContext?.additionalAudit) {
+      await createAuditLog(companyId, {
+        entityType: "BOQItem",
+        entityId: item.id,
+        action: mutationContext.additionalAudit.action,
+        payload: mutationContext.additionalAudit.payload,
+      }, tx);
+    }
   });
   return { id: item.id, deleted: true };
 }

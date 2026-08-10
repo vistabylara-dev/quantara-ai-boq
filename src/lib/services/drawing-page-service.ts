@@ -9,6 +9,8 @@ import type { DocumentStorageAdapter } from "@/lib/storage/document-storage-adap
 import { createAuditLog } from "@/lib/repositories/audit-repository";
 import { classifyPdfContent, OCR_IMPLEMENTATION_STATUS } from "@/lib/files/pdf-text-extraction";
 import { extractionJobQueue } from "@/lib/jobs/extraction-worker";
+import { AppError } from "@/lib/errors/app-error";
+import { getSourceProcessingCapability } from "@/lib/files/source-processing-capability";
 
 /** Was hardcoded to the local-filesystem adapter — see preprocessing-handler.ts for the same production fix. */
 let cachedStorageAdapter: DocumentStorageAdapter | null = null;
@@ -26,6 +28,10 @@ export async function triggerFilePreprocessing(actor: CurrentActor, fileId: stri
   // has every supported handler even when processing crosses a request/module boundary.
   await import("@/lib/jobs/register-handlers");
   const file = await getProjectFileRecord(actor.companyId, fileId);
+  const capability = getSourceProcessingCapability(file.extension);
+  if (!capability.canRenderPages) {
+    throw new AppError("PREPROCESSING_NOT_SUPPORTED", capability.message, 400);
+  }
 
   const job = await extractionJobQueue.enqueue({
     companyId: actor.companyId,

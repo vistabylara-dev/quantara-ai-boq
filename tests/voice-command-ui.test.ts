@@ -96,6 +96,7 @@ describe("Release 1 voice command UI", () => {
     expect(isPersistedItemId("section-item-1234")).toBe(false);
     expect(getVoiceBOQFieldLabel("quantity")).toBe("Quantity");
     expect(getVoiceBOQFieldLabel("notes")).toBe("Notes");
+    expect(getVoiceBOQFieldLabel("item")).toBe("BOQ item");
 
     const editor = source("src/components/boq/boq-editor.tsx");
     expect(editor).toContain("isPersistedItemId(item.id)");
@@ -104,11 +105,18 @@ describe("Release 1 voice command UI", () => {
     expect(editor).toContain("/voice/apply");
     expect(editor).toContain("{ confirmed: true, proposal: pendingVoiceProposal.proposal }");
     expect(editor).toContain("onVoiceApplied(updated)");
+    expect(editor).toContain('context={{ type: "BOQ_SECTION", sectionId: section.id }}');
+    expect(editor).toContain('"ADD_BOQ_ITEM"');
+    expect(editor).toContain('"DELETE_BOQ_ITEM"');
+    expect(editor).toContain("pendingVoiceProposal && firstSection");
+    expect(editor).not.toContain(
+      "pendingVoiceProposal?.sectionId === firstSection?.id && pendingVoiceProposal.proposal",
+    );
   });
 
   it("keeps voice discoverable before it is safe to use", () => {
     const editor = source("src/components/boq/boq-editor.tsx");
-    expect(editor).toContain("Voice becomes available as soon as you add and save a BOQ item.");
+    expect(editor).toContain("Voice can add a reviewed draft item to a BOQ section.");
     expect(editor).toContain("Save this BOQ item before using voice.");
     expect(editor).toContain("!isPersistedItemId(item.id)");
     expect(editor).not.toContain("\n                              compact\n");

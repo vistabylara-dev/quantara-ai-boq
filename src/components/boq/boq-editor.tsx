@@ -50,21 +50,30 @@ export function getVoiceBOQFieldLabel(field: string): string {
       return "Unit";
     case "notes":
       return "Notes";
+    case "item":
+      return "BOQ item";
     default:
       return field.replace(/_/g, " ");
   }
 }
 
 type PendingBOQVoiceProposal = {
-  itemId: string;
+  targetKey: string;
+  sectionId: string;
+  itemId?: string;
   proposal: VoiceCommandProposal;
 };
 
-const SUPPORTED_BOQ_VOICE_COMMANDS = new Set([
+const SUPPORTED_BOQ_ITEM_VOICE_COMMANDS = new Set([
   "SET_BOQ_QUANTITY",
   "SET_BOQ_DESCRIPTION",
   "SET_BOQ_UNIT",
   "SET_BOQ_NOTES",
+  "DELETE_BOQ_ITEM",
+]);
+
+const SUPPORTED_BOQ_SECTION_VOICE_COMMANDS = new Set([
+  "ADD_BOQ_ITEM",
 ]);
 
 const emptyItem = (section: BOQSection, nextNumber: number): BOQItem => ({
@@ -144,12 +153,20 @@ export default function BoqEditor({
     setIsApplyingVoice(false);
   }, [activeBoq.id]);
 
-  const handleBOQVoiceProposal = useCallback((itemId: string, proposal: VoiceCommandProposal) => {
-    if (proposal.targetType !== "BOQ_ITEM" || proposal.targetId !== itemId || !SUPPORTED_BOQ_VOICE_COMMANDS.has(proposal.commandType)) {
-      throw new Error("This voice instruction did not resolve to a supported change for this BOQ item.");
+  const handleBOQItemVoiceProposal = useCallback((sectionId: string, itemId: string, proposal: VoiceCommandProposal) => {
+    if (proposal.targetType !== "BOQ_ITEM" || proposal.targetId !== itemId || !SUPPORTED_BOQ_ITEM_VOICE_COMMANDS.has(proposal.commandType)) {
+      throw new Error("This voice instruction did not resolve to a supported action for this BOQ item.");
     }
     setVoiceApplyError(null);
-    setPendingVoiceProposal({ itemId, proposal });
+    setPendingVoiceProposal({ targetKey: `item:${itemId}`, sectionId, itemId, proposal });
+  }, []);
+
+  const handleBOQSectionVoiceProposal = useCallback((sectionId: string, proposal: VoiceCommandProposal) => {
+    if (proposal.targetType !== "BOQ_SECTION" || proposal.targetId !== sectionId || !SUPPORTED_BOQ_SECTION_VOICE_COMMANDS.has(proposal.commandType)) {
+      throw new Error("This voice instruction did not resolve to a supported add-item action for this BOQ section.");
+    }
+    setVoiceApplyError(null);
+    setPendingVoiceProposal({ targetKey: `section:${sectionId}`, sectionId, proposal });
   }, []);
 
   const confirmBOQVoiceProposal = useCallback(async () => {
@@ -162,9 +179,11 @@ export default function BoqEditor({
         { confirmed: true, proposal: pendingVoiceProposal.proposal },
       );
       onVoiceApplied(updated);
-      const itemId = pendingVoiceProposal.itemId;
+      const returnFocusKey = pendingVoiceProposal.proposal.commandType === "DELETE_BOQ_ITEM"
+        ? `section:${pendingVoiceProposal.sectionId}`
+        : pendingVoiceProposal.targetKey;
       setPendingVoiceProposal(null);
-      requestAnimationFrame(() => voiceButtonRefs.current.get(itemId)?.focus());
+      requestAnimationFrame(() => voiceButtonRefs.current.get(returnFocusKey)?.focus());
     } catch (caught) {
       setVoiceApplyError(getApiErrorMessage(caught));
     } finally {
@@ -288,6 +307,7 @@ export default function BoqEditor({
   };
 
   const isLegacyEmpty = isReadOnly && activeBoq.sections.every(s => s.items.length === 0);
+  const firstSection = activeBoq.sections[0] ?? null;
 
   return (
     <div className="space-y-6">
@@ -363,8 +383,62 @@ export default function BoqEditor({
           <p className="mt-2 text-slate-400">Start building your Bill of Quantities to calculate totals.</p>
           <div className="mx-auto mt-4 flex max-w-xl items-center justify-center gap-2 rounded-2xl border border-blue-900/60 bg-blue-950/20 px-4 py-3 text-sm text-blue-200">
             <Mic className="h-4 w-4 shrink-0" aria-hidden="true" />
-            <span>Voice becomes available as soon as you add and save a BOQ item.</span>
+            <span>Voice can add a reviewed draft item to a BOQ section. Saved items also support voice change and delete proposals.</span>
           </div>
+          {!isReadOnly && firstSection && onVoiceApplied ? (
+            <div className="mx-auto mt-4 flex max-w-xl justify-center">
+              <VoiceCommandButton
+                ref={(element) => {
+                  const key = `section:${firstSection.id}`;
+                  if (element) voiceButtonRefs.current.set(key, element);
+                  else voiceButtonRefs.current.delete(key);
+                }}
+                projectId={projectId}
+                context={{ type: "BOQ_SECTION", sectionId: firstSection.id }}
+                onProposal={(proposal) => handleBOQSectionVoiceProposal(firstSection.id, proposal)}
+                onBusyChange={(busy) => {
+                  const key = `section:${firstSection.id}`;
+                  setVoiceBusyItemId((current) => busy ? key : current === key ? null : current);
+                }}
+                disabled={
+                  actionPending
+                  || hasUnsavedChanges
+                  || pendingVoiceProposal !== null
+                  || isApplyingVoice
+                  || (voiceBusyItemId !== null && voiceBusyItemId !== `section:${firstSection.id}`)
+                }
+                disabledReason={
+                  hasUnsavedChanges
+                    ? "Save the draft before using voice."
+                    : pendingVoiceProposal
+                      ? "Review or cancel the current voice proposal first."
+                      : actionPending || isApplyingVoice || voiceBusyItemId !== null
+                        ? "Wait for the current BOQ action to finish."
+                        : "Voice add is unavailable."
+                }
+                ariaLabel={`Record a voice instruction to add an item to ${firstSection.title}`}
+              />
+            </div>
+          ) : null}
+          {pendingVoiceProposal && firstSection && pendingVoiceProposal.sectionId === firstSection.id && pendingVoiceProposal.proposal.commandType === "ADD_BOQ_ITEM" ? (
+            <div className="mx-auto mt-4 max-w-3xl">
+              <VoiceProposalCard
+                proposal={pendingVoiceProposal.proposal}
+                fieldLabel="BOQ item"
+                confirmationScope="PERSISTED_BOQ_ITEM"
+                isConfirming={isApplyingVoice}
+                error={voiceApplyError}
+                onConfirm={confirmBOQVoiceProposal}
+                onCancel={() => {
+                  const key = pendingVoiceProposal.targetKey;
+                  setPendingVoiceProposal(null);
+                  setVoiceApplyError(null);
+                  requestAnimationFrame(() => voiceButtonRefs.current.get(key)?.focus());
+                }}
+                returnFocusRef={{ current: voiceButtonRefs.current.get(pendingVoiceProposal.targetKey) ?? null }}
+              />
+            </div>
+          ) : null}
           
           {!isReadOnly && (
             <div className="mt-8 flex flex-wrap justify-center gap-4">
@@ -421,6 +495,42 @@ export default function BoqEditor({
               >
                 {section.collapsed ? "Expand" : "Collapse"}
               </button>
+              <VoiceCommandButton
+                ref={(element) => {
+                  const key = `section:${section.id}`;
+                  if (element) voiceButtonRefs.current.set(key, element);
+                  else voiceButtonRefs.current.delete(key);
+                }}
+                projectId={projectId}
+                context={{ type: "BOQ_SECTION", sectionId: section.id }}
+                onProposal={(proposal) => handleBOQSectionVoiceProposal(section.id, proposal)}
+                onBusyChange={(busy) => {
+                  const key = `section:${section.id}`;
+                  setVoiceBusyItemId((current) => busy ? key : current === key ? null : current);
+                }}
+                disabled={
+                  isReadOnly
+                  || actionPending
+                  || hasUnsavedChanges
+                  || !onVoiceApplied
+                  || pendingVoiceProposal !== null
+                  || isApplyingVoice
+                  || (voiceBusyItemId !== null && voiceBusyItemId !== `section:${section.id}`)
+                }
+                disabledReason={
+                  isReadOnly
+                    ? "This BOQ revision is read-only."
+                    : hasUnsavedChanges
+                      ? "Save the draft before using voice."
+                      : pendingVoiceProposal
+                        ? "Review or cancel the current voice proposal first."
+                        : actionPending || isApplyingVoice || voiceBusyItemId !== null
+                          ? "Wait for the current BOQ action to finish."
+                          : "Voice add is unavailable."
+                }
+                ariaLabel={`Record a voice instruction to add an item to ${section.title}`}
+                compact
+              />
               <button
                 type="button"
                 onClick={() => onAddItem && onAddItem()}
@@ -431,6 +541,26 @@ export default function BoqEditor({
               </button>
             </div>
           </div>
+
+          {pendingVoiceProposal?.sectionId === section.id && pendingVoiceProposal.proposal.commandType === "ADD_BOQ_ITEM" ? (
+            <div className="border-b border-blue-800/60 bg-blue-950/10 p-4">
+              <VoiceProposalCard
+                proposal={pendingVoiceProposal.proposal}
+                fieldLabel="BOQ item"
+                confirmationScope="PERSISTED_BOQ_ITEM"
+                isConfirming={isApplyingVoice}
+                error={voiceApplyError}
+                onConfirm={confirmBOQVoiceProposal}
+                onCancel={() => {
+                  const key = pendingVoiceProposal.targetKey;
+                  setPendingVoiceProposal(null);
+                  setVoiceApplyError(null);
+                  requestAnimationFrame(() => voiceButtonRefs.current.get(key)?.focus());
+                }}
+                returnFocusRef={{ current: voiceButtonRefs.current.get(pendingVoiceProposal.targetKey) ?? null }}
+              />
+            </div>
+          ) : null}
 
           {section.collapsed ? (
             <div className="p-6 text-slate-400">Section is collapsed.</div>
@@ -555,14 +685,16 @@ export default function BoqEditor({
                           )}
                           <VoiceCommandButton
                               ref={(element) => {
-                                if (element) voiceButtonRefs.current.set(item.id, element);
-                                else voiceButtonRefs.current.delete(item.id);
+                                const key = `item:${item.id}`;
+                                if (element) voiceButtonRefs.current.set(key, element);
+                                else voiceButtonRefs.current.delete(key);
                               }}
                               projectId={projectId}
                               context={{ type: "BOQ_ITEM", itemId: item.id }}
-                              onProposal={(proposal) => handleBOQVoiceProposal(item.id, proposal)}
+                              onProposal={(proposal) => handleBOQItemVoiceProposal(section.id, item.id, proposal)}
                               onBusyChange={(busy) => {
-                                setVoiceBusyItemId((current) => busy ? item.id : current === item.id ? null : current);
+                                const key = `item:${item.id}`;
+                                setVoiceBusyItemId((current) => busy ? key : current === key ? null : current);
                               }}
                               disabled={
                                 !isPersistedItemId(item.id)
@@ -572,7 +704,7 @@ export default function BoqEditor({
                                 || !onVoiceApplied
                                 || pendingVoiceProposal !== null
                                 || isApplyingVoice
-                                || (voiceBusyItemId !== null && voiceBusyItemId !== item.id)
+                                || (voiceBusyItemId !== null && voiceBusyItemId !== `item:${item.id}`)
                               }
                               disabledReason={
                                 !isPersistedItemId(item.id)
@@ -611,12 +743,12 @@ export default function BoqEditor({
                             error={voiceApplyError}
                             onConfirm={confirmBOQVoiceProposal}
                             onCancel={() => {
-                              const itemId = pendingVoiceProposal.itemId;
+                              const key = pendingVoiceProposal.targetKey;
                               setPendingVoiceProposal(null);
                               setVoiceApplyError(null);
-                              requestAnimationFrame(() => voiceButtonRefs.current.get(itemId)?.focus());
+                              requestAnimationFrame(() => voiceButtonRefs.current.get(key)?.focus());
                             }}
-                            returnFocusRef={{ current: voiceButtonRefs.current.get(item.id) ?? null }}
+                            returnFocusRef={{ current: voiceButtonRefs.current.get(`item:${item.id}`) ?? null }}
                           />
                         </td>
                       </tr>

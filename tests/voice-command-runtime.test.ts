@@ -232,7 +232,7 @@ describe("Release 1 voice audio and deterministic command parsing", () => {
     });
   });
 
-  it("parses supported BOQ quantity and description commands", async () => {
+  it("parses supported BOQ change, add, and delete commands", async () => {
     await expect(interpretVoiceCommand("change this quantity to 25 square metres", { type: "BOQ_ITEM" })).resolves.toMatchObject({
       commandType: "SET_BOQ_QUANTITY",
       field: "quantity",
@@ -244,6 +244,50 @@ describe("Release 1 voice audio and deterministic command parsing", () => {
       field: "description",
       newValue: "acoustic gypsum partition",
     });
+    await expect(interpretVoiceCommand("delete this item", { type: "BOQ_ITEM" })).resolves.toMatchObject({
+      commandType: "DELETE_BOQ_ITEM",
+      field: "item",
+    });
+    expect(
+      interpretVoiceCommandDeterministically("remove this description", { type: "BOQ_ITEM" }),
+    ).toMatchObject({ status: "ambiguous" });
+    await expect(
+      interpretVoiceCommand("remove this description", { type: "BOQ_ITEM" }),
+    ).rejects.toMatchObject({ code: "VOICE_COMMAND_AMBIGUOUS" });
+
+    await expect(interpretVoiceCommand(
+      "add item acoustic ceiling quantity 14 square metres rate 35 code AC-VOICE-01",
+      { type: "BOQ_SECTION" },
+    )).resolves.toMatchObject({
+      commandType: "ADD_BOQ_ITEM",
+      field: "item",
+      itemDraft: {
+        description: "acoustic ceiling",
+        quantity: 14,
+        unit: "m2",
+        unitCost: 35,
+        itemCode: "AC-VOICE-01",
+      },
+    });
+
+    await expect(interpretVoiceCommand(
+      "add item cable supports quantity 5 pieces rate 12 per kg code CBL-VOICE-01",
+      { type: "BOQ_SECTION" },
+    )).resolves.toMatchObject({
+      commandType: "ADD_BOQ_ITEM",
+      itemDraft: {
+        quantity: 5,
+        unit: "nr",
+        unitCost: 12,
+      },
+    });
+
+    expect(
+      interpretVoiceCommandDeterministically(
+        "add item mixed material quantity 5 pieces kg rate 12",
+        { type: "BOQ_SECTION" },
+      ),
+    ).toMatchObject({ status: "ambiguous" });
   });
 
   it("does not guess ambiguous instructions or advertise unsupported execution", async () => {
@@ -288,6 +332,7 @@ describe("Release 1 voice proposal/apply integration (real local Postgres)", () 
   let projectBId: string;
   let projectBSlug: string;
   let boqAId: string;
+  let sectionAId: string;
   let itemAId: string;
   let lockProjectId: string;
   let lockItemId: string;
@@ -359,6 +404,7 @@ describe("Release 1 voice proposal/apply integration (real local Postgres)", () 
     projectBId = createdB.project.databaseId;
     projectBSlug = createdB.project.id;
     boqAId = createdA.boq.databaseId;
+    sectionAId = createdA.boq.sections[0].id;
     const item = await prisma.bOQItem.create({
       data: {
         companyId: companyAId,
@@ -584,6 +630,77 @@ describe("Release 1 voice proposal/apply integration (real local Postgres)", () 
       code: "VOICE_PROPOSAL_STALE",
     });
     expect((await prisma.bOQItem.findUniqueOrThrow({ where: { id: itemAId } })).description).toBe("Changed by another editor");
+  });
+
+  it("adds and deletes BOQ items only after signed explicit confirmation", async () => {
+    const beforeCount = await prisma.bOQItem.count({ where: { companyId: companyAId, sectionId: sectionAId } });
+    const addProposal = await proposeVoiceCommand(
+      actorA(),
+      projectAId,
+      "add item acoustic ceiling quantity 14 square metres rate 35 code AC-VOICE-01",
+      { type: "BOQ_SECTION", sectionId: sectionAId },
+      { proposalSigningKey: TEST_PROPOSAL_SIGNING_KEY },
+    );
+    if (addProposal.commandType !== "ADD_BOQ_ITEM") throw new Error("Expected an add proposal.");
+    expect(await prisma.bOQItem.count({ where: { companyId: companyAId, sectionId: sectionAId } })).toBe(beforeCount);
+
+    setActorContext(actorA());
+    const afterAdd = await applyVoiceBOQCommand(
+      actorA(),
+      projectAId,
+      { confirmed: true, proposal: addProposal },
+      { proposalSigningKey: TEST_PROPOSAL_SIGNING_KEY },
+    );
+    expect(afterAdd.id).toBe(boqAId);
+    const added = await prisma.bOQItem.findFirstOrThrow({
+      where: { companyId: companyAId, sectionId: sectionAId, itemCode: "AC-VOICE-01" },
+    });
+    expect(added.quantity.toNumber()).toBe(14);
+    expect(added.unit).toBe("m2");
+    expect(added.unitCost.toNumber()).toBe(35);
+    expect(await prisma.auditLog.findFirst({
+      where: { companyId: companyAId, entityId: added.id, action: "VOICE_BOQ_ITEM_ADDED" },
+    })).not.toBeNull();
+
+    const deleteProposal = await proposeVoiceCommand(
+      actorA(),
+      projectAId,
+      "delete this item",
+      { type: "BOQ_ITEM", itemId: added.id },
+      { proposalSigningKey: TEST_PROPOSAL_SIGNING_KEY },
+    );
+    if (deleteProposal.commandType !== "DELETE_BOQ_ITEM") throw new Error("Expected a delete proposal.");
+    expect(await prisma.bOQItem.findUnique({ where: { id: added.id } })).not.toBeNull();
+
+    await applyVoiceBOQCommand(
+      actorA(),
+      projectAId,
+      { confirmed: true, proposal: deleteProposal },
+      { proposalSigningKey: TEST_PROPOSAL_SIGNING_KEY },
+    );
+    expect(await prisma.bOQItem.findUnique({ where: { id: added.id } })).toBeNull();
+    expect(await prisma.auditLog.findFirst({
+      where: { companyId: companyAId, entityId: added.id, action: "VOICE_BOQ_ITEM_DELETED" },
+    })).not.toBeNull();
+  });
+
+  it("rejects a stale signed delete proposal after the BOQ version changes", async () => {
+    const proposal = await proposeVoiceCommand(
+      actorA(),
+      projectAId,
+      "delete this item",
+      { type: "BOQ_ITEM", itemId: itemAId },
+      { proposalSigningKey: TEST_PROPOSAL_SIGNING_KEY },
+    );
+    if (proposal.commandType !== "DELETE_BOQ_ITEM") throw new Error("Expected a delete proposal.");
+    await updateBOQItem(companyAId, itemAId, { notes: `stale-delete-${RUN_ID}` });
+    await expect(applyVoiceBOQCommand(
+      actorA(),
+      projectAId,
+      { confirmed: true, proposal },
+      { proposalSigningKey: TEST_PROPOSAL_SIGNING_KEY },
+    )).rejects.toMatchObject({ code: "VOICE_PROPOSAL_STALE" });
+    expect(await prisma.bOQItem.findUnique({ where: { id: itemAId } })).not.toBeNull();
   });
 
   it("allows read-only proposal on a locked BOQ but rejects the confirmed persisted change", async () => {

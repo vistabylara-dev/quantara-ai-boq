@@ -8,6 +8,7 @@ import { toExtractionJobDTO } from "@/lib/repositories/extraction-job-repository
 import { createAuditLog } from "@/lib/repositories/audit-repository";
 import { extractionJobQueue } from "@/lib/jobs/extraction-worker";
 import { TABLE_EXTRACTABLE_EXTENSIONS } from "@/lib/files/table-extraction/constants";
+import { getSourceProcessingCapability } from "@/lib/files/source-processing-capability";
 
 /** Dispatches the appropriate extraction engine(s) for a file's type. Only TABLE_EXTRACTION exists so far; later sub-phases extend this switch as new engines land. */
 export async function triggerFileExtraction(actor: CurrentActor, fileId: string) {
@@ -19,10 +20,11 @@ export async function triggerFileExtraction(actor: CurrentActor, fileId: string)
 
   const file = await getProjectFileRecord(actor.companyId, fileId);
 
-  if (!(TABLE_EXTRACTABLE_EXTENSIONS as readonly string[]).includes(file.extension)) {
+  const capability = getSourceProcessingCapability(file.extension);
+  if (!capability.canExtractTables) {
     throw new AppError(
       "EXTRACTION_NOT_SUPPORTED",
-      `No extraction engine is available yet for .${file.extension} files. Supported today: ${TABLE_EXTRACTABLE_EXTENSIONS.join(", ")}.`,
+      `${capability.message} Structured extraction is currently enabled for: ${TABLE_EXTRACTABLE_EXTENSIONS.join(", ")}.`,
       400,
     );
   }

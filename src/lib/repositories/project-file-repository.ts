@@ -1,6 +1,7 @@
 import { Prisma, ProjectFileClassification, ProjectFileStatus } from "@prisma/client";
 import { prisma } from "@/lib/db/prisma";
 import { NotFoundError } from "@/lib/errors/app-error";
+import { getSourceProcessingCapability } from "@/lib/files/source-processing-capability";
 
 type DbClient = typeof prisma | Prisma.TransactionClient;
 
@@ -41,6 +42,7 @@ export function toProjectFileDTO(row: ProjectFileRecord) {
     mimeType: row.mimeType,
     extension: row.extension,
     fileSize: Number(row.fileSize),
+    processingCapability: getSourceProcessingCapability(row.extension),
     checksum: row.checksum,
     classification: row.classification,
     classificationConfidence: row.classificationConfidence?.toNumber() ?? null,

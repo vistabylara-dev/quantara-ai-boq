@@ -72,6 +72,9 @@ export function VoiceProposalCard({
   const confirmRef = useRef<HTMLButtonElement>(null);
   const label = fieldLabel ?? proposal.field.replace(/_/g, " ");
   const proposalUnit = "unit" in proposal ? proposal.unit : undefined;
+  const isAddItem = proposal.commandType === "ADD_BOQ_ITEM";
+  const isDeleteItem = proposal.commandType === "DELETE_BOQ_ITEM";
+  const confirmLabel = isAddItem ? "Confirm Add" : isDeleteItem ? "Confirm Delete" : "Confirm Change";
 
   useEffect(() => {
     confirmRef.current?.focus();
@@ -155,7 +158,11 @@ export function VoiceProposalCard({
       <p className="mt-4 text-xs leading-5 text-slate-400">
         {confirmationScope === "LOCAL_DIMENSION"
           ? "Confirm Change updates this visible dimension form only. You must still select Calculate and then Confirm calculation."
-          : "No BOQ value has changed yet. Confirm Change applies only this reviewed field through the governed BOQ update path."}
+          : isAddItem
+            ? "No BOQ item has been added yet. Confirm Add creates only this reviewed draft item through the governed BOQ mutation path."
+            : isDeleteItem
+              ? "No BOQ item has been deleted yet. Confirm Delete removes only this reviewed item from the current editable revision through the governed BOQ mutation path."
+              : "No BOQ value has changed yet. Confirm Change applies only this reviewed field through the governed BOQ update path."}
       </p>
       {error ? <p className="mt-3 text-sm text-rose-300" role="alert">{error}</p> : null}
 
@@ -167,7 +174,7 @@ export function VoiceProposalCard({
           disabled={isConfirming || confirmDisabled}
           className="min-h-11 rounded-2xl border border-emerald-600 bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-400 disabled:cursor-not-allowed disabled:opacity-50"
         >
-          {isConfirming ? "Applying…" : "Confirm Change"}
+          {isConfirming ? "Applying…" : confirmLabel}
         </button>
         <button
           type="button"

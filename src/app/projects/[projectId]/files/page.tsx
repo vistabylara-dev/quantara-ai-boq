@@ -17,6 +17,13 @@ type FileView = {
   mimeType: string;
   extension: string;
   fileSize: number;
+  processingCapability: {
+    mode: string;
+    canClassify: true;
+    canRenderPages: boolean;
+    canExtractTables: boolean;
+    message: string;
+  };
   classification: string;
   classificationConfidence: number | null;
   classificationConfirmedAt: string | null;
@@ -325,7 +332,16 @@ export default function ProjectFilesPage(props: {
   }
 
   async function trigger(action: "classify" | "extract" | "preprocess") {
-    if (!selectedFileId) return;
+    if (!selectedFileId || !selectedFile) return;
+
+    if (action === "preprocess" && !selectedFile.processingCapability.canRenderPages) {
+      setDetailWarning(selectedFile.processingCapability.message);
+      return;
+    }
+    if (action === "extract" && !selectedFile.processingCapability.canExtractTables) {
+      setDetailWarning(selectedFile.processingCapability.message);
+      return;
+    }
 
     const fileId = selectedFileId;
     setBusy(true);
@@ -622,6 +638,9 @@ export default function ProjectFilesPage(props: {
                   <p className="text-sm uppercase tracking-[0.2em] text-slate-500">Selected source</p>
                   <h3 className="mt-2 break-words text-xl font-semibold text-white">{selectedFile.originalName}</h3>
                   <p className="mt-1 text-sm text-slate-400">Source: {getProjectSourceOrigin(selectedFile.metadata)}</p>
+                  <p className="mt-2 max-w-3xl rounded-xl border border-slate-800 bg-slate-900 px-3 py-2 text-xs leading-5 text-slate-300">
+                    {selectedFile.processingCapability.message}
+                  </p>
                 </div>
                 <a
                   href={`/api/files/${encodeURIComponent(selectedFile.id)}/download`}
@@ -636,10 +655,22 @@ export default function ProjectFilesPage(props: {
                   <button type="button" onClick={() => void trigger("classify")} disabled={busy} className="rounded-full bg-blue-600 px-4 py-2 text-sm text-white hover:bg-blue-500 disabled:opacity-50">
                     Classify
                   </button>
-                  <button type="button" onClick={() => void trigger("preprocess")} disabled={busy} className="rounded-full bg-slate-700 px-4 py-2 text-sm text-white hover:bg-slate-600 disabled:opacity-50">
+                  <button
+                    type="button"
+                    onClick={() => void trigger("preprocess")}
+                    disabled={busy || !selectedFile.processingCapability.canRenderPages}
+                    title={!selectedFile.processingCapability.canRenderPages ? selectedFile.processingCapability.message : undefined}
+                    className="rounded-full bg-slate-700 px-4 py-2 text-sm text-white hover:bg-slate-600 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
                     Render Pages
                   </button>
-                  <button type="button" onClick={() => void trigger("extract")} disabled={busy} className="rounded-full bg-slate-700 px-4 py-2 text-sm text-white hover:bg-slate-600 disabled:opacity-50">
+                  <button
+                    type="button"
+                    onClick={() => void trigger("extract")}
+                    disabled={busy || !selectedFile.processingCapability.canExtractTables}
+                    title={!selectedFile.processingCapability.canExtractTables ? selectedFile.processingCapability.message : undefined}
+                    className="rounded-full bg-slate-700 px-4 py-2 text-sm text-white hover:bg-slate-600 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
                     Detect Schedule Tables
                   </button>
                 </div>

@@ -1,5 +1,8 @@
 export type ParsedCell = {
+  /** Stable normalized key used by downstream services. */
   columnKey: string;
+  /** Human-readable full header path, e.g. "Reinforcement > Bottom Steel > Straight". */
+  columnTitle?: string;
   rawValue: string;
   normalizedValue?: string;
   sourceCellReference?: string;
@@ -18,5 +21,9 @@ export type ParsedTable = {
   title?: string;
   rows: ParsedTableRow[];
   confidence: number;
-  method: "xlsx-merge-reconstruction" | "csv-blank-cell-inheritance" | "pdf-grid-detection";
+  method:
+    | "xlsx-merge-reconstruction"
+    | "csv-blank-cell-inheritance"
+    | "pdf-grid-detection"
+    | "pdf-text-schedule-fallback";
 };

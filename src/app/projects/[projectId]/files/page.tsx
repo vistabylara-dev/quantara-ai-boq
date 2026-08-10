@@ -37,6 +37,16 @@ type PageView = {
   pageNumber: number;
   hasImage: boolean;
   processingStatus: string;
+  hasText: boolean | null;
+  text: string | null;
+  normalizedText: string | null;
+  characterCount: number | null;
+  ocrStatus: string | null;
+  signals: {
+    drawingTitles: string[];
+    scales: string[];
+    technicalLines: string[];
+  } | null;
 };
 
 type TableView = {
@@ -47,7 +57,7 @@ type TableView = {
   rows: Array<{
     id: string;
     parentRowId: string | null;
-    cells: Array<{ columnKey: string; rawValue: string | null }>;
+    cells: Array<{ columnKey: string; columnTitle?: string; rawValue: string | null }>;
   }>;
 };
 
@@ -502,7 +512,12 @@ export default function ProjectFilesPage(props: {
                         : "border-slate-800 bg-slate-900 text-slate-300"
                     }`}
                   >
-                    <button type="button" onClick={() => void loadDetail(file.id)} className="w-full text-left">
+                    <button
+                      type="button"
+                      onClick={() => void loadDetail(file.id)}
+                      disabled={busy}
+                      className="w-full text-left disabled:cursor-not-allowed disabled:opacity-60"
+                    >
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0">
                           <p className="truncate font-semibold text-white">{file.originalName}</p>
@@ -679,18 +694,83 @@ export default function ProjectFilesPage(props: {
 
               {pages.length > 0 && (
                 <div>
-                  <h3 className="mb-2 text-sm font-semibold uppercase tracking-wide text-slate-400">Pages</h3>
-                  <div className="flex flex-wrap gap-3">
+                  <h3 className="mb-2 text-sm font-semibold uppercase tracking-wide text-slate-400">Rendered drawing pages</h3>
+                  <div className="grid gap-4 xl:grid-cols-2">
                     {pages.map((page) => (
-                      <div key={page.id} className="w-40 rounded-xl border border-slate-800 bg-slate-900 p-2">
+                      <article key={page.id} className="rounded-xl border border-slate-800 bg-slate-900 p-3">
+                        <div className="flex items-center justify-between gap-3">
+                          <p className="text-sm font-semibold text-white">Page {page.pageNumber}</p>
+                          <span className="text-xs text-slate-500">
+                            {page.hasText === true
+                              ? `${page.characterCount ?? 0} text characters`
+                              : page.ocrStatus === "OCR_REQUIRED"
+                                ? "Image preserved · OCR required"
+                                : "Text status unavailable"}
+                          </span>
+                        </div>
+
                         {page.hasImage ? (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img src={`/api/drawing-pages/${page.id}/image`} alt={`Page ${page.pageNumber}`} className="w-full rounded-lg" />
+                          <a
+                            href={`/api/drawing-pages/${page.id}/image`}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="mt-3 block overflow-hidden rounded-lg border border-slate-800 bg-black"
+                          >
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img
+                              src={`/api/drawing-pages/${page.id}/image`}
+                              alt={`Rendered drawing page ${page.pageNumber}`}
+                              className="w-full"
+                            />
+                          </a>
                         ) : (
-                          <div className="flex h-24 items-center justify-center text-xs text-slate-500">No image</div>
+                          <div className="mt-3 flex h-40 items-center justify-center rounded-lg border border-slate-800 text-xs text-slate-500">
+                            No rendered image
+                          </div>
                         )}
-                        <div className="mt-1 text-center text-xs text-slate-500">Page {page.pageNumber}</div>
-                      </div>
+
+                        {page.signals && (
+                          <div className="mt-3 space-y-2">
+                            {page.signals.drawingTitles.length > 0 && (
+                              <div className="flex flex-wrap gap-1.5">
+                                {page.signals.drawingTitles.map((title) => (
+                                  <span key={title} className="rounded-full border border-blue-900/60 bg-blue-950/30 px-2 py-1 text-[0.68rem] text-blue-200">
+                                    {title}
+                                  </span>
+                                ))}
+                              </div>
+                            )}
+                            {page.signals.scales.length > 0 && (
+                              <p className="text-xs text-slate-400">
+                                Scale text: {page.signals.scales.join(" · ")}
+                              </p>
+                            )}
+                            {page.signals.technicalLines.length > 0 && (
+                              <details className="rounded-lg border border-slate-800 bg-slate-950 p-3">
+                                <summary className="cursor-pointer text-xs font-semibold text-slate-300">
+                                  Engineering text signals ({page.signals.technicalLines.length})
+                                </summary>
+                                <ul className="mt-2 space-y-1 text-xs text-slate-400">
+                                  {page.signals.technicalLines.map((line) => (
+                                    <li key={line} className="break-words">{line}</li>
+                                  ))}
+                                </ul>
+                              </details>
+                            )}
+                          </div>
+                        )}
+
+                        {page.text && (
+                          <details className="mt-3 rounded-lg border border-slate-800 bg-slate-950 p-3">
+                            <summary className="cursor-pointer text-xs font-semibold text-slate-300">
+                              Full captured PDF text layer
+                            </summary>
+                            <pre className="mt-2 max-h-72 overflow-auto whitespace-pre-wrap break-words text-[0.68rem] leading-5 text-slate-400">
+                              {page.text}
+                            </pre>
+                          </details>
+                        )}
+                      </article>
                     ))}
                   </div>
                 </div>
@@ -699,27 +779,51 @@ export default function ProjectFilesPage(props: {
               {tables.length > 0 && (
                 <div>
                   <h3 className="mb-2 text-sm font-semibold uppercase tracking-wide text-slate-400">Extracted Tables</h3>
-                  {tables.map((table) => (
-                    <div key={table.id} className="mb-4 overflow-x-auto rounded-xl border border-slate-800">
-                      <div className="border-b border-slate-800 bg-slate-900 px-3 py-2 text-xs text-slate-400">
-                        {table.tableType} · confidence {table.confidence}% · {formatStatusLabel(table.status)}
-                      </div>
-                      <table className="min-w-full text-left text-xs text-slate-300">
-                        <tbody>
-                          {table.rows.map((row) => (
-                            <tr key={row.id} className={row.parentRowId ? "bg-slate-950" : "bg-slate-900 font-medium"}>
-                              {row.cells.map((cell) => (
-                                <td key={cell.columnKey} className="border-t border-slate-800 px-3 py-1.5">
-                                  {row.parentRowId ? "↳ " : ""}
-                                  {cell.rawValue}
-                                </td>
+                  {tables.map((table) => {
+                    const columns = Array.from(
+                      new Map(
+                        table.rows.flatMap((row) =>
+                          row.cells.map((cell) => [
+                            cell.columnKey,
+                            { key: cell.columnKey, title: cell.columnTitle ?? formatStatusLabel(cell.columnKey) },
+                          ] as const),
+                        ),
+                      ).values(),
+                    );
+
+                    return (
+                      <div key={table.id} className="mb-4 overflow-x-auto rounded-xl border border-slate-800">
+                        <div className="border-b border-slate-800 bg-slate-900 px-3 py-2 text-xs text-slate-400">
+                          {table.tableType} · confidence {table.confidence}% · {formatStatusLabel(table.status)}
+                        </div>
+                        <table className="min-w-full text-left text-xs text-slate-300">
+                          <thead>
+                            <tr className="bg-slate-950 text-[0.68rem] uppercase tracking-wide text-slate-500">
+                              {columns.map((column) => (
+                                <th key={column.key} className="border-b border-slate-800 px-3 py-2 align-bottom">
+                                  {column.title}
+                                </th>
                               ))}
                             </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  ))}
+                          </thead>
+                          <tbody>
+                            {table.rows.map((row) => (
+                              <tr key={row.id} className={row.parentRowId ? "bg-slate-950" : "bg-slate-900 font-medium"}>
+                                {columns.map((column) => {
+                                  const cell = row.cells.find((entry) => entry.columnKey === column.key);
+                                  return (
+                                    <td key={column.key} className="border-t border-slate-800 px-3 py-1.5 align-top">
+                                      {cell ? `${row.parentRowId ? "↳ " : ""}${cell.rawValue ?? ""}` : ""}
+                                    </td>
+                                  );
+                                })}
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    );
+                  })}
                 </div>
               )}
 

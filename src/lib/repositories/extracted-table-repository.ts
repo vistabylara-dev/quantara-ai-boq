@@ -4,6 +4,16 @@ import type { ParsedTable } from "@/lib/files/table-extraction/types";
 
 type DbClient = typeof prisma | Prisma.TransactionClient;
 
+function readHeaderTitles(value: Prisma.JsonValue | null): Record<string, string> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  const headerTitles = (value as Record<string, unknown>).headerTitles;
+  if (!headerTitles || typeof headerTitles !== "object" || Array.isArray(headerTitles)) return {};
+  return Object.fromEntries(
+    Object.entries(headerTitles as Record<string, unknown>)
+      .filter((entry): entry is [string, string] => typeof entry[1] === "string"),
+  );
+}
+
 const tableInclude = {
   rows: {
     include: { cells: true },
@@ -24,21 +34,25 @@ export function toExtractedTableDTO(table: ExtractedTableRecord) {
     confidence: table.confidence.toNumber(),
     sourceReference: table.sourceReference,
     status: table.status,
-    rows: table.rows.map((row) => ({
-      id: row.id,
-      rowNumber: row.rowNumber,
-      parentRowId: row.parentRowId,
-      confidence: row.confidence.toNumber(),
-      status: row.status,
-      cells: row.cells.map((cell) => ({
-        id: cell.id,
-        columnKey: cell.columnKey,
-        rawValue: cell.rawValue,
-        normalizedValue: cell.normalizedValue,
-        confidence: cell.confidence.toNumber(),
-        sourceCellReference: cell.sourceCellReference,
-      })),
-    })),
+    rows: table.rows.map((row) => {
+      const headerTitles = readHeaderTitles(row.normalizedDataJson);
+      return {
+        id: row.id,
+        rowNumber: row.rowNumber,
+        parentRowId: row.parentRowId,
+        confidence: row.confidence.toNumber(),
+        status: row.status,
+        cells: row.cells.map((cell) => ({
+          id: cell.id,
+          columnKey: cell.columnKey,
+          columnTitle: headerTitles[cell.columnKey] ?? cell.columnKey,
+          rawValue: cell.rawValue,
+          normalizedValue: cell.normalizedValue,
+          confidence: cell.confidence.toNumber(),
+          sourceCellReference: cell.sourceCellReference,
+        })),
+      };
+    }),
     createdAt: table.createdAt.toISOString(),
     updatedAt: table.updatedAt.toISOString(),
   };
@@ -101,6 +115,9 @@ export async function replaceExtractedTablesForFile(
       for (const row of orderedRows) {
         const parentRowId = row.parentRowNumber !== undefined ? rowIdByRowNumber.get(row.parentRowNumber) ?? null : null;
         const rawDataJson = Object.fromEntries(row.cells.map((cell) => [cell.columnKey, cell.rawValue]));
+        const headerTitles = Object.fromEntries(
+          row.cells.map((cell) => [cell.columnKey, cell.columnTitle ?? cell.columnKey]),
+        );
 
         const createdRow = await tx.extractedTableRow.create({
           data: {
@@ -109,6 +126,7 @@ export async function replaceExtractedTablesForFile(
             rowNumber: row.rowNumber,
             parentRowId,
             rawDataJson: rawDataJson as Prisma.InputJsonValue,
+            normalizedDataJson: { headerTitles } as Prisma.InputJsonValue,
             confidence: row.confidence,
             status: ExtractedTableStatus.EXTRACTED,
           },

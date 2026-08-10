@@ -13,9 +13,9 @@ import { TABLE_EXTRACTABLE_EXTENSIONS } from "@/lib/files/table-extraction/const
 export async function triggerFileExtraction(actor: CurrentActor, fileId: string) {
   requireCapability(actor, "files:manage");
 
-  // Register the heavy table/PDF handler only for the mutating extraction
-  // action. GET /tables remains a DB-only read path.
-  await import("@/lib/files/table-extraction-handler");
+  // Register the complete handler composition before dispatch. The queue is a singleton,
+  // so processing remains safe even when enqueue/worker code is evaluated in another module context.
+  await import("@/lib/jobs/register-handlers");
 
   const file = await getProjectFileRecord(actor.companyId, fileId);
 

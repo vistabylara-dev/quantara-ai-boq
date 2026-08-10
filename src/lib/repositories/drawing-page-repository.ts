@@ -25,6 +25,7 @@ export function toDrawingPageDTO(page: DrawingPage) {
     characterCount: textLayer?.characterCount ?? null,
     extractionMethod: textLayer?.extractionMethod ?? null,
     ocrStatus: textLayer?.ocrStatus ?? null,
+    signals: textLayer?.signals ?? null,
   };
 }
 

@@ -40,7 +40,19 @@ export const localProjectFileStorageAdapter: DocumentStorageAdapter = {
   async putObject(input: PutObjectInput): Promise<PutObjectResult> {
     const filePath = resolvePath(input.key);
     await mkdir(path.dirname(filePath), { recursive: true });
-    await writeFile(filePath, input.body);
+    try {
+      if (input.allowOverwrite === true) {
+        await writeFile(filePath, input.body);
+      } else {
+        // "wx" is atomic: it creates a new object but refuses to replace an existing key.
+        await writeFile(filePath, input.body, { flag: "wx" });
+      }
+    } catch (error) {
+      if (input.allowOverwrite !== true && (error as NodeJS.ErrnoException).code === "EEXIST") {
+        throw new Error(`Object already exists and overwrite is disabled: ${input.key}`);
+      }
+      throw error;
+    }
     contentTypeByKey.set(input.key, input.contentType);
     return { key: input.key, size: input.body.byteLength };
   },

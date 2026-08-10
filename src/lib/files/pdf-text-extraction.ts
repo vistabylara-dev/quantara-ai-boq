@@ -1,18 +1,10 @@
-/**
- * Per-page PDF text-layer extraction and honest content classification.
- *
- * "Text layer" here means exactly what pdf-parse's own PDFParse.getText()
- * reports — the same detection mechanism pdf-table-parser.ts already relies
- * on for its hasTextLayer check. A page with zero extractable text is
- * reported as such, never guessed at or backfilled.
- *
- * OCR_IMPLEMENTATION_STATUS is a real, asserted fact (checked against
- * package.json and the codebase, not a placeholder): no OCR provider is
- * wired into this project. Scanned/image-only pages are rasterized and
- * their page images are stored and retrievable, but their text is reported
- * as OCR_REQUIRED rather than fabricated.
- */
 export const OCR_IMPLEMENTATION_STATUS = "NOT_IMPLEMENTED" as const;
+
+export type PageTextSignals = {
+  drawingTitles: string[];
+  scales: string[];
+  technicalLines: string[];
+};
 
 export type PageTextExtraction = {
   extractionMethod: "pdf-text-layer";
@@ -22,13 +14,50 @@ export type PageTextExtraction = {
   normalizedText: string;
   characterCount: number;
   ocrStatus: "NOT_APPLICABLE" | "OCR_REQUIRED";
+  signals: PageTextSignals;
 };
 
 export type PdfContentClassification = "TEXT_LAYER" | "SCANNED_IMAGE" | "MIXED" | "UNKNOWN";
 
-/** Collapses runs of whitespace/newlines to single spaces and trims — a normalized form for search/matching, never a replacement for the raw extracted text. */
 export function normalizeExtractedText(text: string): string {
   return text.replace(/\s+/g, " ").trim();
+}
+
+function uniqueLimited(values: string[], limit: number): string[] {
+  return [...new Set(values.map((value) => value.trim()).filter(Boolean))].slice(0, limit);
+}
+
+export function extractPageTextSignals(rawText: string): PageTextSignals {
+  const lines = rawText
+    .split(/\r?\n/)
+    .map((line) => line.replace(/\s+/g, " ").trim())
+    .filter(Boolean);
+
+  const drawingTitles = uniqueLimited(
+    lines.filter((line) =>
+      /^(?:LAYOUT OF|DETAILS? OF|DETAIL OF|TYPICAL SECTION|SECTION\b|SEC\b|SCHEDULE OF)/i.test(line)
+    ),
+    30,
+  );
+
+  const scales = uniqueLimited(
+    lines.filter((line) => /\bSCALE\s*:?\s*\d+\s*(?::|\/)\s*\d+\b/i.test(line)),
+    20,
+  );
+
+  const technicalLines = uniqueLimited(
+    lines.filter((line) =>
+      /\d+\s*[xX×]\s*\d+/i.test(line)
+      || /\bT\d+\b/i.test(line)
+      || /\d+\s*T\s*\d+/i.test(line)
+      || /@\s*\d+(?:\.\d+)?\s*(?:cm|mm|m)\b/i.test(line)
+      || /\b\d+(?:\.\d+)?\s*(?:mm|cm|m|m2|m3|kN|N\/mm2)\b/i.test(line)
+      || /\b(?:TB|CB|STB|B|C|F)\d+\*?\b/i.test(line)
+    ),
+    120,
+  );
+
+  return { drawingTitles, scales, technicalLines };
 }
 
 export function buildPageTextExtraction(rawText: string, sourceProjectFileId: string): PageTextExtraction {
@@ -42,14 +71,10 @@ export function buildPageTextExtraction(rawText: string, sourceProjectFileId: st
     normalizedText,
     characterCount: normalizedText.length,
     ocrStatus: hasText ? "NOT_APPLICABLE" : "OCR_REQUIRED",
+    signals: extractPageTextSignals(rawText),
   };
 }
 
-/**
- * Document-level classification derived purely from each page's own
- * hasText flag — never persisted separately from the pages it summarizes,
- * so it can never drift out of sync with them.
- */
 export function classifyPdfContent(pages: Array<{ hasText: boolean | null | undefined }>): PdfContentClassification {
   if (pages.length === 0 || pages.some((page) => page.hasText == null)) return "UNKNOWN";
   const withText = pages.filter((page) => page.hasText === true).length;

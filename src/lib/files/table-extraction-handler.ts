@@ -35,6 +35,7 @@ extractionJobQueue.registerHandler(ExtractionEngineType.TABLE_EXTRACTION, async 
   let parsedTables: ParsedTable[];
   let noTextLayerMessage: string | null = null;
   let skippedTablePages: number[] = [];
+  let textFallbackPages: number[] = [];
 
   await ctx.updateProgress(35, file.extension === "pdf" ? "detecting schedule-table grids" : "parsing structured table");
 
@@ -49,6 +50,7 @@ extractionJobQueue.registerHandler(ExtractionEngineType.TABLE_EXTRACTION, async 
       const result = await parsePdfTables(buffer);
       parsedTables = result.tables;
       skippedTablePages = result.skippedTablePages;
+      textFallbackPages = result.textFallbackPages;
       if (!result.hasTextLayer) {
         noTextLayerMessage = "This PDF has no extractable text layer (likely a scanned image). OCR-based extraction is not yet available — upload a text-based PDF, or CSV/XLSX for structured extraction.";
       }
@@ -110,7 +112,16 @@ extractionJobQueue.registerHandler(ExtractionEngineType.TABLE_EXTRACTION, async 
             warningCode: "PDF_TABLE_GEOMETRY_UNSUPPORTED",
             message:
               `Reliable tables were captured from supported pages. Page(s) ${skippedTablePages.join(", ")} contained `
-              + "grid geometry that could not be safely reconstructed and were not converted into candidates.",
+              + "grid geometry that could not be safely reconstructed and had no safe structural text fallback.",
+          }
+        : {}),
+      ...(textFallbackPages.length > 0
+        ? {
+            textFallbackPages,
+            textFallbackCode: "PDF_TEXT_SCHEDULE_FALLBACK_USED",
+            textFallbackMessage:
+              `Schedule rows on page(s) ${textFallbackPages.join(", ")} were reconstructed from exact PDF text-layer values `
+              + "after vector-grid extraction was unavailable or produced no usable table. Professional review remains required.",
           }
         : {}),
       ...(bridgeResult.status === "skipped"

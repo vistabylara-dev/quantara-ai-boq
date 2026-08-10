@@ -84,6 +84,7 @@ export default function AddItemFromSourceModal({
 
   const [reviewedEntities, setReviewedEntities] = useState<ExtractedEntityView[]>([]);
   const [isLoadingReviewed, setIsLoadingReviewed] = useState(false);
+  const [hasLoadedReviewed, setHasLoadedReviewed] = useState(false);
   const [selectedEntity, setSelectedEntity] = useState<ExtractedEntityView | null>(null);
   const [extractionDraft, setExtractionDraft] = useState({
     itemCode: "",
@@ -139,6 +140,7 @@ export default function AddItemFromSourceModal({
 
     const controller = new AbortController();
     setIsLoadingReviewed(true);
+    setHasLoadedReviewed(false);
     setError(null);
 
     apiClient
@@ -158,7 +160,10 @@ export default function AddItemFromSourceModal({
         setError(getApiErrorMessage(err));
       })
       .finally(() => {
-        if (!controller.signal.aborted) setIsLoadingReviewed(false);
+        if (!controller.signal.aborted) {
+          setIsLoadingReviewed(false);
+          setHasLoadedReviewed(true);
+        }
       });
 
     return () => controller.abort();
@@ -378,7 +383,7 @@ export default function AddItemFromSourceModal({
               <p className="text-sm text-slate-400">Loading reviewed extraction…</p>
             )}
 
-            {!isLoadingReviewed && reviewedEntities.length === 0 && (
+            {!isLoadingReviewed && hasLoadedReviewed && reviewedEntities.length === 0 && (
               <div className="rounded-2xl border border-dashed border-slate-700 p-5">
                 <p className="text-sm text-slate-300">No confirmed or corrected extracted items are ready for BOQ import.</p>
                 <Link

@@ -202,9 +202,9 @@ export async function deleteProjectFile(actor: CurrentActor, fileId: string) {
 export async function triggerFileClassification(actor: CurrentActor, fileId: string) {
   requireCapability(actor, "files:manage");
 
-  // Classification does not require the PDF rendering/table runtime.
-  // Register only this handler when this action is requested.
-  await import("@/lib/files/classification-handler");
+  // Register the complete handler composition before dispatch so the singleton queue
+  // has every supported handler even when processing crosses a request/module boundary.
+  await import("@/lib/jobs/register-handlers");
   const file = await getProjectFileRecord(actor.companyId, fileId);
   await updateProjectFileStatus(actor.companyId, fileId, ProjectFileStatus.CLASSIFYING);
 

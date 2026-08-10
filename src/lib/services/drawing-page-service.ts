@@ -22,10 +22,9 @@ function getProjectFileStorageAdapter(): DocumentStorageAdapter {
 export async function triggerFilePreprocessing(actor: CurrentActor, fileId: string) {
   requireCapability(actor, "files:manage");
 
-  // Register only the engine this action actually needs. Keeping this import
-  // inside the mutating trigger prevents read-only page/image routes from
-  // loading pdfjs/canvas and the rest of the extraction runtime.
-  await import("@/lib/files/preprocessing-handler");
+  // Register the complete handler composition before dispatch so the singleton queue
+  // has every supported handler even when processing crosses a request/module boundary.
+  await import("@/lib/jobs/register-handlers");
   const file = await getProjectFileRecord(actor.companyId, fileId);
 
   const job = await extractionJobQueue.enqueue({

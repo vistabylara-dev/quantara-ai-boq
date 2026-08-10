@@ -52,7 +52,7 @@ export async function GET() {
     await requireOwnerWithoutTouchingMissingColumns();
     const log: string[] = [];
     const MIGRATION_NAME = "20260805025000_add_sales_inquiry";
-    const CHECKSUM = "e844c9dfb791b910a2b86c4a5f6821710a103c49609e3265519dd4598cde58d2";
+    const CHECKSUM = "3def2f3a0b9b6d97789929a80b0d851435a8f5800b4306e045d44607462408a5";
 
     const alreadyRecorded = await prisma.$queryRaw<{ migration_name: string }[]>`
       SELECT migration_name FROM "_prisma_migrations" WHERE migration_name = ${MIGRATION_NAME}

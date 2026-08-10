@@ -8,7 +8,6 @@ import { createStorageAdapter, resolveStorageProvider } from "@/lib/storage/stor
 import type { DocumentStorageAdapter } from "@/lib/storage/document-storage-adapter";
 import { createAuditLog } from "@/lib/repositories/audit-repository";
 import { classifyPdfContent, OCR_IMPLEMENTATION_STATUS } from "@/lib/files/pdf-text-extraction";
-import "@/lib/jobs/register-handlers";
 import { extractionJobQueue } from "@/lib/jobs/extraction-worker";
 
 /** Was hardcoded to the local-filesystem adapter — see preprocessing-handler.ts for the same production fix. */
@@ -22,6 +21,11 @@ function getProjectFileStorageAdapter(): DocumentStorageAdapter {
 
 export async function triggerFilePreprocessing(actor: CurrentActor, fileId: string) {
   requireCapability(actor, "files:manage");
+
+  // Register only the engine this action actually needs. Keeping this import
+  // inside the mutating trigger prevents read-only page/image routes from
+  // loading pdfjs/canvas and the rest of the extraction runtime.
+  await import("@/lib/files/preprocessing-handler");
   const file = await getProjectFileRecord(actor.companyId, fileId);
 
   const job = await extractionJobQueue.enqueue({

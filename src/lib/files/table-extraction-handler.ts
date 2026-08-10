@@ -12,8 +12,9 @@ import { parsePdfTables } from "./table-extraction/pdf-table-parser";
 import { inferTableType } from "./table-extraction/infer-table-type";
 import type { ParsedTable } from "./table-extraction/types";
 
-/** File types this engine can actually parse today — kept in sync with the routes that enqueue it. */
-export const TABLE_EXTRACTABLE_EXTENSIONS = ["csv", "xlsx", "pdf"] as const;
+// Kept as a re-export for existing imports, but the capability list itself
+// lives in a side-effect-free module.
+export { TABLE_EXTRACTABLE_EXTENSIONS } from "./table-extraction/constants";
 
 /** Was hardcoded to the local-filesystem adapter — see preprocessing-handler.ts for the same production fix. */
 let cachedStorageAdapter: DocumentStorageAdapter | null = null;

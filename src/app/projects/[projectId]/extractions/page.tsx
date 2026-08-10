@@ -181,6 +181,13 @@ export default function ProjectExtractionsPage(props: { params: Promise<{ projec
     [entities],
   );
 
+  const importableEntityCount = useMemo(
+    () => entities.filter(
+      (entity) => entity.status === "CONFIRMED" || entity.status === "CORRECTED",
+    ).length,
+    [entities],
+  );
+
   const refreshAfterAction = useCallback(async () => {
     try {
       const [entityData, fileData] = await fetchWorkspace();
@@ -352,7 +359,13 @@ export default function ProjectExtractionsPage(props: { params: Promise<{ projec
           </div>
           {(reviewSummary.total === 0 || reviewSummary.complete) && (
             <Link
-              href={reviewSummary.complete ? `/projects/${encodedProjectId}/boq` : `/projects/${encodedProjectId}/files`}
+              href={
+                reviewSummary.complete
+                  ? importableEntityCount > 0
+                    ? `/projects/${encodedProjectId}/boq?action=import-reviewed`
+                    : `/projects/${encodedProjectId}/boq`
+                  : `/projects/${encodedProjectId}/files`
+              }
               className="inline-flex shrink-0 justify-center rounded-2xl bg-[#009FE3] px-4 py-2 text-sm font-semibold text-white hover:opacity-90 dark:bg-[#21C7F3] dark:text-[#040A16]"
             >
               {reviewSummary.complete ? "Continue to BOQ" : "Review Project Sources"}

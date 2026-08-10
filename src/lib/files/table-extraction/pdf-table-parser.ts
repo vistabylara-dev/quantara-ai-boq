@@ -36,7 +36,7 @@ function tableArrayToParsedTable(rows: string[][], pageNumber: number, tableInde
   return {
     title: headerRow.join(" | "),
     confidence: CONFIDENCE,
-    method: "pdf-whitespace-heuristic",
+    method: "pdf-grid-detection",
     rows: parsedRows,
   };
 }

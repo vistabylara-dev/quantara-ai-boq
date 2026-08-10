@@ -12,6 +12,7 @@ import {
   getExtractionJobRecord,
   isExtractionJobCancelled,
   QUEUE_NON_TERMINAL_STATUSES,
+  recoverStaleRunningExtractionJobForTarget,
   requeueExtractionJobForRetry,
   resetExtractionJobToQueued,
   setExtractionJobCancelled,
@@ -62,6 +63,18 @@ export class LocalJobQueue implements JobQueue {
   }
 
   async enqueue(input: EnqueueJobInput): Promise<ExtractionJob> {
+    // Crash recovery belongs to the real request/enqueue path, never module
+    // initialization. Only the same tenant + file + engine being retried is
+    // inspected. A live RUNNING job is untouched because the repository
+    // requires updatedAt to remain older than the stale cutoff.
+    const staleCutoff = new Date(Date.now() - STALE_RUNNING_CUTOFF_MS);
+    await recoverStaleRunningExtractionJobForTarget(
+      input.companyId,
+      input.projectFileId,
+      input.engineType,
+      staleCutoff,
+    );
+
     // findOrCreateQueuedExtractionJob is atomic (SERIALIZABLE transaction) — two concurrent
     // enqueue() calls for the same company+file+engine can never both create a row.
     const job = await findOrCreateQueuedExtractionJob(input);

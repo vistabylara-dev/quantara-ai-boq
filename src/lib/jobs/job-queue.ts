@@ -44,9 +44,11 @@ export interface JobQueue {
   enqueue(input: EnqueueJobInput): Promise<ExtractionJob>;
   cancel(companyId: string, jobId: string): Promise<ExtractionJob>;
   /**
-   * Resets any job left RUNNING by an invocation that died mid-job back to
-   * QUEUED. Call once at startup. Does not itself re-execute those jobs —
-   * see the QUEUED branch in LocalJobQueue.enqueue() for why.
+   * Explicit maintenance recovery for stale RUNNING jobs.
+   *
+   * Normal user-triggered processing performs targeted recovery inside
+   * enqueue(). This broad recovery method must never be invoked merely by
+   * importing the queue module.
    */
   recoverStaleJobs(): Promise<void>;
   /**

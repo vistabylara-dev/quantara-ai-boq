@@ -68,7 +68,12 @@ extractionJobQueue.registerHandler(ExtractionEngineType.FILE_PREPROCESSING, asyn
     const pages: CreateDrawingPageInput[] = [];
     for (const shot of screenshots.pages) {
       const imageKey = buildStorageKey(job.companyId, job.projectId, "pages", `${file.id}-page-${shot.pageNumber}.png`);
-      await storage.putObject({ key: imageKey, body: Buffer.from(shot.data), contentType: "image/png" });
+      await storage.putObject({
+        key: imageKey,
+        body: Buffer.from(shot.data),
+        contentType: "image/png",
+        allowOverwrite: true,
+      });
       pages.push({
         projectFileId: file.id,
         pageNumber: shot.pageNumber,

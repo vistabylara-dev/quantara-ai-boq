@@ -18,6 +18,7 @@ const bodySchema = z.object({
   itemCode: z.string().min(1).max(50),
   category: z.string().min(1).max(100),
   description: z.string().min(1).max(500),
+  specification: z.string().max(2000),
   unit: z.string().min(1).max(20),
   quantity: z.number().positive(),
   unitCost: z.number().min(0),

@@ -267,6 +267,37 @@ export async function resetExtractionJobToQueued(companyId: string, jobId: strin
   return result.count === 1;
 }
 
+/**
+ * Request-path crash recovery for one exact tenant + source + engine.
+ *
+ * This deliberately does NOT sweep every tenant and does NOT run at module
+ * import time. When a user retries a processing action, only a genuinely
+ * stale RUNNING attempt for that same company/file/engine may be returned
+ * to QUEUED. The final reset rechecks updatedAt atomically, so a live worker
+ * that reports progress during the selecting read is never stolen.
+ */
+export async function recoverStaleRunningExtractionJobForTarget(
+  companyId: string,
+  projectFileId: string,
+  engineType: ExtractionEngineType,
+  cutoff: Date,
+): Promise<boolean> {
+  const stale = await prisma.extractionJob.findFirst({
+    where: {
+      companyId,
+      projectFileId,
+      engineType,
+      status: ExtractionJobStatus.RUNNING,
+      updatedAt: { lt: cutoff },
+    },
+    orderBy: { createdAt: "desc" },
+    select: { id: true },
+  });
+
+  if (!stale) return false;
+  return resetExtractionJobToQueued(companyId, stale.id, cutoff);
+}
+
 export async function setExtractionJobCancelled(companyId: string, jobId: string): Promise<ExtractionJob | null> {
   const result = await prisma.extractionJob.updateMany({
     where: { id: jobId, companyId, status: { in: QUEUE_NON_TERMINAL_STATUSES } },

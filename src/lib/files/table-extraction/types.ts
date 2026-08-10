@@ -18,5 +18,5 @@ export type ParsedTable = {
   title?: string;
   rows: ParsedTableRow[];
   confidence: number;
-  method: "xlsx-merge-reconstruction" | "csv-blank-cell-inheritance" | "pdf-whitespace-heuristic";
+  method: "xlsx-merge-reconstruction" | "csv-blank-cell-inheritance" | "pdf-grid-detection";
 };

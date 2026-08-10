@@ -20,16 +20,39 @@ type SearchResultItem = {
   packageNames?: string[];
 };
 
-type Tab = "search" | "manual";
+type ExtractedEntityView = {
+  id: string;
+  projectId: string;
+  projectFileId: string;
+  entityType: string;
+  label: string;
+  quantity: number | null;
+  unit: string | null;
+  confidence: number;
+  extractionMethod: string;
+  sourceText: string | null;
+  status: string;
+};
+
+export type AddItemTab = "reviewed" | "search" | "manual";
 
 type Props = {
   projectId: string;
   boqId: string;
   sections: Section[];
   nextItemNumber: number;
+  initialTab?: AddItemTab;
   onClose: () => void;
   onAdded: () => void;
 };
+
+function humanizeEntityType(value: string): string {
+  return value
+    .toLowerCase()
+    .split("_")
+    .map((part) => part ? `${part[0].toUpperCase()}${part.slice(1)}` : part)
+    .join(" ");
+}
 
 const SOURCE_TYPE_BY_RESULT_SOURCE: Record<string, string> = {
   COMPANY_LIBRARY: "COMPANY_LIBRARY",
@@ -40,8 +63,16 @@ const SOURCE_TYPE_BY_RESULT_SOURCE: Record<string, string> = {
   SUPPLIER_CATALOGUE: "RATE_CATALOGUE",
 };
 
-export default function AddItemFromSourceModal({ projectId, boqId, sections, nextItemNumber, onClose, onAdded }: Props) {
-  const [tab, setTab] = useState<Tab>("search");
+export default function AddItemFromSourceModal({
+  projectId,
+  boqId,
+  sections,
+  nextItemNumber,
+  initialTab = "search",
+  onClose,
+  onAdded,
+}: Props) {
+  const [tab, setTab] = useState<AddItemTab>(initialTab);
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<SearchResultItem[]>([]);
   const [sectionId, setSectionId] = useState(sections[0]?.id ?? "");
@@ -50,6 +81,25 @@ export default function AddItemFromSourceModal({ projectId, boqId, sections, nex
   const [isSearching, setIsSearching] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const [reviewedEntities, setReviewedEntities] = useState<ExtractedEntityView[]>([]);
+  const [isLoadingReviewed, setIsLoadingReviewed] = useState(false);
+  const [selectedEntity, setSelectedEntity] = useState<ExtractedEntityView | null>(null);
+  const [extractionDraft, setExtractionDraft] = useState({
+    itemCode: "",
+    category: "",
+    description: "",
+    specification: "",
+    unitCost: "0",
+    marginPercentage: "0",
+  });
+  const [useExtractionCalculation, setUseExtractionCalculation] = useState(false);
+  const [extractionCalculationType, setExtractionCalculationType] = useState<QuantityCalculationType | "">("");
+  const [confirmedExtractionCalculation, setConfirmedExtractionCalculation] = useState<{
+    id: string;
+    resultValue: number;
+    resultUnit: string;
+  } | null>(null);
 
   const [manualDraft, setManualDraft] = useState({ itemCode: "", category: "", description: "", specification: "", unit: "", unitCost: "0", marginPercentage: "0" });
   const [useMeasurementCalculation, setUseMeasurementCalculation] = useState(false);
@@ -83,6 +133,147 @@ export default function AddItemFromSourceModal({ projectId, boqId, sections, nex
       controller.abort();
     };
   }, [search]);
+
+  useEffect(() => {
+    if (tab !== "reviewed") return;
+
+    const controller = new AbortController();
+    setIsLoadingReviewed(true);
+    setError(null);
+
+    apiClient
+      .get<ExtractedEntityView[]>(
+        `/api/projects/${encodeURIComponent(projectId)}/extractions`,
+        controller.signal,
+      )
+      .then((entities) => {
+        setReviewedEntities(
+          entities.filter(
+            (entity) => entity.status === "CONFIRMED" || entity.status === "CORRECTED",
+          ),
+        );
+      })
+      .catch((err) => {
+        if (err instanceof DOMException && err.name === "AbortError") return;
+        setError(getApiErrorMessage(err));
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setIsLoadingReviewed(false);
+      });
+
+    return () => controller.abort();
+  }, [projectId, tab]);
+
+  const selectReviewedEntity = useCallback((entity: ExtractedEntityView) => {
+    setSelectedEntity(entity);
+    setExtractionDraft({
+      itemCode: `EXT-${String(nextItemNumber).padStart(3, "0")}`.slice(0, 50),
+      category: humanizeEntityType(entity.entityType).slice(0, 100),
+      description: entity.label.slice(0, 500),
+      specification: (entity.sourceText ?? "").slice(0, 2000),
+      unitCost: "0",
+      marginPercentage: "0",
+    });
+    setUseExtractionCalculation(false);
+    setExtractionCalculationType("");
+    setConfirmedExtractionCalculation(null);
+    setError(null);
+  }, [nextItemNumber]);
+
+  const importReviewedEntity = useCallback(async () => {
+    if (!selectedEntity) return;
+
+    if (useExtractionCalculation && !confirmedExtractionCalculation) {
+      setError("Confirm the measurement calculation before importing this reviewed item.");
+      return;
+    }
+
+    const effectiveQuantity = useExtractionCalculation
+      ? confirmedExtractionCalculation?.resultValue ?? null
+      : selectedEntity.quantity;
+
+    const effectiveUnit = (
+      useExtractionCalculation
+        ? confirmedExtractionCalculation?.resultUnit ?? ""
+        : selectedEntity.unit ?? ""
+    ).trim();
+
+    if (
+      effectiveQuantity === null
+      || !Number.isFinite(effectiveQuantity)
+      || effectiveQuantity <= 0
+      || !effectiveUnit
+    ) {
+      setError(
+        "This reviewed item does not yet have a usable positive quantity and unit. "
+        + "Correct the extracted information or confirm a supported measurement calculation first.",
+      );
+      return;
+    }
+
+    const itemCode = extractionDraft.itemCode.trim();
+    const category = extractionDraft.category.trim();
+    const description = extractionDraft.description.trim();
+    const unitCost = Number(extractionDraft.unitCost);
+    const marginPercentage = Number(extractionDraft.marginPercentage);
+
+    if (!itemCode || !category || !description) {
+      setError("Item code, category, and description are required before BOQ import.");
+      return;
+    }
+
+    if (
+      !Number.isFinite(unitCost)
+      || unitCost < 0
+      || !Number.isFinite(marginPercentage)
+      || marginPercentage < 0
+    ) {
+      setError("Unit cost and margin must be valid non-negative numbers.");
+      return;
+    }
+
+    setIsSaving(true);
+    setError(null);
+
+    try {
+      await apiClient.post(
+        `/api/projects/${encodeURIComponent(projectId)}/extractions/import-to-boq`,
+        {
+          boqId,
+          entityId: selectedEntity.id,
+          sectionId,
+          itemNumber: nextItemNumber,
+          itemCode,
+          category,
+          description,
+          specification: extractionDraft.specification,
+          unit: effectiveUnit,
+          quantity: effectiveQuantity,
+          unitCost,
+          marginPercentage,
+          ...(confirmedExtractionCalculation
+            ? { quantityCalculationId: confirmedExtractionCalculation.id }
+            : {}),
+        },
+      );
+
+      onAdded();
+    } catch (err) {
+      setError(getApiErrorMessage(err));
+    } finally {
+      setIsSaving(false);
+    }
+  }, [
+    boqId,
+    confirmedExtractionCalculation,
+    extractionDraft,
+    nextItemNumber,
+    onAdded,
+    projectId,
+    sectionId,
+    selectedEntity,
+    useExtractionCalculation,
+  ]);
 
   const addFromSearch = useCallback(async () => {
     if (!selected || selected.locked) return;
@@ -123,6 +314,28 @@ export default function AddItemFromSourceModal({ projectId, boqId, sections, nex
     }
   }, [boqId, manualDraft, nextItemNumber, onAdded, quantity, sectionId]);
 
+  const directReviewedQuantityReady = Boolean(
+    selectedEntity
+    && selectedEntity.quantity !== null
+    && selectedEntity.quantity > 0
+    && selectedEntity.unit?.trim(),
+  );
+
+  const reviewedQuantityReady = useExtractionCalculation
+    ? Boolean(confirmedExtractionCalculation)
+    : directReviewedQuantityReady;
+
+  const reviewedImportReady = Boolean(
+    selectedEntity
+    && sectionId
+    && extractionDraft.itemCode.trim()
+    && extractionDraft.category.trim()
+    && extractionDraft.description.trim()
+    && reviewedQuantityReady
+    && extractionDraft.unitCost.trim()
+    && extractionDraft.marginPercentage.trim(),
+  );
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
       <div className="max-h-[85vh] w-full max-w-2xl overflow-y-auto rounded-[32px] border border-slate-800 bg-slate-950 p-8">
@@ -131,7 +344,10 @@ export default function AddItemFromSourceModal({ projectId, boqId, sections, nex
           <button type="button" onClick={onClose} className="rounded-2xl border border-slate-700 bg-slate-900 px-3 py-2 text-xs text-slate-300 hover:bg-slate-800">Close</button>
         </div>
 
-        <div className="mt-4 flex gap-2">
+        <div className="mt-4 flex flex-wrap gap-2">
+          <button type="button" onClick={() => setTab("reviewed")} className={`rounded-full px-4 py-2 text-sm ${tab === "reviewed" ? "bg-blue-600 text-white" : "border border-slate-800 bg-slate-900 text-slate-300"}`}>
+            Reviewed Extraction
+          </button>
           <button type="button" onClick={() => setTab("search")} className={`rounded-full px-4 py-2 text-sm ${tab === "search" ? "bg-blue-600 text-white" : "border border-slate-800 bg-slate-900 text-slate-300"}`}>
             Search Catalogue / My Library
           </button>
@@ -146,6 +362,255 @@ export default function AddItemFromSourceModal({ projectId, boqId, sections, nex
             {sections.map((section) => <option key={section.id} value={section.id}>{section.title}</option>)}
           </select>
         </label>
+
+        {tab === "reviewed" && (
+          <div className="mt-4 space-y-4">
+            <div className="rounded-2xl border border-blue-900/60 bg-blue-950/20 p-4">
+              <p className="text-sm font-semibold text-blue-200">Professionally reviewed project information</p>
+              <p className="mt-2 text-xs leading-5 text-slate-400">
+                Only confirmed or corrected extraction appears here. Nothing is imported automatically.
+                Select the reviewed source item, use its reviewed quantity directly when appropriate,
+                or create a visible deterministic measurement calculation before BOQ import.
+              </p>
+            </div>
+
+            {isLoadingReviewed && (
+              <p className="text-sm text-slate-400">Loading reviewed extraction…</p>
+            )}
+
+            {!isLoadingReviewed && reviewedEntities.length === 0 && (
+              <div className="rounded-2xl border border-dashed border-slate-700 p-5">
+                <p className="text-sm text-slate-300">No confirmed or corrected extracted items are ready for BOQ import.</p>
+                <Link
+                  href={`/projects/${encodeURIComponent(projectId)}/extractions`}
+                  className="mt-3 inline-flex text-sm font-semibold text-blue-300 hover:text-blue-200"
+                >
+                  Open Extraction Review
+                </Link>
+              </div>
+            )}
+
+            {reviewedEntities.length > 0 && (
+              <div className="max-h-64 space-y-2 overflow-y-auto">
+                {reviewedEntities.map((entity) => (
+                  <button
+                    key={entity.id}
+                    type="button"
+                    onClick={() => selectReviewedEntity(entity)}
+                    className={`w-full rounded-2xl border px-4 py-3 text-left text-sm ${
+                      selectedEntity?.id === entity.id
+                        ? "border-blue-500 bg-blue-950/40"
+                        : "border-slate-800 bg-slate-900 hover:border-slate-700"
+                    }`}
+                  >
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <span className="font-semibold text-white">{entity.label}</span>
+                      <span className="text-[0.65rem] uppercase tracking-wide text-emerald-300">
+                        {entity.status}
+                      </span>
+                    </div>
+                    <p className="mt-1 text-xs text-slate-400">
+                      {humanizeEntityType(entity.entityType)}
+                      {" · "}
+                      {entity.quantity !== null ? entity.quantity : "Quantity not provided"}
+                      {entity.unit ? ` ${entity.unit}` : ""}
+                      {" · "}
+                      confidence {entity.confidence}%
+                    </p>
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {selectedEntity && (
+              <div className="space-y-4 rounded-2xl border border-slate-800 bg-slate-900/50 p-5">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Selected reviewed source item</p>
+                    <h4 className="mt-2 font-semibold text-white">{selectedEntity.label}</h4>
+                    <p className="mt-1 text-xs text-slate-400">
+                      Method: {humanizeEntityType(selectedEntity.extractionMethod)}
+                    </p>
+                  </div>
+                  <Link
+                    href={`/projects/${encodeURIComponent(projectId)}/extractions`}
+                    className="text-xs font-semibold text-blue-300 hover:text-blue-200"
+                  >
+                    Review source data
+                  </Link>
+                </div>
+
+                <div className="rounded-xl border border-slate-800 bg-slate-950 p-3">
+                  <p className="text-xs uppercase tracking-[0.18em] text-slate-500">Source evidence</p>
+                  <p className="mt-2 whitespace-pre-wrap break-words text-xs leading-5 text-slate-300">
+                    {selectedEntity.sourceText || "No source text was retained for this candidate."}
+                  </p>
+                </div>
+
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <label className="text-sm text-slate-300">
+                    <span className="text-slate-400">Item code</span>
+                    <input
+                      value={extractionDraft.itemCode}
+                      maxLength={50}
+                      onChange={(e) => setExtractionDraft((current) => ({ ...current, itemCode: e.target.value }))}
+                      className="mt-2 w-full rounded-xl border border-slate-800 bg-slate-950 px-3 py-2 text-white outline-none focus:border-blue-500"
+                    />
+                  </label>
+
+                  <label className="text-sm text-slate-300">
+                    <span className="text-slate-400">Category</span>
+                    <input
+                      value={extractionDraft.category}
+                      maxLength={100}
+                      onChange={(e) => setExtractionDraft((current) => ({ ...current, category: e.target.value }))}
+                      className="mt-2 w-full rounded-xl border border-slate-800 bg-slate-950 px-3 py-2 text-white outline-none focus:border-blue-500"
+                    />
+                  </label>
+
+                  <label className="text-sm text-slate-300 sm:col-span-2">
+                    <span className="text-slate-400">BOQ description</span>
+                    <input
+                      value={extractionDraft.description}
+                      maxLength={500}
+                      onChange={(e) => setExtractionDraft((current) => ({ ...current, description: e.target.value }))}
+                      className="mt-2 w-full rounded-xl border border-slate-800 bg-slate-950 px-3 py-2 text-white outline-none focus:border-blue-500"
+                    />
+                  </label>
+
+                  <label className="text-sm text-slate-300 sm:col-span-2">
+                    <span className="text-slate-400">BOQ specification — review before import</span>
+                    <textarea
+                      value={extractionDraft.specification}
+                      maxLength={2000}
+                      rows={4}
+                      onChange={(e) => setExtractionDraft((current) => ({ ...current, specification: e.target.value }))}
+                      className="mt-2 w-full rounded-xl border border-slate-800 bg-slate-950 px-3 py-2 text-white outline-none focus:border-blue-500"
+                    />
+                    <span className="mt-1 block text-xs text-slate-500">
+                      Prefilled from source evidence where available. Edit or clear it before import.
+                    </span>
+                  </label>
+
+                  <label className="text-sm text-slate-300">
+                    <span className="text-slate-400">Unit cost</span>
+                    <input
+                      type="number"
+                      min="0"
+                      step="any"
+                      value={extractionDraft.unitCost}
+                      onChange={(e) => setExtractionDraft((current) => ({ ...current, unitCost: e.target.value }))}
+                      className="mt-2 w-full rounded-xl border border-slate-800 bg-slate-950 px-3 py-2 text-white outline-none focus:border-blue-500"
+                    />
+                  </label>
+
+                  <label className="text-sm text-slate-300">
+                    <span className="text-slate-400">Margin %</span>
+                    <input
+                      type="number"
+                      min="0"
+                      step="any"
+                      value={extractionDraft.marginPercentage}
+                      onChange={(e) => setExtractionDraft((current) => ({ ...current, marginPercentage: e.target.value }))}
+                      className="mt-2 w-full rounded-xl border border-slate-800 bg-slate-950 px-3 py-2 text-white outline-none focus:border-blue-500"
+                    />
+                  </label>
+                </div>
+
+                <div className="rounded-xl border border-slate-800 bg-slate-950 p-4">
+                  <p className="text-xs uppercase tracking-[0.18em] text-slate-500">Reviewed quantity</p>
+                  {directReviewedQuantityReady ? (
+                    <p className="mt-2 text-sm font-semibold text-white">
+                      {selectedEntity.quantity} {selectedEntity.unit}
+                    </p>
+                  ) : (
+                    <p className="mt-2 text-sm text-amber-300">
+                      A usable direct quantity and unit are not available on this reviewed item.
+                      Correct the extraction or use a supported measurement calculation below.
+                    </p>
+                  )}
+                </div>
+
+                <label className="flex items-start gap-3 text-sm text-slate-300">
+                  <input
+                    type="checkbox"
+                    checked={useExtractionCalculation}
+                    onChange={(e) => {
+                      setUseExtractionCalculation(e.target.checked);
+                      setExtractionCalculationType("");
+                      setConfirmedExtractionCalculation(null);
+                      setError(null);
+                    }}
+                    className="mt-1 h-4 w-4 rounded border-slate-700 bg-slate-900"
+                  />
+                  <span>
+                    Use a visible measurement calculation instead of the direct reviewed quantity
+                    <span className="mt-1 block text-xs text-slate-500">
+                      Use this only when the BOQ quantity must be derived from dimensions.
+                      Schedule/count quantities do not require a dimensional calculation.
+                    </span>
+                  </span>
+                </label>
+
+                {useExtractionCalculation && (
+                  <div className="space-y-3">
+                    <label className="block text-sm text-slate-300">
+                      <span className="text-slate-400">Calculation type</span>
+                      <select
+                        value={extractionCalculationType}
+                        onChange={(e) => {
+                          setExtractionCalculationType(e.target.value as QuantityCalculationType);
+                          setConfirmedExtractionCalculation(null);
+                        }}
+                        className="mt-2 w-full rounded-xl border border-slate-800 bg-slate-950 px-3 py-2 text-white outline-none focus:border-blue-500"
+                      >
+                        <option value="">Select a supported calculation…</option>
+                        {supportedCalculationTypes.map((type) => (
+                          <option key={type} value={type}>
+                            {getRequiredDimensions(type)?.label ?? type}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+
+                    {extractionCalculationType && !confirmedExtractionCalculation && (
+                      <QuantityCalculationPanel
+                        projectId={projectId}
+                        calculationType={extractionCalculationType}
+                        extractedEntityId={selectedEntity.id}
+                        onConfirmed={(calculation) => {
+                          setConfirmedExtractionCalculation({
+                            id: calculation.id,
+                            resultValue: calculation.resultValue,
+                            resultUnit: calculation.resultUnit,
+                          });
+                        }}
+                      />
+                    )}
+
+                    {confirmedExtractionCalculation && (
+                      <div className="rounded-xl border border-emerald-900/60 bg-emerald-950/20 p-3 text-sm text-emerald-300">
+                        Confirmed calculation: {confirmedExtractionCalculation.resultValue}{" "}
+                        {confirmedExtractionCalculation.resultUnit}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {error && <p className="text-sm text-rose-300">{error}</p>}
+
+                <button
+                  type="button"
+                  onClick={() => void importReviewedEntity()}
+                  disabled={isSaving || !reviewedImportReady}
+                  className="rounded-2xl border border-slate-700 bg-blue-600 px-5 py-3 text-sm font-semibold text-white hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {isSaving ? "Importing…" : "Add Reviewed Item to BOQ"}
+                </button>
+              </div>
+            )}
+          </div>
+        )}
 
         {tab === "search" && (
           <div className="mt-4">

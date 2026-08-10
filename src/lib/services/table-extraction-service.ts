@@ -7,11 +7,16 @@ import { listExtractedTablesForFile as listExtractedTablesForFileRepo, toExtract
 import { toExtractionJobDTO } from "@/lib/repositories/extraction-job-repository";
 import { createAuditLog } from "@/lib/repositories/audit-repository";
 import { extractionJobQueue } from "@/lib/jobs/extraction-worker";
-import { TABLE_EXTRACTABLE_EXTENSIONS } from "@/lib/files/table-extraction-handler";
+import { TABLE_EXTRACTABLE_EXTENSIONS } from "@/lib/files/table-extraction/constants";
 
 /** Dispatches the appropriate extraction engine(s) for a file's type. Only TABLE_EXTRACTION exists so far; later sub-phases extend this switch as new engines land. */
 export async function triggerFileExtraction(actor: CurrentActor, fileId: string) {
   requireCapability(actor, "files:manage");
+
+  // Register the heavy table/PDF handler only for the mutating extraction
+  // action. GET /tables remains a DB-only read path.
+  await import("@/lib/files/table-extraction-handler");
+
   const file = await getProjectFileRecord(actor.companyId, fileId);
 
   if (!(TABLE_EXTRACTABLE_EXTENSIONS as readonly string[]).includes(file.extension)) {

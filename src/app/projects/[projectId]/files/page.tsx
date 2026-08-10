@@ -51,6 +51,83 @@ type TableView = {
   }>;
 };
 
+type ExtractionJobView = {
+  id: string;
+  projectFileId: string;
+  engineType: string;
+  status: string;
+  progressPercentage: number;
+  currentStep: string | null;
+  errorCode: string | null;
+  resultSummary: unknown;
+  createdAt: string;
+  updatedAt: string;
+};
+
+const ACTION_ENGINE = {
+  classify: "DOCUMENT_CLASSIFICATION",
+  preprocess: "FILE_PREPROCESSING",
+  extract: "TABLE_EXTRACTION",
+} as const;
+
+const ACTION_LABEL = {
+  classify: "Classification",
+  preprocess: "Page rendering",
+  extract: "Schedule table detection",
+} as const;
+
+const ENGINE_LABELS: Record<string, string> = {
+  DOCUMENT_CLASSIFICATION: "Classification",
+  FILE_PREPROCESSING: "Render pages",
+  TABLE_EXTRACTION: "Schedule tables",
+};
+
+const SETTLED_JOB_STATUSES = new Set([
+  "COMPLETED",
+  "FAILED",
+  "CANCELLED",
+  "NEEDS_INPUT",
+  "NEEDS_REVIEW",
+]);
+
+const JOB_POLL_INTERVAL_MS = 750;
+const JOB_POLL_TIMEOUT_MS = 65_000;
+
+function latestEngineStatuses(jobs: ExtractionJobView[]): Record<string, string> {
+  const statuses: Record<string, string> = {};
+  // /api/files/[fileId]/jobs is returned newest first.
+  for (const job of jobs) {
+    if (!(job.engineType in statuses)) {
+      statuses[job.engineType] = job.status;
+    }
+  }
+  return statuses;
+}
+
+function resultSummaryMessage(job: ExtractionJobView): string | null {
+  if (!job.resultSummary || typeof job.resultSummary !== "object" || Array.isArray(job.resultSummary)) {
+    return null;
+  }
+  const message = (job.resultSummary as Record<string, unknown>).message;
+  return typeof message === "string" && message.trim()
+    ? message.trim().slice(0, 500)
+    : null;
+}
+
+/**
+ * Never expose the queue's raw exception message to the customer UI.
+ * errorCode is safe operational context; raw server detail remains in logs/DB.
+ */
+function safeJobFailureMessage(
+  action: keyof typeof ACTION_LABEL,
+  job: ExtractionJobView,
+): string {
+  const code = job.errorCode || "PROCESSING_FAILED";
+  return `${ACTION_LABEL[action]} could not be completed (${code}). `
+    + "Any previously captured project information remains available. "
+    + "Retry this processing action or provide the error code to support.";
+}
+
 function formatFileSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
@@ -66,6 +143,8 @@ export default function ProjectFilesPage(props: {
   const requestedFileId = Array.isArray(searchParams.file) ? searchParams.file[0] : searchParams.file;
   const [files, setFiles] = useState<FileView[]>([]);
   const [currentJobStatuses, setCurrentJobStatuses] = useState<Record<string, string | null>>({});
+  const [currentJobStatusesByEngine, setCurrentJobStatusesByEngine] = useState<Record<string, Record<string, string>>>({});
+  const [activeJob, setActiveJob] = useState<ExtractionJobView | null>(null);
   const [workflowSnapshot, setWorkflowSnapshot] = useState<ProjectWorkflowSnapshot | null>(null);
   const [selectedFileId, setSelectedFileId] = useState<string | null>(null);
   const [pages, setPages] = useState<PageView[]>([]);
@@ -82,6 +161,11 @@ export default function ProjectFilesPage(props: {
   const selectedFile = useMemo(
     () => files.find((file) => file.id === selectedFileId) ?? null,
     [files, selectedFileId],
+  );
+
+  const selectedEngineStatuses = useMemo(
+    () => selectedFileId ? (currentJobStatusesByEngine[selectedFileId] ?? {}) : {},
+    [currentJobStatusesByEngine, selectedFileId],
   );
 
   const processingFacts = useMemo(() => {
@@ -117,12 +201,14 @@ export default function ProjectFilesPage(props: {
     setPageResultsAvailable(null);
     setTableResultsAvailable(null);
     setDetailWarning(null);
+    setActiveJob(null);
 
-    const [pagesResult, tablesResult] = await Promise.allSettled([
+    const [pagesResult, tablesResult, jobsResult] = await Promise.allSettled([
       apiClient.get<{ pages: PageView[]; classification: string; ocrStatus: string }>(
         `/api/files/${encodeURIComponent(fileId)}/pages`,
       ),
       apiClient.get<TableView[]>(`/api/files/${encodeURIComponent(fileId)}/tables`),
+      apiClient.get<ExtractionJobView[]>(`/api/files/${encodeURIComponent(fileId)}/jobs`),
     ]);
 
     if (pagesResult.status === "fulfilled") {
@@ -139,8 +225,22 @@ export default function ProjectFilesPage(props: {
       setTableResultsAvailable(false);
     }
 
-    if (pagesResult.status === "rejected" || tablesResult.status === "rejected") {
-      setDetailWarning("Some captured processing information is currently unavailable. No missing result is being reported as zero.");
+    if (jobsResult.status === "fulfilled") {
+      setCurrentJobStatusesByEngine((current) => ({
+        ...current,
+        [fileId]: latestEngineStatuses(jobsResult.value),
+      }));
+    }
+
+    if (
+      pagesResult.status === "rejected"
+      || tablesResult.status === "rejected"
+      || jobsResult.status === "rejected"
+    ) {
+      setDetailWarning(
+        "Some captured processing information is currently unavailable. "
+        + "Available results remain visible; unavailable results are not being reported as zero.",
+      );
     }
   }, []);
 
@@ -169,9 +269,15 @@ export default function ProjectFilesPage(props: {
         setCurrentJobStatuses(Object.fromEntries(
           snapshotResult.value.sources.map((source) => [source.id, source.currentJobStatus] as const),
         ));
+        setCurrentJobStatusesByEngine(Object.fromEntries(
+          snapshotResult.value.sources.map(
+            (source) => [source.id, source.currentJobStatusesByEngine] as const,
+          ),
+        ));
       } else {
         setWorkflowSnapshot(null);
         setCurrentJobStatuses({});
+        setCurrentJobStatusesByEngine({});
         setSnapshotWarning("Project processing facts are temporarily unavailable. Source access and professional actions remain available.");
       }
     } finally {
@@ -210,12 +316,81 @@ export default function ProjectFilesPage(props: {
 
   async function trigger(action: "classify" | "extract" | "preprocess") {
     if (!selectedFileId) return;
+
+    const fileId = selectedFileId;
     setBusy(true);
     setError(null);
+    setDetailWarning(null);
+    setActiveJob(null);
+
     try {
-      await apiClient.post(`/api/files/${encodeURIComponent(selectedFileId)}/${action}`, {});
-      await new Promise((resolve) => setTimeout(resolve, 800));
-      await Promise.all([loadFiles(), loadDetail(selectedFileId)]);
+      const startedJob = await apiClient.post<ExtractionJobView>(
+        `/api/files/${encodeURIComponent(fileId)}/${action}`,
+        {},
+      );
+
+      let currentJob = startedJob;
+      setActiveJob(currentJob);
+      setCurrentJobStatusesByEngine((current) => ({
+        ...current,
+        [fileId]: {
+          ...(current[fileId] ?? {}),
+          [currentJob.engineType || ACTION_ENGINE[action]]: currentJob.status,
+        },
+      }));
+
+      const deadline = Date.now() + JOB_POLL_TIMEOUT_MS;
+
+      while (!SETTLED_JOB_STATUSES.has(currentJob.status) && Date.now() < deadline) {
+        await new Promise((resolve) => setTimeout(resolve, JOB_POLL_INTERVAL_MS));
+
+        const jobs = await apiClient.get<ExtractionJobView[]>(
+          `/api/files/${encodeURIComponent(fileId)}/jobs`,
+        );
+        const refreshed = jobs.find((job) => job.id === startedJob.id);
+        if (!refreshed) continue;
+
+        currentJob = refreshed;
+        setActiveJob(currentJob);
+        setCurrentJobStatusesByEngine((current) => ({
+          ...current,
+          [fileId]: {
+            ...(current[fileId] ?? {}),
+            [currentJob.engineType || ACTION_ENGINE[action]]: currentJob.status,
+          },
+        }));
+      }
+
+      await Promise.all([loadFiles(), loadDetail(fileId)]);
+
+      if (!SETTLED_JOB_STATUSES.has(currentJob.status)) {
+        setDetailWarning(
+          `${ACTION_LABEL[action]} is still processing. `
+          + "You can continue working and return to this source to review the final status.",
+        );
+        return;
+      }
+
+      if (currentJob.status === "FAILED") {
+        setError(safeJobFailureMessage(action, currentJob));
+        return;
+      }
+
+      if (currentJob.status === "CANCELLED") {
+        setDetailWarning(`${ACTION_LABEL[action]} was cancelled. Previously captured results remain available.`);
+        return;
+      }
+
+      if (currentJob.status === "NEEDS_INPUT" || currentJob.status === "NEEDS_REVIEW") {
+        setDetailWarning(
+          resultSummaryMessage(currentJob)
+          ?? (
+            action === "extract"
+              ? "Schedule table processing completed and requires professional review."
+              : `${ACTION_LABEL[action]} requires professional attention before it can be finalized.`
+          ),
+        );
+      }
     } catch (err) {
       setError(getApiErrorMessage(err));
     } finally {
@@ -293,11 +468,28 @@ export default function ProjectFilesPage(props: {
           <ul className="mt-4 space-y-3">
             {files.map((file) => {
               const origin = getProjectSourceOrigin(file.metadata);
+              const sourceSnapshot = workflowSnapshot?.sources.find((source) => source.id === file.id) ?? null;
               const processing = getProjectSourceProcessingState(
                 file.status,
                 currentJobStatuses[file.id] ?? null,
                 Boolean(file.processingErrorCode || file.processingErrorMessage),
               );
+
+              if (sourceSnapshot?.isProcessing) {
+                processing.label = "Processing";
+                processing.tone = "info";
+                processing.needsAttention = false;
+                processing.isProcessing = true;
+                processing.warning = null;
+              } else if (sourceSnapshot?.hasProcessingError && sourceSnapshot.hasCapturedResults) {
+                processing.label = "Ready · attention";
+                processing.tone = "warning";
+                processing.needsAttention = true;
+                processing.isProcessing = false;
+                processing.warning =
+                  "Captured results remain available. A separate processing action needs attention.";
+              }
+
               const isImported = origin === "Google Drive";
 
               return (
@@ -348,10 +540,19 @@ export default function ProjectFilesPage(props: {
                           <dd className="mt-0.5 text-slate-300">{file.pageCount}</dd>
                         </div>
                       )}
-                      {currentJobStatuses[file.id] && (
-                        <div>
-                          <dt className="text-slate-500">Current processing</dt>
-                          <dd className="mt-0.5 text-slate-300">{formatStatusLabel(currentJobStatuses[file.id] ?? "")}</dd>
+                      {Object.keys(currentJobStatusesByEngine[file.id] ?? {}).length > 0 && (
+                        <div className="sm:col-span-2">
+                          <dt className="text-slate-500">Processing actions</dt>
+                          <dd className="mt-1 flex flex-wrap gap-1.5">
+                            {Object.entries(currentJobStatusesByEngine[file.id] ?? {}).map(([engine, status]) => (
+                              <span
+                                key={engine}
+                                className="rounded-full border border-slate-700 bg-slate-950 px-2 py-1 text-[0.68rem] text-slate-300"
+                              >
+                                {ENGINE_LABELS[engine] ?? formatStatusLabel(engine)}: {formatStatusLabel(status)}
+                              </span>
+                            ))}
+                          </dd>
                         </div>
                       )}
                       {file.revisionNumber && (
@@ -415,17 +616,54 @@ export default function ProjectFilesPage(props: {
                 </a>
               </div>
 
-              <div className="flex flex-wrap gap-2">
-                <button type="button" onClick={() => void trigger("classify")} disabled={busy} className="rounded-full bg-blue-600 px-4 py-2 text-sm text-white hover:bg-blue-500 disabled:opacity-50">
-                  Classify
-                </button>
-                <button type="button" onClick={() => void trigger("preprocess")} disabled={busy} className="rounded-full bg-slate-700 px-4 py-2 text-sm text-white hover:bg-slate-600 disabled:opacity-50">
-                  Render Pages
-                </button>
-                <button type="button" onClick={() => void trigger("extract")} disabled={busy} className="rounded-full bg-slate-700 px-4 py-2 text-sm text-white hover:bg-slate-600 disabled:opacity-50">
-                  Extract Tables
-                </button>
+              <div>
+                <div className="flex flex-wrap gap-2">
+                  <button type="button" onClick={() => void trigger("classify")} disabled={busy} className="rounded-full bg-blue-600 px-4 py-2 text-sm text-white hover:bg-blue-500 disabled:opacity-50">
+                    Classify
+                  </button>
+                  <button type="button" onClick={() => void trigger("preprocess")} disabled={busy} className="rounded-full bg-slate-700 px-4 py-2 text-sm text-white hover:bg-slate-600 disabled:opacity-50">
+                    Render Pages
+                  </button>
+                  <button type="button" onClick={() => void trigger("extract")} disabled={busy} className="rounded-full bg-slate-700 px-4 py-2 text-sm text-white hover:bg-slate-600 disabled:opacity-50">
+                    Detect Schedule Tables
+                  </button>
+                </div>
+                <p className="mt-2 text-xs text-slate-500">
+                  These are independent actions. Schedule-table detection does not perform OCR or automatic drawing takeoff,
+                  and a table-detection issue does not remove successfully rendered pages.
+                </p>
               </div>
+
+              <div className="grid gap-2 sm:grid-cols-3" aria-label="Source processing actions">
+                {[
+                  ["DOCUMENT_CLASSIFICATION", "Classification"],
+                  ["FILE_PREPROCESSING", "Render pages"],
+                  ["TABLE_EXTRACTION", "Schedule tables"],
+                ].map(([engine, label]) => (
+                  <div key={engine} className="rounded-xl border border-slate-800 bg-slate-900 px-3 py-2">
+                    <p className="text-[0.68rem] uppercase tracking-[0.16em] text-slate-500">{label}</p>
+                    <p className="mt-1 text-sm font-medium text-slate-200">
+                      {formatStatusLabel(selectedEngineStatuses[engine] ?? "NOT_RUN")}
+                    </p>
+                  </div>
+                ))}
+              </div>
+
+              {activeJob && (
+                <div className="rounded-xl border border-blue-900/60 bg-blue-950/20 p-4">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <p className="text-sm font-semibold text-blue-200">
+                      {ENGINE_LABELS[activeJob.engineType] ?? formatStatusLabel(activeJob.engineType)}
+                    </p>
+                    <span className="text-xs font-medium text-blue-300">
+                      {formatStatusLabel(activeJob.status)} · {activeJob.progressPercentage}%
+                    </span>
+                  </div>
+                  {activeJob.currentStep && (
+                    <p className="mt-2 text-xs text-slate-400">{activeJob.currentStep}</p>
+                  )}
+                </div>
+              )}
 
               {detailWarning && (
                 <p className="rounded-xl border border-amber-800/70 bg-amber-950/30 px-4 py-3 text-sm text-amber-200">

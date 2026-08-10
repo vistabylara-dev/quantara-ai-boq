@@ -279,14 +279,22 @@ describe("Quantara Guide v2 snapshot and workflow decisions", () => {
     expect(retryingStaleFailure.nextStep?.ctaLabel).toBe("View Source Processing");
 
     const separateEngineFailure = workflow({
-      files: [file("multi-engine-source")],
+      files: [file("multi-engine-source", { extractedTableCount: 1 })],
       jobs: [
         job("table-success", "multi-engine-source", "COMPLETED", "2026-08-09T12:00:00.000Z", { engineType: "TABLE_EXTRACTION" }),
         job("preprocess-failure", "multi-engine-source", "FAILED", "2026-08-09T09:00:00.000Z", { engineType: "FILE_PREPROCESSING" }),
       ],
       entityStatuses: [],
     });
-    expect(separateEngineFailure.nextStep?.ctaLabel).toBe("Review Source");
+
+    expect(separateEngineFailure.snapshot.sources[0]?.currentJobStatusesByEngine).toEqual({
+      TABLE_EXTRACTION: "COMPLETED",
+      FILE_PREPROCESSING: "FAILED",
+    });
+    expect(separateEngineFailure.snapshot.sources[0]?.hasCapturedResults).toBe(true);
+    expect(separateEngineFailure.snapshot.sources[0]?.hasProcessingError).toBe(true);
+    expect(separateEngineFailure.nextStep?.ctaLabel).toBe("Review Processing Results");
+    expect(separateEngineFailure.nextStep?.message).not.toMatch(/processing could not be completed/i);
   });
 
   it("sends reviewable candidates to professional extraction review", () => {

@@ -12,7 +12,6 @@ import { LocalJobQueue } from "./local-job-queue";
  */
 const globalForJobQueue = globalThis as unknown as {
   quantaraExtractionJobQueue: JobQueue | undefined;
-  quantaraExtractionJobQueueRecovered: boolean | undefined;
 };
 
 export const extractionJobQueue: JobQueue = globalForJobQueue.quantaraExtractionJobQueue ?? new LocalJobQueue();
@@ -21,9 +20,14 @@ if (process.env.NODE_ENV !== "production") {
   globalForJobQueue.quantaraExtractionJobQueue = extractionJobQueue;
 }
 
-if (!globalForJobQueue.quantaraExtractionJobQueueRecovered) {
-  globalForJobQueue.quantaraExtractionJobQueueRecovered = true;
-  extractionJobQueue.recoverStaleJobs().catch((error) => {
-    console.error("[extraction-worker] stale job recovery failed", error);
-  });
-}
+/**
+ * IMPORTANT: no database work is allowed at module import time.
+ *
+ * Next.js evaluates server modules while collecting/building routes. Calling
+ * recoverStaleJobs() here previously caused next build itself to connect to
+ * Postgres. Normal crash recovery now occurs inside LocalJobQueue.enqueue(),
+ * scoped to the exact company + file + engine being retried.
+ *
+ * recoverStaleJobs() remains available on the JobQueue interface for an
+ * explicit maintenance/recovery caller; importing this singleton is pure.
+ */

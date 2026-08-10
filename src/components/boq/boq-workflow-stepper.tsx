@@ -15,6 +15,7 @@ const STATUS_STYLES: Record<WorkflowStep["status"], { dot: string; text: string;
   CURRENT: { dot: "bg-blue-500", text: "text-blue-300", label: "Current" },
   NEEDS_ATTENTION: { dot: "bg-amber-500", text: "text-amber-300", label: "Needs attention" },
   NOT_STARTED: { dot: "bg-slate-700", text: "text-slate-500", label: "Not started" },
+  NOT_REQUIRED: { dot: "bg-slate-600", text: "text-slate-400", label: "Not required" },
 };
 
 export type BoqWorkflowStepperProps = {

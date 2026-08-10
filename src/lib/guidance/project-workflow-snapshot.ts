@@ -10,6 +10,11 @@ export type ProjectSourceSnapshot = {
   origin: "Google Drive" | "Uploaded manually";
   status: string;
   currentJobStatus: string | null;
+  /**
+   * Current status of each independent processing engine.
+   * A table-detection failure must never erase a successful page-render result.
+   */
+  currentJobStatusesByEngine: Record<string, string>;
   hasProcessingError: boolean;
   needsReview: boolean;
   isProcessing: boolean;
@@ -206,6 +211,12 @@ export function buildProjectWorkflowSnapshot(
     const fileStatus = normalizeStatus(file.status);
     const currentJobs = currentJobsByFile.get(file.id) ?? [];
     const currentJobStatuses = currentJobs.map((job) => normalizeStatus(job.status));
+    const currentJobStatusesByEngine = Object.fromEntries(
+      currentJobs.map((job) => [
+        normalizeStatus(job.engineType) || "UNSPECIFIED",
+        normalizeStatus(job.status) || "UNKNOWN",
+      ]),
+    );
     const attentionJobStatus = SOURCE_JOB_STATUS_PRIORITY
       .slice(0, 4)
       .find((status) => currentJobStatuses.includes(status));
@@ -245,6 +256,7 @@ export function buildProjectWorkflowSnapshot(
       origin: isGoogleDriveSource(file.metadata) ? "Google Drive" : "Uploaded manually",
       status: fileStatus || "UNKNOWN",
       currentJobStatus,
+      currentJobStatusesByEngine,
       hasProcessingError,
       needsReview,
       isProcessing,

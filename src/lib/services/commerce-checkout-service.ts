@@ -1,5 +1,6 @@
+import { randomUUID } from "node:crypto";
 import type Stripe from "stripe";
-import type { CommerceProviderEnvironment } from "@prisma/client";
+import type { CommerceProviderEnvironment, Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db/prisma";
 import type { CurrentActor } from "@/lib/auth/current-actor";
 import { AppError } from "@/lib/errors/app-error";
@@ -154,9 +155,11 @@ async function resolveProviderPriceMapping(environment: CommerceProviderEnvironm
   return mapping;
 }
 
-/** Exported so commerce-checkout-availability-service.ts can report the same "already subscribed" fact to the UI without duplicating this query. */
-export async function hasNonFinalStripeSubscription(companyId: string): Promise<boolean> {
-  const existing = await prisma.companySoftwareSubscription.findFirst({
+type CompanySubscriptionClient = Pick<Prisma.TransactionClient, "companySoftwareSubscription">;
+
+/** Exported so commerce-checkout-availability-service.ts can report the same "already subscribed" fact to the UI without duplicating this query. Accepts an optional transaction client so the per-company-lock recheck in createCommerceCheckoutSession reads through the SAME transaction, not a separate connection. */
+export async function hasNonFinalStripeSubscription(companyId: string, client: CompanySubscriptionClient = prisma): Promise<boolean> {
+  const existing = await client.companySoftwareSubscription.findFirst({
     where: { companyId, source: "stripe", status: { in: [...NON_FINAL_SUBSCRIPTION_STATUSES] } },
     select: { id: true },
   });
@@ -164,8 +167,8 @@ export async function hasNonFinalStripeSubscription(companyId: string): Promise<
 }
 
 /** STRIPE-COMMERCIAL-6 — a company cannot start a second subscription checkout while a non-final Stripe subscription already exists (see NON_FINAL_SUBSCRIPTION_STATUSES). A CANCELLED/EXPIRED subscription never blocks a fresh checkout. */
-async function assertNoExistingNonFinalSubscription(companyId: string): Promise<void> {
-  if (await hasNonFinalStripeSubscription(companyId)) throw new ExistingSubscriptionError();
+async function assertNoExistingNonFinalSubscription(companyId: string, client: CompanySubscriptionClient = prisma): Promise<void> {
+  if (await hasNonFinalStripeSubscription(companyId, client)) throw new ExistingSubscriptionError();
 }
 
 /**
@@ -237,36 +240,50 @@ async function findAppOwnedOpenCheckoutSessions(
 }
 
 /**
- * A deterministic idempotency key scoped to a short time bucket: two
- * concurrent/rapidly-repeated requests for the same company+price (a
- * double-click, a client-side retry) collapse into the same Stripe
- * idempotency key and therefore the same Checkout Session, while a later,
- * genuinely separate checkout attempt (next bucket) gets a fresh one.
+ * STRIPE-COMMERCIAL-18 — a fixed, arbitrary int32 namespace, distinct from
+ * STRIPE_WEBHOOK_LOCK_NAMESPACE in stripe-webhook-service.ts, so this app's
+ * per-company checkout-creation lock can never collide with the
+ * per-subscription webhook lock or any other advisory lock this codebase
+ * might take. Combined with `hashtext(companyId)` via the two-argument
+ * `pg_advisory_xact_lock(key1, key2)` overload.
+ *
+ * Serializes the entire "resolve customer, recheck for an existing
+ * subscription/open session, reuse-or-expire-or-create" sequence for ONE
+ * company, across every concurrent Node process/serverless instance — not
+ * just within one. Two simultaneous requests for the SAME company (even for
+ * two different prices, e.g. Starter + Professional) can never both pass
+ * the checks before either session exists: whichever acquires the lock
+ * second waits for the first to fully commit (create its session, or
+ * discover and reuse an existing one) before it re-reads any state,
+ * guaranteeing its recheck sees the first's result.
  */
-function checkoutIdempotencyKey(companyId: string, priceCode: string, livemode: boolean): string {
-  const bucketMs = 5 * 60 * 1000;
-  const bucket = Math.floor(Date.now() / bucketMs);
-  return `quantara:${livemode ? "live" : "test"}:checkout:${companyId}:${priceCode}:${bucket}`;
+const CHECKOUT_LOCK_NAMESPACE = 419_628_331;
+
+async function acquireCompanyCheckoutLock(tx: Prisma.TransactionClient, companyId: string): Promise<void> {
+  await tx.$executeRaw`SELECT pg_advisory_xact_lock(${CHECKOUT_LOCK_NAMESPACE}, hashtext(${companyId}))`;
 }
 
 /**
  * Reuses the company's existing Stripe customer for the current mode, or
- * creates one. The Stripe-side create call carries a deterministic
- * idempotency key so two concurrent requests for a company with no existing
- * customer resolve to the *same* Stripe customer object; the DB-level
- * unique(companyId, livemode) constraint (via createStripeBillingCustomer's
- * catch-and-refetch) then guarantees only one StripeBillingCustomer row
- * survives even if both requests reach the database.
+ * creates one. The Stripe-side create call still carries a deterministic
+ * idempotency key (customer identity is a stable, permanent fact about a
+ * company+mode, unlike a one-shot Checkout Session — see the note on
+ * randomUUID() at the call site below) so a request racing this one before
+ * the per-company lock existed, or a raw network retry, resolves to the
+ * *same* Stripe customer object; the DB-level unique(companyId, livemode)
+ * constraint (via createStripeBillingCustomer's catch-and-refetch) then
+ * guarantees only one StripeBillingCustomer row survives regardless.
  */
 async function getOrCreateStripeCustomerForCompany(
   stripe: Stripe,
   actor: CurrentActor,
   livemode: boolean,
+  tx: Prisma.TransactionClient,
 ): Promise<string> {
-  const existing = await findStripeBillingCustomer(actor.companyId, livemode);
+  const existing = await findStripeBillingCustomer(actor.companyId, livemode, tx);
   if (existing) return existing.stripeCustomerId;
 
-  const company = await prisma.company.findUniqueOrThrow({ where: { id: actor.companyId } });
+  const company = await tx.company.findUniqueOrThrow({ where: { id: actor.companyId } });
   const stripeCustomer = await stripe.customers.create(
     {
       name: company.legalName,
@@ -276,7 +293,7 @@ async function getOrCreateStripeCustomerForCompany(
     { idempotencyKey: `quantara:${livemode ? "live" : "test"}:customer:${actor.companyId}` },
   );
 
-  const created = await createStripeBillingCustomer(actor.companyId, stripeCustomer.id, livemode);
+  const created = await createStripeBillingCustomer(actor.companyId, stripeCustomer.id, livemode, tx);
   return created.stripeCustomerId;
 }
 
@@ -293,67 +310,111 @@ export async function createCommerceCheckoutSession(
   const stripe = resolveCommercialStripeClient(overrideClient);
   const baseUrl = validateAppBaseUrl(liveMode);
 
+  // Global catalog validation — not company-specific, so it doesn't need the
+  // per-company lock below. Never trusts client-supplied amount/currency/
+  // providerPriceId; both are resolved purely from the trusted priceCode.
   const price = await loadEligibleCommercePrice(input.priceCode);
   const mapping = await resolveProviderPriceMapping(environment, price.id);
-  await assertNoExistingNonFinalSubscription(actor.companyId);
-  const stripeCustomerId = await getOrCreateStripeCustomerForCompany(stripe, actor, liveMode);
-
-  // Stripe-side checks close the window the DB-only check above cannot: the
-  // gap between session creation and the (asynchronous) webhook that would
-  // otherwise be the only thing recording a CompanySoftwareSubscription row.
-  await assertNoExistingStripeSubscription(stripe, stripeCustomerId);
 
   /**
-   * STRIPE-COMMERCIAL-16 — an app-owned open session only gets reused when it
-   * is for THIS EXACT price (quantara_price_code matches too, not just the
-   * company). A Starter session must never be handed back to a customer who
-   * is now requesting Professional, or a monthly session to an annual
-   * request. Every other app-owned open session for this customer (i.e. a
-   * stale attempt at a different price) is explicitly expired before the
-   * newly requested one is created — never left open to be discovered by a
-   * later request, and never touched if it doesn't carry Quantara's own
-   * metadata.
+   * STRIPE-COMMERCIAL-18 — everything from here on is serialized per company
+   * by acquireCompanyCheckoutLock, and every check is RE-DONE after
+   * acquiring the lock (never trusts a pre-lock read): two concurrent
+   * requests for the same company — even for two different prices, e.g.
+   * Starter and Professional, or monthly and annual — can no longer both
+   * pass the subscription/session checks before either session exists.
+   * Whichever request acquires the lock second waits for the first's
+   * transaction to fully commit, then re-reads Stripe/DB state that already
+   * reflects the first's outcome.
    */
-  const appOwnedOpenSessions = await findAppOwnedOpenCheckoutSessions(stripe, stripeCustomerId, actor.companyId);
-  const matchingSession = appOwnedOpenSessions.find((session) => session.metadata?.quantara_price_code === price.code);
-  if (matchingSession?.url) {
-    return { checkoutSessionId: matchingSession.id, checkoutUrl: matchingSession.url };
-  }
-  for (const stale of appOwnedOpenSessions) {
-    try {
-      await stripe.checkout.sessions.expire(stale.id);
-    } catch (error) {
-      // Best-effort cleanup — a failure to expire a stale session must never block
-      // the customer from getting the checkout they're actually requesting now.
-      console.error("[commerce-checkout] Failed to expire stale open Checkout Session", stale.id, error);
-    }
-  }
+  return prisma.$transaction(
+    async (tx) => {
+      await acquireCompanyCheckoutLock(tx, actor.companyId);
 
-  const session = await stripe.checkout.sessions.create(
-    {
-      mode: "subscription",
-      customer: stripeCustomerId,
-      line_items: [{ price: mapping.providerPriceId as string, quantity: 1 }],
-      success_url: `${baseUrl}/settings/subscription?checkout=success&session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${baseUrl}/settings/subscription?checkout=cancelled`,
-      client_reference_id: actor.companyId,
-      metadata: {
-        quantara_company_id: actor.companyId,
-        quantara_price_code: price.code,
-        quantara_environment: liveMode ? "live" : "test",
-      },
-      subscription_data: {
-        metadata: { quantara_company_id: actor.companyId, quantara_price_code: price.code },
-      },
+      await assertNoExistingNonFinalSubscription(actor.companyId, tx);
+      const stripeCustomerId = await getOrCreateStripeCustomerForCompany(stripe, actor, liveMode, tx);
+
+      // Stripe-side checks close the window the DB-only check above cannot: the
+      // gap between session creation and the (asynchronous) webhook that would
+      // otherwise be the only thing recording a CompanySoftwareSubscription row.
+      await assertNoExistingStripeSubscription(stripe, stripeCustomerId);
+
+      /**
+       * An app-owned open session only gets reused when it is for THIS EXACT
+       * price (quantara_price_code matches too, not just the company). A
+       * Starter session must never be handed back to a customer who is now
+       * requesting Professional, or a monthly session to an annual request.
+       */
+      const appOwnedOpenSessions = await findAppOwnedOpenCheckoutSessions(stripe, stripeCustomerId, actor.companyId);
+      const matchingSession = appOwnedOpenSessions.find((session) => session.metadata?.quantara_price_code === price.code);
+      if (matchingSession?.url) {
+        return { checkoutSessionId: matchingSession.id, checkoutUrl: matchingSession.url };
+      }
+
+      /**
+       * STRIPE-COMMERCIAL-19 — every OTHER app-owned open session (a stale
+       * attempt at a different price/interval) must be confirmed expired
+       * before a new one is created — never left open to be discovered by a
+       * later request. If ANY expiry cannot be confirmed, this fails closed:
+       * no new Checkout Session is created, and the caller must retry. The
+       * alternative (creating a new session anyway) would risk leaving two
+       * simultaneously-payable open sessions for the same company. Never
+       * touches a session lacking Quantara's own metadata — see
+       * findAppOwnedOpenCheckoutSessions.
+       */
+      for (const stale of appOwnedOpenSessions) {
+        try {
+          await stripe.checkout.sessions.expire(stale.id);
+        } catch (error) {
+          console.error("[commerce-checkout] Failed to expire stale open Checkout Session", stale.id, error);
+          throw new AppError(
+            "STRIPE_STALE_SESSION_EXPIRE_FAILED",
+            "Could not confirm cancellation of a previous checkout attempt. Please try again.",
+            502,
+          );
+        }
+      }
+
+      const session = await stripe.checkout.sessions.create(
+        {
+          mode: "subscription",
+          customer: stripeCustomerId,
+          line_items: [{ price: mapping.providerPriceId as string, quantity: 1 }],
+          success_url: `${baseUrl}/settings/subscription?checkout=success&session_id={CHECKOUT_SESSION_ID}`,
+          cancel_url: `${baseUrl}/settings/subscription?checkout=cancelled`,
+          client_reference_id: actor.companyId,
+          metadata: {
+            quantara_company_id: actor.companyId,
+            quantara_price_code: price.code,
+            quantara_environment: liveMode ? "live" : "test",
+          },
+          subscription_data: {
+            metadata: { quantara_company_id: actor.companyId, quantara_price_code: price.code },
+          },
+        },
+        // STRIPE-COMMERCIAL-20 — a fresh, high-entropy key per genuine new
+        // Checkout Session creation attempt, generated once for this
+        // invocation and reused only if Stripe's own SDK internally retries
+        // this exact request (a transport-level retry of the same call,
+        // never a separate later attempt). Checkout creation is now
+        // serialized per company above, so the old 5-minute-bucket
+        // deterministic key is no longer needed to prevent a duplicate
+        // session — and reusing a bucketed key across genuinely separate
+        // attempts risked Stripe replaying an already-expired session
+        // instead of creating the newly requested one.
+        { idempotencyKey: randomUUID() },
+      );
+
+      if (!session.url) {
+        throw new AppError("STRIPE_CHECKOUT_SESSION_NO_URL", "Stripe did not return a checkout URL.", 502);
+      }
+
+      return { checkoutSessionId: session.id, checkoutUrl: session.url };
     },
-    { idempotencyKey: checkoutIdempotencyKey(actor.companyId, price.code, liveMode) },
+    // Generous timeout: this transaction holds a per-company advisory lock
+    // and makes several real Stripe API calls while open, not just DB writes.
+    { maxWait: 10_000, timeout: 30_000 },
   );
-
-  if (!session.url) {
-    throw new AppError("STRIPE_CHECKOUT_SESSION_NO_URL", "Stripe did not return a checkout URL.", 502);
-  }
-
-  return { checkoutSessionId: session.id, checkoutUrl: session.url };
 }
 
 export type CreateBillingPortalSessionResult = { portalUrl: string };

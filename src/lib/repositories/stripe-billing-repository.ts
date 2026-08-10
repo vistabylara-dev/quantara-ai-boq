@@ -9,11 +9,14 @@ import { prisma } from "@/lib/db/prisma";
  * commerce-provider-mapping-repository.ts pattern.
  */
 
+type StripeBillingCustomerClient = Pick<PrismaClient, "stripeBillingCustomer">;
+
 export async function findStripeBillingCustomer(
   companyId: string,
   livemode: boolean,
+  client: StripeBillingCustomerClient = prisma,
 ): Promise<StripeBillingCustomer | null> {
-  return prisma.stripeBillingCustomer.findUnique({
+  return client.stripeBillingCustomer.findUnique({
     where: { companyId_livemode: { companyId, livemode } },
   });
 }
@@ -39,14 +42,15 @@ export async function createStripeBillingCustomer(
   companyId: string,
   stripeCustomerId: string,
   livemode: boolean,
+  client: StripeBillingCustomerClient = prisma,
 ): Promise<StripeBillingCustomer> {
   try {
-    return await prisma.stripeBillingCustomer.create({
+    return await client.stripeBillingCustomer.create({
       data: { companyId, stripeCustomerId, livemode },
     });
   } catch (error) {
     if (!isUniqueViolation(error)) throw error;
-    const existing = await findStripeBillingCustomer(companyId, livemode);
+    const existing = await findStripeBillingCustomer(companyId, livemode, client);
     if (existing) return existing;
     throw error;
   }

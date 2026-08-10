@@ -27,9 +27,16 @@ function mockStripeClient() {
     customers: {
       create: vi.fn(async () => ({ id: `cus_test_${RUN_ID}_${++globalCustomerCounter}` })),
     },
+    // Defaults to "no existing subscription" / "no open session" — FIX B
+    // tests override these per-test to simulate the Stripe-side state a
+    // DB-only check can't see (webhook lag, a still-open prior session).
+    subscriptions: {
+      list: vi.fn(async () => ({ data: [] })),
+    },
     checkout: {
       sessions: {
         create: vi.fn(async () => ({ id: `cs_test_${RUN_ID}_${++globalSessionCounter}`, url: `https://checkout.stripe.com/test/${RUN_ID}_${globalSessionCounter}` })),
+        list: vi.fn(async () => ({ data: [] })),
       },
     },
     billingPortal: {
@@ -43,6 +50,7 @@ describe("commerce-checkout-service (integration, real local Postgres, mocked St
   let companyId: string;
   let otherCompanyId: string;
   let thirdCompanyId: string;
+  let fourthCompanyId: string;
   let userId: string;
   const originalKey = process.env.STRIPE_SECRET_KEY;
   const originalMode = process.env.STRIPE_MODE;
@@ -55,6 +63,8 @@ describe("commerce-checkout-service (integration, real local Postgres, mocked St
     otherCompanyId = otherCompany.id;
     const thirdCompany = await prisma.company.create({ data: { legalName: `Third Co ${RUN_ID}`, tradeName: "Third Co", email: `checkout-third-${RUN_ID}@example.com` } });
     thirdCompanyId = thirdCompany.id;
+    const fourthCompany = await prisma.company.create({ data: { legalName: `Fourth Co ${RUN_ID}`, tradeName: "Fourth Co", email: `checkout-fourth-${RUN_ID}@example.com` } });
+    fourthCompanyId = fourthCompany.id;
     const user = await prisma.user.create({ data: { companyId, email: `checkout-owner-${RUN_ID}@example.com`, passwordHash: "hash", fullName: "Owner", role: "COMPANY_OWNER", isActive: true, emailVerifiedAt: new Date() } });
     userId = user.id;
   });
@@ -76,11 +86,11 @@ describe("commerce-checkout-service (integration, real local Postgres, mocked St
 
   afterAll(async () => {
     await prisma.commerceProduct.deleteMany({ where: { code: { contains: RUN_ID } } });
-    await prisma.companySoftwareSubscription.deleteMany({ where: { companyId: { in: [companyId, otherCompanyId, thirdCompanyId] } } });
+    await prisma.companySoftwareSubscription.deleteMany({ where: { companyId: { in: [companyId, otherCompanyId, thirdCompanyId, fourthCompanyId] } } });
     await prisma.softwarePlan.deleteMany({ where: { key: { contains: RUN_ID } } });
-    await prisma.stripeBillingCustomer.deleteMany({ where: { companyId: { in: [companyId, otherCompanyId, thirdCompanyId] } } });
+    await prisma.stripeBillingCustomer.deleteMany({ where: { companyId: { in: [companyId, otherCompanyId, thirdCompanyId, fourthCompanyId] } } });
     await prisma.user.deleteMany({ where: { id: userId } });
-    await prisma.company.deleteMany({ where: { id: { in: [companyId, otherCompanyId, thirdCompanyId] } } });
+    await prisma.company.deleteMany({ where: { id: { in: [companyId, otherCompanyId, thirdCompanyId, fourthCompanyId] } } });
     await prisma.$disconnect();
   });
 
@@ -256,6 +266,69 @@ describe("commerce-checkout-service (integration, real local Postgres, mocked St
 
     const actor = actorFor(userId, thirdCompanyId, `checkout-third-${RUN_ID}@example.com`);
     const result = await createCommerceCheckoutSession(actor, { priceCode: price.code }, mockStripeClient());
+    expect(result.checkoutUrl).toMatch(/^https:\/\/checkout\.stripe\.com/);
+  });
+
+  it("FIX B: two rapid/repeated checkout requests for the same company+price reuse the same Stripe idempotency key", async () => {
+    const { product, price } = await makeApprovedDirectPrice();
+    await createMapping({ provider: "STRIPE", environment: "TEST", commerceProductId: product.id, commercePriceId: price.id, providerProductId: `prod_test_idem_${RUN_ID}`, providerPriceId: `price_test_idem_${RUN_ID}`, providerObjectType: "PRICE" });
+    const actor = actorFor(userId, fourthCompanyId, `checkout-fourth-${RUN_ID}@example.com`);
+    const stripe = mockStripeClient();
+
+    await createCommerceCheckoutSession(actor, { priceCode: price.code }, stripe);
+    // No open session is returned by the mock between calls, so a second call still reaches
+    // sessions.create — but must carry the identical idempotency key for this same attempt window.
+    stripe.checkout.sessions.list.mockResolvedValueOnce({ data: [] });
+    await createCommerceCheckoutSession(actor, { priceCode: price.code }, stripe);
+
+    expect(stripe.checkout.sessions.create).toHaveBeenCalledTimes(2);
+    const firstKey = stripe.checkout.sessions.create.mock.calls[0][1]?.idempotencyKey;
+    const secondKey = stripe.checkout.sessions.create.mock.calls[1][1]?.idempotencyKey;
+    expect(firstKey).toBeTruthy();
+    expect(firstKey).toBe(secondKey);
+  });
+
+  it("FIX B: webhook lag cannot allow a second subscription — a Stripe-side active subscription blocks checkout even with no DB record yet", async () => {
+    const { product, price } = await makeApprovedDirectPrice();
+    await createMapping({ provider: "STRIPE", environment: "TEST", commerceProductId: product.id, commercePriceId: price.id, providerProductId: `prod_test_lag_${RUN_ID}`, providerPriceId: `price_test_lag_${RUN_ID}`, providerObjectType: "PRICE" });
+    const actor = actorFor(userId, fourthCompanyId, `checkout-fourth-${RUN_ID}@example.com`);
+    const stripe = mockStripeClient();
+    // Simulates: an earlier checkout completed on Stripe's side and Stripe already created the
+    // subscription, but our webhook hasn't been processed yet — companySoftwareSubscription has
+    // no row for this company, so the DB-only check alone would incorrectly allow a second checkout.
+    stripe.subscriptions.list.mockResolvedValueOnce({ data: [{ id: `sub_lag_${RUN_ID}`, status: "active" }] });
+
+    const dbCheckPassed = await prisma.companySoftwareSubscription.count({ where: { companyId: fourthCompanyId, source: "stripe" } });
+    expect(dbCheckPassed).toBe(0); // confirms the DB-only signal would have said "no existing subscription"
+
+    await expect(createCommerceCheckoutSession(actor, { priceCode: price.code }, stripe)).rejects.toMatchObject({ code: "CHECKOUT_EXISTING_SUBSCRIPTION" });
+    expect(stripe.checkout.sessions.create).not.toHaveBeenCalled();
+  });
+
+  it("FIX B: an existing open Checkout Session for this company is reused instead of creating a second one", async () => {
+    const { product, price } = await makeApprovedDirectPrice();
+    await createMapping({ provider: "STRIPE", environment: "TEST", commerceProductId: product.id, commercePriceId: price.id, providerProductId: `prod_test_open_${RUN_ID}`, providerPriceId: `price_test_open_${RUN_ID}`, providerObjectType: "PRICE" });
+    const actor = actorFor(userId, fourthCompanyId, `checkout-fourth-${RUN_ID}@example.com`);
+    const stripe = mockStripeClient();
+    stripe.checkout.sessions.list.mockResolvedValueOnce({
+      data: [{ id: `cs_existing_open_${RUN_ID}`, url: `https://checkout.stripe.com/test/existing_${RUN_ID}`, metadata: { quantara_company_id: fourthCompanyId } }],
+    });
+
+    const result = await createCommerceCheckoutSession(actor, { priceCode: price.code }, stripe);
+
+    expect(result.checkoutSessionId).toBe(`cs_existing_open_${RUN_ID}`);
+    expect(result.checkoutUrl).toBe(`https://checkout.stripe.com/test/existing_${RUN_ID}`);
+    expect(stripe.checkout.sessions.create).not.toHaveBeenCalled();
+  });
+
+  it("FIX B: a genuinely canceled Stripe subscription does not block a fresh checkout", async () => {
+    const { product, price } = await makeApprovedDirectPrice();
+    await createMapping({ provider: "STRIPE", environment: "TEST", commerceProductId: product.id, commercePriceId: price.id, providerProductId: `prod_test_stripecancel_${RUN_ID}`, providerPriceId: `price_test_stripecancel_${RUN_ID}`, providerObjectType: "PRICE" });
+    const actor = actorFor(userId, fourthCompanyId, `checkout-fourth-${RUN_ID}@example.com`);
+    const stripe = mockStripeClient();
+    stripe.subscriptions.list.mockResolvedValueOnce({ data: [{ id: `sub_old_cancelled_${RUN_ID}`, status: "canceled" }] });
+
+    const result = await createCommerceCheckoutSession(actor, { priceCode: price.code }, stripe);
     expect(result.checkoutUrl).toMatch(/^https:\/\/checkout\.stripe\.com/);
   });
 });

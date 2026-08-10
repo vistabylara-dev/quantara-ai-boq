@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { PlatformRole } from "@prisma/client";
 import { prisma } from "@/lib/db/prisma";
 import type { PlatformActor } from "@/lib/auth/platform-authorization";
@@ -52,7 +53,12 @@ import type Stripe from "stripe";
  * price is archived on the next run.
  */
 
-export type LivePriceBlockedReason = PriceBlockedReason | "PRODUCT_NOT_PUBLIC" | "PRODUCT_NOT_SUBSCRIPTION" | "UNSUPPORTED_LIVE_INTERVAL";
+export type LivePriceBlockedReason =
+  | PriceBlockedReason
+  | "PRODUCT_NOT_PUBLIC"
+  | "PRODUCT_NOT_SUBSCRIPTION"
+  | "UNSUPPORTED_LIVE_INTERVAL"
+  | "INDICATIVE_FROM_PRICE";
 
 /**
  * STRIPE-COMMERCIAL-7/8 — the eligibility bar for genuine customer
@@ -60,7 +66,12 @@ export type LivePriceBlockedReason = PriceBlockedReason | "PRODUCT_NOT_PUBLIC" |
  * additionally requires the product to be public (never make a hidden/
  * private product purchasable merely by knowing its price code) and a
  * SUBSCRIPTION-type product (one-time fulfillment does not exist yet — see
- * commerce-checkout-service.ts), with a MONTH/YEAR billing interval only.
+ * commerce-checkout-service.ts), with a MONTH/YEAR billing interval only,
+ * and never an indicative "from AED X" price (isFromPrice) — mirrors the
+ * exact same check commerce-checkout-service.ts's loadEligibleCommercePrice
+ * and commerce-checkout-availability-service.ts already apply for customer
+ * checkout; a "from" price was never meant to be an exact purchasable
+ * amount and must never become a live, chargeable Stripe Price.
  */
 export function classifyLiveCheckoutEligibility(
   product: CommerceProductRecord,
@@ -69,7 +80,32 @@ export function classifyLiveCheckoutEligibility(
   if (!product.isPublic) return { eligible: false, reason: "PRODUCT_NOT_PUBLIC" };
   if (product.type !== "SUBSCRIPTION") return { eligible: false, reason: "PRODUCT_NOT_SUBSCRIPTION" };
   if (price.billingInterval === "ONE_TIME") return { eligible: false, reason: "UNSUPPORTED_LIVE_INTERVAL" };
+  if (price.isFromPrice) return { eligible: false, reason: "INDICATIVE_FROM_PRICE" };
   return classifyPriceEligibility(product, price);
+}
+
+/** True if at least one of this product's prices currently passes classifyLiveCheckoutEligibility — the same signal buildLiveSyncPlan uses to decide whether a product should be represented as a live Stripe Product at all. Shared with verifyLiveStripeMapping so "desired active state" is computed identically in both places. */
+function productHasEligibleLivePrice(product: CommerceProductRecord): boolean {
+  return product.prices.some((price) => classifyLiveCheckoutEligibility(product, price).eligible);
+}
+
+/**
+ * STRIPE-COMMERCIAL-12 — unlike computeCatalogueFingerprint (shared with the
+ * test-mode sync, which does not consider isPublic at all since test-mode
+ * eligibility never depends on it), live checkout eligibility depends on
+ * CommerceProduct.isPublic. A confirmation built against a plan that omitted
+ * isPublic could apply a stale plan after isPublic flipped without the
+ * fingerprint changing. This layers an isPublic-sensitive hash on top of the
+ * shared fingerprint rather than modifying computeCatalogueFingerprint
+ * itself, so the existing 26/26 test-mode sync suite (which asserts on the
+ * shared fingerprint's exact behavior) is never touched.
+ */
+function computeLiveCatalogueFingerprint(products: CommerceProductRecord[]): string {
+  const base = computeCatalogueFingerprint(products);
+  const publicFlags = [...products]
+    .sort((a, b) => a.code.localeCompare(b.code))
+    .map((product) => ({ code: product.code, isPublic: product.isPublic }));
+  return createHash("sha256").update(`${base}:${JSON.stringify(publicFlags)}`).digest("hex");
 }
 
 const PROVIDER = "STRIPE" as const;
@@ -136,7 +172,7 @@ export async function buildLiveSyncPlan() {
   const priceMappingByPriceId = new Map(mappings.filter((m) => m.providerObjectType === "PRICE" && m.commercePriceId).map((m) => [m.commercePriceId as string, m]));
 
   const products_: { productId: string; code: string; action: "CREATE" | "UPDATE" | "ARCHIVE" | "UNCHANGED" }[] = [];
-  const prices_: { priceId: string; code: string; productCode: string; action: "CREATE" | "ARCHIVE" | "UNCHANGED" | "BLOCKED"; blockedReason?: string }[] = [];
+  const prices_: { priceId: string; code: string; productCode: string; action: "CREATE" | "REACTIVATE" | "ARCHIVE" | "UNCHANGED" | "BLOCKED"; blockedReason?: string }[] = [];
 
   for (const product of products) {
     const priceEntries: typeof prices_ = [];
@@ -150,6 +186,11 @@ export async function buildLiveSyncPlan() {
       if (existingPriceMapping) {
         if (!eligibility.eligible && existingPriceMapping.providerActive) {
           priceEntries.push({ priceId: price.id, code: price.code, productCode: product.code, action: "ARCHIVE" });
+        } else if (eligibility.eligible && !existingPriceMapping.providerActive) {
+          // STRIPE-COMMERCIAL-13 — a price that was archived (e.g. its product
+          // went private, then public again) must be able to become
+          // checkout-ready again rather than being stuck UNCHANGED forever.
+          priceEntries.push({ priceId: price.id, code: price.code, productCode: product.code, action: "REACTIVATE" });
         } else {
           priceEntries.push({ priceId: price.id, code: price.code, productCode: product.code, action: "UNCHANGED" });
         }
@@ -177,7 +218,7 @@ export async function buildLiveSyncPlan() {
   }
 
   return {
-    catalogueFingerprint: computeCatalogueFingerprint(products),
+    catalogueFingerprint: computeLiveCatalogueFingerprint(products),
     products: products_,
     prices: prices_,
     productsToCreate: products_.filter((p) => p.action === "CREATE").length,
@@ -185,6 +226,7 @@ export async function buildLiveSyncPlan() {
     productsUnchanged: products_.filter((p) => p.action === "UNCHANGED").length,
     productsToArchive: products_.filter((p) => p.action === "ARCHIVE").length,
     pricesToCreate: prices_.filter((p) => p.action === "CREATE").length,
+    pricesToReactivate: prices_.filter((p) => p.action === "REACTIVATE").length,
     pricesUnchanged: prices_.filter((p) => p.action === "UNCHANGED").length,
     pricesToArchive: prices_.filter((p) => p.action === "ARCHIVE").length,
     blockedCount: prices_.filter((p) => p.action === "BLOCKED").length,
@@ -283,6 +325,7 @@ export async function synchronizeLiveCommerceCatalogue(
   let productsUpdated = 0;
   let productsArchived = 0;
   let pricesCreated = 0;
+  let pricesReactivated = 0;
   let pricesArchived = 0;
   let warningCount = 0;
   const errors: string[] = [];
@@ -321,7 +364,7 @@ export async function synchronizeLiveCommerceCatalogue(
   }
 
   for (const entry of plan.prices) {
-    if (entry.action !== "CREATE" && entry.action !== "ARCHIVE") continue;
+    if (entry.action !== "CREATE" && entry.action !== "REACTIVATE" && entry.action !== "ARCHIVE") continue;
     const product = products.find((p) => p.code === entry.productCode);
     const price = product?.prices.find((p) => p.id === entry.priceId);
     if (!product || !price) continue;
@@ -354,6 +397,16 @@ export async function synchronizeLiveCommerceCatalogue(
           providerObjectType: "PRICE",
         });
         pricesCreated += 1;
+      } else if (entry.action === "REACTIVATE") {
+        // STRIPE-COMMERCIAL-13 — the price was archived (Stripe Price
+        // active:false) but has become eligible again; re-enable the
+        // existing Stripe object rather than creating a new one.
+        const mapping = await findPriceMapping(PROVIDER, ENVIRONMENT, price.id);
+        if (mapping?.providerPriceId) {
+          await stripe.prices.update(mapping.providerPriceId, { active: true });
+          await updateMappingState(mapping.id, { providerActive: true, synchronizationStatus: "SYNCED", lastSynchronizedAt: new Date() });
+          pricesReactivated += 1;
+        }
       } else if (entry.action === "ARCHIVE") {
         const mapping = await findPriceMapping(PROVIDER, ENVIRONMENT, price.id);
         if (mapping?.providerPriceId) {
@@ -376,7 +429,11 @@ export async function synchronizeLiveCommerceCatalogue(
     productsUpdated,
     productsUnchanged: plan.productsUnchanged,
     productsArchived,
-    pricesCreated,
+    // CommerceSyncRun has no dedicated "reactivated" column (a REACTIVATE
+    // never mints a new Stripe object, so it isn't really a create) — folded
+    // into pricesCreated for the typed summary; the exact reactivated count
+    // is preserved separately in the audit log below.
+    pricesCreated: pricesCreated + pricesReactivated,
     pricesUnchanged: plan.pricesUnchanged,
     pricesArchived,
     blockedCount: plan.blockedCount,
@@ -392,11 +449,11 @@ export async function synchronizeLiveCommerceCatalogue(
       targetType: "CommerceSyncRun",
       targetId: completed.id,
       requestMetadataJson: requestMetadataJson(requestMetadata),
-      afterJson: { productsCreated, productsUpdated, productsArchived, pricesCreated, pricesArchived, warningCount },
+      afterJson: { productsCreated, productsUpdated, productsArchived, pricesCreated, pricesReactivated, pricesArchived, warningCount },
     },
   });
 
-  return { run: toSyncRunDTO(completed), errors };
+  return { run: toSyncRunDTO(completed), pricesReactivated, errors };
 }
 
 /** Fetches the live Stripe object for every existing LIVE mapping and reports drift. Never overwrites the internal value. PLATFORM_OWNER only — unlike the test-mode verify, which admits platform:operate. */
@@ -418,7 +475,18 @@ export async function verifyLiveStripeMapping(actor: PlatformActor, requestMetad
         const stripeProduct = await stripe.products.retrieve(mapping.providerProductId);
         const fieldDrift: typeof drift = [];
         if (product && stripeProduct.name !== product.name) fieldDrift.push({ mappingId: mapping.id, providerObjectType: "PRODUCT", code: product.code, field: "name", internalValue: product.name, providerValue: stripeProduct.name });
-        if (product && stripeProduct.active !== product.isActive) fieldDrift.push({ mappingId: mapping.id, providerObjectType: "PRODUCT", code: product.code, field: "active", internalValue: String(product.isActive), providerValue: String(stripeProduct.active) });
+        // STRIPE-COMMERCIAL-14 — "desired" active state is not raw
+        // CommerceProduct.isActive; a product with zero currently-eligible
+        // live prices should be represented as inactive in Stripe even if
+        // isActive itself is still true (mirrors buildLiveSyncPlan's own
+        // CREATE/UPDATE-vs-ARCHIVE decision, computed identically here via
+        // productHasEligibleLivePrice so the two can never disagree).
+        if (product) {
+          const desiredActive = product.isActive && productHasEligibleLivePrice(product);
+          if (stripeProduct.active !== desiredActive) {
+            fieldDrift.push({ mappingId: mapping.id, providerObjectType: "PRODUCT", code: product.code, field: "active", internalValue: String(desiredActive), providerValue: String(stripeProduct.active) });
+          }
+        }
         drift.push(...fieldDrift);
         await updateMappingState(mapping.id, { lastVerifiedAt: new Date(), synchronizationStatus: fieldDrift.length > 0 ? "DRIFTED" : "SYNCED" });
       } else if (mapping.commercePriceId && mapping.providerPriceId) {
@@ -430,6 +498,17 @@ export async function verifyLiveStripeMapping(actor: PlatformActor, requestMetad
         if (price && stripePrice.currency.toUpperCase() !== price.currency) fieldDrift.push({ mappingId: mapping.id, providerObjectType: "PRICE", code: price.code, field: "currency", internalValue: price.currency, providerValue: stripePrice.currency.toUpperCase() });
         const expectedInterval = price?.billingInterval === "ONE_TIME" ? null : price?.billingInterval === "MONTH" ? "month" : "year";
         if (price && (stripePrice.recurring?.interval ?? null) !== expectedInterval) fieldDrift.push({ mappingId: mapping.id, providerObjectType: "PRICE", code: price.code, field: "interval", internalValue: String(expectedInterval), providerValue: String(stripePrice.recurring?.interval ?? null) });
+        // STRIPE-COMMERCIAL-14 — a manually deactivated Stripe Price (e.g.
+        // toggled off directly in the Stripe Dashboard) must never verify as
+        // SYNCED just because amount/currency/interval still match; a
+        // checkout-options caller relies on synchronizationStatus === SYNCED
+        // to decide whether the "Subscribe" button is real.
+        if (product && price) {
+          const desiredActive = classifyLiveCheckoutEligibility(product, price).eligible;
+          if (stripePrice.active !== desiredActive) {
+            fieldDrift.push({ mappingId: mapping.id, providerObjectType: "PRICE", code: price.code, field: "active", internalValue: String(desiredActive), providerValue: String(stripePrice.active) });
+          }
+        }
         drift.push(...fieldDrift);
         await updateMappingState(mapping.id, { lastVerifiedAt: new Date(), synchronizationStatus: fieldDrift.length > 0 ? "DRIFTED" : "SYNCED" });
       }
@@ -440,7 +519,7 @@ export async function verifyLiveStripeMapping(actor: PlatformActor, requestMetad
     }
   }
 
-  const run = await createSyncRun({ provider: PROVIDER, environment: ENVIRONMENT, operation: "VERIFY", initiatedByUserId: actor.userId, dryRun: false, catalogueFingerprint: computeCatalogueFingerprint(products) });
+  const run = await createSyncRun({ provider: PROVIDER, environment: ENVIRONMENT, operation: "VERIFY", initiatedByUserId: actor.userId, dryRun: false, catalogueFingerprint: computeLiveCatalogueFingerprint(products) });
   const completed = await completeSyncRun(run.id, {
     status: errored > 0 ? "COMPLETED_WITH_WARNINGS" : "COMPLETED",
     productsCreated: 0,

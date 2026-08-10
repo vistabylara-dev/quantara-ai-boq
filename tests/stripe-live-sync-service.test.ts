@@ -41,13 +41,15 @@ function mockStripeClient() {
     prices: {
       create: vi.fn(async () => ({ id: `price_live_test_${RUN_ID}_${++globalPriceCounter}` })),
       update: vi.fn(async (id: string) => ({ id })),
-      retrieve: vi.fn(async (id: string) => ({ id, unit_amount: 14900, currency: "aed", recurring: { interval: "month" } })),
+      // active: true by default — matches an eligible price's desired state, so tests that
+      // don't care about drift see a clean "no drift" result. FIX D tests override this.
+      retrieve: vi.fn(async (id: string) => ({ id, unit_amount: 14900, currency: "aed", recurring: { interval: "month" }, active: true })),
     },
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
   } as any;
 }
 
-async function makeEligibleProduct(codeSuffix: string, overrides: { isPublic?: boolean; purchaseMode?: "DIRECT" | "QUOTATION_REQUIRED" | "CONTACT_SALES"; type?: "SUBSCRIPTION" | "ONE_TIME" | "ADD_ON"; billingInterval?: "MONTH" | "YEAR" | "ONE_TIME"; approved?: boolean } = {}) {
+async function makeEligibleProduct(codeSuffix: string, overrides: { isPublic?: boolean; purchaseMode?: "DIRECT" | "QUOTATION_REQUIRED" | "CONTACT_SALES"; type?: "SUBSCRIPTION" | "ONE_TIME" | "ADD_ON"; billingInterval?: "MONTH" | "YEAR" | "ONE_TIME"; approved?: boolean; isFromPrice?: boolean } = {}) {
   const { product } = await upsertCommerceProduct({
     code: `test_live_${codeSuffix}_${RUN_ID}`,
     type: overrides.type ?? "SUBSCRIPTION",
@@ -62,6 +64,7 @@ async function makeEligibleProduct(codeSuffix: string, overrides: { isPublic?: b
     amountMinor: 14900,
     billingInterval: overrides.billingInterval ?? "MONTH",
     isActive: true,
+    isFromPrice: overrides.isFromPrice ?? false,
   });
   if (overrides.approved !== false) {
     await prisma.commercePrice.update({ where: { id: price.id }, data: { reviewStatus: "APPROVED" } });
@@ -108,6 +111,11 @@ describe("classifyLiveCheckoutEligibility (pure business logic over fixtures)", 
   it("blocks a REQUIRES_REVIEW (non-APPROVED) price", async () => {
     const { product, price } = await makeEligibleProduct("unapproved", { approved: false });
     expect(classifyLiveCheckoutEligibility(product, price)).toMatchObject({ eligible: false, reason: "PRICE_NOT_APPROVED" });
+  });
+
+  it("blocks an indicative isFromPrice price exactly like customer checkout and checkout-options do — FIX 6", async () => {
+    const { product, price } = await makeEligibleProduct("fromprice", { isFromPrice: true });
+    expect(classifyLiveCheckoutEligibility(product, price)).toMatchObject({ eligible: false, reason: "INDICATIVE_FROM_PRICE" });
   });
 });
 
@@ -239,8 +247,8 @@ describe("stripe-live-sync-service (integration, real local Postgres, mocked Str
     // the specific providerPriceId under test rather than relying on call order.
     const driftedStripe = mockStripeClient();
     driftedStripe.prices.retrieve.mockImplementation(async (id: string) => {
-      if (id === `price_live_drift_${RUN_ID}`) return { id, unit_amount: 99900, currency: "aed", recurring: { interval: "month" } };
-      return { id, unit_amount: 14900, currency: "aed", recurring: { interval: "month" } };
+      if (id === `price_live_drift_${RUN_ID}`) return { id, unit_amount: 99900, currency: "aed", recurring: { interval: "month" }, active: true };
+      return { id, unit_amount: 14900, currency: "aed", recurring: { interval: "month" }, active: true };
     });
     const result = await verifyLiveStripeMapping(ownerActor(ownerUserId, ownerCompanyId), { method: "POST", path: "/test" }, driftedStripe);
 
@@ -269,5 +277,80 @@ describe("stripe-live-sync-service (integration, real local Postgres, mocked Str
     const mappingAfter = await findPriceMapping("STRIPE", "LIVE", price.id);
     expect(mappingAfter?.providerActive).toBe(false);
     expect(mappingAfter?.synchronizationStatus).toBe("ARCHIVED");
+  });
+
+  it("FIX C: the live confirmation fingerprint changes when isPublic flips, rejecting a stale plan", async () => {
+    const { product } = await makeEligibleProduct("fingerprint-public");
+    const plan = await buildLiveSyncPlan();
+
+    await prisma.commerceProduct.update({ where: { id: product.id }, data: { isPublic: false } });
+
+    await expect(
+      synchronizeLiveCommerceCatalogue(ownerActor(ownerUserId, ownerCompanyId), { catalogueFingerprint: plan.catalogueFingerprint, confirm: true }, { method: "POST", path: "/test" }, mockStripeClient()),
+    ).rejects.toMatchObject({ code: "STALE_SYNC_PLAN" });
+  });
+
+  it("FIX D: verify flags a manually deactivated Stripe Price as DRIFTED, never SYNCED, so checkout-options would no longer show it as checkout-ready", async () => {
+    const { product, price } = await makeEligibleProduct("price-deactivated");
+    const productMapping = await createMapping({ provider: "STRIPE", environment: "LIVE", commerceProductId: product.id, providerProductId: `prod_live_deactivated_${RUN_ID}`, providerObjectType: "PRODUCT" });
+    const priceMapping = await createMapping({ provider: "STRIPE", environment: "LIVE", commerceProductId: product.id, commercePriceId: price.id, providerProductId: productMapping.providerProductId, providerPriceId: `price_live_deactivated_${RUN_ID}`, providerObjectType: "PRICE" });
+
+    const stripe = mockStripeClient();
+    stripe.prices.retrieve.mockImplementation(async (id: string) => {
+      if (id === `price_live_deactivated_${RUN_ID}`) return { id, unit_amount: 14900, currency: "aed", recurring: { interval: "month" }, active: false };
+      return { id, unit_amount: 14900, currency: "aed", recurring: { interval: "month" }, active: true };
+    });
+
+    const result = await verifyLiveStripeMapping(ownerActor(ownerUserId, ownerCompanyId), { method: "POST", path: "/test" }, stripe);
+
+    expect(result.drift.some((d) => d.mappingId === priceMapping.id && d.field === "active")).toBe(true);
+    const refetched = await prisma.commerceProviderMapping.findUnique({ where: { id: priceMapping.id } });
+    expect(refetched?.synchronizationStatus).toBe("DRIFTED");
+    expect(refetched?.synchronizationStatus).not.toBe("SYNCED");
+  });
+
+  it("FIX D: verify compares product active state against isActive AND having an eligible live price, not raw isActive alone", async () => {
+    const { product } = await makeEligibleProduct("product-desired-state", { approved: false }); // no eligible price
+    const mapping = await createMapping({ provider: "STRIPE", environment: "LIVE", commerceProductId: product.id, providerProductId: `prod_live_desired_${RUN_ID}`, providerObjectType: "PRODUCT" });
+
+    const stripe = mockStripeClient();
+    // Stripe still shows the product active, but it has no eligible price — desired state is
+    // inactive. listMappingsForEnvironment is global (not scoped to this test), so this is keyed
+    // by providerProductId rather than relying on call order among every mapping in the file.
+    stripe.products.retrieve.mockImplementation(async (id: string) => ({ id, name: id === `prod_live_desired_${RUN_ID}` ? product.name : "Mock Live Product", active: true }));
+
+    const result = await verifyLiveStripeMapping(ownerActor(ownerUserId, ownerCompanyId), { method: "POST", path: "/test" }, stripe);
+
+    expect(result.drift.some((d) => d.mappingId === mapping.id && d.field === "active" && d.internalValue === "false")).toBe(true);
+  });
+
+  it("FIX E: a previously archived price that becomes eligible again is REACTIVATEd (Stripe active:true, mapping SYNCED) rather than staying UNCHANGED", async () => {
+    const { product, price } = await makeEligibleProduct("reactivate-flow");
+    const firstPlan = await buildLiveSyncPlan();
+    const stripe = mockStripeClient();
+    await synchronizeLiveCommerceCatalogue(ownerActor(ownerUserId, ownerCompanyId), { catalogueFingerprint: firstPlan.catalogueFingerprint, confirm: true }, { method: "POST", path: "/test" }, stripe);
+    expect((await findPriceMapping("STRIPE", "LIVE", price.id))?.providerActive).toBe(true);
+
+    // Archive it (turn the product private, sync, confirm archived).
+    await prisma.commerceProduct.update({ where: { id: product.id }, data: { isPublic: false } });
+    const archivePlan = await buildLiveSyncPlan();
+    await synchronizeLiveCommerceCatalogue(ownerActor(ownerUserId, ownerCompanyId), { catalogueFingerprint: archivePlan.catalogueFingerprint, confirm: true }, { method: "POST", path: "/test" }, stripe);
+    const archivedMapping = await findPriceMapping("STRIPE", "LIVE", price.id);
+    expect(archivedMapping?.providerActive).toBe(false);
+    expect(archivedMapping?.synchronizationStatus).toBe("ARCHIVED");
+
+    // Make it public (eligible) again.
+    await prisma.commerceProduct.update({ where: { id: product.id }, data: { isPublic: true } });
+    const reactivatePlan = await buildLiveSyncPlan();
+    const priceEntry = reactivatePlan.prices.find((p) => p.priceId === price.id);
+    expect(priceEntry?.action).toBe("REACTIVATE");
+
+    const reactivateResult = await synchronizeLiveCommerceCatalogue(ownerActor(ownerUserId, ownerCompanyId), { catalogueFingerprint: reactivatePlan.catalogueFingerprint, confirm: true }, { method: "POST", path: "/test" }, stripe);
+    expect(reactivateResult.pricesReactivated).toBe(1);
+
+    const reactivatedMapping = await findPriceMapping("STRIPE", "LIVE", price.id);
+    expect(reactivatedMapping?.providerActive).toBe(true);
+    expect(reactivatedMapping?.synchronizationStatus).toBe("SYNCED");
+    expect(stripe.prices.update).toHaveBeenCalledWith(archivedMapping?.providerPriceId, { active: true });
   });
 });

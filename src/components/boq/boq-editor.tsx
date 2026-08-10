@@ -420,7 +420,7 @@ export default function BoqEditor({
               />
             </div>
           ) : null}
-          {pendingVoiceProposal?.sectionId === firstSection?.id && pendingVoiceProposal.proposal.commandType === "ADD_BOQ_ITEM" ? (
+          {pendingVoiceProposal && firstSection && pendingVoiceProposal.sectionId === firstSection.id && pendingVoiceProposal.proposal.commandType === "ADD_BOQ_ITEM" ? (
             <div className="mx-auto mt-4 max-w-3xl">
               <VoiceProposalCard
                 proposal={pendingVoiceProposal.proposal}

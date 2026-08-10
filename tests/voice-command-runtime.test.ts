@@ -248,6 +248,13 @@ describe("Release 1 voice audio and deterministic command parsing", () => {
       commandType: "DELETE_BOQ_ITEM",
       field: "item",
     });
+    expect(
+      interpretVoiceCommandDeterministically("remove this description", { type: "BOQ_ITEM" }),
+    ).toMatchObject({ status: "ambiguous" });
+    await expect(
+      interpretVoiceCommand("remove this description", { type: "BOQ_ITEM" }),
+    ).rejects.toMatchObject({ code: "VOICE_COMMAND_AMBIGUOUS" });
+
     await expect(interpretVoiceCommand(
       "add item acoustic ceiling quantity 14 square metres rate 35 code AC-VOICE-01",
       { type: "BOQ_SECTION" },
@@ -262,6 +269,25 @@ describe("Release 1 voice audio and deterministic command parsing", () => {
         itemCode: "AC-VOICE-01",
       },
     });
+
+    await expect(interpretVoiceCommand(
+      "add item cable supports quantity 5 pieces rate 12 per kg code CBL-VOICE-01",
+      { type: "BOQ_SECTION" },
+    )).resolves.toMatchObject({
+      commandType: "ADD_BOQ_ITEM",
+      itemDraft: {
+        quantity: 5,
+        unit: "nr",
+        unitCost: 12,
+      },
+    });
+
+    expect(
+      interpretVoiceCommandDeterministically(
+        "add item mixed material quantity 5 pieces kg rate 12",
+        { type: "BOQ_SECTION" },
+      ),
+    ).toMatchObject({ status: "ambiguous" });
   });
 
   it("does not guess ambiguous instructions or advertise unsupported execution", async () => {

@@ -108,6 +108,10 @@ describe("Release 1 voice command UI", () => {
     expect(editor).toContain('context={{ type: "BOQ_SECTION", sectionId: section.id }}');
     expect(editor).toContain('"ADD_BOQ_ITEM"');
     expect(editor).toContain('"DELETE_BOQ_ITEM"');
+    expect(editor).toContain("pendingVoiceProposal && firstSection");
+    expect(editor).not.toContain(
+      "pendingVoiceProposal?.sectionId === firstSection?.id && pendingVoiceProposal.proposal",
+    );
   });
 
   it("keeps voice discoverable before it is safe to use", () => {

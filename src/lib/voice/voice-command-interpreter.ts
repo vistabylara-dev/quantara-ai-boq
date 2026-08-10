@@ -151,23 +151,36 @@ const BOQ_FIELD_COMMANDS = {
   notes: "SET_BOQ_NOTES",
 } as const;
 
+function deleteBoqItemResult(): DeterministicResult {
+  return {
+    status: "matched",
+    intent: {
+      commandType: "DELETE_BOQ_ITEM",
+      field: "item",
+      newValue: "Deleted",
+      warnings: ["Deleting removes this item from the editable BOQ revision after confirmation."],
+      confidence: 100,
+    },
+  };
+}
+
 function parseBoqCommand(transcript: string): DeterministicResult {
   const normalized = normalizeText(transcript);
 
-  if (
-    /\b(?:delete|remove)(?:\s+(?:this|the))?(?:\s+boq)?\s+item\b/.test(normalized)
-    || /\b(?:delete|remove)\s+this\b/.test(normalized)
-  ) {
+  const mentionsSupportedField = /\b(?:quantity|description|unit|notes?)\b/.test(normalized);
+  const explicitItemDelete =
+    /\b(?:delete|remove)(?:\s+(?:this|the))?(?:\s+boq)?\s+item\b/.test(normalized);
+  const looseThisDelete = /\b(?:delete|remove)\s+this\b/.test(normalized);
+
+  if ((explicitItemDelete || looseThisDelete) && mentionsSupportedField) {
     return {
-      status: "matched",
-      intent: {
-        commandType: "DELETE_BOQ_ITEM",
-        field: "item",
-        newValue: "Deleted",
-        warnings: ["Deleting removes this item from the editable BOQ revision after confirmation."],
-        confidence: 100,
-      },
+      status: "ambiguous",
+      message: "Say “delete this item” to remove the whole BOQ item, or clearly name the field you want to change.",
     };
+  }
+
+  if (explicitItemDelete || looseThisDelete) {
+    return deleteBoqItemResult();
   }
 
   if (/\b(?:add|create|insert)\b/.test(normalized) && /\bitem\b/.test(normalized)) {
@@ -248,6 +261,29 @@ function extractItemCode(transcript: string): string | null {
   return match?.[1]?.trim() || null;
 }
 
+function quantityAssociatedUnit(transcript: string): string | null {
+  const match = transcript.match(
+    /\b(?:quantity|qty)\b\s*(?:to|as|of|at|equals?|=)?\s*-?\d+(?:[.,]\d+)?\s*(.*?)(?=\s*[,;]?\s*\b(?:unit\s+cost|rate|cost|code|description)\b|$)/i,
+  );
+  const segment = match?.[1]?.trim() ?? "";
+  if (!segment) return null;
+
+  const normalized = normalizeText(segment);
+  const candidates = new Set<string>();
+
+  const hasM2 = /\b(?:square metres?|square meters?|sqm|m2)\b/.test(normalized);
+  const hasM3 = /\b(?:cubic metres?|cubic meters?|cum|m3)\b/.test(normalized);
+
+  if (hasM2) candidates.add("m2");
+  if (hasM3) candidates.add("m3");
+  if (/\b(?:percent|percentage)\b/.test(normalized) || segment.includes("%")) candidates.add("%");
+  if (/\b(?:kilograms?|kilos?|kg)\b/.test(normalized)) candidates.add("kg");
+  if (!hasM2 && !hasM3 && /\b(?:metres?|meters?|m)\b/.test(normalized)) candidates.add("m");
+  if (/\b(?:number|numbers|pieces?|pcs|nr)\b/.test(normalized)) candidates.add("nr");
+
+  return candidates.size === 1 ? Array.from(candidates)[0] : null;
+}
+
 function parseBoqSectionCommand(transcript: string): DeterministicResult {
   const normalized = normalizeText(transcript);
   if (!/\b(?:add|create|insert)\b/.test(normalized) || !/\bitem\b/.test(normalized)) {
@@ -265,9 +301,12 @@ function parseBoqSectionCommand(transcript: string): DeterministicResult {
     return { status: "ambiguous", message: "The new item needs one explicit positive quantity." };
   }
 
-  const unit = spokenUnit(transcript);
+  const unit = quantityAssociatedUnit(transcript);
   if (!unit) {
-    return { status: "ambiguous", message: "The new item needs a supported unit such as m, m2, m3, kg, nr, or percent." };
+    return {
+      status: "ambiguous",
+      message: "The new item needs one unambiguous supported unit associated with its quantity, such as m, m2, m3, kg, nr, or percent.",
+    };
   }
 
   const unitCost = labeledNumericValue(transcript, "unit\\s+cost|rate|cost");

@@ -47,11 +47,77 @@ function mockStripeClient() {
   } as any;
 }
 
+// Module-level so IDs stay unique across concurrency tests that share a
+// single makeStatefulStripeClient() instance within one test's Promise.all().
+let globalStatefulCustomerCounter = 0;
+let globalStatefulSessionCounter = 0;
+
+type StatefulSession = {
+  id: string;
+  url: string;
+  status: "open" | "expired" | "complete";
+  metadata: Record<string, string>;
+  customer: string;
+};
+
+/**
+ * Unlike mockStripeClient() above (which always answers "no existing
+ * session"), this backs sessions.create/list/expire with real shared state
+ * in a Map, so concurrent createCommerceCheckoutSession() calls racing
+ * against the REAL Postgres advisory lock (STRIPE-COMMERCIAL-18) produce a
+ * genuinely observable final state — e.g. "exactly one open session
+ * survives" — rather than each call independently believing it's the only
+ * one. This is what lets the concurrency tests below assert on outcomes
+ * instead of just mock call counts.
+ */
+function makeStatefulStripeClient() {
+  const sessions = new Map<string, StatefulSession>();
+
+  const client = {
+    customers: {
+      create: vi.fn(async () => ({ id: `cus_stateful_${RUN_ID}_${++globalStatefulCustomerCounter}` })),
+    },
+    subscriptions: {
+      list: vi.fn(async () => ({ data: [], has_more: false })),
+    },
+    checkout: {
+      sessions: {
+        create: vi.fn(async (params: { customer: string; metadata?: Record<string, string> }) => {
+          const id = `cs_stateful_${RUN_ID}_${++globalStatefulSessionCounter}`;
+          const url = `https://checkout.stripe.com/test/stateful_${RUN_ID}_${globalStatefulSessionCounter}`;
+          sessions.set(id, { id, url, status: "open", metadata: params.metadata ?? {}, customer: params.customer });
+          return { id, url };
+        }),
+        list: vi.fn(async (params: { customer: string; status?: string; starting_after?: string }) => {
+          const data = Array.from(sessions.values()).filter(
+            (session) => session.customer === params.customer && (!params.status || session.status === params.status),
+          );
+          return { data, has_more: false };
+        }),
+        expire: vi.fn(async (id: string) => {
+          const session = sessions.get(id);
+          if (!session) throw new Error(`stateful mock: no such session ${id}`);
+          session.status = "expired";
+          return { id, status: "expired" };
+        }),
+      },
+    },
+    billingPortal: {
+      sessions: { create: vi.fn(async () => ({ url: `https://billing.stripe.com/test/${RUN_ID}` })) },
+    },
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  } as any;
+
+  return { client, sessions };
+}
+
 describe("commerce-checkout-service (integration, real local Postgres, mocked Stripe)", () => {
   let companyId: string;
   let otherCompanyId: string;
   let thirdCompanyId: string;
   let fourthCompanyId: string;
+  let raceCompanyId: string;
+  let raceCompanyBId: string;
   let userId: string;
   const originalKey = process.env.STRIPE_SECRET_KEY;
   const originalMode = process.env.STRIPE_MODE;
@@ -66,6 +132,10 @@ describe("commerce-checkout-service (integration, real local Postgres, mocked St
     thirdCompanyId = thirdCompany.id;
     const fourthCompany = await prisma.company.create({ data: { legalName: `Fourth Co ${RUN_ID}`, tradeName: "Fourth Co", email: `checkout-fourth-${RUN_ID}@example.com` } });
     fourthCompanyId = fourthCompany.id;
+    const raceCompany = await prisma.company.create({ data: { legalName: `Race Co ${RUN_ID}`, tradeName: "Race Co", email: `checkout-race-${RUN_ID}@example.com` } });
+    raceCompanyId = raceCompany.id;
+    const raceCompanyB = await prisma.company.create({ data: { legalName: `Race Co B ${RUN_ID}`, tradeName: "Race Co B", email: `checkout-race-b-${RUN_ID}@example.com` } });
+    raceCompanyBId = raceCompanyB.id;
     const user = await prisma.user.create({ data: { companyId, email: `checkout-owner-${RUN_ID}@example.com`, passwordHash: "hash", fullName: "Owner", role: "COMPANY_OWNER", isActive: true, emailVerifiedAt: new Date() } });
     userId = user.id;
   });
@@ -86,12 +156,13 @@ describe("commerce-checkout-service (integration, real local Postgres, mocked St
   });
 
   afterAll(async () => {
+    const allCompanyIds = [companyId, otherCompanyId, thirdCompanyId, fourthCompanyId, raceCompanyId, raceCompanyBId];
     await prisma.commerceProduct.deleteMany({ where: { code: { contains: RUN_ID } } });
-    await prisma.companySoftwareSubscription.deleteMany({ where: { companyId: { in: [companyId, otherCompanyId, thirdCompanyId, fourthCompanyId] } } });
+    await prisma.companySoftwareSubscription.deleteMany({ where: { companyId: { in: allCompanyIds } } });
     await prisma.softwarePlan.deleteMany({ where: { key: { contains: RUN_ID } } });
-    await prisma.stripeBillingCustomer.deleteMany({ where: { companyId: { in: [companyId, otherCompanyId, thirdCompanyId, fourthCompanyId] } } });
+    await prisma.stripeBillingCustomer.deleteMany({ where: { companyId: { in: allCompanyIds } } });
     await prisma.user.deleteMany({ where: { id: userId } });
-    await prisma.company.deleteMany({ where: { id: { in: [companyId, otherCompanyId, thirdCompanyId, fourthCompanyId] } } });
+    await prisma.company.deleteMany({ where: { id: { in: allCompanyIds } } });
     await prisma.$disconnect();
   });
 
@@ -270,23 +341,25 @@ describe("commerce-checkout-service (integration, real local Postgres, mocked St
     expect(result.checkoutUrl).toMatch(/^https:\/\/checkout\.stripe\.com/);
   });
 
-  it("FIX B: two rapid/repeated checkout requests for the same company+price reuse the same Stripe idempotency key", async () => {
+  it("STRIPE-COMMERCIAL-20: each genuine new Checkout Session creation attempt gets a fresh, distinct high-entropy idempotency key — the old deterministic time-bucket key is gone", async () => {
     const { product, price } = await makeApprovedDirectPrice();
     await createMapping({ provider: "STRIPE", environment: "TEST", commerceProductId: product.id, commercePriceId: price.id, providerProductId: `prod_test_idem_${RUN_ID}`, providerPriceId: `price_test_idem_${RUN_ID}`, providerObjectType: "PRICE" });
     const actor = actorFor(userId, fourthCompanyId, `checkout-fourth-${RUN_ID}@example.com`);
     const stripe = mockStripeClient();
 
     await createCommerceCheckoutSession(actor, { priceCode: price.code }, stripe);
-    // No open session is returned by the mock between calls, so a second call still reaches
-    // sessions.create — but must carry the identical idempotency key for this same attempt window.
-    stripe.checkout.sessions.list.mockResolvedValueOnce({ data: [] });
+    // No open session is returned by the mock between calls (each is a genuinely separate attempt).
+    stripe.checkout.sessions.list.mockResolvedValueOnce({ data: [], has_more: false });
     await createCommerceCheckoutSession(actor, { priceCode: price.code }, stripe);
 
     expect(stripe.checkout.sessions.create).toHaveBeenCalledTimes(2);
     const firstKey = stripe.checkout.sessions.create.mock.calls[0][1]?.idempotencyKey;
     const secondKey = stripe.checkout.sessions.create.mock.calls[1][1]?.idempotencyKey;
     expect(firstKey).toBeTruthy();
-    expect(firstKey).toBe(secondKey);
+    expect(secondKey).toBeTruthy();
+    expect(firstKey).not.toBe(secondKey);
+    // A UUID, not a predictable "quantara:test:checkout:<company>:<price>:<bucket>" string.
+    expect(firstKey).toMatch(/^[0-9a-f-]{36}$/i);
   });
 
   it("FIX B: webhook lag cannot allow a second subscription — a Stripe-side active subscription blocks checkout even with no DB record yet", async () => {
@@ -435,5 +508,155 @@ describe("commerce-checkout-service (integration, real local Postgres, mocked St
 
     await expect(createCommerceCheckoutSession(actor, { priceCode: price.code }, stripe)).rejects.toMatchObject({ code: "STRIPE_SUBSCRIPTION_LOOKUP_FAILED" });
     expect(stripe.checkout.sessions.create).not.toHaveBeenCalled();
+  });
+
+  describe("STRIPE-COMMERCIAL-18/19/20: per-company checkout concurrency (real Postgres advisory lock)", () => {
+    it("concurrent Starter + Professional requests for the SAME company cannot leave two open Checkout Sessions", async () => {
+      const { product: starterProduct, price: starterPrice } = await makeApprovedDirectPrice();
+      const { product: proProduct, price: proPrice } = await makeApprovedDirectPrice();
+      await createMapping({ provider: "STRIPE", environment: "TEST", commerceProductId: starterProduct.id, commercePriceId: starterPrice.id, providerProductId: `prod_race_starter_${RUN_ID}`, providerPriceId: `price_race_starter_${RUN_ID}`, providerObjectType: "PRICE" });
+      await createMapping({ provider: "STRIPE", environment: "TEST", commerceProductId: proProduct.id, commercePriceId: proPrice.id, providerProductId: `prod_race_pro_${RUN_ID}`, providerPriceId: `price_race_pro_${RUN_ID}`, providerObjectType: "PRICE" });
+
+      const actor = actorFor(userId, raceCompanyId, `checkout-race-${RUN_ID}@example.com`);
+      const { client: stripe, sessions } = makeStatefulStripeClient();
+
+      const [resultA, resultB] = await Promise.all([
+        createCommerceCheckoutSession(actor, { priceCode: starterPrice.code }, stripe),
+        createCommerceCheckoutSession(actor, { priceCode: proPrice.code }, stripe),
+      ]);
+
+      expect(resultA.checkoutSessionId).not.toBe(resultB.checkoutSessionId);
+      const billingCustomer = await prisma.stripeBillingCustomer.findUnique({ where: { companyId_livemode: { companyId: raceCompanyId, livemode: false } } });
+      expect(billingCustomer).not.toBeNull();
+      // Only one Stripe customer must ever be created for this company, even though two requests raced.
+      expect(stripe.customers.create).toHaveBeenCalledTimes(1);
+      const openForCustomer = Array.from(sessions.values()).filter((s) => s.customer === billingCustomer!.stripeCustomerId && s.status === "open");
+      expect(openForCustomer).toHaveLength(1);
+      // Whichever request lost the race must have had its stale session expired, not left open.
+      expect(stripe.checkout.sessions.expire).toHaveBeenCalledTimes(1);
+    });
+
+    it("concurrent monthly + annual requests for the SAME company cannot leave two open Checkout Sessions", async () => {
+      const { product } = await makeApprovedDirectPrice();
+      const { price: monthlyPrice } = await upsertCommercePrice({ productId: product.id, code: `test_checkout_race_monthly_${RUN_ID}`, amountMinor: 14900, billingInterval: "MONTH" });
+      await prisma.commercePrice.update({ where: { id: monthlyPrice.id }, data: { reviewStatus: "APPROVED" } });
+      const { price: annualPrice } = await upsertCommercePrice({ productId: product.id, code: `test_checkout_race_annual_${RUN_ID}`, amountMinor: 149000, billingInterval: "YEAR" });
+      await prisma.commercePrice.update({ where: { id: annualPrice.id }, data: { reviewStatus: "APPROVED" } });
+      await createMapping({ provider: "STRIPE", environment: "TEST", commerceProductId: product.id, commercePriceId: monthlyPrice.id, providerProductId: `prod_race_interval_${RUN_ID}`, providerPriceId: `price_race_monthly_${RUN_ID}`, providerObjectType: "PRICE" });
+      await createMapping({ provider: "STRIPE", environment: "TEST", commerceProductId: product.id, commercePriceId: annualPrice.id, providerProductId: `prod_race_interval_${RUN_ID}`, providerPriceId: `price_race_annual_${RUN_ID}`, providerObjectType: "PRICE" });
+
+      const actor = actorFor(userId, raceCompanyId, `checkout-race-${RUN_ID}@example.com`);
+      const { client: stripe, sessions } = makeStatefulStripeClient();
+
+      const [resultA, resultB] = await Promise.all([
+        createCommerceCheckoutSession(actor, { priceCode: monthlyPrice.code }, stripe),
+        createCommerceCheckoutSession(actor, { priceCode: annualPrice.code }, stripe),
+      ]);
+
+      expect(resultA.checkoutSessionId).not.toBe(resultB.checkoutSessionId);
+      const billingCustomer = await prisma.stripeBillingCustomer.findUnique({ where: { companyId_livemode: { companyId: raceCompanyId, livemode: false } } });
+      const openForCustomer = Array.from(sessions.values()).filter((s) => s.customer === billingCustomer!.stripeCustomerId && s.status === "open");
+      expect(openForCustomer).toHaveLength(1);
+    });
+
+    it("different companies racing at the same time do not block each other and each gets its own session", async () => {
+      const { product: productA, price: priceA } = await makeApprovedDirectPrice();
+      const { product: productB, price: priceB } = await makeApprovedDirectPrice();
+      await createMapping({ provider: "STRIPE", environment: "TEST", commerceProductId: productA.id, commercePriceId: priceA.id, providerProductId: `prod_race_companyA_${RUN_ID}`, providerPriceId: `price_race_companyA_${RUN_ID}`, providerObjectType: "PRICE" });
+      await createMapping({ provider: "STRIPE", environment: "TEST", commerceProductId: productB.id, commercePriceId: priceB.id, providerProductId: `prod_race_companyB_${RUN_ID}`, providerPriceId: `price_race_companyB_${RUN_ID}`, providerObjectType: "PRICE" });
+
+      const actorA = actorFor(userId, raceCompanyId, `checkout-race-${RUN_ID}@example.com`);
+      const actorB = actorFor(userId, raceCompanyBId, `checkout-race-b-${RUN_ID}@example.com`);
+      const { client: stripe, sessions } = makeStatefulStripeClient();
+
+      const [resultA, resultB] = await Promise.all([
+        createCommerceCheckoutSession(actorA, { priceCode: priceA.code }, stripe),
+        createCommerceCheckoutSession(actorB, { priceCode: priceB.code }, stripe),
+      ]);
+
+      expect(resultA.checkoutUrl).toMatch(/^https:\/\/checkout\.stripe\.com/);
+      expect(resultB.checkoutUrl).toMatch(/^https:\/\/checkout\.stripe\.com/);
+      expect(resultA.checkoutSessionId).not.toBe(resultB.checkoutSessionId);
+      // Neither company's lock caused the other's stale-session cleanup — no expiry needed at all.
+      expect(stripe.checkout.sessions.expire).not.toHaveBeenCalled();
+      const customerA = await prisma.stripeBillingCustomer.findUnique({ where: { companyId_livemode: { companyId: raceCompanyId, livemode: false } } });
+      const customerB = await prisma.stripeBillingCustomer.findUnique({ where: { companyId_livemode: { companyId: raceCompanyBId, livemode: false } } });
+      expect(customerA!.stripeCustomerId).not.toBe(customerB!.stripeCustomerId);
+      expect(Array.from(sessions.values()).filter((s) => s.customer === customerA!.stripeCustomerId && s.status === "open")).toHaveLength(1);
+      expect(Array.from(sessions.values()).filter((s) => s.customer === customerB!.stripeCustomerId && s.status === "open")).toHaveLength(1);
+    });
+
+    it("fails closed with STRIPE_STALE_SESSION_EXPIRE_FAILED and creates NO new session when expiring a stale session errors", async () => {
+      const { product: staleProduct, price: stalePrice } = await makeApprovedDirectPrice();
+      const { product: newProduct, price: newPrice } = await makeApprovedDirectPrice();
+      await createMapping({ provider: "STRIPE", environment: "TEST", commerceProductId: staleProduct.id, commercePriceId: stalePrice.id, providerProductId: `prod_race_stale_${RUN_ID}`, providerPriceId: `price_race_stale_${RUN_ID}`, providerObjectType: "PRICE" });
+      await createMapping({ provider: "STRIPE", environment: "TEST", commerceProductId: newProduct.id, commercePriceId: newPrice.id, providerProductId: `prod_race_new_${RUN_ID}`, providerPriceId: `price_race_new_${RUN_ID}`, providerObjectType: "PRICE" });
+
+      const actor = actorFor(userId, fourthCompanyId, `checkout-fourth-${RUN_ID}@example.com`);
+      const stripe = mockStripeClient();
+      const staleSessionId = `cs_stale_expirefail_${RUN_ID}`;
+      stripe.checkout.sessions.list.mockResolvedValueOnce({
+        data: [{ id: staleSessionId, url: `https://checkout.stripe.com/test/stale_expirefail_${RUN_ID}`, metadata: { quantara_company_id: fourthCompanyId, quantara_price_code: stalePrice.code } }],
+        has_more: false,
+      });
+      stripe.checkout.sessions.expire.mockRejectedValueOnce(new Error("Stripe network timeout"));
+
+      await expect(createCommerceCheckoutSession(actor, { priceCode: newPrice.code }, stripe)).rejects.toMatchObject({ code: "STRIPE_STALE_SESSION_EXPIRE_FAILED" });
+      expect(stripe.checkout.sessions.create).not.toHaveBeenCalled();
+    });
+
+    it("multiple app-owned open sessions are all confirmed expired and reduced to exactly one new session", async () => {
+      const { product: staleProductA, price: stalePriceA } = await makeApprovedDirectPrice();
+      const { product: staleProductB, price: stalePriceB } = await makeApprovedDirectPrice();
+      const { product: newProduct, price: newPrice } = await makeApprovedDirectPrice();
+      await createMapping({ provider: "STRIPE", environment: "TEST", commerceProductId: staleProductA.id, commercePriceId: stalePriceA.id, providerProductId: `prod_race_multiA_${RUN_ID}`, providerPriceId: `price_race_multiA_${RUN_ID}`, providerObjectType: "PRICE" });
+      await createMapping({ provider: "STRIPE", environment: "TEST", commerceProductId: staleProductB.id, commercePriceId: stalePriceB.id, providerProductId: `prod_race_multiB_${RUN_ID}`, providerPriceId: `price_race_multiB_${RUN_ID}`, providerObjectType: "PRICE" });
+      await createMapping({ provider: "STRIPE", environment: "TEST", commerceProductId: newProduct.id, commercePriceId: newPrice.id, providerProductId: `prod_race_multiNew_${RUN_ID}`, providerPriceId: `price_race_multiNew_${RUN_ID}`, providerObjectType: "PRICE" });
+
+      const actor = actorFor(userId, fourthCompanyId, `checkout-fourth-${RUN_ID}@example.com`);
+      const stripe = mockStripeClient();
+      const staleIdA = `cs_stale_multiA_${RUN_ID}`;
+      const staleIdB = `cs_stale_multiB_${RUN_ID}`;
+      stripe.checkout.sessions.list.mockResolvedValueOnce({
+        data: [
+          { id: staleIdA, url: `https://checkout.stripe.com/test/multiA_${RUN_ID}`, metadata: { quantara_company_id: fourthCompanyId, quantara_price_code: stalePriceA.code } },
+          { id: staleIdB, url: `https://checkout.stripe.com/test/multiB_${RUN_ID}`, metadata: { quantara_company_id: fourthCompanyId, quantara_price_code: stalePriceB.code } },
+        ],
+        has_more: false,
+      });
+
+      const result = await createCommerceCheckoutSession(actor, { priceCode: newPrice.code }, stripe);
+
+      expect(stripe.checkout.sessions.expire).toHaveBeenCalledTimes(2);
+      expect(stripe.checkout.sessions.expire).toHaveBeenCalledWith(staleIdA);
+      expect(stripe.checkout.sessions.expire).toHaveBeenCalledWith(staleIdB);
+      expect(stripe.checkout.sessions.create).toHaveBeenCalledTimes(1);
+      expect(result.checkoutSessionId).not.toBe(staleIdA);
+      expect(result.checkoutSessionId).not.toBe(staleIdB);
+    });
+
+    it("a genuine new attempt after a prior session has already expired creates a NEW session with a NEW idempotency key, not a replay of the expired one", async () => {
+      const { product, price } = await makeApprovedDirectPrice();
+      await createMapping({ provider: "STRIPE", environment: "TEST", commerceProductId: product.id, commercePriceId: price.id, providerProductId: `prod_race_reattempt_${RUN_ID}`, providerPriceId: `price_race_reattempt_${RUN_ID}`, providerObjectType: "PRICE" });
+
+      const actor = actorFor(userId, raceCompanyId, `checkout-race-${RUN_ID}@example.com`);
+      const { client: stripe, sessions } = makeStatefulStripeClient();
+
+      const first = await createCommerceCheckoutSession(actor, { priceCode: price.code }, stripe);
+      // Simulate real-world natural expiry (e.g. the customer never completed payment and the
+      // session's 24h lifetime elapsed) — the session no longer shows up in a "status: open" list.
+      const expiredSession = sessions.get(first.checkoutSessionId);
+      expiredSession!.status = "expired";
+
+      const second = await createCommerceCheckoutSession(actor, { priceCode: price.code }, stripe);
+
+      expect(second.checkoutSessionId).not.toBe(first.checkoutSessionId);
+      // Nothing was "open" to expire — the already-expired session must never be touched again.
+      expect(stripe.checkout.sessions.expire).not.toHaveBeenCalled();
+      expect(stripe.checkout.sessions.create).toHaveBeenCalledTimes(2);
+      const firstKey = stripe.checkout.sessions.create.mock.calls[0][1]?.idempotencyKey;
+      const secondKey = stripe.checkout.sessions.create.mock.calls[1][1]?.idempotencyKey;
+      expect(firstKey).not.toBe(secondKey);
+    });
   });
 });

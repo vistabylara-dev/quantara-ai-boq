@@ -67,3 +67,19 @@ export type CommercePriceIdParams = z.output<typeof commercePriceIdParamsSchema>
 export type CommercePriceReviewUpdateInput = z.output<typeof commercePriceReviewUpdateSchema>;
 export type StripeSynchronizeRequestInput = z.output<typeof stripeSynchronizeRequestSchema>;
 export type StripeHistoryQuery = z.output<typeof stripeHistoryQuerySchema>;
+
+// ---------------------------------------------------------------------------
+// STRIPE-COMMERCIAL-2 — customer checkout. Deliberately the only field
+// accepted from the browser: every other checkout fact (amount, currency,
+// Stripe price ID, company identity) is resolved server-side. `.strict()`
+// rejects any extra field (amount, currency, providerPriceId, companyId,
+// metadata, ...) outright instead of silently ignoring it.
+// ---------------------------------------------------------------------------
+
+export const commerceCheckoutRequestSchema = z
+  .object({
+    priceCode: z.string().trim().min(1, "A price code is required.").max(200),
+  })
+  .strict();
+
+export type CommerceCheckoutRequestInput = z.output<typeof commerceCheckoutRequestSchema>;

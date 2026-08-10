@@ -8,7 +8,6 @@ import { createStorageAdapter, resolveStorageProvider } from "@/lib/storage/stor
 import type { DocumentStorageAdapter } from "@/lib/storage/document-storage-adapter";
 import { createAuditLog } from "@/lib/repositories/audit-repository";
 import { classifyPdfContent, OCR_IMPLEMENTATION_STATUS } from "@/lib/files/pdf-text-extraction";
-import "@/lib/jobs/register-handlers";
 import { extractionJobQueue } from "@/lib/jobs/extraction-worker";
 
 /** Was hardcoded to the local-filesystem adapter — see preprocessing-handler.ts for the same production fix. */
@@ -22,6 +21,10 @@ function getProjectFileStorageAdapter(): DocumentStorageAdapter {
 
 export async function triggerFilePreprocessing(actor: CurrentActor, fileId: string) {
   requireCapability(actor, "files:manage");
+
+  // Register the complete handler composition before dispatch so the singleton queue
+  // has every supported handler even when processing crosses a request/module boundary.
+  await import("@/lib/jobs/register-handlers");
   const file = await getProjectFileRecord(actor.companyId, fileId);
 
   const job = await extractionJobQueue.enqueue({

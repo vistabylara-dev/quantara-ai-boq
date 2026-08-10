@@ -43,7 +43,7 @@ export class VercelBlobStorageAdapter implements DocumentStorageAdapter {
     await this.blobClient.put(input.key, input.body, {
       access: "private",
       contentType: input.contentType,
-      allowOverwrite: false,
+      allowOverwrite: input.allowOverwrite ?? false,
     });
     return { key: input.key, size: input.body.byteLength };
   }

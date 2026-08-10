@@ -18,7 +18,6 @@ import { buildStorageKey, computeChecksum, validateUpload } from "@/lib/files/fi
 import { createStorageAdapter, resolveStorageProvider } from "@/lib/storage/storage-factory";
 import type { DocumentStorageAdapter } from "@/lib/storage/document-storage-adapter";
 import { createAuditLog } from "@/lib/repositories/audit-repository";
-import "@/lib/jobs/register-handlers";
 import { extractionJobQueue } from "@/lib/jobs/extraction-worker";
 
 export type UploadProjectFileInput = {
@@ -202,6 +201,10 @@ export async function deleteProjectFile(actor: CurrentActor, fileId: string) {
 /** Enqueues the automatic classification engine. Idempotent — re-triggering while a job is already in flight returns that same job rather than starting a duplicate. */
 export async function triggerFileClassification(actor: CurrentActor, fileId: string) {
   requireCapability(actor, "files:manage");
+
+  // Register the complete handler composition before dispatch so the singleton queue
+  // has every supported handler even when processing crosses a request/module boundary.
+  await import("@/lib/jobs/register-handlers");
   const file = await getProjectFileRecord(actor.companyId, fileId);
   await updateProjectFileStatus(actor.companyId, fileId, ProjectFileStatus.CLASSIFYING);
 

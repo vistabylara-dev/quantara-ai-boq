@@ -28,6 +28,12 @@ type ExtractedEntityView = {
   confidence: number;
   extractionMethod: string;
   sourceText: string | null;
+  tableEvidence?: Array<{
+    fieldKey: string;
+    fieldTitle: string;
+    rawValue: string;
+    isNumericLike: boolean;
+  }>;
   status: string;
   correction: unknown;
   confirmedAt: string | null;
@@ -178,6 +184,13 @@ export default function ProjectExtractionsPage(props: { params: Promise<{ projec
   const sourceFiles = useMemo(() => new Map(files.map((file) => [file.id, file])), [files]);
   const reviewSummary = useMemo(
     () => summarizeExtractionReview(entities.map((entity) => entity.status)),
+    [entities],
+  );
+
+  const importableEntityCount = useMemo(
+    () => entities.filter(
+      (entity) => entity.status === "CONFIRMED" || entity.status === "CORRECTED",
+    ).length,
     [entities],
   );
 
@@ -352,7 +365,13 @@ export default function ProjectExtractionsPage(props: { params: Promise<{ projec
           </div>
           {(reviewSummary.total === 0 || reviewSummary.complete) && (
             <Link
-              href={reviewSummary.complete ? `/projects/${encodedProjectId}/boq` : `/projects/${encodedProjectId}/files`}
+              href={
+                reviewSummary.complete
+                  ? importableEntityCount > 0
+                    ? `/projects/${encodedProjectId}/boq?action=import-reviewed`
+                    : `/projects/${encodedProjectId}/boq`
+                  : `/projects/${encodedProjectId}/files`
+              }
               className="inline-flex shrink-0 justify-center rounded-2xl bg-[#009FE3] px-4 py-2 text-sm font-semibold text-white hover:opacity-90 dark:bg-[#21C7F3] dark:text-[#040A16]"
             >
               {reviewSummary.complete ? "Continue to BOQ" : "Review Project Sources"}
@@ -441,6 +460,34 @@ export default function ProjectExtractionsPage(props: { params: Promise<{ projec
                     </p>
                   </div>
                 </div>
+
+                {entity.tableEvidence && entity.tableEvidence.length > 0 && (
+                  <div className="mt-4 rounded-2xl border border-[#D9E2EC] bg-white p-4 dark:border-[#1E2A42] dark:bg-[#0B1426]">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#7B879C] dark:text-[#7F8DA6]">
+                        Captured schedule fields
+                      </p>
+                      <span className="text-xs text-[#7B879C] dark:text-[#8CA0BE]">
+                        {entity.tableEvidence.length} source-linked field{entity.tableEvidence.length === 1 ? "" : "s"}
+                      </span>
+                    </div>
+                    <dl className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+                      {entity.tableEvidence.map((entry) => (
+                        <div key={`${entry.fieldKey}:${entry.rawValue}`} className="rounded-xl border border-[#D9E2EC] bg-[#EEF3F8] p-3 dark:border-[#1E2A42] dark:bg-[#111D33]">
+                          <dt className="text-[0.68rem] font-semibold uppercase tracking-wide text-[#7B879C] dark:text-[#7F8DA6]">
+                            {entry.fieldTitle}
+                          </dt>
+                          <dd className="mt-1 break-words text-sm font-semibold text-[#0B1630] dark:text-white">
+                            {entry.rawValue}
+                          </dd>
+                        </div>
+                      ))}
+                    </dl>
+                    <p className="mt-3 text-xs leading-5 text-[#7B879C] dark:text-[#8CA0BE]">
+                      Captured source fields remain review evidence. Numeric-looking values are not automatically treated as BOQ quantities unless the source column explicitly means quantity.
+                    </p>
+                  </div>
+                )}
 
                 {entity.correction !== null && entity.correction !== undefined && (
                   <div className="mt-4"><CorrectionInformation correction={entity.correction} /></div>

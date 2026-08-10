@@ -56,4 +56,73 @@ describe("next.config.mjs phase gating", () => {
       serverExternalPackages: ["pdfkit", "pdf-parse", "pdfjs-dist"],
     });
   });
+
+  it("keeps read-only file and page-image services decoupled from the global extraction registry", async () => {
+    const { readFile } = await import("node:fs/promises");
+
+    const drawingService = await readFile(
+      new URL("../src/lib/services/drawing-page-service.ts", import.meta.url),
+      "utf8",
+    );
+    const projectFileService = await readFile(
+      new URL("../src/lib/services/project-file-service.ts", import.meta.url),
+      "utf8",
+    );
+    const preprocessing = await readFile(
+      new URL("../src/lib/files/preprocessing-handler.ts", import.meta.url),
+      "utf8",
+    );
+    const blobAdapter = await readFile(
+      new URL("../src/lib/storage/vercel-blob-storage-adapter.ts", import.meta.url),
+      "utf8",
+    );
+
+    expect(drawingService).not.toContain('import "@/lib/jobs/register-handlers"');
+    expect(projectFileService).not.toContain('import "@/lib/jobs/register-handlers"');
+    expect(drawingService).toContain('await import("@/lib/files/preprocessing-handler")');
+    expect(projectFileService).toContain('await import("@/lib/files/classification-handler")');
+
+    expect(preprocessing).toContain("allowOverwrite: true");
+    expect(blobAdapter).toContain("allowOverwrite: input.allowOverwrite ?? false");
+  });
+
+  it("ships the complete PDF runtime for table extraction without coupling it to screenshot preprocessing", async () => {
+    const buildConfig = await nextConfigFn(PHASE_PRODUCTION_BUILD);
+    const tracing = buildConfig.outputFileTracingIncludes as Record<string, string[]>;
+
+    const requiredPdfRuntime = [
+      "./node_modules/@napi-rs/canvas/**",
+      "./node_modules/@napi-rs/canvas-linux-x64-gnu/**",
+      "./node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs",
+    ];
+
+    expect(tracing["/api/files/[fileId]/extract"]).toEqual(
+      expect.arrayContaining(requiredPdfRuntime),
+    );
+
+    // The already-working screenshot/preprocessing route must retain the same
+    // production runtime dependencies.
+    expect(tracing["/api/files/[fileId]/preprocess"]).toEqual(
+      expect.arrayContaining(requiredPdfRuntime),
+    );
+
+    const { readFile } = await import("node:fs/promises");
+    const serviceSource = await readFile(
+      new URL("../src/lib/services/table-extraction-service.ts", import.meta.url),
+      "utf8",
+    );
+
+    expect(serviceSource).toContain(
+      'from "@/lib/files/table-extraction/constants"',
+    );
+    expect(serviceSource).toContain(
+      'await import("@/lib/files/table-extraction-handler")',
+    );
+    expect(serviceSource).not.toContain(
+      'import { TABLE_EXTRACTABLE_EXTENSIONS } from "@/lib/files/table-extraction-handler"',
+    );
+    expect(serviceSource).not.toContain(
+      'import "@/lib/jobs/register-handlers"',
+    );
+  });
 });

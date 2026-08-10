@@ -6,13 +6,17 @@ import { getProjectFileRecord } from "@/lib/repositories/project-file-repository
 import { listExtractedTablesForFile as listExtractedTablesForFileRepo, toExtractedTableDTO } from "@/lib/repositories/extracted-table-repository";
 import { toExtractionJobDTO } from "@/lib/repositories/extraction-job-repository";
 import { createAuditLog } from "@/lib/repositories/audit-repository";
-import "@/lib/jobs/register-handlers";
 import { extractionJobQueue } from "@/lib/jobs/extraction-worker";
-import { TABLE_EXTRACTABLE_EXTENSIONS } from "@/lib/files/table-extraction-handler";
+import { TABLE_EXTRACTABLE_EXTENSIONS } from "@/lib/files/table-extraction/constants";
 
 /** Dispatches the appropriate extraction engine(s) for a file's type. Only TABLE_EXTRACTION exists so far; later sub-phases extend this switch as new engines land. */
 export async function triggerFileExtraction(actor: CurrentActor, fileId: string) {
   requireCapability(actor, "files:manage");
+
+  // Register the complete handler composition before dispatch. The queue is a singleton,
+  // so processing remains safe even when enqueue/worker code is evaluated in another module context.
+  await import("@/lib/jobs/register-handlers");
+
   const file = await getProjectFileRecord(actor.companyId, fileId);
 
   if (!(TABLE_EXTRACTABLE_EXTENSIONS as readonly string[]).includes(file.extension)) {

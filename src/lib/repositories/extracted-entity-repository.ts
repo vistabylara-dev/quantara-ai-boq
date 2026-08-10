@@ -1,8 +1,27 @@
 import type { ExtractedEntity, Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db/prisma";
 import { NotFoundError } from "@/lib/errors/app-error";
+import {
+  extractTableFieldEvidence,
+  extractTableNumericEvidence,
+  formatTableNumericEvidence,
+} from "@/lib/files/table-extraction/numeric-evidence";
 
 export function toExtractedEntityDTO(row: ExtractedEntity) {
+  const tableEvidence = row.extractionMethod === "TABLE_PARSER"
+    ? extractTableFieldEvidence(row.technicalDataJson)
+    : [];
+  const numericEvidence = row.extractionMethod === "TABLE_PARSER"
+    ? extractTableNumericEvidence(row.technicalDataJson)
+    : [];
+  const numericEvidenceSummary = formatTableNumericEvidence(numericEvidence);
+  const sourceTextParts = [
+    row.sourceText?.trim() || null,
+    numericEvidenceSummary
+      ? `Captured numeric table fields (header → value): ${numericEvidenceSummary}`
+      : null,
+  ].filter((part): part is string => Boolean(part));
+
   return {
     id: row.id,
     projectId: row.projectId,
@@ -16,11 +35,13 @@ export function toExtractedEntityDTO(row: ExtractedEntity) {
     unit: row.unit,
     confidence: row.confidence.toNumber(),
     extractionMethod: row.extractionMethod,
-    sourceText: row.sourceText,
+    sourceText: sourceTextParts.length > 0 ? sourceTextParts.join("\n") : null,
     sourceReference: row.sourceReference,
     // Row evidence only (table/row IDs, normalized dimension keys, raw cell values) — never
     // storage keys, provider credentials, or anything else infrastructure-internal.
     technicalData: row.technicalDataJson,
+    tableEvidence,
+    numericEvidence,
     status: row.status,
     confirmedAt: row.confirmedAt?.toISOString() ?? null,
     rejectedAt: row.rejectedAt?.toISOString() ?? null,

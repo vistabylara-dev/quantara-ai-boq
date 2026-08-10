@@ -1,15 +1,28 @@
 import type { BOQ } from "@/types/boq";
 
 /**
- * Guided BOQ measurement workflow (Release 1), spec section 1 — a single,
- * pure, testable function deriving the 7-stage workflow status from real
- * data only. Never marks a stage COMPLETE without evidence: every branch
- * below is driven by an actual count from the API, never a guess.
+ * BOQ workflow state derived only from evidence that is actually available.
+ *
+ * Direct reviewed schedule/count quantities do not require a dimensional
+ * calculation. Rejected calculations never satisfy a required measurement.
+ * Imported entities remain professionally accepted evidence. Validation
+ * failure is never converted into "0 warnings".
  */
+export type WorkflowStepStatus =
+  | "COMPLETE"
+  | "CURRENT"
+  | "NEEDS_ATTENTION"
+  | "NOT_STARTED"
+  | "NOT_REQUIRED";
 
-export type WorkflowStepStatus = "COMPLETE" | "CURRENT" | "NEEDS_ATTENTION" | "NOT_STARTED";
-
-export type WorkflowStepId = "sources" | "extraction" | "dimensions" | "calculation" | "boq_review" | "validation" | "output";
+export type WorkflowStepId =
+  | "sources"
+  | "extraction"
+  | "dimensions"
+  | "calculation"
+  | "boq_review"
+  | "validation"
+  | "output";
 
 export type WorkflowStep = {
   id: WorkflowStepId;
@@ -20,47 +33,152 @@ export type WorkflowStep = {
 export type NextStepAction = {
   message: string;
   ctaLabel: string;
-  ctaAction: "open_files" | "review_extractions" | "review_dimensions" | "review_calculations" | "open_boq" | "run_validation" | "lock_boq" | null;
+  ctaAction:
+    | "open_files"
+    | "review_extractions"
+    | "review_dimensions"
+    | "review_calculations"
+    | "open_boq"
+    | "run_validation"
+    | "lock_boq"
+    | "view_output"
+    | null;
+};
+
+export type WorkflowEntityFact = {
+  id: string;
+  status: string;
+  quantity?: number | null;
+  unit?: string | null;
+};
+
+export type WorkflowCalculationFact = {
+  id: string;
+  extractedEntityId: string | null;
+  status: string;
 };
 
 export type BoqWorkflowStateInput = {
   fileCount: number;
-  extractedEntities: { id: string; status: string }[];
-  calculations: { id: string; extractedEntityId: string | null; status: string }[];
+  extractedEntities: WorkflowEntityFact[];
+  calculations: WorkflowCalculationFact[];
   boqItemCount: number;
-  validationWarningCount: number;
+  validationWarningCount: number | null;
+  /**
+   * Number of completed, non-draft generated documents for this exact BOQ
+   * revision. null means output history could not be proven.
+   */
+  generatedDocumentCount: number | null;
   isLocked: boolean;
 };
 
-const REVIEWED_ENTITY_STATUSES = new Set(["CONFIRMED", "CORRECTED", "REJECTED", "IMPORTED"]);
+const REVIEWED_ENTITY_STATUSES = new Set([
+  "CONFIRMED",
+  "CORRECTED",
+  "REJECTED",
+  "IMPORTED",
+]);
 
-export function computeBoqWorkflowState(input: BoqWorkflowStateInput): { steps: WorkflowStep[]; nextAction: NextStepAction } {
-  const reviewableEntities = input.extractedEntities.filter((e) => e.status !== "REJECTED");
-  const unreviewedEntities = input.extractedEntities.filter((e) => !REVIEWED_ENTITY_STATUSES.has(e.status));
-  const reviewedEntityIds = new Set(
-    input.extractedEntities.filter((e) => e.status === "CONFIRMED" || e.status === "CORRECTED").map((e) => e.id),
-  );
-  const entitiesMissingDimensions = [...reviewedEntityIds].filter(
-    (entityId) => !input.calculations.some((c) => c.extractedEntityId === entityId),
-  );
-  const unconfirmedCalculations = input.calculations.filter((c) => c.status !== "CONFIRMED");
+const ACCEPTED_ENTITY_STATUSES = new Set([
+  "CONFIRMED",
+  "CORRECTED",
+  "IMPORTED",
+]);
 
-  const sourcesStatus: WorkflowStepStatus = input.fileCount > 0 ? "COMPLETE" : "NOT_STARTED";
+function hasUsableDirectReviewedQuantity(entity: WorkflowEntityFact): boolean {
+  return (
+    typeof entity.quantity === "number"
+    && Number.isFinite(entity.quantity)
+    && entity.quantity > 0
+    && typeof entity.unit === "string"
+    && entity.unit.trim().length > 0
+  );
+}
+
+export function computeBoqWorkflowState(
+  input: BoqWorkflowStateInput,
+): { steps: WorkflowStep[]; nextAction: NextStepAction } {
+  const unreviewedEntities = input.extractedEntities.filter(
+    (entity) => !REVIEWED_ENTITY_STATUSES.has(entity.status),
+  );
+
+  const acceptedEntities = input.extractedEntities.filter(
+    (entity) => ACCEPTED_ENTITY_STATUSES.has(entity.status),
+  );
+
+  const importableEntities = input.extractedEntities.filter(
+    (entity) => entity.status === "CONFIRMED" || entity.status === "CORRECTED",
+  );
+
+  const acceptedEntityIds = new Set(acceptedEntities.map((entity) => entity.id));
+
+  const nonRejectedCalculations = input.calculations.filter(
+    (calculation) => calculation.status !== "REJECTED",
+  );
+
+  const linkedNonRejectedCalculations = nonRejectedCalculations.filter(
+    (calculation) =>
+      calculation.extractedEntityId !== null
+      && acceptedEntityIds.has(calculation.extractedEntityId),
+  );
+
+  // A calculation is workflow-relevant only when it is a deliberate manual
+  // project calculation (no extractedEntityId) or belongs to professionally
+  // accepted extracted evidence. Calculations attached to rejected/unaccepted
+  // entities must not keep the workflow permanently blocked.
+  const relevantNonRejectedCalculations = nonRejectedCalculations.filter(
+    (calculation) =>
+      calculation.extractedEntityId === null
+      || acceptedEntityIds.has(calculation.extractedEntityId),
+  );
+
+  const relevantConfirmedCalculations = relevantNonRejectedCalculations.filter(
+    (calculation) => calculation.status === "CONFIRMED",
+  );
+
+  const entitiesMissingDimensions = acceptedEntities.filter((entity) => {
+    if (hasUsableDirectReviewedQuantity(entity)) return false;
+
+    return !linkedNonRejectedCalculations.some(
+      (calculation) => calculation.extractedEntityId === entity.id,
+    );
+  });
+
+  const unconfirmedCalculations = relevantNonRejectedCalculations.filter(
+    (calculation) => calculation.status !== "CONFIRMED",
+  );
+
+  const hasAnyEntityCalculation = linkedNonRejectedCalculations.length > 0;
+
+  const sourcesStatus: WorkflowStepStatus =
+    input.fileCount > 0 ? "COMPLETE" : "NOT_STARTED";
 
   const extractionStatus: WorkflowStepStatus =
     input.fileCount === 0
       ? "NOT_STARTED"
       : unreviewedEntities.length > 0
         ? "NEEDS_ATTENTION"
-        : reviewableEntities.length > 0
+        : input.extractedEntities.length > 0
           ? "COMPLETE"
           : "CURRENT";
 
   const dimensionsStatus: WorkflowStepStatus =
-    entitiesMissingDimensions.length > 0 ? "NEEDS_ATTENTION" : reviewedEntityIds.size > 0 ? "COMPLETE" : "NOT_STARTED";
+    entitiesMissingDimensions.length > 0
+      ? "NEEDS_ATTENTION"
+      : acceptedEntities.length === 0
+        ? "NOT_STARTED"
+        : hasAnyEntityCalculation
+          ? "COMPLETE"
+          : "NOT_REQUIRED";
 
   const calculationStatus: WorkflowStepStatus =
-    unconfirmedCalculations.length > 0 ? "NEEDS_ATTENTION" : input.calculations.length > 0 ? "COMPLETE" : "NOT_STARTED";
+    unconfirmedCalculations.length > 0
+      ? "NEEDS_ATTENTION"
+      : relevantConfirmedCalculations.length > 0
+        ? "COMPLETE"
+        : acceptedEntities.length > 0 && entitiesMissingDimensions.length === 0
+          ? "NOT_REQUIRED"
+          : "NOT_STARTED";
 
   const boqReviewStatus: WorkflowStepStatus = input.isLocked
     ? "COMPLETE"
@@ -72,11 +190,17 @@ export function computeBoqWorkflowState(input: BoqWorkflowStateInput): { steps: 
     ? "COMPLETE"
     : input.boqItemCount === 0
       ? "NOT_STARTED"
-      : input.validationWarningCount > 0
+      : input.validationWarningCount === null
         ? "NEEDS_ATTENTION"
-        : "CURRENT";
+        : input.validationWarningCount > 0
+          ? "NEEDS_ATTENTION"
+          : "CURRENT";
 
-  const outputStatus: WorkflowStepStatus = input.isLocked ? "COMPLETE" : "NOT_STARTED";
+  const outputStatus: WorkflowStepStatus = !input.isLocked
+    ? "NOT_STARTED"
+    : input.generatedDocumentCount !== null && input.generatedDocumentCount > 0
+      ? "COMPLETE"
+      : "CURRENT";
 
   const steps: WorkflowStep[] = [
     { id: "sources", label: "Sources", status: sourcesStatus },
@@ -89,8 +213,13 @@ export function computeBoqWorkflowState(input: BoqWorkflowStateInput): { steps: 
   ];
 
   let nextAction: NextStepAction;
+
   if (input.fileCount === 0 && input.boqItemCount === 0) {
-    nextAction = { message: "Add project drawings or source files first.", ctaLabel: "Add source files", ctaAction: "open_files" };
+    nextAction = {
+      message: "Add project drawings or source files first.",
+      ctaLabel: "Add source files",
+      ctaAction: "open_files",
+    };
   } else if (unreviewedEntities.length > 0) {
     nextAction = {
       message: `Review the information Quantara found — ${unreviewedEntities.length} item(s) need your confirmation.`,
@@ -99,7 +228,7 @@ export function computeBoqWorkflowState(input: BoqWorkflowStateInput): { steps: 
     };
   } else if (entitiesMissingDimensions.length > 0) {
     nextAction = {
-      message: `${entitiesMissingDimensions.length} item(s) need measurements before quantities can be calculated.`,
+      message: `${entitiesMissingDimensions.length} reviewed item(s) need professional dimensions before a quantity can be calculated.`,
       ctaLabel: "Add dimensions",
       ctaAction: "review_dimensions",
     };
@@ -110,17 +239,46 @@ export function computeBoqWorkflowState(input: BoqWorkflowStateInput): { steps: 
       ctaAction: "review_calculations",
     };
   } else if (input.boqItemCount === 0) {
-    nextAction = { message: "Add your first BOQ item to get started.", ctaLabel: "Open BOQ", ctaAction: "open_boq" };
-  } else if (!input.isLocked && input.validationWarningCount > 0) {
     nextAction = {
-      message: `${input.validationWarningCount} validation warning(s) need attention before this BOQ can be locked.`,
-      ctaLabel: "Run validation",
+      message:
+        importableEntities.length > 0
+          ? "Reviewed project information is ready to be added to the BOQ."
+          : "Add your first BOQ item to get started.",
+      ctaLabel:
+        importableEntities.length > 0
+          ? "Open reviewed items"
+          : "Open BOQ",
+      ctaAction: "open_boq",
+    };
+  } else if (input.isLocked) {
+    nextAction = {
+      message:
+        input.generatedDocumentCount !== null && input.generatedDocumentCount > 0
+          ? "This locked BOQ revision has professional output available."
+          : "This BOQ revision is locked and ready for professional output generation.",
+      ctaLabel: "View output",
+      ctaAction: "view_output",
+    };
+  } else if (input.validationWarningCount === null) {
+    nextAction = {
+      message:
+        "Validation status is currently unavailable. Open verification and run the checks before locking this revision.",
+      ctaLabel: "Open validation",
       ctaAction: "run_validation",
     };
-  } else if (!input.isLocked) {
-    nextAction = { message: "Your next step is BOQ validation and locking.", ctaLabel: "Lock BOQ", ctaAction: "lock_boq" };
+  } else if (input.validationWarningCount > 0) {
+    nextAction = {
+      message: `${input.validationWarningCount} validation warning(s) need professional attention before this BOQ is locked.`,
+      ctaLabel: "Review validation",
+      ctaAction: "run_validation",
+    };
   } else {
-    nextAction = { message: "This BOQ revision is locked and ready for output.", ctaLabel: "View output", ctaAction: null };
+    nextAction = {
+      message:
+        "The validation preview reports no structural warnings. Review verification, then use the explicit Lock revision control when professionally satisfied.",
+      ctaLabel: "Open validation",
+      ctaAction: "run_validation",
+    };
   }
 
   return { steps, nextAction };

@@ -9,7 +9,7 @@ import { formatCurrency } from "@/lib/formatting/currency";
 import { formatDate } from "@/lib/formatting/dates";
 import { withCalculatedBOQTotals } from "@/lib/calculations/boq-totals";
 import BoqEditor from "@/components/boq/boq-editor";
-import AddItemFromSourceModal from "@/components/boq/add-item-from-source-modal";
+import AddItemFromSourceModal, { type AddItemTab } from "@/components/boq/add-item-from-source-modal";
 import { BoqCreationMethodSelector, type BoqCreationMethod } from "@/components/boq/boq-creation-method-selector";
 import { BoqWorkflowStepper } from "@/components/boq/boq-workflow-stepper";
 import { computeBoqWorkflowState, type NextStepAction } from "@/lib/workflow/boq-workflow-state";
@@ -47,11 +47,28 @@ export default function ProjectBOQPage(props: PageProps) {
   const [pendingAction, setPendingAction] = useState<PendingAction>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [showAddItem, setShowAddItem] = useState(false);
+  const [addItemInitialTab, setAddItemInitialTab] = useState<AddItemTab>("search");
   const [showCreationSelector, setShowCreationSelector] = useState(false);
   const [fileCount, setFileCount] = useState(0);
-  const [extractedEntities, setExtractedEntities] = useState<{ id: string; status: string }[]>([]);
-  const [calculations, setCalculations] = useState<{ id: string; extractedEntityId: string | null; status: string }[]>([]);
-  const [validationWarningCount, setValidationWarningCount] = useState(0);
+  const [extractedEntities, setExtractedEntities] = useState<Array<{
+    id: string;
+    status: string;
+    quantity: number | null;
+    unit: string | null;
+  }>>([]);
+  const [calculations, setCalculations] = useState<Array<{
+    id: string;
+    extractedEntityId: string | null;
+    status: string;
+  }>>([]);
+  const [generatedDocuments, setGeneratedDocuments] = useState<Array<{
+    boqId: string;
+    status: string;
+    isDraft: boolean;
+  }> | null>(null);
+  const [workflowFactsWarning, setWorkflowFactsWarning] = useState<string | null>(null);
+  const [validationWarningCount, setValidationWarningCount] = useState<number | null>(null);
+  const [validationPreviewError, setValidationPreviewError] = useState<string | null>(null);
   const hasTriggeredAction = useRef(false);
 
   const loadWorkspace = useCallback(async (signal?: AbortSignal) => {
@@ -60,23 +77,54 @@ export default function ProjectBOQPage(props: PageProps) {
     setActionError(null);
     try {
       const encodedProjectId = encodeURIComponent(params.projectId);
-      const [projectData, boqData, filesData, entitiesData, calculationsData] = await Promise.all([
+      const [projectData, boqData, filesData, entitiesData, calculationsData, documentsData] = await Promise.all([
         apiClient.get<Project>(`/api/projects/${encodedProjectId}`, signal),
         apiClient.get<BOQ[]>(`/api/projects/${encodedProjectId}/boqs`, signal),
-        apiClient.get<unknown[]>(`/api/projects/${encodedProjectId}/files`, signal).catch(() => []),
-        apiClient.get<{ id: string; status: string }[]>(`/api/projects/${encodedProjectId}/extractions`, signal).catch(() => []),
+        apiClient.get<unknown[]>(`/api/projects/${encodedProjectId}/files`, signal).catch(() => null),
+        apiClient.get<Array<{
+          id: string;
+          status: string;
+          quantity: number | null;
+          unit: string | null;
+        }>>(`/api/projects/${encodedProjectId}/extractions`, signal).catch(() => null),
         apiClient
-          .get<{ id: string; extractedEntityId: string | null; status: string }[]>(`/api/projects/${encodedProjectId}/quantity-calculations`, signal)
-          .catch(() => []),
+          .get<Array<{
+            id: string;
+            extractedEntityId: string | null;
+            status: string;
+          }>>(`/api/projects/${encodedProjectId}/quantity-calculations`, signal)
+          .catch(() => null),
+        apiClient
+          .get<Array<{ boqId: string; status: string; isDraft: boolean }>>(
+            `/api/projects/${encodedProjectId}/documents`,
+            signal,
+          )
+          .catch(() => null),
       ]);
+
       const orderedRevisions = newestFirst(boqData);
       setProject(projectData);
       setRevisions(orderedRevisions);
       setActiveBoq(orderedRevisions[0] ?? null);
       setHasUnsavedChanges(false);
-      setFileCount(filesData.length);
-      setExtractedEntities(entitiesData);
-      setCalculations(calculationsData);
+
+      setFileCount(filesData?.length ?? 0);
+      setExtractedEntities(entitiesData ?? []);
+      setCalculations(calculationsData ?? []);
+      setGeneratedDocuments(documentsData);
+
+      const unavailableFacts = [
+        filesData === null ? "sources" : null,
+        entitiesData === null ? "extraction" : null,
+        calculationsData === null ? "calculations" : null,
+        documentsData === null ? "output history" : null,
+      ].filter((value): value is string => Boolean(value));
+
+      setWorkflowFactsWarning(
+        unavailableFacts.length > 0
+          ? `Workflow guidance is temporarily incomplete because ${unavailableFacts.join(", ")} could not be verified. BOQ editing remains available; no unavailable count is being treated as zero.`
+          : null,
+      );
     } catch (error) {
       if (error instanceof DOMException && error.name === "AbortError") return;
       setLoadError(getApiErrorMessage(error));
@@ -181,13 +229,29 @@ export default function ProjectBOQPage(props: PageProps) {
       void createInitialBOQ();
     } else if (action === "new-revision" && activeBoq && isReadOnlyBOQ(activeBoq)) {
       void createRevision(activeBoq);
+    } else if (action === "import-reviewed") {
+      setAddItemInitialTab("reviewed");
+
+      const editableRevision = revisions.find((revision) => !isReadOnlyBOQ(revision));
+      if (editableRevision) {
+        setActiveBoq(editableRevision);
+        setHasUnsavedChanges(false);
+        setShowAddItem(true);
+      } else if (revisions.length === 0) {
+        void createInitialBOQ(true);
+      } else {
+        setActionError(
+          "Reviewed source information is ready, but this project has no editable BOQ revision. "
+          + "Create a new revision before importing it.",
+        );
+      }
     }
     
     // Clean up URL
     const url = new URL(window.location.href);
     url.searchParams.delete("action");
     router.replace(url.pathname + url.search);
-  }, [isLoading, searchParams, revisions.length, activeBoq, createInitialBOQ, createRevision, router]);
+  }, [isLoading, searchParams, revisions, activeBoq, createInitialBOQ, createRevision, router]);
 
   const lockRevision = useCallback(async (draft: BOQ) => {
     if (isReadOnlyBOQ(draft) || pendingAction) return;
@@ -208,23 +272,53 @@ export default function ProjectBOQPage(props: PageProps) {
 
   const activeRevision = useMemo(() => activeBoq ?? revisions[0] ?? null, [activeBoq, revisions]);
 
+  const activeRevisionId = activeRevision?.id ?? null;
+
   useEffect(() => {
-    if (!activeRevision) {
-      setValidationWarningCount(0);
+    if (!activeRevisionId) {
+      setValidationWarningCount(null);
+      setValidationPreviewError(null);
       return;
     }
+
     const controller = new AbortController();
+    setValidationWarningCount(null);
+    setValidationPreviewError(null);
+
     apiClient
-      .get<{ code: string }[]>(`/api/boqs/${encodeURIComponent(activeRevision.id)}/validation-preview`, controller.signal)
-      .then((warnings) => setValidationWarningCount(warnings.length))
-      .catch(() => setValidationWarningCount(0));
+      .get<{ code: string }[]>(
+        `/api/boqs/${encodeURIComponent(activeRevisionId)}/validation-preview`,
+        controller.signal,
+      )
+      .then((warnings) => {
+        setValidationWarningCount(warnings.length);
+        setValidationPreviewError(null);
+      })
+      .catch((error) => {
+        if (error instanceof DOMException && error.name === "AbortError") return;
+        setValidationWarningCount(null);
+        setValidationPreviewError(
+          `Validation preview is currently unavailable: ${getApiErrorMessage(error)} No zero-warning status is being assumed.`,
+        );
+      });
+
     return () => controller.abort();
-  }, [activeRevision]);
+  }, [activeRevisionId]);
 
   const boqItemCount = useMemo(
     () => (activeRevision ? activeRevision.sections.reduce((sum, section) => sum + section.items.length, 0) : 0),
     [activeRevision],
   );
+
+  const generatedDocumentCount = useMemo(() => {
+    if (!activeRevision || generatedDocuments === null) return null;
+    return generatedDocuments.filter(
+      (document) =>
+        document.boqId === activeRevision.id
+        && document.status === "COMPLETED"
+        && document.isDraft === false,
+    ).length;
+  }, [activeRevision, generatedDocuments]);
 
   const workflowState = useMemo(
     () =>
@@ -234,32 +328,109 @@ export default function ProjectBOQPage(props: PageProps) {
         calculations,
         boqItemCount,
         validationWarningCount,
+        generatedDocumentCount,
         isLocked: isReadOnlyBOQ(activeRevision),
       }),
-    [fileCount, extractedEntities, calculations, boqItemCount, validationWarningCount, activeRevision],
+    [
+      fileCount,
+      extractedEntities,
+      calculations,
+      boqItemCount,
+      validationWarningCount,
+      generatedDocumentCount,
+      activeRevision,
+    ],
   );
 
   const handleWorkflowAction = useCallback((action: NonNullable<NextStepAction["ctaAction"]>) => {
     const encodedProjectId = encodeURIComponent(params.projectId);
+
     switch (action) {
       case "open_files":
-        router.push(`/projects/${encodedProjectId}/drawings`);
+        router.push(`/projects/${encodedProjectId}/files`);
         break;
+
       case "review_extractions":
+        router.push(`/projects/${encodedProjectId}/extractions`);
+        break;
+
       case "review_dimensions":
       case "review_calculations":
-        // These stages are reviewed on the project's extraction-review workflow, not this page.
-        router.push(`/projects/${encodedProjectId}`);
-        break;
-      case "open_boq":
+        if (!activeRevision) {
+          void createInitialBOQ(true);
+          setAddItemInitialTab("reviewed");
+          break;
+        }
+        if (isReadOnlyBOQ(activeRevision)) {
+          setActionError(
+            "This BOQ revision is locked. Create a new revision before adding or changing reviewed measurements.",
+          );
+          break;
+        }
+        if (hasUnsavedChanges) {
+          setActionError(
+            "Save the current BOQ changes before adding or importing another item. Your unsaved edits will not be discarded.",
+          );
+          break;
+        }
+        setAddItemInitialTab("reviewed");
         setShowAddItem(true);
         break;
+
+      case "open_boq":
+        if (!activeRevision) {
+          const hasReviewedEntities = extractedEntities.some(
+            (entity) => entity.status === "CONFIRMED" || entity.status === "CORRECTED",
+          );
+          setAddItemInitialTab(hasReviewedEntities ? "reviewed" : "search");
+          void createInitialBOQ(true);
+          break;
+        }
+        if (isReadOnlyBOQ(activeRevision)) {
+          setActionError(
+            "This BOQ revision is locked. Create a new revision before adding an item.",
+          );
+          break;
+        }
+        if (hasUnsavedChanges) {
+          setActionError(
+            "Save the current BOQ changes before adding or importing another item. Your unsaved edits will not be discarded.",
+          );
+          break;
+        }
+        setAddItemInitialTab(
+          extractedEntities.some(
+            (entity) => entity.status === "CONFIRMED" || entity.status === "CORRECTED",
+          )
+            ? "reviewed"
+            : "search",
+        );
+        setShowAddItem(true);
+        break;
+
       case "run_validation":
+        // Read-only professional verification workspace. Never locks the BOQ.
+        router.push(`/projects/${encodedProjectId}/verification`);
+        break;
+
       case "lock_boq":
+        // Consequential action remains explicit and separate from validation.
         if (activeRevision) void lockRevision(activeRevision);
         break;
+
+      case "view_output":
+        router.push(`/projects/${encodedProjectId}/documents`);
+        break;
     }
-  }, [activeRevision, lockRevision, params.projectId, router]);
+  }, [
+    activeRevision,
+    createInitialBOQ,
+    extractedEntities,
+    hasUnsavedChanges,
+    lockRevision,
+    params.projectId,
+    router,
+  ]);
 
   const applyCatalogueRate = useCallback(async (itemId: string, catalogueItemId: string, confirmReplaceOverrides = false) => {
     if (!activeRevision || isReadOnlyBOQ(activeRevision)) return;
@@ -335,8 +506,12 @@ export default function ProjectBOQPage(props: PageProps) {
           <div className="flex flex-wrap gap-3">
             <button
               type="button"
-              onClick={() => setShowAddItem(true)}
-              disabled={!activeRevision || isReadOnly || actionInProgress}
+              onClick={() => {
+                setAddItemInitialTab("search");
+                setShowAddItem(true);
+              }}
+              title={hasUnsavedChanges ? "Save current BOQ changes before adding another item." : ""}
+              disabled={!activeRevision || isReadOnly || actionInProgress || hasUnsavedChanges}
               className="rounded-2xl border border-slate-700 bg-slate-900 px-4 py-2 text-sm font-semibold text-slate-200 hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
             >
               Add item
@@ -378,7 +553,29 @@ export default function ProjectBOQPage(props: PageProps) {
         </div>
       </div>
 
-      <BoqWorkflowStepper steps={workflowState.steps} nextAction={workflowState.nextAction} onAction={handleWorkflowAction} />
+      {workflowFactsWarning ? (
+        <div
+          role="status"
+          className="rounded-[28px] border border-amber-900/60 bg-amber-950/20 p-5 text-sm text-amber-200"
+        >
+          {workflowFactsWarning}
+        </div>
+      ) : (
+        <BoqWorkflowStepper
+          steps={workflowState.steps}
+          nextAction={workflowState.nextAction}
+          onAction={handleWorkflowAction}
+        />
+      )}
+
+      {validationPreviewError && (
+        <div
+          role="alert"
+          className="rounded-[28px] border border-amber-900/60 bg-amber-950/20 p-5 text-sm text-amber-200"
+        >
+          {validationPreviewError}
+        </div>
+      )}
 
       {actionError && (
         <div className="rounded-[28px] border border-rose-900 bg-rose-950/40 p-5 text-sm text-rose-200" role="alert">
@@ -415,7 +612,16 @@ export default function ProjectBOQPage(props: PageProps) {
               onCreateRevision={createRevision}
               onLock={lockRevision}
               onApplyCatalogueRate={applyCatalogueRate}
-              onAddItem={() => setShowAddItem(true)}
+              onAddItem={() => {
+                if (hasUnsavedChanges) {
+                  setActionError(
+                    "Save the current BOQ changes before adding another item. Your unsaved edits will not be discarded.",
+                  );
+                  return;
+                }
+                setAddItemInitialTab("search");
+                setShowAddItem(true);
+              }}
               hasUnsavedChanges={hasUnsavedChanges}
               onVoiceApplied={replaceRevision}
             />
@@ -472,6 +678,7 @@ export default function ProjectBOQPage(props: PageProps) {
           boqId={activeRevision.id}
           sections={activeRevision.sections.map((section) => ({ id: section.id, title: section.title }))}
           nextItemNumber={activeRevision.sections.reduce((max, section) => Math.max(max, ...section.items.map((item) => item.itemNumber), 0), 0) + 1}
+          initialTab={addItemInitialTab}
           onClose={() => setShowAddItem(false)}
           onAdded={() => {
             setShowAddItem(false);

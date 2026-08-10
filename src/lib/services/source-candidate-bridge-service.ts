@@ -157,6 +157,17 @@ function cellsToMap(row: TableRow): Map<string, string> {
   return new Map(row.cells.map((cell) => [normalizedKey(cell.columnKey), (cell.rawValue ?? "").trim()]));
 }
 
+function rowHeaderTitles(row: TableRow): Record<string, string> {
+  const normalized = row.normalizedDataJson;
+  if (!normalized || typeof normalized !== "object" || Array.isArray(normalized)) return {};
+  const headerTitles = (normalized as Record<string, unknown>).headerTitles;
+  if (!headerTitles || typeof headerTitles !== "object" || Array.isArray(headerTitles)) return {};
+  return Object.fromEntries(
+    Object.entries(headerTitles as Record<string, unknown>)
+      .filter((entry): entry is [string, string] => typeof entry[1] === "string"),
+  );
+}
+
 function buildParentContext(table: ExtractedTableRecord, row: TableRow): Record<string, unknown> | null {
   if (!row.parentRowId) return null;
   const parentRow = table.rows.find((candidate) => candidate.id === row.parentRowId);
@@ -241,6 +252,7 @@ export async function generateCandidatesFromStructuredTables(input: GenerateCand
       rowsConsidered += 1;
       const cellsByKey = cellsToMap(row);
       const rawData = Object.fromEntries(row.cells.map((cell) => [cell.columnKey, cell.rawValue ?? ""]));
+      const headerTitles = rowHeaderTitles(row);
 
       const label = buildLabel(cellsByKey, row.rowNumber);
       const { quantity, unit } = resolveQuantityAndUnit(cellsByKey);
@@ -254,6 +266,7 @@ export async function generateCandidatesFromStructuredTables(input: GenerateCand
         sheetName: table.sheetName ?? null,
         rowNumber: row.rowNumber,
         rawData,
+        headerTitles,
         ...(parentContext ? { parentContext } : {}),
         candidateGenerationVersion: CANDIDATE_GENERATION_VERSION,
       };
@@ -262,7 +275,10 @@ export async function generateCandidatesFromStructuredTables(input: GenerateCand
       // honest ceiling for evidence a human hasn't reviewed yet.
       const confidence = Math.min(tableConfidence, row.confidence.toNumber());
       const sourceReference = `${file.originalName} · ${table.sheetName ?? table.title ?? table.tableType} · row ${row.rowNumber}`;
-      const sourceText = row.cells.map((cell) => `${cell.columnKey}: ${cell.rawValue ?? ""}`).join("; ").slice(0, 4000);
+      const sourceText = row.cells
+        .map((cell) => `${headerTitles[cell.columnKey] ?? cell.columnKey}: ${cell.rawValue ?? ""}`)
+        .join("; ")
+        .slice(0, 4000);
 
       await prisma.extractedEntity.create({
         data: {

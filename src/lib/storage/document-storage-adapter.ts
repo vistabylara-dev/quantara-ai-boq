@@ -14,6 +14,11 @@ export type PutObjectInput = {
   key: string;
   body: Buffer;
   contentType: string;
+  /**
+   * Derived/rebuildable artifacts may explicitly replace the same key.
+   * Original uploaded source files must leave this false/undefined.
+   */
+  allowOverwrite?: boolean;
 };
 
 export type PutObjectResult = {

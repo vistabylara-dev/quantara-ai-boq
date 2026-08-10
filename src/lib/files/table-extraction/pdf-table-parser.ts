@@ -1,77 +1,83 @@
 import { PDFParse } from "pdf-parse";
-import { normalizeColumnKey } from "./column-normalization";
-import type { ParsedTable, ParsedTableRow } from "./types";
-
-// Real detected grid structure (drawn table borders), not a guess — moderate confidence, but
-// still always forced to NEEDS_REVIEW by the caller (no vector/DPI cross-check against the
-// actual page geometry the way a true layout engine would do; spec section 6: PDF "table
-// extraction where reliable" never means auto-trusted for commercial use).
-const CONFIDENCE = 65;
+import type { ParsedTable } from "./types";
+import { parsePdfGridTable } from "./pdf-table-grid-normalization";
+import { parseStructuralScheduleTextFallback } from "./pdf-text-schedule-fallback";
 
 export type PdfExtractionResult = {
   tables: ParsedTable[];
   hasTextLayer: boolean;
+  /** Every text page for which no schedule table was recovered. */
+  skippedTablePages: number[];
+  /** Subset of skippedTablePages where pdf-parse threw the known incomplete-grid geometry error. */
+  geometryFailedPages: number[];
+  textFallbackPages: number[];
 };
 
-function tableArrayToParsedTable(rows: string[][], pageNumber: number, tableIndex: number): ParsedTable | null {
-  if (rows.length < 2) return null;
-  const [headerRow, ...dataRows] = rows;
-  const columnKeys = headerRow.map((header, index) => normalizeColumnKey(header, index));
-
-  const parsedRows: ParsedTableRow[] = dataRows
-    .map((row, rowIndex) => ({
-      rowNumber: rowIndex + 2,
-      confidence: CONFIDENCE,
-      cells: columnKeys
-        .map((columnKey, colIndex) => ({
-          columnKey,
-          rawValue: (row[colIndex] ?? "").trim(),
-          sourceCellReference: `page ${pageNumber}, table ${tableIndex + 1}, row ${rowIndex + 2}`,
-        }))
-        .filter((cell) => cell.rawValue !== ""),
-    }))
-    .filter((row) => row.cells.length > 0);
-
-  if (parsedRows.length === 0) return null;
-  return {
-    title: headerRow.join(" | "),
-    confidence: CONFIDENCE,
-    method: "pdf-whitespace-heuristic",
-    rows: parsedRows,
-  };
+function isKnownPdfTableGeometryError(error: unknown): boolean {
+  return error instanceof TypeError
+    && error.message === "Cannot read properties of undefined (reading 'from')";
 }
 
-/**
- * Detects real bordered/grid tables in a PDF (vector line/rectangle drawing
- * operators, matched to positioned text — pdf-parse's own PDFParse.getTable()).
- * Plain text-aligned tables with no visible borders are not detected by
- * this method and are honestly reported as "no tabular structure found"
- * rather than guessed at — a whitespace-position heuristic for that case
- * proved unreliable across the PDF-generation tools available for testing
- * this and was deliberately not shipped (see pdf-table-parser.test notes).
- */
 export async function parsePdfTables(buffer: Buffer): Promise<PdfExtractionResult> {
   const parser = new PDFParse({ data: buffer });
   try {
-    // pageJoiner defaults to a non-empty "-- page N of M --" marker per page, which would make
-    // an otherwise-blank/textless page's concatenated text non-empty; disabling it keeps this
-    // check honest.
     const textResult = await parser.getText({ pageJoiner: "" });
-    const hasTextLayer = textResult.text.trim().length > 0;
-    if (!hasTextLayer) {
-      return { tables: [], hasTextLayer: false };
+    const pagesWithText = textResult.pages.filter((page) => page.text.trim().length > 0);
+
+    if (pagesWithText.length === 0) {
+      return {
+        tables: [],
+        hasTextLayer: false,
+        skippedTablePages: [],
+        geometryFailedPages: [],
+        textFallbackPages: [],
+      };
     }
 
-    const tableResult = await parser.getTable();
     const tables: ParsedTable[] = [];
-    for (const page of tableResult.pages) {
-      page.tables.forEach((tableArray, tableIndex) => {
-        const parsed = tableArrayToParsedTable(tableArray, page.num, tableIndex);
-        if (parsed) tables.push(parsed);
-      });
+    const skippedTablePages: number[] = [];
+    const geometryFailedPages: number[] = [];
+    const textFallbackPages: number[] = [];
+
+    for (const textPage of pagesWithText) {
+      const beforePageCount = tables.length;
+      let geometryFailed = false;
+
+      try {
+        const tableResult = await parser.getTable({ partial: [textPage.num] });
+        for (const page of tableResult.pages) {
+          page.tables.forEach((tableArray, tableIndex) => {
+            const parsed = parsePdfGridTable(tableArray, page.num, tableIndex);
+            if (parsed) tables.push(parsed);
+          });
+        }
+      } catch (error) {
+        if (!isKnownPdfTableGeometryError(error)) throw error;
+        geometryFailed = true;
+        geometryFailedPages.push(textPage.num);
+      }
+
+      if (geometryFailed || tables.length === beforePageCount) {
+        const fallback = parseStructuralScheduleTextFallback(textPage.text, textPage.num);
+        if (fallback.length > 0) {
+          tables.push(...fallback);
+          textFallbackPages.push(textPage.num);
+        } else {
+          // Record every page where neither vector-grid extraction nor the safe
+          // structural text fallback recovered a table. geometryFailedPages
+          // separately distinguishes a parser failure from a normal non-table page.
+          skippedTablePages.push(textPage.num);
+        }
+      }
     }
 
-    return { tables, hasTextLayer: true };
+    return {
+      tables,
+      hasTextLayer: true,
+      skippedTablePages,
+      geometryFailedPages,
+      textFallbackPages,
+    };
   } finally {
     await parser.destroy();
   }

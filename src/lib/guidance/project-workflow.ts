@@ -271,26 +271,35 @@ export function deriveProjectWorkflow(input: ProjectWorkflowInput): ProjectWorkf
       };
     } else {
       states.SOURCES = "COMPLETE";
-      const failedSource = snapshot.sources.find((source) => source.hasProcessingError);
+      // A source is only treated as a hard processing failure when no
+      // captured result survived. If pages/tables/results exist, preserve them
+      // and report the failed engine as attention rather than declaring the
+      // entire source failed.
+      const failedSource = snapshot.sources.find(
+        (source) => source.hasProcessingError && !source.hasCapturedResults,
+      );
       const processingSource = snapshot.sources.find((source) => source.isProcessing);
       const sourceNeedingReview = snapshot.sources.find((source) => source.needsReview);
       const capturedSource = snapshot.sources.find((source) => source.hasCapturedResults);
       const runningJobs = (snapshot.processingJobs.queued ?? 0) + (snapshot.processingJobs.running ?? 0);
       const candidateTotal = snapshot.extractedEntities.total;
       const candidatesNeedingReview = snapshot.extractedEntities.needsReview;
+      const hasCandidateReview = candidateTotal !== null
+        && candidateTotal > 0
+        && (candidatesNeedingReview ?? 0) > 0;
       const hasCapturedData = (snapshot.capturedResults.pageCount ?? 0) > 0
         || (snapshot.capturedResults.tableCount ?? 0) > 0
         || (snapshot.capturedResults.storedJobResultCount ?? 0) > 0;
       const hasCompletedProcessing = (snapshot.processingJobs.completed ?? 0) > 0;
 
-      if (failedSource || (snapshot.files.processingErrorCount ?? 0) > 0) {
+      if (failedSource) {
         states.EXTRACTION = "NEEDS_ATTENTION";
         nextStep = {
           message: GENERIC_PROCESSING_WARNING,
           ctaLabel: "Review Source",
           href: getProjectFilesHref(input.projectId, failedSource?.id),
         };
-      } else if (sourceNeedingReview) {
+      } else if (sourceNeedingReview && !hasCandidateReview) {
         states.EXTRACTION = "NEEDS_ATTENTION";
         nextStep = {
           message: "Source processing requires professional attention before Quantara can report further captured results.",
@@ -305,7 +314,7 @@ export function deriveProjectWorkflow(input: ProjectWorkflowInput): ProjectWorkf
           ctaLabel: "View Source Processing",
           href: getProjectFilesHref(input.projectId, processingSource?.id),
         };
-      } else if (candidateTotal !== null && candidateTotal > 0 && (candidatesNeedingReview ?? 0) > 0) {
+      } else if (hasCandidateReview) {
         states.EXTRACTION = "NEEDS_ATTENTION";
         nextStep = {
           message: "Quantara captured project information that requires professional confirmation, correction, or rejection.",

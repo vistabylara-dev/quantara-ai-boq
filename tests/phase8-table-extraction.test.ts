@@ -194,6 +194,8 @@ describe("Phase 8 sub-phase 4: structured table and schedule extraction", () => 
       const result = await parsePdfTables(buffer);
       expect(result.hasTextLayer).toBe(true);
       expect(result.tables).toEqual([]);
+      expect(result.skippedTablePages).toEqual([1]);
+      expect(result.geometryFailedPages).toEqual([]);
     });
   });
 

@@ -3,31 +3,29 @@ import type { DimensionInputDefinition } from "@/lib/calculations/required-dimen
 import type { VoiceCommandType } from "@/lib/voice/voice-types";
 
 export type VoiceInterpreterContext =
-  | {
-      type: "DIMENSION_CALCULATION";
-      dimensions: DimensionInputDefinition[];
-      activeDimensionKey?: string;
-    }
-  | {
-      type: "BOQ_ITEM";
-    };
+  | { type: "DIMENSION_CALCULATION"; dimensions: DimensionInputDefinition[]; activeDimensionKey?: string }
+  | { type: "BOQ_ITEM" }
+  | { type: "BOQ_SECTION" };
+
+export type VoiceAddItemDraft = {
+  description: string;
+  quantity: number;
+  unit: string;
+  itemCode?: string;
+  unitCost?: number;
+};
 
 export type VoiceCommandIntent = {
   commandType: VoiceCommandType;
-  field: "value" | "quantity" | "description" | "unit" | "notes";
+  field: "value" | "quantity" | "description" | "unit" | "notes" | "item";
   dimensionKey?: string;
   newValue: string | number;
   unit?: string;
+  itemDraft?: VoiceAddItemDraft;
   warnings: string[];
   confidence?: number;
 };
 
-/**
- * Optional second interpretation layer. A caller may inject a separately
- * approved natural-language interpreter, but this Release 1 module never
- * sends a transcript to another provider on its own. The interpreter can
- * propose intent only; it receives no database mutation capability.
- */
 export interface NaturalLanguageVoiceInterpreter {
   interpret(transcript: string, context: VoiceInterpreterContext): Promise<VoiceCommandIntent | null>;
 }
@@ -45,7 +43,7 @@ function normalizeText(value: string): string {
     .replace(/²/g, "2")
     .replace(/³/g, "3")
     .toLowerCase()
-    .replace(/[^a-z0-9.%]+/g, " ")
+    .replace(/[^a-z0-9.%/_-]+/g, " ")
     .replace(/\s+/g, " ")
     .trim();
 }
@@ -58,10 +56,17 @@ function numericValue(transcript: string): number | null {
   const connectorMatches = Array.from(transcript.matchAll(/\b(?:to|as|at|equals?)\s+(-?\d+(?:[.,]\d+)?)/gi));
   const selected = connectorMatches[connectorMatches.length - 1]?.[1];
   if (selected) return Number(selected.replace(",", "."));
-
   const all = Array.from(transcript.matchAll(/-?\d+(?:[.,]\d+)?/g));
   if (all.length !== 1) return null;
   return Number(all[0][0].replace(",", "."));
+}
+
+function labeledNumericValue(transcript: string, labels: string): number | null {
+  const match = transcript.match(
+    new RegExp(`\\b(?:${labels})\\b\\s*(?:to|as|of|at|equals?|=)?\\s*(-?\\d+(?:[.,]\\d+)?)`, "i"),
+  );
+  if (!match?.[1]) return null;
+  return Number(match[1].replace(",", "."));
 }
 
 function textAfterConnector(transcript: string): string | null {
@@ -100,11 +105,9 @@ function parseDimensionCommand(
   const explicitMatches = context.dimensions.filter((dimension) =>
     aliasesForDimension(dimension).some((alias) => normalized.includes(alias)),
   );
-
   if (explicitMatches.length > 1) {
     return { status: "ambiguous", message: "The instruction refers to more than one dimension." };
   }
-
   let dimension: DimensionInputDefinition | undefined = explicitMatches[0];
   if (!dimension && context.activeDimensionKey) {
     dimension = context.dimensions.find((candidate) => candidate.key === context.activeDimensionKey);
@@ -115,15 +118,11 @@ function parseDimensionCommand(
     }
     return { status: "unrecognized" };
   }
-
   const value = numericValue(transcript);
   if (value === null || !Number.isFinite(value)) {
     return { status: "ambiguous", message: "The instruction does not contain one clear numeric value." };
   }
-  if (value < 0) {
-    return { status: "unsupported", message: "Negative measurement values are not supported." };
-  }
-
+  if (value < 0) return { status: "unsupported", message: "Negative measurement values are not supported." };
   const suppliedUnit = spokenUnit(transcript);
   if (suppliedUnit && suppliedUnit !== dimension.unit) {
     return {
@@ -131,7 +130,6 @@ function parseDimensionCommand(
       message: `The spoken unit does not match ${dimension.label}'s required unit${dimension.unit ? ` (${dimension.unit})` : ""}.`,
     };
   }
-
   return {
     status: "matched",
     intent: {
@@ -155,17 +153,35 @@ const BOQ_FIELD_COMMANDS = {
 
 function parseBoqCommand(transcript: string): DeterministicResult {
   const normalized = normalizeText(transcript);
-  if (/\b(?:delete|remove|move|lock|approve|issue|specification|allowance|deduction)\b/.test(normalized)) {
-    return { status: "unsupported", message: "That voice command is not supported in Release 1." };
+
+  if (
+    /\b(?:delete|remove)(?:\s+(?:this|the))?(?:\s+boq)?\s+item\b/.test(normalized)
+    || /\b(?:delete|remove)\s+this\b/.test(normalized)
+  ) {
+    return {
+      status: "matched",
+      intent: {
+        commandType: "DELETE_BOQ_ITEM",
+        field: "item",
+        newValue: "Deleted",
+        warnings: ["Deleting removes this item from the editable BOQ revision after confirmation."],
+        confidence: 100,
+      },
+    };
+  }
+
+  if (/\b(?:add|create|insert)\b/.test(normalized) && /\bitem\b/.test(normalized)) {
+    return { status: "unsupported", message: "Use the voice control on the target BOQ section to add a new item." };
+  }
+  if (/\b(?:move|lock|approve|issue|specification|allowance|deduction)\b/.test(normalized)) {
+    return { status: "unsupported", message: "That voice command is not supported in this workflow." };
   }
 
   const fields = (Object.keys(BOQ_FIELD_COMMANDS) as Array<keyof typeof BOQ_FIELD_COMMANDS>).filter((field) => {
     if (field === "notes") return /\bnotes?\b/.test(normalized);
     return new RegExp(`\\b${field}\\b`).test(normalized);
   });
-  if (fields.length > 1) {
-    return { status: "ambiguous", message: "The instruction refers to more than one BOQ field." };
-  }
+  if (fields.length > 1) return { status: "ambiguous", message: "The instruction refers to more than one BOQ field." };
   if (fields.length === 0) {
     if (/\b(?:change|set|update|make)\b/.test(normalized)) {
       return { status: "ambiguous", message: "The instruction does not identify a supported BOQ field." };
@@ -202,9 +218,7 @@ function parseBoqCommand(transcript: string): DeterministicResult {
   }
 
   const value = textAfterConnector(transcript);
-  if (value === null) {
-    return { status: "ambiguous", message: `The instruction does not provide a clear new ${field}.` };
-  }
+  if (value === null) return { status: "ambiguous", message: `The instruction does not provide a clear new ${field}.` };
   const normalizedValue = field === "unit" ? spokenUnit(value) ?? value.trim() : value.trim();
   return {
     status: "matched",
@@ -218,15 +232,81 @@ function parseBoqCommand(transcript: string): DeterministicResult {
   };
 }
 
+function extractAddItemDescription(transcript: string): string | null {
+  const explicit = transcript.match(
+    /\bdescription\b\s*(?:to|as|is|=)?\s*["']?(.+?)["']?(?=\s+\b(?:quantity|qty|unit\s+cost|rate|cost|unit|code)\b|$)/i,
+  );
+  if (explicit?.[1]?.trim()) return explicit[1].trim();
+  const afterItem = transcript.match(
+    /\b(?:add|create|insert)\s+(?:(?:a|an|new)\s+)?(?:boq\s+)?item\b\s*(?:called|named|for)?\s*["']?(.+?)["']?(?=\s+\b(?:quantity|qty|unit\s+cost|rate|cost|unit|code)\b|$)/i,
+  );
+  return afterItem?.[1]?.trim() || null;
+}
+
+function extractItemCode(transcript: string): string | null {
+  const match = transcript.match(/\bcode\b\s*(?:to|as|is|=)?\s*([A-Za-z0-9][A-Za-z0-9._/-]{0,99})/i);
+  return match?.[1]?.trim() || null;
+}
+
+function parseBoqSectionCommand(transcript: string): DeterministicResult {
+  const normalized = normalizeText(transcript);
+  if (!/\b(?:add|create|insert)\b/.test(normalized) || !/\bitem\b/.test(normalized)) {
+    if (/\b(?:delete|remove|change|set|update)\b/.test(normalized)) {
+      return { status: "unsupported", message: "Use an individual BOQ item's voice control to change or delete that item." };
+    }
+    return { status: "unrecognized" };
+  }
+
+  const description = extractAddItemDescription(transcript);
+  if (!description) return { status: "ambiguous", message: "Say the new item's description after “add item” or “description”." };
+
+  const quantity = labeledNumericValue(transcript, "quantity|qty");
+  if (quantity === null || !Number.isFinite(quantity) || quantity <= 0) {
+    return { status: "ambiguous", message: "The new item needs one explicit positive quantity." };
+  }
+
+  const unit = spokenUnit(transcript);
+  if (!unit) {
+    return { status: "ambiguous", message: "The new item needs a supported unit such as m, m2, m3, kg, nr, or percent." };
+  }
+
+  const unitCost = labeledNumericValue(transcript, "unit\\s+cost|rate|cost");
+  if (unitCost !== null && (!Number.isFinite(unitCost) || unitCost < 0)) {
+    return { status: "ambiguous", message: "The spoken unit cost/rate is not valid." };
+  }
+
+  const itemCode = extractItemCode(transcript);
+  return {
+    status: "matched",
+    intent: {
+      commandType: "ADD_BOQ_ITEM",
+      field: "item",
+      newValue: description,
+      itemDraft: {
+        description,
+        quantity,
+        unit,
+        ...(itemCode ? { itemCode } : {}),
+        ...(unitCost !== null ? { unitCost } : {}),
+      },
+      warnings: [
+        ...(itemCode ? [] : ["No item code was spoken; Quantara will generate a draft voice item code for review."]),
+        ...(unitCost === null ? ["No unit cost/rate was spoken; the draft item will use 0 until professionally reviewed."] : []),
+      ],
+      confidence: 100,
+    },
+  };
+}
+
 export function interpretVoiceCommandDeterministically(
   transcript: string,
   context: VoiceInterpreterContext,
 ): DeterministicResult {
   const normalized = normalizeText(transcript);
   if (!normalized) return { status: "ambiguous", message: "The voice instruction is empty." };
-  return context.type === "DIMENSION_CALCULATION"
-    ? parseDimensionCommand(transcript, context)
-    : parseBoqCommand(transcript);
+  if (context.type === "DIMENSION_CALCULATION") return parseDimensionCommand(transcript, context);
+  if (context.type === "BOQ_SECTION") return parseBoqSectionCommand(transcript);
+  return parseBoqCommand(transcript);
 }
 
 function validateOptionalIntent(intent: VoiceCommandIntent, context: VoiceInterpreterContext): VoiceCommandIntent {
@@ -244,15 +324,35 @@ function validateOptionalIntent(intent: VoiceCommandIntent, context: VoiceInterp
     return intent;
   }
 
+  if (context.type === "BOQ_SECTION") {
+    if (
+      intent.commandType !== "ADD_BOQ_ITEM"
+      || intent.field !== "item"
+      || !intent.itemDraft
+      || !intent.itemDraft.description.trim()
+      || !Number.isFinite(intent.itemDraft.quantity)
+      || intent.itemDraft.quantity <= 0
+      || !intent.itemDraft.unit.trim()
+    ) {
+      throw new AppError("VOICE_COMMAND_NOT_SUPPORTED", "That add-item voice command is not valid for this BOQ section.", 400);
+    }
+    return intent;
+  }
+
+  if (intent.commandType === "DELETE_BOQ_ITEM") {
+    if (intent.field !== "item") throw new AppError("VOICE_COMMAND_AMBIGUOUS", "The delete command target is inconsistent.", 422);
+    return intent;
+  }
+  if (intent.commandType === "ADD_BOQ_ITEM" || intent.commandType === "SET_DIMENSION") {
+    throw new AppError("VOICE_COMMAND_NOT_SUPPORTED", "That voice command is not supported in this context.", 400);
+  }
+
   const expectedFieldByCommand = {
     SET_BOQ_QUANTITY: "quantity",
     SET_BOQ_DESCRIPTION: "description",
     SET_BOQ_UNIT: "unit",
     SET_BOQ_NOTES: "notes",
   } as const;
-  if (intent.commandType === "SET_DIMENSION") {
-    throw new AppError("VOICE_COMMAND_NOT_SUPPORTED", "That voice command is not supported in this context.", 400);
-  }
   if (intent.field !== expectedFieldByCommand[intent.commandType]) {
     throw new AppError("VOICE_COMMAND_AMBIGUOUS", "The interpreted command field is inconsistent.", 422);
   }
@@ -266,16 +366,12 @@ export async function interpretVoiceCommand(
 ): Promise<VoiceCommandIntent> {
   const deterministic = interpretVoiceCommandDeterministically(transcript, context);
   if (deterministic.status === "matched") return deterministic.intent;
-  if (deterministic.status === "ambiguous") {
-    throw new AppError("VOICE_COMMAND_AMBIGUOUS", deterministic.message, 422);
-  }
-  if (deterministic.status === "unsupported") {
-    throw new AppError("VOICE_COMMAND_NOT_SUPPORTED", deterministic.message, 400);
-  }
+  if (deterministic.status === "ambiguous") throw new AppError("VOICE_COMMAND_AMBIGUOUS", deterministic.message, 422);
+  if (deterministic.status === "unsupported") throw new AppError("VOICE_COMMAND_NOT_SUPPORTED", deterministic.message, 400);
 
   if (optionalInterpreter) {
     const intent = await optionalInterpreter.interpret(transcript, context);
     if (intent) return validateOptionalIntent(intent, context);
   }
-  throw new AppError("VOICE_COMMAND_NOT_SUPPORTED", "That voice command is not supported in Release 1.", 400);
+  throw new AppError("VOICE_COMMAND_NOT_SUPPORTED", "That voice command is not supported in this workflow.", 400);
 }

@@ -6,7 +6,10 @@ import { parseStructuralScheduleTextFallback } from "./pdf-text-schedule-fallbac
 export type PdfExtractionResult = {
   tables: ParsedTable[];
   hasTextLayer: boolean;
+  /** Every text page for which no schedule table was recovered. */
   skippedTablePages: number[];
+  /** Subset of skippedTablePages where pdf-parse threw the known incomplete-grid geometry error. */
+  geometryFailedPages: number[];
   textFallbackPages: number[];
 };
 
@@ -26,12 +29,14 @@ export async function parsePdfTables(buffer: Buffer): Promise<PdfExtractionResul
         tables: [],
         hasTextLayer: false,
         skippedTablePages: [],
+        geometryFailedPages: [],
         textFallbackPages: [],
       };
     }
 
     const tables: ParsedTable[] = [];
     const skippedTablePages: number[] = [];
+    const geometryFailedPages: number[] = [];
     const textFallbackPages: number[] = [];
 
     for (const textPage of pagesWithText) {
@@ -49,6 +54,7 @@ export async function parsePdfTables(buffer: Buffer): Promise<PdfExtractionResul
       } catch (error) {
         if (!isKnownPdfTableGeometryError(error)) throw error;
         geometryFailed = true;
+        geometryFailedPages.push(textPage.num);
       }
 
       if (geometryFailed || tables.length === beforePageCount) {
@@ -56,7 +62,10 @@ export async function parsePdfTables(buffer: Buffer): Promise<PdfExtractionResul
         if (fallback.length > 0) {
           tables.push(...fallback);
           textFallbackPages.push(textPage.num);
-        } else if (geometryFailed) {
+        } else {
+          // Record every page where neither vector-grid extraction nor the safe
+          // structural text fallback recovered a table. geometryFailedPages
+          // separately distinguishes a parser failure from a normal non-table page.
           skippedTablePages.push(textPage.num);
         }
       }
@@ -66,6 +75,7 @@ export async function parsePdfTables(buffer: Buffer): Promise<PdfExtractionResul
       tables,
       hasTextLayer: true,
       skippedTablePages,
+      geometryFailedPages,
       textFallbackPages,
     };
   } finally {

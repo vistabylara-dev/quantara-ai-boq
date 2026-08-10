@@ -38,7 +38,10 @@ describe("Release integrity recovery", () => {
     try {
       const result = await parsePdfTables(buffer);
       expect(result.hasTextLayer).toBe(true);
-      expect(result.skippedTablePages).toEqual([1]);
+      // Page 1 is a real geometry failure; page 2 simply has no table.
+      // Both are recorded as pages with no recovered table, but only page 1 is a parser failure.
+      expect(result.skippedTablePages).toEqual([1, 2]);
+      expect(result.geometryFailedPages).toEqual([1]);
       expect(result.tables).toEqual([]);
       expect(visitedPages).toEqual([1, 2]);
     } finally {

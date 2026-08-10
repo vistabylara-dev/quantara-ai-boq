@@ -35,6 +35,7 @@ extractionJobQueue.registerHandler(ExtractionEngineType.TABLE_EXTRACTION, async 
   let parsedTables: ParsedTable[];
   let noTextLayerMessage: string | null = null;
   let skippedTablePages: number[] = [];
+  let geometryFailedPages: number[] = [];
   let textFallbackPages: number[] = [];
 
   await ctx.updateProgress(35, file.extension === "pdf" ? "detecting schedule-table grids" : "parsing structured table");
@@ -50,6 +51,7 @@ extractionJobQueue.registerHandler(ExtractionEngineType.TABLE_EXTRACTION, async 
       const result = await parsePdfTables(buffer);
       parsedTables = result.tables;
       skippedTablePages = result.skippedTablePages;
+      geometryFailedPages = result.geometryFailedPages;
       textFallbackPages = result.textFallbackPages;
       if (!result.hasTextLayer) {
         noTextLayerMessage = "This PDF has no extractable text layer (likely a scanned image). OCR-based extraction is not yet available — upload a text-based PDF, or CSV/XLSX for structured extraction.";
@@ -64,16 +66,17 @@ extractionJobQueue.registerHandler(ExtractionEngineType.TABLE_EXTRACTION, async 
     return { status: ExtractionJobStatus.NEEDS_REVIEW, resultSummary: { message: noTextLayerMessage, tablesFound: 0 } };
   }
 
-  if (parsedTables.length === 0 && skippedTablePages.length > 0) {
+  if (parsedTables.length === 0 && geometryFailedPages.length > 0) {
     return {
       status: ExtractionJobStatus.NEEDS_REVIEW,
       resultSummary: {
         message:
-          `Schedule-table grid geometry on page(s) ${skippedTablePages.join(", ")} could not be safely reconstructed. `
+          `Schedule-table grid geometry on page(s) ${geometryFailedPages.join(", ")} could not be safely reconstructed. `
           + "Those pages were not converted into BOQ candidates; review the rendered pages or provide a structured CSV/XLSX schedule.",
         warningCode: "PDF_TABLE_GEOMETRY_UNSUPPORTED",
         tablesFound: 0,
         skippedTablePages,
+        geometryFailedPages,
       },
     };
   }
@@ -107,11 +110,14 @@ extractionJobQueue.registerHandler(ExtractionEngineType.TABLE_EXTRACTION, async 
       rowsConsidered: bridgeResult.rowsConsidered,
       candidatesCreated: bridgeResult.candidatesCreated,
       ...(skippedTablePages.length > 0
+        ? { pagesWithoutRecoveredTables: skippedTablePages }
+        : {}),
+      ...(geometryFailedPages.length > 0
         ? {
-            skippedTablePages,
+            geometryFailedPages,
             warningCode: "PDF_TABLE_GEOMETRY_UNSUPPORTED",
             message:
-              `Reliable tables were captured from supported pages. Page(s) ${skippedTablePages.join(", ")} contained `
+              `Reliable tables were captured from supported pages. Page(s) ${geometryFailedPages.join(", ")} contained `
               + "grid geometry that could not be safely reconstructed and had no safe structural text fallback.",
           }
         : {}),

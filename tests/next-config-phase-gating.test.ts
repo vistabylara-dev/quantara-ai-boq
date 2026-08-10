@@ -56,4 +56,38 @@ describe("next.config.mjs phase gating", () => {
       serverExternalPackages: ["pdfkit", "pdf-parse", "pdfjs-dist"],
     });
   });
+
+  it("ships the complete PDF runtime for table extraction without coupling it to screenshot preprocessing", async () => {
+    const buildConfig = await nextConfigFn(PHASE_PRODUCTION_BUILD);
+    const tracing = buildConfig.outputFileTracingIncludes as Record<string, string[]>;
+
+    const requiredPdfRuntime = [
+      "./node_modules/@napi-rs/canvas/**",
+      "./node_modules/@napi-rs/canvas-linux-x64-gnu/**",
+      "./node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs",
+    ];
+
+    expect(tracing["/api/files/[fileId]/extract"]).toEqual(
+      expect.arrayContaining(requiredPdfRuntime),
+    );
+
+    // The already-working screenshot/preprocessing route must retain the same
+    // production runtime dependencies.
+    expect(tracing["/api/files/[fileId]/preprocess"]).toEqual(
+      expect.arrayContaining(requiredPdfRuntime),
+    );
+
+    const { readFile } = await import("node:fs/promises");
+    const serviceSource = await readFile(
+      new URL("../src/lib/services/table-extraction-service.ts", import.meta.url),
+      "utf8",
+    );
+
+    expect(serviceSource).toContain(
+      'from "@/lib/files/table-extraction-handler"',
+    );
+    expect(serviceSource).not.toContain(
+      'import "@/lib/jobs/register-handlers"',
+    );
+  });
 });

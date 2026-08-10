@@ -6,7 +6,6 @@ import { getProjectFileRecord } from "@/lib/repositories/project-file-repository
 import { listExtractedTablesForFile as listExtractedTablesForFileRepo, toExtractedTableDTO } from "@/lib/repositories/extracted-table-repository";
 import { toExtractionJobDTO } from "@/lib/repositories/extraction-job-repository";
 import { createAuditLog } from "@/lib/repositories/audit-repository";
-import "@/lib/jobs/register-handlers";
 import { extractionJobQueue } from "@/lib/jobs/extraction-worker";
 import { TABLE_EXTRACTABLE_EXTENSIONS } from "@/lib/files/table-extraction-handler";
 

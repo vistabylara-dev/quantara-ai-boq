@@ -272,8 +272,10 @@ export default function ProjectBOQPage(props: PageProps) {
 
   const activeRevision = useMemo(() => activeBoq ?? revisions[0] ?? null, [activeBoq, revisions]);
 
+  const activeRevisionId = activeRevision?.id ?? null;
+
   useEffect(() => {
-    if (!activeRevision) {
+    if (!activeRevisionId) {
       setValidationWarningCount(null);
       setValidationPreviewError(null);
       return;
@@ -285,7 +287,7 @@ export default function ProjectBOQPage(props: PageProps) {
 
     apiClient
       .get<{ code: string }[]>(
-        `/api/boqs/${encodeURIComponent(activeRevision.id)}/validation-preview`,
+        `/api/boqs/${encodeURIComponent(activeRevisionId)}/validation-preview`,
         controller.signal,
       )
       .then((warnings) => {
@@ -301,7 +303,7 @@ export default function ProjectBOQPage(props: PageProps) {
       });
 
     return () => controller.abort();
-  }, [activeRevision]);
+  }, [activeRevisionId]);
 
   const boqItemCount = useMemo(
     () => (activeRevision ? activeRevision.sections.reduce((sum, section) => sum + section.items.length, 0) : 0),

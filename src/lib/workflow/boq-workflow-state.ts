@@ -122,17 +122,19 @@ export function computeBoqWorkflowState(
       && acceptedEntityIds.has(calculation.extractedEntityId),
   );
 
-  const confirmedCalculations = nonRejectedCalculations.filter(
-    (calculation) => calculation.status === "CONFIRMED",
+  // A calculation is workflow-relevant only when it is a deliberate manual
+  // project calculation (no extractedEntityId) or belongs to professionally
+  // accepted extracted evidence. Calculations attached to rejected/unaccepted
+  // entities must not keep the workflow permanently blocked.
+  const relevantNonRejectedCalculations = nonRejectedCalculations.filter(
+    (calculation) =>
+      calculation.extractedEntityId === null
+      || acceptedEntityIds.has(calculation.extractedEntityId),
   );
 
-  const relevantConfirmedCalculations = acceptedEntities.length > 0
-    ? confirmedCalculations.filter(
-        (calculation) =>
-          calculation.extractedEntityId !== null
-          && acceptedEntityIds.has(calculation.extractedEntityId),
-      )
-    : confirmedCalculations;
+  const relevantConfirmedCalculations = relevantNonRejectedCalculations.filter(
+    (calculation) => calculation.status === "CONFIRMED",
+  );
 
   const entitiesMissingDimensions = acceptedEntities.filter((entity) => {
     if (hasUsableDirectReviewedQuantity(entity)) return false;
@@ -142,7 +144,7 @@ export function computeBoqWorkflowState(
     );
   });
 
-  const unconfirmedCalculations = nonRejectedCalculations.filter(
+  const unconfirmedCalculations = relevantNonRejectedCalculations.filter(
     (calculation) => calculation.status !== "CONFIRMED",
   );
 

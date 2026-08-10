@@ -1,22 +1,13 @@
 import type { CurrentActor } from "@/lib/auth/current-actor";
-import { getBOQ } from "@/lib/repositories/boq-repository";
+import { getBOQRecord } from "@/lib/repositories/boq-repository";
 import { listQuantityCalculationsForProject } from "@/lib/repositories/quantity-calculation-repository";
 import { listExtractedEntities } from "@/lib/repositories/extracted-entity-repository";
 
 /**
- * Guided BOQ measurement workflow (Release 1), spec section 12 — a
- * read-only PREVIEW of the same structural checks lockBOQ (boq-repository.ts)
- * already enforces at lock time, so the professional can see and act on
- * warnings before attempting to lock, instead of only discovering them from
- * a rejected lock request. This never blocks anything itself and never
- * duplicates lockBOQ's actual enforcement — lockBOQ remains the sole
- * authority at commit time; this is purely advisory.
- *
- * Per spec: a manual item with a professionally entered quantity and no
- * QuantityCalculation is fully legitimate and must never be flagged merely
- * for lacking a calculation link.
+ * Read-only validation preview using the canonical BOQ database record.
+ * The frontend BOQ DTO intentionally exposes projectId as the project slug
+ * for routing, while project-scoped calculation/extraction columns are UUIDs.
  */
-
 export type ValidationWarning = {
   code: string;
   severity: "warning" | "info";
@@ -25,7 +16,7 @@ export type ValidationWarning = {
 };
 
 export async function previewBoqValidation(actor: CurrentActor, boqId: string): Promise<ValidationWarning[]> {
-  const boq = await getBOQ(actor.companyId, boqId);
+  const boq = await getBOQRecord(actor.companyId, boqId);
   const warnings: ValidationWarning[] = [];
 
   for (const section of boq.sections) {
@@ -36,10 +27,10 @@ export async function previewBoqValidation(actor: CurrentActor, boqId: string): 
       if (!item.unit || !item.unit.trim()) {
         warnings.push({ code: "MISSING_UNIT", severity: "warning", message: `Item ${item.itemCode || item.itemNumber}: unit is missing.`, itemId: item.id });
       }
-      if (!(item.quantity > 0)) {
+      if (item.quantity.toNumber() <= 0) {
         warnings.push({ code: "INVALID_QUANTITY", severity: "warning", message: `Item ${item.itemCode || item.itemNumber}: quantity must be greater than zero.`, itemId: item.id });
       }
-      if (item.unitCost < 0) {
+      if (item.unitCost.toNumber() < 0) {
         warnings.push({ code: "INVALID_RATE", severity: "warning", message: `Item ${item.itemCode || item.itemNumber}: unit cost cannot be negative.`, itemId: item.id });
       }
     }

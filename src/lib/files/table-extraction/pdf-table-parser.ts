@@ -11,6 +11,12 @@ const CONFIDENCE = 65;
 export type PdfExtractionResult = {
   tables: ParsedTable[];
   hasTextLayer: boolean;
+  /**
+   * Pages whose vector grid could not be safely reconstructed by pdf-parse.
+   * They are quarantined rather than failing the whole source or being
+   * misreported as "no tables".
+   */
+  skippedTablePages: number[];
 };
 
 function tableArrayToParsedTable(rows: string[][], pageNumber: number, tableIndex: number): ParsedTable | null {
@@ -42,36 +48,54 @@ function tableArrayToParsedTable(rows: string[][], pageNumber: number, tableInde
 }
 
 /**
+ * pdf-parse 2.4.5's vector-grid reconstruction can dereference a missing
+ * bottom grid line (`.from`) when a real construction drawing contains an
+ * incomplete/intersecting grid. Quarantine only this exact upstream defect;
+ * every other parser/runtime error must still fail loudly.
+ */
+function isKnownPdfTableGeometryError(error: unknown): boolean {
+  return error instanceof TypeError
+    && error.message === "Cannot read properties of undefined (reading 'from')";
+}
+
+/**
  * Detects real bordered/grid tables in a PDF (vector line/rectangle drawing
- * operators, matched to positioned text — pdf-parse's own PDFParse.getTable()).
+ * operators, matched to positioned text — pdf-parse's PDFParse.getTable()).
  * Plain text-aligned tables with no visible borders are not detected by
  * this method and are honestly reported as "no tabular structure found"
- * rather than guessed at — a whitespace-position heuristic for that case
- * proved unreliable across the PDF-generation tools available for testing
- * this and was deliberately not shipped (see pdf-table-parser.test notes).
+ * rather than guessed at.
+ *
+ * Detection is page-scoped so one malformed drawing grid cannot erase
+ * reliable tables captured from another page or fail the whole source.
  */
 export async function parsePdfTables(buffer: Buffer): Promise<PdfExtractionResult> {
   const parser = new PDFParse({ data: buffer });
   try {
-    // pageJoiner defaults to a non-empty "-- page N of M --" marker per page, which would make
-    // an otherwise-blank/textless page's concatenated text non-empty; disabling it keeps this
-    // check honest.
     const textResult = await parser.getText({ pageJoiner: "" });
-    const hasTextLayer = textResult.text.trim().length > 0;
-    if (!hasTextLayer) {
-      return { tables: [], hasTextLayer: false };
+    const pagesWithText = textResult.pages.filter((page) => page.text.trim().length > 0);
+    if (pagesWithText.length === 0) {
+      return { tables: [], hasTextLayer: false, skippedTablePages: [] };
     }
 
-    const tableResult = await parser.getTable();
     const tables: ParsedTable[] = [];
-    for (const page of tableResult.pages) {
-      page.tables.forEach((tableArray, tableIndex) => {
-        const parsed = tableArrayToParsedTable(tableArray, page.num, tableIndex);
-        if (parsed) tables.push(parsed);
-      });
+    const skippedTablePages: number[] = [];
+
+    for (const textPage of pagesWithText) {
+      try {
+        const tableResult = await parser.getTable({ partial: [textPage.num] });
+        for (const page of tableResult.pages) {
+          page.tables.forEach((tableArray, tableIndex) => {
+            const parsed = tableArrayToParsedTable(tableArray, page.num, tableIndex);
+            if (parsed) tables.push(parsed);
+          });
+        }
+      } catch (error) {
+        if (!isKnownPdfTableGeometryError(error)) throw error;
+        skippedTablePages.push(textPage.num);
+      }
     }
 
-    return { tables, hasTextLayer: true };
+    return { tables, hasTextLayer: true, skippedTablePages };
   } finally {
     await parser.destroy();
   }

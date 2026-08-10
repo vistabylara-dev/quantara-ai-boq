@@ -12,11 +12,8 @@ import { parsePdfTables } from "./table-extraction/pdf-table-parser";
 import { inferTableType } from "./table-extraction/infer-table-type";
 import type { ParsedTable } from "./table-extraction/types";
 
-// Kept as a re-export for existing imports, but the capability list itself
-// lives in a side-effect-free module.
 export { TABLE_EXTRACTABLE_EXTENSIONS } from "./table-extraction/constants";
 
-/** Was hardcoded to the local-filesystem adapter — see preprocessing-handler.ts for the same production fix. */
 let cachedStorageAdapter: DocumentStorageAdapter | null = null;
 function getProjectFileStorageAdapter(): DocumentStorageAdapter {
   if (!cachedStorageAdapter) {
@@ -28,9 +25,6 @@ function getProjectFileStorageAdapter(): DocumentStorageAdapter {
 extractionJobQueue.registerHandler(ExtractionEngineType.TABLE_EXTRACTION, async (job, ctx) => {
   const file = await prisma.projectFile.findUniqueOrThrow({ where: { id: job.projectFileId } });
 
-  // A reviewed row (legacy per-row review path) OR a reviewed TABLE_PARSER candidate (the
-  // structured source → review-candidate bridge) both mean this file's tables must not be
-  // silently replaced — a reviewed candidate's source table/row must never disappear under it.
   if ((await hasReviewedRows(job.companyId, job.projectFileId)) || (await hasReviewedTableDerivedCandidates(job.companyId, job.projectFileId))) {
     return { status: ExtractionJobStatus.COMPLETED, resultSummary: { skipped: true, reason: "Reviewed rows or review candidates already exist for this file; re-extraction was skipped to avoid discarding confirmed work." } };
   }
@@ -40,6 +34,9 @@ extractionJobQueue.registerHandler(ExtractionEngineType.TABLE_EXTRACTION, async 
 
   let parsedTables: ParsedTable[];
   let noTextLayerMessage: string | null = null;
+  let skippedTablePages: number[] = [];
+
+  await ctx.updateProgress(35, file.extension === "pdf" ? "detecting schedule-table grids" : "parsing structured table");
 
   switch (file.extension) {
     case "csv":
@@ -51,6 +48,7 @@ extractionJobQueue.registerHandler(ExtractionEngineType.TABLE_EXTRACTION, async 
     case "pdf": {
       const result = await parsePdfTables(buffer);
       parsedTables = result.tables;
+      skippedTablePages = result.skippedTablePages;
       if (!result.hasTextLayer) {
         noTextLayerMessage = "This PDF has no extractable text layer (likely a scanned image). OCR-based extraction is not yet available — upload a text-based PDF, or CSV/XLSX for structured extraction.";
       }
@@ -64,21 +62,31 @@ extractionJobQueue.registerHandler(ExtractionEngineType.TABLE_EXTRACTION, async 
     return { status: ExtractionJobStatus.NEEDS_REVIEW, resultSummary: { message: noTextLayerMessage, tablesFound: 0 } };
   }
 
+  if (parsedTables.length === 0 && skippedTablePages.length > 0) {
+    return {
+      status: ExtractionJobStatus.NEEDS_REVIEW,
+      resultSummary: {
+        message:
+          `Schedule-table grid geometry on page(s) ${skippedTablePages.join(", ")} could not be safely reconstructed. `
+          + "Those pages were not converted into BOQ candidates; review the rendered pages or provide a structured CSV/XLSX schedule.",
+        warningCode: "PDF_TABLE_GEOMETRY_UNSUPPORTED",
+        tablesFound: 0,
+        skippedTablePages,
+      },
+    };
+  }
+
   await ctx.updateProgress(60, "storing extracted tables");
 
   if (parsedTables.length === 0) {
-    return { resultSummary: { tablesFound: 0, message: "No tabular structure was found in this file." } };
+    return { resultSummary: { tablesFound: 0, message: "No supported bordered schedule-table structure was found in this file." } };
   }
 
   const tableType = inferTableType(file.classification);
   const createdTableIds = await replaceExtractedTablesForFile(job.companyId, job.projectFileId, parsedTables, tableType);
-
-  // PDF-derived tables are a best-effort heuristic (no real layout coordinates) — never let them land as auto-confirmable; force review regardless of confidence.
   const status = file.extension === "pdf" ? ExtractionJobStatus.NEEDS_REVIEW : ExtractionJobStatus.COMPLETED;
 
   await ctx.updateProgress(80, "generating review candidates");
-  // job.projectId is always the canonical project UUID (every enqueue call resolves it before
-  // creating the job), so this always resolves immediately — never fails on a fresh table set.
   const bridgeResult = await generateCandidatesFromStructuredTables({
     companyId: job.companyId,
     projectId: job.projectId,
@@ -96,6 +104,15 @@ extractionJobQueue.registerHandler(ExtractionEngineType.TABLE_EXTRACTION, async 
       tablesConsidered: bridgeResult.tablesConsidered,
       rowsConsidered: bridgeResult.rowsConsidered,
       candidatesCreated: bridgeResult.candidatesCreated,
+      ...(skippedTablePages.length > 0
+        ? {
+            skippedTablePages,
+            warningCode: "PDF_TABLE_GEOMETRY_UNSUPPORTED",
+            message:
+              `Reliable tables were captured from supported pages. Page(s) ${skippedTablePages.join(", ")} contained `
+              + "grid geometry that could not be safely reconstructed and were not converted into candidates.",
+          }
+        : {}),
       ...(bridgeResult.status === "skipped"
         ? { candidateGenerationSkipped: true, candidateGenerationSkippedReason: bridgeResult.reason }
         : {}),

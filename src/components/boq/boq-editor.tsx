@@ -1,6 +1,7 @@
 "use client";
 
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Mic } from "lucide-react";
 import type { BOQ, BOQItem, BOQSection } from "@/types/boq";
 import {
   calculateEditableBOQItem,
@@ -360,6 +361,10 @@ export default function BoqEditor({
         <div className="rounded-[32px] border border-slate-800 bg-slate-950 p-12 text-center">
           <p className="text-xl font-semibold text-white">No items have been added to this BOQ yet.</p>
           <p className="mt-2 text-slate-400">Start building your Bill of Quantities to calculate totals.</p>
+          <div className="mx-auto mt-4 flex max-w-xl items-center justify-center gap-2 rounded-2xl border border-blue-900/60 bg-blue-950/20 px-4 py-3 text-sm text-blue-200">
+            <Mic className="h-4 w-4 shrink-0" aria-hidden="true" />
+            <span>Voice becomes available as soon as you add and save a BOQ item.</span>
+          </div>
           
           {!isReadOnly && (
             <div className="mt-8 flex flex-wrap justify-center gap-4">
@@ -548,8 +553,7 @@ export default function BoqEditor({
                               Apply rate
                             </button>
                           )}
-                          {isPersistedItemId(item.id) ? (
-                            <VoiceCommandButton
+                          <VoiceCommandButton
                               ref={(element) => {
                                 if (element) voiceButtonRefs.current.set(item.id, element);
                                 else voiceButtonRefs.current.delete(item.id);
@@ -561,7 +565,8 @@ export default function BoqEditor({
                                 setVoiceBusyItemId((current) => busy ? item.id : current === item.id ? null : current);
                               }}
                               disabled={
-                                isReadOnly
+                                !isPersistedItemId(item.id)
+                                || isReadOnly
                                 || actionPending
                                 || hasUnsavedChanges
                                 || !onVoiceApplied
@@ -570,8 +575,10 @@ export default function BoqEditor({
                                 || (voiceBusyItemId !== null && voiceBusyItemId !== item.id)
                               }
                               disabledReason={
-                                isReadOnly
-                                  ? "This BOQ revision is read-only."
+                                !isPersistedItemId(item.id)
+                                  ? "Save this BOQ item before using voice."
+                                  : isReadOnly
+                                    ? "This BOQ revision is read-only."
                                   : hasUnsavedChanges
                                     ? "Save the draft before using voice so the saved old value can be verified."
                                     : pendingVoiceProposal
@@ -580,10 +587,8 @@ export default function BoqEditor({
                                         ? "Wait for the current BOQ action to finish."
                                         : "Voice updates are not available for this item."
                               }
-                              compact
                               ariaLabel={`Record a voice instruction for BOQ item ${item.itemNumber}`}
                             />
-                          ) : null}
                           <button
                             type="button"
                             onClick={() => deleteItem(section.id, item.id)}

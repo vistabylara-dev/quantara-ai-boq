@@ -91,7 +91,7 @@ describe("Release 1 voice command UI", () => {
     expect(button).not.toMatch(/localStorage|sessionStorage|createObjectURL/);
   });
 
-  it("only offers BOQ voice on persisted rows and requires an explicit governed apply confirmation", () => {
+  it("only enables BOQ voice on persisted rows and requires an explicit governed apply confirmation", () => {
     expect(isPersistedItemId("4d675343-6e22-4786-92e5-c68ab3d1a4c2")).toBe(true);
     expect(isPersistedItemId("section-item-1234")).toBe(false);
     expect(getVoiceBOQFieldLabel("quantity")).toBe("Quantity");
@@ -104,6 +104,19 @@ describe("Release 1 voice command UI", () => {
     expect(editor).toContain("/voice/apply");
     expect(editor).toContain("{ confirmed: true, proposal: pendingVoiceProposal.proposal }");
     expect(editor).toContain("onVoiceApplied(updated)");
+  });
+
+  it("keeps voice discoverable before it is safe to use", () => {
+    const editor = source("src/components/boq/boq-editor.tsx");
+    expect(editor).toContain("Voice becomes available as soon as you add and save a BOQ item.");
+    expect(editor).toContain("Save this BOQ item before using voice.");
+    expect(editor).toContain("!isPersistedItemId(item.id)");
+    expect(editor).not.toContain("\n                              compact\n");
+
+    const addItemModal = source("src/components/boq/add-item-from-source-modal.tsx");
+    expect(addItemModal).toContain(
+      "Voice input appears inside the measurement panel after you select a supported calculation type.",
+    );
   });
 
   it("renders explicit old-to-new values and advertises voice only as a supported input method", () => {

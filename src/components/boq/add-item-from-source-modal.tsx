@@ -240,6 +240,10 @@ export default function AddItemFromSourceModal({ projectId, boqId, sections, nex
               Add measurement calculation
             </label>
 
+            <p className="text-xs text-slate-500">
+              Voice input appears inside the measurement panel after you select a supported calculation type.
+            </p>
+
             {useMeasurementCalculation && (
               <div className="space-y-3 rounded-2xl border border-slate-800 bg-slate-900/50 p-4">
                 <label className="block text-sm text-slate-300">

@@ -17,7 +17,8 @@ import {
 } from "@/lib/repositories/commerce-provider-mapping-repository";
 import { completeSyncRun, createSyncRun, listSyncRuns, toSyncRunDTO } from "@/lib/repositories/commerce-sync-run-repository";
 import type { PlatformRequestMetadata } from "@/lib/repositories/platform-admin-repository";
-import { classifyPriceEligibility, computeCatalogueFingerprint } from "@/lib/services/stripe-sync-service";
+import { classifyPriceEligibility, computeCatalogueFingerprint, type PriceBlockedReason } from "@/lib/services/stripe-sync-service";
+import type { CommerceProductRecord } from "@/lib/repositories/commerce-product-repository";
 import type Stripe from "stripe";
 
 /**
@@ -33,16 +34,43 @@ import type Stripe from "stripe";
  * Reuses classifyPriceEligibility/computeCatalogueFingerprint (pure
  * functions, provider/environment-agnostic) and every repository function
  * (already parameterized by CommerceProviderEnvironment) from the existing
- * test-mode module — no duplicated business logic, only duplicated
- * orchestration with a different environment/role/idempotency-key
- * namespace.
+ * test-mode module — no duplicated business logic for the shared checks;
+ * classifyLiveCheckoutEligibility below only adds the *stricter* checks
+ * genuine self-checkout requires (public, SUBSCRIPTION, MONTH/YEAR) on top
+ * of it, rather than duplicating the DIRECT/APPROVED/active/amount/currency
+ * checks it already performs.
  *
  * Never promotes a price's reviewStatus — classifyPriceEligibility already
  * requires APPROVED, and this file has no code path that writes
  * CommercePrice.reviewStatus at all. Never syncs a QUOTATION_REQUIRED/
  * CONTACT_SALES product as a direct-checkout price — classifyPriceEligibility
- * requires purchaseMode === DIRECT.
+ * requires purchaseMode === DIRECT. A CommerceProduct is only ever
+ * represented as a live Stripe Product while it has at least one currently
+ * eligible price (see buildLiveSyncPlan) — an ADD_ON/ENTERPRISE/private
+ * product, or a SUBSCRIPTION product none of whose prices are eligible, is
+ * never live-synced at all, and a product that loses its last eligible
+ * price is archived on the next run.
  */
+
+export type LivePriceBlockedReason = PriceBlockedReason | "PRODUCT_NOT_PUBLIC" | "PRODUCT_NOT_SUBSCRIPTION" | "UNSUPPORTED_LIVE_INTERVAL";
+
+/**
+ * STRIPE-COMMERCIAL-7/8 — the eligibility bar for genuine customer
+ * self-checkout, stricter than the shared test-mode classifyPriceEligibility:
+ * additionally requires the product to be public (never make a hidden/
+ * private product purchasable merely by knowing its price code) and a
+ * SUBSCRIPTION-type product (one-time fulfillment does not exist yet — see
+ * commerce-checkout-service.ts), with a MONTH/YEAR billing interval only.
+ */
+export function classifyLiveCheckoutEligibility(
+  product: CommerceProductRecord,
+  price: CommerceProductRecord["prices"][number],
+): { eligible: boolean; reason?: LivePriceBlockedReason } {
+  if (!product.isPublic) return { eligible: false, reason: "PRODUCT_NOT_PUBLIC" };
+  if (product.type !== "SUBSCRIPTION") return { eligible: false, reason: "PRODUCT_NOT_SUBSCRIPTION" };
+  if (price.billingInterval === "ONE_TIME") return { eligible: false, reason: "UNSUPPORTED_LIVE_INTERVAL" };
+  return classifyPriceEligibility(product, price);
+}
 
 const PROVIDER = "STRIPE" as const;
 const ENVIRONMENT = "LIVE" as const;
@@ -85,7 +113,22 @@ function requireOwner(actor: PlatformActor): void {
 
 export type LiveSyncPlan = Awaited<ReturnType<typeof buildLiveSyncPlan>>;
 
-/** Pure computation — reads internal DB state and existing LIVE mappings only. Zero Stripe calls, so this alone is safe even before a live key is configured. */
+/**
+ * Pure computation — reads internal DB state and existing LIVE mappings
+ * only. Zero Stripe calls, so this alone is safe even before a live key is
+ * configured.
+ *
+ * STRIPE-COMMERCIAL-8 — unlike the test-mode plan (which syncs every
+ * active CommerceProduct as a Stripe Product regardless of purchase mode),
+ * a CommerceProduct here is only ever CREATE/UPDATE'd while it currently
+ * has at least one price passing classifyLiveCheckoutEligibility. A product
+ * with zero eligible prices (never had one, or its last one just became
+ * ineligible) is ARCHIVEd if it was previously mapped, or simply never
+ * synced (UNCHANGED) if it never was. This is evaluated fresh on every
+ * call, so a price that becomes ineligible after being synced (review
+ * revoked, product turned private/non-DIRECT, ...) is archived — never left
+ * representing itself as checkout-ready.
+ */
 export async function buildLiveSyncPlan() {
   const products = await listAllCommerceProductsWithPrices();
   const mappings = await listMappingsForEnvironment(PROVIDER, ENVIRONMENT);
@@ -96,35 +139,41 @@ export async function buildLiveSyncPlan() {
   const prices_: { priceId: string; code: string; productCode: string; action: "CREATE" | "ARCHIVE" | "UNCHANGED" | "BLOCKED"; blockedReason?: string }[] = [];
 
   for (const product of products) {
-    const existingMapping = productMappingByProductId.get(product.id);
-    if (product.isActive) {
-      products_.push({ productId: product.id, code: product.code, action: existingMapping ? "UPDATE" : "CREATE" });
-    } else if (existingMapping && existingMapping.providerActive) {
-      products_.push({ productId: product.id, code: product.code, action: "ARCHIVE" });
-    } else {
-      products_.push({ productId: product.id, code: product.code, action: "UNCHANGED" });
-    }
+    const priceEntries: typeof prices_ = [];
+    let hasCurrentlyEligiblePrice = false;
 
     for (const price of product.prices) {
       const existingPriceMapping = priceMappingByPriceId.get(price.id);
-      const eligibility = classifyPriceEligibility(product, price);
+      const eligibility = classifyLiveCheckoutEligibility(product, price);
+      if (eligibility.eligible) hasCurrentlyEligiblePrice = true;
 
       if (existingPriceMapping) {
-        if (!price.isActive && existingPriceMapping.providerActive) {
-          prices_.push({ priceId: price.id, code: price.code, productCode: product.code, action: "ARCHIVE" });
+        if (!eligibility.eligible && existingPriceMapping.providerActive) {
+          priceEntries.push({ priceId: price.id, code: price.code, productCode: product.code, action: "ARCHIVE" });
         } else {
-          prices_.push({ priceId: price.id, code: price.code, productCode: product.code, action: "UNCHANGED" });
+          priceEntries.push({ priceId: price.id, code: price.code, productCode: product.code, action: "UNCHANGED" });
         }
         continue;
       }
 
       if (!eligibility.eligible) {
-        prices_.push({ priceId: price.id, code: price.code, productCode: product.code, action: "BLOCKED", blockedReason: eligibility.reason });
+        priceEntries.push({ priceId: price.id, code: price.code, productCode: product.code, action: "BLOCKED", blockedReason: eligibility.reason });
         continue;
       }
 
-      prices_.push({ priceId: price.id, code: price.code, productCode: product.code, action: "CREATE" });
+      priceEntries.push({ priceId: price.id, code: price.code, productCode: product.code, action: "CREATE" });
     }
+
+    const existingProductMapping = productMappingByProductId.get(product.id);
+    if (product.isActive && hasCurrentlyEligiblePrice) {
+      products_.push({ productId: product.id, code: product.code, action: existingProductMapping ? "UPDATE" : "CREATE" });
+    } else if (existingProductMapping && existingProductMapping.providerActive) {
+      products_.push({ productId: product.id, code: product.code, action: "ARCHIVE" });
+    } else {
+      products_.push({ productId: product.id, code: product.code, action: "UNCHANGED" });
+    }
+
+    prices_.push(...priceEntries);
   }
 
   return {

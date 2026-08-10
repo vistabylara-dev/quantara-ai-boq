@@ -15,7 +15,13 @@ if (typeof window !== "undefined") {
   throw new Error("stripe-client.ts must never be imported into client-side code.");
 }
 
-const STRIPE_API_VERSION: Stripe.LatestApiVersion = "2026-07-29.dahlia";
+/**
+ * Exported so callers that must validate an inbound object's shape against
+ * this exact pin (e.g. the webhook receiver checking Stripe.Event.api_version)
+ * can compare against the single source of truth instead of hardcoding the
+ * literal a second time.
+ */
+export const STRIPE_API_VERSION: Stripe.LatestApiVersion = "2026-07-29.dahlia";
 
 export type StripeKeyClassification = "test" | "live" | "invalid";
 export type StripeConfiguredMode = "test" | "live" | "invalid";

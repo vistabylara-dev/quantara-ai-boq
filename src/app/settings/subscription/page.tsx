@@ -41,11 +41,35 @@ type PackageSubscription = {
 
 type SoftwarePlan = { id: string; key: string; name: string; description: string; planType: string; monthlyPrice: number; annualPrice: number; currency: string };
 
+type CommercePriceSummary = {
+  code: string;
+  amountMinor: number;
+  currency: string;
+  billingInterval: "ONE_TIME" | "MONTH" | "YEAR";
+  isFromPrice: boolean;
+};
+
+type CommerceProductSummary = {
+  code: string;
+  name: string;
+  shortDescription: string;
+  purchaseMode: "DIRECT" | "QUOTATION_REQUIRED" | "CONTACT_SALES";
+  prices: CommercePriceSummary[];
+};
+
+/** The three direct-checkout subscription tiers — see src/lib/entitlements/commerce-plan-mapping.ts for the matching entitlement mapping. */
+const CHECKOUT_TIER_CODES = new Set(["starter", "professional", "business"]);
+
+function formatMoney(amountMinor: number, currency: string): string {
+  return `${currency} ${(amountMinor / 100).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`;
+}
+
 export default function SubscriptionSettingsPage() {
   const [entitlements, setEntitlements] = useState<Entitlements | null>(null);
   const [trialUsage, setTrialUsage] = useState<TrialUsage>(null);
   const [packages, setPackages] = useState<PackageSubscription[]>([]);
   const [plans, setPlans] = useState<SoftwarePlan[]>([]);
+  const [checkoutProducts, setCheckoutProducts] = useState<CommerceProductSummary[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
@@ -56,14 +80,16 @@ export default function SubscriptionSettingsPage() {
     setIsLoading(true);
     setLoadError(null);
     try {
-      const [entitlementsData, plansData] = await Promise.all([
+      const [entitlementsData, plansData, commerceProducts] = await Promise.all([
         apiClient.get<{ entitlements: Entitlements; trialUsage: TrialUsage; packages: PackageSubscription[] }>("/api/entitlements", signal),
         apiClient.get<SoftwarePlan[]>("/api/software-plans", signal),
+        apiClient.get<CommerceProductSummary[]>("/api/commerce/products?type=SUBSCRIPTION", signal),
       ]);
       setEntitlements(entitlementsData.entitlements);
       setTrialUsage(entitlementsData.trialUsage);
       setPackages(entitlementsData.packages);
       setPlans(plansData);
+      setCheckoutProducts(commerceProducts.filter((product) => CHECKOUT_TIER_CODES.has(product.code) && product.purchaseMode === "DIRECT"));
     } catch (error) {
       if (error instanceof DOMException && error.name === "AbortError") return;
       setLoadError(getApiErrorMessage(error));
@@ -109,6 +135,11 @@ export default function SubscriptionSettingsPage() {
     await apiClient.post("/api/entitlements/expire-development-plan", {});
   }), [runAction]);
 
+  const checkout = useCallback((priceCode: string) => runAction(`checkout-${priceCode}`, async () => {
+    const result = await apiClient.post<{ checkoutUrl: string; checkoutSessionId: string }>("/api/commerce/checkout", { priceCode });
+    window.location.href = result.checkoutUrl;
+  }), [runAction]);
+
   if (isLoading) {
     return (
       <div className="rounded-[32px] border border-slate-800 bg-slate-950 p-8 text-slate-300">
@@ -135,7 +166,7 @@ export default function SubscriptionSettingsPage() {
         <p className="text-sm uppercase tracking-[0.28em] text-slate-500">Settings</p>
         <h1 className="mt-2 text-3xl font-semibold text-white">Subscription</h1>
         <p className="mt-2 rounded-2xl border border-amber-900 bg-amber-950/30 px-4 py-2 text-xs text-amber-300">
-          Billing is not connected in this build. All activation below is a development control, not a real payment.
+          Use &ldquo;Upgrade&rdquo; below for a real Stripe checkout. The &ldquo;Software plans (development)&rdquo; controls are a manual test control, not a real payment, and are kept only for internal testing.
         </p>
 
         <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -210,9 +241,40 @@ export default function SubscriptionSettingsPage() {
         </div>
       )}
 
+      {checkoutProducts.length > 0 && (
+        <div className="rounded-[32px] border border-slate-800 bg-slate-950 p-8">
+          <h2 className="text-xl font-semibold text-white">Upgrade</h2>
+          <p className="mt-1 text-sm text-slate-400">Real Stripe checkout — you will be redirected to a secure payment page.</p>
+          <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {checkoutProducts.map((product) => (
+              <div key={product.code} className="rounded-3xl border border-slate-800 bg-slate-900 p-5">
+                <h3 className="text-lg font-semibold text-white">{product.name}</h3>
+                <p className="mt-1 text-xs text-slate-500">{product.shortDescription}</p>
+                <div className="mt-4 space-y-2">
+                  {product.prices
+                    .filter((price) => !price.isFromPrice)
+                    .map((price) => (
+                      <button
+                        key={price.code}
+                        type="button"
+                        onClick={() => void checkout(price.code)}
+                        disabled={busyKey === `checkout-${price.code}`}
+                        className="flex w-full items-center justify-between rounded-2xl border border-slate-700 bg-blue-600 px-4 py-2 text-xs font-semibold text-white hover:bg-blue-500 disabled:opacity-50"
+                      >
+                        <span>{price.billingInterval === "MONTH" ? "Monthly" : price.billingInterval === "YEAR" ? "Annual" : "One-time"}</span>
+                        <span>{busyKey === `checkout-${price.code}` ? "Redirecting…" : formatMoney(price.amountMinor, price.currency)}</span>
+                      </button>
+                    ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       <div className="rounded-[32px] border border-slate-800 bg-slate-950 p-8">
-        <h2 className="text-xl font-semibold text-white">Software plans</h2>
-        <p className="mt-1 text-sm text-slate-400">Development activation only — no payment is processed.</p>
+        <h2 className="text-xl font-semibold text-white">Software plans (development)</h2>
+        <p className="mt-1 text-sm text-slate-400">Development activation only — no payment is processed. Use &ldquo;Upgrade&rdquo; above for a real subscription.</p>
         <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {plans.map((plan) => (
             <div key={plan.id} className="rounded-3xl border border-slate-800 bg-slate-900 p-5">

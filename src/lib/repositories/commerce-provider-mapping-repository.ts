@@ -58,6 +58,18 @@ export async function findPriceMapping(
   });
 }
 
+/** Reverse lookup for webhook processing — resolves an inbound Stripe price ID back to the internal mapping (and via it, the CommercePrice/CommerceProduct). Accepts an optional transaction client so it can run inside the same transaction as the state mutation it feeds. */
+export async function findMappingByProviderPriceId(
+  provider: CommerceProvider,
+  environment: CommerceProviderEnvironment,
+  providerPriceId: string,
+  client: { commerceProviderMapping: typeof prisma.commerceProviderMapping } = prisma,
+): Promise<CommerceProviderMapping | null> {
+  return client.commerceProviderMapping.findFirst({
+    where: { provider, environment, providerPriceId, providerObjectType: "PRICE" },
+  });
+}
+
 export async function listMappingsForEnvironment(
   provider: CommerceProvider,
   environment: CommerceProviderEnvironment,

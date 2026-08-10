@@ -177,30 +177,63 @@ async function assertNoExistingNonFinalSubscription(companyId: string): Promise<
  * are the only two genuinely terminal Stripe subscription statuses — every
  * other value (including any future status Stripe might add) is treated as
  * blocking, deliberately failing closed rather than open.
+ *
+ * STRIPE-COMMERCIAL-16 — walks every page of the customer's subscriptions
+ * rather than inspecting only the first (a customer with a long history of
+ * canceled subscriptions could otherwise push a genuinely blocking one past
+ * page 1). A provider/network error mid-pagination fails closed — treated
+ * as "cannot rule out an existing subscription", never as "none found".
  */
 const NON_BLOCKING_STRIPE_SUBSCRIPTION_STATUSES = new Set<Stripe.Subscription.Status>(["canceled", "incomplete_expired"]);
 
+async function hasBlockingStripeSubscription(stripe: Stripe, stripeCustomerId: string): Promise<boolean> {
+  let startingAfter: string | undefined;
+  for (;;) {
+    let page: Stripe.ApiList<Stripe.Subscription>;
+    try {
+      page = await stripe.subscriptions.list({ customer: stripeCustomerId, status: "all", limit: 100, starting_after: startingAfter });
+    } catch (error) {
+      throw new AppError("STRIPE_SUBSCRIPTION_LOOKUP_FAILED", "Could not verify existing subscriptions with Stripe. Please try again.", 502);
+    }
+    if (page.data.some((subscription) => !NON_BLOCKING_STRIPE_SUBSCRIPTION_STATUSES.has(subscription.status))) {
+      return true;
+    }
+    if (!page.has_more || page.data.length === 0) return false;
+    startingAfter = page.data[page.data.length - 1].id;
+  }
+}
+
 async function assertNoExistingStripeSubscription(stripe: Stripe, stripeCustomerId: string): Promise<void> {
-  const subscriptions = await stripe.subscriptions.list({ customer: stripeCustomerId, status: "all", limit: 20 });
-  const blocking = subscriptions.data.some((subscription) => !NON_BLOCKING_STRIPE_SUBSCRIPTION_STATUSES.has(subscription.status));
-  if (blocking) throw new ExistingSubscriptionError();
+  if (await hasBlockingStripeSubscription(stripe, stripeCustomerId)) throw new ExistingSubscriptionError();
 }
 
 /**
- * If this company already has an open (unpaid, not yet expired/completed)
- * Checkout Session with Stripe, reuse it instead of minting a second one —
- * e.g. the customer opened checkout in one tab, then hit "Subscribe" again
- * in another before completing payment. Scoped to sessions this app itself
- * created (quantara_company_id metadata matches), never an arbitrary open
- * session that merely happens to share the same Stripe customer.
+ * Every open Checkout Session Stripe has for this customer that this app
+ * itself created (quantara_company_id metadata matches) — never an
+ * arbitrary open session that merely happens to share the same Stripe
+ * customer. Paginated for the same reason as hasBlockingStripeSubscription
+ * above; fails closed on a provider error.
  */
-async function findExistingOpenCheckoutSession(
+async function findAppOwnedOpenCheckoutSessions(
   stripe: Stripe,
   stripeCustomerId: string,
   companyId: string,
-): Promise<Stripe.Checkout.Session | null> {
-  const sessions = await stripe.checkout.sessions.list({ customer: stripeCustomerId, status: "open", limit: 20 });
-  return sessions.data.find((session) => session.metadata?.quantara_company_id === companyId) ?? null;
+): Promise<Stripe.Checkout.Session[]> {
+  const matches: Stripe.Checkout.Session[] = [];
+  let startingAfter: string | undefined;
+  for (;;) {
+    let page: Stripe.ApiList<Stripe.Checkout.Session>;
+    try {
+      page = await stripe.checkout.sessions.list({ customer: stripeCustomerId, status: "open", limit: 100, starting_after: startingAfter });
+    } catch (error) {
+      throw new AppError("STRIPE_CHECKOUT_SESSION_LOOKUP_FAILED", "Could not verify existing checkout sessions with Stripe. Please try again.", 502);
+    }
+    for (const session of page.data) {
+      if (session.metadata?.quantara_company_id === companyId) matches.push(session);
+    }
+    if (!page.has_more || page.data.length === 0) return matches;
+    startingAfter = page.data[page.data.length - 1].id;
+  }
 }
 
 /**
@@ -269,9 +302,31 @@ export async function createCommerceCheckoutSession(
   // gap between session creation and the (asynchronous) webhook that would
   // otherwise be the only thing recording a CompanySoftwareSubscription row.
   await assertNoExistingStripeSubscription(stripe, stripeCustomerId);
-  const existingSession = await findExistingOpenCheckoutSession(stripe, stripeCustomerId, actor.companyId);
-  if (existingSession?.url) {
-    return { checkoutSessionId: existingSession.id, checkoutUrl: existingSession.url };
+
+  /**
+   * STRIPE-COMMERCIAL-16 — an app-owned open session only gets reused when it
+   * is for THIS EXACT price (quantara_price_code matches too, not just the
+   * company). A Starter session must never be handed back to a customer who
+   * is now requesting Professional, or a monthly session to an annual
+   * request. Every other app-owned open session for this customer (i.e. a
+   * stale attempt at a different price) is explicitly expired before the
+   * newly requested one is created — never left open to be discovered by a
+   * later request, and never touched if it doesn't carry Quantara's own
+   * metadata.
+   */
+  const appOwnedOpenSessions = await findAppOwnedOpenCheckoutSessions(stripe, stripeCustomerId, actor.companyId);
+  const matchingSession = appOwnedOpenSessions.find((session) => session.metadata?.quantara_price_code === price.code);
+  if (matchingSession?.url) {
+    return { checkoutSessionId: matchingSession.id, checkoutUrl: matchingSession.url };
+  }
+  for (const stale of appOwnedOpenSessions) {
+    try {
+      await stripe.checkout.sessions.expire(stale.id);
+    } catch (error) {
+      // Best-effort cleanup — a failure to expire a stale session must never block
+      // the customer from getting the checkout they're actually requesting now.
+      console.error("[commerce-checkout] Failed to expire stale open Checkout Session", stale.id, error);
+    }
   }
 
   const session = await stripe.checkout.sessions.create(

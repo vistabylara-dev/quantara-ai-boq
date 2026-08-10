@@ -31,12 +31,13 @@ function mockStripeClient() {
     // tests override these per-test to simulate the Stripe-side state a
     // DB-only check can't see (webhook lag, a still-open prior session).
     subscriptions: {
-      list: vi.fn(async () => ({ data: [] })),
+      list: vi.fn(async () => ({ data: [], has_more: false })),
     },
     checkout: {
       sessions: {
         create: vi.fn(async () => ({ id: `cs_test_${RUN_ID}_${++globalSessionCounter}`, url: `https://checkout.stripe.com/test/${RUN_ID}_${globalSessionCounter}` })),
-        list: vi.fn(async () => ({ data: [] })),
+        list: vi.fn(async () => ({ data: [], has_more: false })),
+        expire: vi.fn(async (id: string) => ({ id, status: "expired" })),
       },
     },
     billingPortal: {
@@ -305,13 +306,14 @@ describe("commerce-checkout-service (integration, real local Postgres, mocked St
     expect(stripe.checkout.sessions.create).not.toHaveBeenCalled();
   });
 
-  it("FIX B: an existing open Checkout Session for this company is reused instead of creating a second one", async () => {
+  it("FIX B/FIX 1: an existing open Checkout Session for THIS company AND THIS price is reused instead of creating a second one", async () => {
     const { product, price } = await makeApprovedDirectPrice();
     await createMapping({ provider: "STRIPE", environment: "TEST", commerceProductId: product.id, commercePriceId: price.id, providerProductId: `prod_test_open_${RUN_ID}`, providerPriceId: `price_test_open_${RUN_ID}`, providerObjectType: "PRICE" });
     const actor = actorFor(userId, fourthCompanyId, `checkout-fourth-${RUN_ID}@example.com`);
     const stripe = mockStripeClient();
     stripe.checkout.sessions.list.mockResolvedValueOnce({
-      data: [{ id: `cs_existing_open_${RUN_ID}`, url: `https://checkout.stripe.com/test/existing_${RUN_ID}`, metadata: { quantara_company_id: fourthCompanyId } }],
+      data: [{ id: `cs_existing_open_${RUN_ID}`, url: `https://checkout.stripe.com/test/existing_${RUN_ID}`, metadata: { quantara_company_id: fourthCompanyId, quantara_price_code: price.code } }],
+      has_more: false,
     });
 
     const result = await createCommerceCheckoutSession(actor, { priceCode: price.code }, stripe);
@@ -319,6 +321,7 @@ describe("commerce-checkout-service (integration, real local Postgres, mocked St
     expect(result.checkoutSessionId).toBe(`cs_existing_open_${RUN_ID}`);
     expect(result.checkoutUrl).toBe(`https://checkout.stripe.com/test/existing_${RUN_ID}`);
     expect(stripe.checkout.sessions.create).not.toHaveBeenCalled();
+    expect(stripe.checkout.sessions.expire).not.toHaveBeenCalled();
   });
 
   it("FIX B: a genuinely canceled Stripe subscription does not block a fresh checkout", async () => {
@@ -326,9 +329,111 @@ describe("commerce-checkout-service (integration, real local Postgres, mocked St
     await createMapping({ provider: "STRIPE", environment: "TEST", commerceProductId: product.id, commercePriceId: price.id, providerProductId: `prod_test_stripecancel_${RUN_ID}`, providerPriceId: `price_test_stripecancel_${RUN_ID}`, providerObjectType: "PRICE" });
     const actor = actorFor(userId, fourthCompanyId, `checkout-fourth-${RUN_ID}@example.com`);
     const stripe = mockStripeClient();
-    stripe.subscriptions.list.mockResolvedValueOnce({ data: [{ id: `sub_old_cancelled_${RUN_ID}`, status: "canceled" }] });
+    stripe.subscriptions.list.mockResolvedValueOnce({ data: [{ id: `sub_old_cancelled_${RUN_ID}`, status: "canceled" }], has_more: false });
 
     const result = await createCommerceCheckoutSession(actor, { priceCode: price.code }, stripe);
     expect(result.checkoutUrl).toMatch(/^https:\/\/checkout\.stripe\.com/);
+  });
+
+  it("FIX 1: an open session for a DIFFERENT price code is never reused — it is expired and a new session is created for the requested price", async () => {
+    const { product: starterProduct, price: starterPrice } = await makeApprovedDirectPrice();
+    const { product: proProduct, price: proPrice } = await makeApprovedDirectPrice();
+    await createMapping({ provider: "STRIPE", environment: "TEST", commerceProductId: starterProduct.id, commercePriceId: starterPrice.id, providerProductId: `prod_test_starter_${RUN_ID}`, providerPriceId: `price_test_starter_${RUN_ID}`, providerObjectType: "PRICE" });
+    await createMapping({ provider: "STRIPE", environment: "TEST", commerceProductId: proProduct.id, commercePriceId: proPrice.id, providerProductId: `prod_test_pro_${RUN_ID}`, providerPriceId: `price_test_pro_${RUN_ID}`, providerObjectType: "PRICE" });
+
+    const actor = actorFor(userId, fourthCompanyId, `checkout-fourth-${RUN_ID}@example.com`);
+    const stripe = mockStripeClient();
+    const staleStarterSessionId = `cs_stale_starter_${RUN_ID}`;
+    stripe.checkout.sessions.list.mockResolvedValueOnce({
+      data: [{ id: staleStarterSessionId, url: `https://checkout.stripe.com/test/stale_${RUN_ID}`, metadata: { quantara_company_id: fourthCompanyId, quantara_price_code: starterPrice.code } }],
+      has_more: false,
+    });
+
+    // Customer already has an open Starter checkout, but is now requesting Professional.
+    const result = await createCommerceCheckoutSession(actor, { priceCode: proPrice.code }, stripe);
+
+    expect(result.checkoutSessionId).not.toBe(staleStarterSessionId);
+    expect(result.checkoutUrl).not.toContain("stale");
+    expect(stripe.checkout.sessions.expire).toHaveBeenCalledWith(staleStarterSessionId);
+    expect(stripe.checkout.sessions.create).toHaveBeenCalledTimes(1);
+    const callArgs = stripe.checkout.sessions.create.mock.calls[0][0];
+    expect(callArgs.line_items).toEqual([{ price: `price_test_pro_${RUN_ID}`, quantity: 1 }]);
+  });
+
+  it("FIX 1: an open session for the SAME product but a DIFFERENT interval (monthly vs annual) is never reused", async () => {
+    const { product } = await makeApprovedDirectPrice();
+    const { price: monthlyPrice } = await upsertCommercePrice({ productId: product.id, code: `test_checkout_monthly_${RUN_ID}`, amountMinor: 14900, billingInterval: "MONTH" });
+    await prisma.commercePrice.update({ where: { id: monthlyPrice.id }, data: { reviewStatus: "APPROVED" } });
+    const { price: annualPrice } = await upsertCommercePrice({ productId: product.id, code: `test_checkout_annual_${RUN_ID}`, amountMinor: 149000, billingInterval: "YEAR" });
+    await prisma.commercePrice.update({ where: { id: annualPrice.id }, data: { reviewStatus: "APPROVED" } });
+    await createMapping({ provider: "STRIPE", environment: "TEST", commerceProductId: product.id, commercePriceId: monthlyPrice.id, providerProductId: `prod_test_interval_${RUN_ID}`, providerPriceId: `price_test_monthly_${RUN_ID}`, providerObjectType: "PRICE" });
+    await createMapping({ provider: "STRIPE", environment: "TEST", commerceProductId: product.id, commercePriceId: annualPrice.id, providerProductId: `prod_test_interval_${RUN_ID}`, providerPriceId: `price_test_annual_${RUN_ID}`, providerObjectType: "PRICE" });
+
+    const actor = actorFor(userId, fourthCompanyId, `checkout-fourth-${RUN_ID}@example.com`);
+    const stripe = mockStripeClient();
+    const staleMonthlySessionId = `cs_stale_monthly_${RUN_ID}`;
+    stripe.checkout.sessions.list.mockResolvedValueOnce({
+      data: [{ id: staleMonthlySessionId, url: `https://checkout.stripe.com/test/stale_monthly_${RUN_ID}`, metadata: { quantara_company_id: fourthCompanyId, quantara_price_code: monthlyPrice.code } }],
+      has_more: false,
+    });
+
+    const result = await createCommerceCheckoutSession(actor, { priceCode: annualPrice.code }, stripe);
+
+    expect(result.checkoutSessionId).not.toBe(staleMonthlySessionId);
+    expect(stripe.checkout.sessions.expire).toHaveBeenCalledWith(staleMonthlySessionId);
+    const callArgs = stripe.checkout.sessions.create.mock.calls[0][0];
+    expect(callArgs.line_items).toEqual([{ price: `price_test_annual_${RUN_ID}`, quantity: 1 }]);
+  });
+
+  it("FIX 3: a blocking subscription that only appears on a later page still blocks checkout", async () => {
+    const { product, price } = await makeApprovedDirectPrice();
+    await createMapping({ provider: "STRIPE", environment: "TEST", commerceProductId: product.id, commercePriceId: price.id, providerProductId: `prod_test_page_${RUN_ID}`, providerPriceId: `price_test_page_${RUN_ID}`, providerObjectType: "PRICE" });
+    const actor = actorFor(userId, fourthCompanyId, `checkout-fourth-${RUN_ID}@example.com`);
+    const stripe = mockStripeClient();
+
+    stripe.subscriptions.list.mockImplementation(async (params: { starting_after?: string }) => {
+      if (!params?.starting_after) {
+        // Page 1: only a non-blocking (canceled) subscription, but there's more.
+        return { data: [{ id: `sub_page1_${RUN_ID}`, status: "canceled" }], has_more: true };
+      }
+      // Page 2: the genuinely blocking one.
+      return { data: [{ id: `sub_page2_${RUN_ID}`, status: "active" }], has_more: false };
+    });
+
+    await expect(createCommerceCheckoutSession(actor, { priceCode: price.code }, stripe)).rejects.toMatchObject({ code: "CHECKOUT_EXISTING_SUBSCRIPTION" });
+    expect(stripe.subscriptions.list).toHaveBeenCalledTimes(2);
+  });
+
+  it("FIX 3: a matching open Quantara session that only appears on a later page is still found and reused, and unrelated first-page sessions never hide it", async () => {
+    const { product, price } = await makeApprovedDirectPrice();
+    await createMapping({ provider: "STRIPE", environment: "TEST", commerceProductId: product.id, commercePriceId: price.id, providerProductId: `prod_test_page2_${RUN_ID}`, providerPriceId: `price_test_page2_${RUN_ID}`, providerObjectType: "PRICE" });
+    const actor = actorFor(userId, fourthCompanyId, `checkout-fourth-${RUN_ID}@example.com`);
+    const stripe = mockStripeClient();
+    const targetSessionId = `cs_page2_match_${RUN_ID}`;
+
+    stripe.checkout.sessions.list.mockImplementation(async (params: { starting_after?: string }) => {
+      if (!params?.starting_after) {
+        // Page 1: an open session that belongs to a different company entirely — must not hide the real match.
+        return { data: [{ id: `cs_page1_unrelated_${RUN_ID}`, url: "https://checkout.stripe.com/test/unrelated", metadata: { quantara_company_id: "some-other-company-id" } }], has_more: true };
+      }
+      return { data: [{ id: targetSessionId, url: `https://checkout.stripe.com/test/page2_${RUN_ID}`, metadata: { quantara_company_id: fourthCompanyId, quantara_price_code: price.code } }], has_more: false };
+    });
+
+    const result = await createCommerceCheckoutSession(actor, { priceCode: price.code }, stripe);
+
+    expect(result.checkoutSessionId).toBe(targetSessionId);
+    expect(stripe.checkout.sessions.list).toHaveBeenCalledTimes(2);
+    expect(stripe.checkout.sessions.create).not.toHaveBeenCalled();
+  });
+
+  it("FIX 3: fails closed (safe error, never treated as 'no blocker found') when the Stripe subscription lookup itself errors", async () => {
+    const { product, price } = await makeApprovedDirectPrice();
+    await createMapping({ provider: "STRIPE", environment: "TEST", commerceProductId: product.id, commercePriceId: price.id, providerProductId: `prod_test_lookupfail_${RUN_ID}`, providerPriceId: `price_test_lookupfail_${RUN_ID}`, providerObjectType: "PRICE" });
+    const actor = actorFor(userId, fourthCompanyId, `checkout-fourth-${RUN_ID}@example.com`);
+    const stripe = mockStripeClient();
+    stripe.subscriptions.list.mockRejectedValueOnce(new Error("network error"));
+
+    await expect(createCommerceCheckoutSession(actor, { priceCode: price.code }, stripe)).rejects.toMatchObject({ code: "STRIPE_SUBSCRIPTION_LOOKUP_FAILED" });
+    expect(stripe.checkout.sessions.create).not.toHaveBeenCalled();
   });
 });

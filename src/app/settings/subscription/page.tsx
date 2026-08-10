@@ -156,6 +156,11 @@ export default function SubscriptionSettingsPage() {
     window.location.href = result.checkoutUrl;
   }), [runAction]);
 
+  const manageBilling = useCallback(() => runAction("manage-billing", async () => {
+    const result = await apiClient.post<{ portalUrl: string }>("/api/commerce/billing-portal", {});
+    window.location.href = result.portalUrl;
+  }), [runAction]);
+
   if (isLoading) {
     return (
       <div className="rounded-[32px] border border-slate-800 bg-slate-950 p-8 text-slate-300">
@@ -259,11 +264,25 @@ export default function SubscriptionSettingsPage() {
       {checkoutAvailability && checkoutAvailability.products.length > 0 && (
         <div className="rounded-[32px] border border-slate-800 bg-slate-950 p-8">
           <h2 className="text-xl font-semibold text-white">Upgrade</h2>
-          <p className="mt-1 text-sm text-slate-400">
-            {checkoutAvailability.products.some((product) => product.prices.some((price) => price.available))
-              ? "Real Stripe checkout — you will be redirected to a secure payment page."
-              : "Checkout is being configured. Plans will be available for purchase shortly."}
-          </p>
+          {checkoutAvailability.hasExistingSubscription ? (
+            <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
+              <p className="text-sm text-slate-400">This company already has a subscription. Manage payment method, invoices, or cancellation from the billing portal.</p>
+              <button
+                type="button"
+                onClick={() => void manageBilling()}
+                disabled={busyKey === "manage-billing"}
+                className="rounded-2xl border border-slate-700 bg-blue-600 px-4 py-2 text-xs font-semibold text-white hover:bg-blue-500 disabled:opacity-50"
+              >
+                {busyKey === "manage-billing" ? "Opening…" : "Manage billing"}
+              </button>
+            </div>
+          ) : (
+            <p className="mt-1 text-sm text-slate-400">
+              {checkoutAvailability.products.some((product) => product.prices.some((price) => price.available))
+                ? "Real Stripe checkout — you will be redirected to a secure payment page."
+                : "Checkout is being configured. Plans will be available for purchase shortly."}
+            </p>
+          )}
           <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {checkoutAvailability.products.map((product) => (
               <div key={product.productCode} className="rounded-3xl border border-slate-800 bg-slate-900 p-5">

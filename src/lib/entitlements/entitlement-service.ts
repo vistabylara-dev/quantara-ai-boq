@@ -172,11 +172,17 @@ export async function canCreateProject(companyId: string): Promise<CheckResult> 
 
   const activeProjectCount = await prisma.project.count({ where: { companyId } });
   if (activeProjectCount >= entitlements.maxProjects) {
-    return deny(
-      entitlements.isTrial
-        ? "The 3-day Pro trial allows one project. Upgrade to create additional projects."
-        : "The free plan allows one draft project. Upgrade to create additional projects.",
-    );
+    if (entitlements.isTrial) {
+      return deny("The 3-day Pro trial allows one project. Upgrade to create additional projects.");
+    }
+    if (entitlements.status === "NONE") {
+      return deny("The free plan allows one draft project. Upgrade to create additional projects.");
+    }
+    // A genuine paid, limited plan (e.g. Starter/Professional) — the message
+    // must name the actual plan and its actual limit, not the free-plan
+    // wording every non-trial limited plan previously got regardless of
+    // what the customer is paying for.
+    return deny(`${entitlements.planName} allows ${entitlements.maxProjects} project${entitlements.maxProjects === 1 ? "" : "s"}. Upgrade to create additional projects.`);
   }
   return allow();
 }

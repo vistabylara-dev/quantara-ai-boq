@@ -413,18 +413,48 @@ describe("processStripeWebhookEvent (integration, real local Postgres)", () => {
     expect(sub?.status).toBe("ACTIVE");
   });
 
-  it("a subscription retrieval failure degrades to a ledger-only no-op rather than crashing the webhook", async () => {
+  it("STRIPE-COMMERCIAL-10: a subscription retrieval failure rejects, records no ledger row, applies no mutation, and the SAME event can subsequently succeed once Stripe recovers", async () => {
     const subscriptionId = `sub_retrieve_fail_${RUN_ID}`;
-    const client = {
+    const failingClient = {
       subscriptions: { retrieve: vi.fn(async () => { throw new Error("network error"); }) },
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } as any;
     const event = fakeSubscriptionEventEnvelope({ id: `evt_retrieve_fail_${RUN_ID}`, livemode: false, stripeCustomerId: `cus_${RUN_ID}`, subscriptionId });
-    const result = await processStripeWebhookEvent(event, client);
+
+    await expect(processStripeWebhookEvent(event, failingClient)).rejects.toMatchObject({ code: "STRIPE_SUBSCRIPTION_RETRIEVAL_FAILED" });
+
+    const ledgerCountAfterFailure = await prisma.stripeWebhookEvent.count({ where: { stripeEventId: event.id } });
+    expect(ledgerCountAfterFailure).toBe(0);
+    const subAfterFailure = await prisma.companySoftwareSubscription.findUnique({ where: { externalSubscriptionId: subscriptionId } });
+    expect(subAfterFailure).toBeNull();
+
+    // Stripe redelivers the SAME event; this time retrieval succeeds.
+    const recovered = fakeCurrentSubscription({ id: subscriptionId, livemode: false, status: "active", stripeCustomerId: `cus_${RUN_ID}`, providerPriceId });
+    const recoveredClient = mockClientReturningSubscription(recovered);
+    const result = await processStripeWebhookEvent(event, recoveredClient);
     expect(result.outcome).toBe("processed");
-    const ledgerCount = await prisma.stripeWebhookEvent.count({ where: { stripeEventId: event.id } });
-    expect(ledgerCount).toBe(1);
-    const sub = await prisma.companySoftwareSubscription.findUnique({ where: { externalSubscriptionId: subscriptionId } });
-    expect(sub).toBeNull();
+
+    const ledgerCountAfterRecovery = await prisma.stripeWebhookEvent.count({ where: { stripeEventId: event.id } });
+    expect(ledgerCountAfterRecovery).toBe(1);
+    const subAfterRecovery = await prisma.companySoftwareSubscription.findUnique({ where: { externalSubscriptionId: subscriptionId } });
+    expect(subAfterRecovery?.status).toBe("ACTIVE");
+  });
+
+  it("the duplicate precheck skips an unnecessary Stripe retrieval for an already-recorded event", async () => {
+    const subscriptionId = `sub_precheck_${RUN_ID}`;
+    const current = fakeCurrentSubscription({ id: subscriptionId, livemode: false, status: "active", stripeCustomerId: `cus_${RUN_ID}`, providerPriceId });
+    const firstClient = mockClientReturningSubscription(current);
+    const event = fakeSubscriptionEventEnvelope({ id: `evt_precheck_${RUN_ID}`, livemode: false, stripeCustomerId: `cus_${RUN_ID}`, subscriptionId });
+
+    const first = await processStripeWebhookEvent(event, firstClient);
+    expect(first.outcome).toBe("processed");
+
+    const secondClient = mockClientReturningSubscription(current);
+    const second = await processStripeWebhookEvent(event, secondClient);
+    expect(second.outcome).toBe("duplicate");
+    // The precheck (a plain findUnique against the already-recorded ledger row) short-circuits
+    // before any Stripe call — the transaction's unique constraint is the correctness guarantee,
+    // this is purely the "avoid unnecessary Stripe retrieval" optimization.
+    expect(secondClient.subscriptions.retrieve).not.toHaveBeenCalled();
   });
 });

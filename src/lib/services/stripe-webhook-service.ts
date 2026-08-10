@@ -175,20 +175,27 @@ function extractRelevantSubscriptionId(event: Stripe.Event): string | null {
 }
 
 /**
- * Fetches Stripe's current view of a subscription. Never throws — a
- * retrieval failure (e.g. the ID is unreachable under this mode's key)
- * degrades to "no state to apply" (logged, still a successfully-processed
- * webhook) rather than failing the whole webhook delivery, since Stripe
- * subscriptions are never hard-deleted (cancellation just changes `status`)
- * and a genuine retrieval failure here is an operational anomaly worth
- * logging, not a reason to make Stripe retry indefinitely.
+ * Fetches Stripe's current view of a subscription.
+ *
+ * STRIPE-COMMERCIAL-10 — a retrieval failure (Stripe API/network error) MUST
+ * throw rather than degrade to "no state to apply": silently swallowing it
+ * would let processStripeWebhookEvent still record the StripeWebhookEvent
+ * ledger row and return "processed" for an event whose state was never
+ * actually applied — permanently consuming that delivery. Stripe's own
+ * retry policy exists precisely to handle exactly this kind of transient
+ * upstream failure, so the correct behavior is to fail the whole webhook
+ * request (safe 502, no ledger row) and let Stripe redeliver.
  */
-async function fetchCurrentSubscription(stripe: Stripe, subscriptionId: string): Promise<Stripe.Subscription | null> {
+async function fetchCurrentSubscription(stripe: Stripe, subscriptionId: string): Promise<Stripe.Subscription> {
   try {
     return await stripe.subscriptions.retrieve(subscriptionId);
   } catch (error) {
     console.error("[stripe-webhook] Failed to retrieve current subscription state for", subscriptionId, error);
-    return null;
+    throw new AppError(
+      "STRIPE_SUBSCRIPTION_RETRIEVAL_FAILED",
+      "Could not retrieve the current subscription state from Stripe. This event was not recorded; Stripe should retry delivery.",
+      502,
+    );
   }
 }
 
@@ -288,6 +295,21 @@ const HANDLED_EVENT_TYPES = new Set<string>([
 export async function processStripeWebhookEvent(event: Stripe.Event, overrideClient?: Stripe): Promise<StripeWebhookProcessResult> {
   assertWebhookModeMatches(event);
   assertWebhookApiVersionMatches(event);
+
+  /**
+   * A read-only precheck, not the correctness guarantee — the transaction's
+   * unique-constraint insert below is what actually prevents a double-apply
+   * race. This exists purely so a replayed/redelivered event that was
+   * already fully processed doesn't pay for a Stripe API round-trip (and,
+   * now that a retrieval failure throws instead of silently no-op'ing,
+   * doesn't risk failing an already-completed delivery due to a *new*,
+   * unrelated Stripe outage).
+   */
+  const alreadyRecorded = await prisma.stripeWebhookEvent.findUnique({
+    where: { stripeEventId: event.id },
+    select: { id: true },
+  });
+  if (alreadyRecorded) return { outcome: "duplicate" };
 
   if (!HANDLED_EVENT_TYPES.has(event.type)) {
     // Still record the event so a later Stripe retry of the *same* event never double-processes it if this event type becomes handled in the future.

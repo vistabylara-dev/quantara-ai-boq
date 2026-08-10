@@ -169,6 +169,54 @@ async function assertNoExistingNonFinalSubscription(companyId: string): Promise<
 }
 
 /**
+ * STRIPE-COMMERCIAL-11 — the DB-only check above cannot protect the window
+ * between a Checkout Session being created and the webhook that eventually
+ * records a CompanySoftwareSubscription row for it (webhook delivery is
+ * asynchronous and can lag by seconds to minutes). This asks Stripe itself,
+ * which is authoritative immediately. `canceled` and `incomplete_expired`
+ * are the only two genuinely terminal Stripe subscription statuses — every
+ * other value (including any future status Stripe might add) is treated as
+ * blocking, deliberately failing closed rather than open.
+ */
+const NON_BLOCKING_STRIPE_SUBSCRIPTION_STATUSES = new Set<Stripe.Subscription.Status>(["canceled", "incomplete_expired"]);
+
+async function assertNoExistingStripeSubscription(stripe: Stripe, stripeCustomerId: string): Promise<void> {
+  const subscriptions = await stripe.subscriptions.list({ customer: stripeCustomerId, status: "all", limit: 20 });
+  const blocking = subscriptions.data.some((subscription) => !NON_BLOCKING_STRIPE_SUBSCRIPTION_STATUSES.has(subscription.status));
+  if (blocking) throw new ExistingSubscriptionError();
+}
+
+/**
+ * If this company already has an open (unpaid, not yet expired/completed)
+ * Checkout Session with Stripe, reuse it instead of minting a second one —
+ * e.g. the customer opened checkout in one tab, then hit "Subscribe" again
+ * in another before completing payment. Scoped to sessions this app itself
+ * created (quantara_company_id metadata matches), never an arbitrary open
+ * session that merely happens to share the same Stripe customer.
+ */
+async function findExistingOpenCheckoutSession(
+  stripe: Stripe,
+  stripeCustomerId: string,
+  companyId: string,
+): Promise<Stripe.Checkout.Session | null> {
+  const sessions = await stripe.checkout.sessions.list({ customer: stripeCustomerId, status: "open", limit: 20 });
+  return sessions.data.find((session) => session.metadata?.quantara_company_id === companyId) ?? null;
+}
+
+/**
+ * A deterministic idempotency key scoped to a short time bucket: two
+ * concurrent/rapidly-repeated requests for the same company+price (a
+ * double-click, a client-side retry) collapse into the same Stripe
+ * idempotency key and therefore the same Checkout Session, while a later,
+ * genuinely separate checkout attempt (next bucket) gets a fresh one.
+ */
+function checkoutIdempotencyKey(companyId: string, priceCode: string, livemode: boolean): string {
+  const bucketMs = 5 * 60 * 1000;
+  const bucket = Math.floor(Date.now() / bucketMs);
+  return `quantara:${livemode ? "live" : "test"}:checkout:${companyId}:${priceCode}:${bucket}`;
+}
+
+/**
  * Reuses the company's existing Stripe customer for the current mode, or
  * creates one. The Stripe-side create call carries a deterministic
  * idempotency key so two concurrent requests for a company with no existing
@@ -217,22 +265,34 @@ export async function createCommerceCheckoutSession(
   await assertNoExistingNonFinalSubscription(actor.companyId);
   const stripeCustomerId = await getOrCreateStripeCustomerForCompany(stripe, actor, liveMode);
 
-  const session = await stripe.checkout.sessions.create({
-    mode: "subscription",
-    customer: stripeCustomerId,
-    line_items: [{ price: mapping.providerPriceId as string, quantity: 1 }],
-    success_url: `${baseUrl}/settings/subscription?checkout=success&session_id={CHECKOUT_SESSION_ID}`,
-    cancel_url: `${baseUrl}/settings/subscription?checkout=cancelled`,
-    client_reference_id: actor.companyId,
-    metadata: {
-      quantara_company_id: actor.companyId,
-      quantara_price_code: price.code,
-      quantara_environment: liveMode ? "live" : "test",
+  // Stripe-side checks close the window the DB-only check above cannot: the
+  // gap between session creation and the (asynchronous) webhook that would
+  // otherwise be the only thing recording a CompanySoftwareSubscription row.
+  await assertNoExistingStripeSubscription(stripe, stripeCustomerId);
+  const existingSession = await findExistingOpenCheckoutSession(stripe, stripeCustomerId, actor.companyId);
+  if (existingSession?.url) {
+    return { checkoutSessionId: existingSession.id, checkoutUrl: existingSession.url };
+  }
+
+  const session = await stripe.checkout.sessions.create(
+    {
+      mode: "subscription",
+      customer: stripeCustomerId,
+      line_items: [{ price: mapping.providerPriceId as string, quantity: 1 }],
+      success_url: `${baseUrl}/settings/subscription?checkout=success&session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${baseUrl}/settings/subscription?checkout=cancelled`,
+      client_reference_id: actor.companyId,
+      metadata: {
+        quantara_company_id: actor.companyId,
+        quantara_price_code: price.code,
+        quantara_environment: liveMode ? "live" : "test",
+      },
+      subscription_data: {
+        metadata: { quantara_company_id: actor.companyId, quantara_price_code: price.code },
+      },
     },
-    subscription_data: {
-      metadata: { quantara_company_id: actor.companyId, quantara_price_code: price.code },
-    },
-  });
+    { idempotencyKey: checkoutIdempotencyKey(actor.companyId, price.code, liveMode) },
+  );
 
   if (!session.url) {
     throw new AppError("STRIPE_CHECKOUT_SESSION_NO_URL", "Stripe did not return a checkout URL.", 502);

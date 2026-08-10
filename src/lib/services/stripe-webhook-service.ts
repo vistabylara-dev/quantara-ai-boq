@@ -175,6 +175,29 @@ function extractRelevantSubscriptionId(event: Stripe.Event): string | null {
 }
 
 /**
+ * STRIPE-COMMERCIAL-17 — a fixed, arbitrary int32 namespace so this app's
+ * per-subscription webhook locks can never collide with any other advisory
+ * lock this codebase (or a future one) might take for an unrelated purpose.
+ * Combined with `hashtext(subscriptionId)` (Postgres's built-in text hash,
+ * also int32) as the second key, via the two-argument
+ * `pg_advisory_xact_lock(key1, key2)` overload.
+ */
+const STRIPE_WEBHOOK_LOCK_NAMESPACE = 875_309_417;
+
+/**
+ * Acquires a transaction-scoped Postgres advisory lock keyed on this exact
+ * subscription ID, released automatically on commit or rollback — never
+ * needs manual unlocking, and is enforced by Postgres itself, so it
+ * serializes concurrent webhook deliveries for the SAME subscription across
+ * every Node process/serverless instance, not just within one. Two
+ * different subscription IDs hash to different keys (bar an astronomically
+ * unlikely hashtext collision) and never block each other.
+ */
+async function acquireSubscriptionLock(tx: TxClient, subscriptionId: string): Promise<void> {
+  await tx.$executeRaw`SELECT pg_advisory_xact_lock(${STRIPE_WEBHOOK_LOCK_NAMESPACE}, hashtext(${subscriptionId}))`;
+}
+
+/**
  * Fetches Stripe's current view of a subscription.
  *
  * STRIPE-COMMERCIAL-10 — a retrieval failure (Stripe API/network error) MUST
@@ -326,37 +349,58 @@ export async function processStripeWebhookEvent(event: Stripe.Event, overrideCli
   }
 
   const subscriptionId = extractRelevantSubscriptionId(event);
-  let currentSubscription: Stripe.Subscription | null = null;
-  if (subscriptionId) {
-    const stripe = resolveWebhookStripeClient(overrideClient);
-    currentSubscription = await fetchCurrentSubscription(stripe, subscriptionId);
-  }
+  const stripe = subscriptionId ? resolveWebhookStripeClient(overrideClient) : null;
 
+  /**
+   * STRIPE-COMMERCIAL-17 — the advisory lock is acquired FIRST, inside the
+   * transaction, and Stripe's current state is fetched only AFTER acquiring
+   * it — not before the transaction starts (see round-3 STRIPE-COMMERCIAL-10
+   * history: it used to fetch outside the transaction). This ordering is
+   * what makes the serialization actually work: two concurrent deliveries
+   * for the same subscription both try to acquire the same lock; whichever
+   * loses waits until the winner commits (releasing the lock), and only
+   * then fetches — guaranteeing its fetch, and thus its write (since it
+   * also commits second), reflects Stripe state at least as current as the
+   * winner's. A retrieval failure still throws and rolls back the whole
+   * transaction (releasing the lock), so no ledger row is written and
+   * Stripe redelivers — identical safety to before, now inside the lock.
+   */
   try {
-    return await prisma.$transaction(async (tx) => {
-      const companyId = currentSubscription
-        ? await resolveCompanyIdForCustomer(tx, extractStripeCustomerId(currentSubscription.customer))
-        : await resolveCompanyIdForEvent(tx, event);
+    return await prisma.$transaction(
+      async (tx) => {
+        if (subscriptionId) {
+          await acquireSubscriptionLock(tx, subscriptionId);
+        }
 
-      await recordStripeWebhookEvent(tx, {
-        stripeEventId: event.id,
-        eventType: event.type,
-        livemode: event.livemode,
-        companyId,
-      });
+        const currentSubscription = subscriptionId ? await fetchCurrentSubscription(stripe!, subscriptionId) : null;
 
-      if (event.type === "checkout.session.completed") {
-        // Intentionally a no-op beyond the ledger insert above — entitlement
-        // is never activated from checkout completion. The authoritative
-        // state change arrives via the current-subscription-state path below.
-      } else if (currentSubscription) {
-        await applyCurrentSubscriptionState(tx, currentSubscription);
-      }
-      // else: a subscription/invoice event whose subscription could not be
-      // retrieved from Stripe — ledger-only, no state mutation attempted.
+        const companyId = currentSubscription
+          ? await resolveCompanyIdForCustomer(tx, extractStripeCustomerId(currentSubscription.customer))
+          : await resolveCompanyIdForEvent(tx, event);
 
-      return { outcome: "processed" as const, eventType: event.type };
-    });
+        await recordStripeWebhookEvent(tx, {
+          stripeEventId: event.id,
+          eventType: event.type,
+          livemode: event.livemode,
+          companyId,
+        });
+
+        if (event.type === "checkout.session.completed") {
+          // Intentionally a no-op beyond the ledger insert above — entitlement
+          // is never activated from checkout completion. The authoritative
+          // state change arrives via the current-subscription-state path below.
+        } else if (currentSubscription) {
+          await applyCurrentSubscriptionState(tx, currentSubscription);
+        }
+        // else: a subscription/invoice event whose subscription could not be
+        // retrieved from Stripe — ledger-only, no state mutation attempted.
+
+        return { outcome: "processed" as const, eventType: event.type };
+      },
+      // Generous timeout: this transaction now holds an advisory lock and
+      // makes a real Stripe API round-trip while open, not just DB writes.
+      { maxWait: 10_000, timeout: 30_000 },
+    );
   } catch (error) {
     if (isStripeWebhookEventIdConflict(error)) return { outcome: "duplicate" };
     throw error;

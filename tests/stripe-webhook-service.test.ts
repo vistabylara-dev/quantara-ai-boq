@@ -457,4 +457,73 @@ describe("processStripeWebhookEvent (integration, real local Postgres)", () => {
     // this is purely the "avoid unnecessary Stripe retrieval" optimization.
     expect(secondClient.subscriptions.retrieve).not.toHaveBeenCalled();
   });
+
+  it("STRIPE-COMMERCIAL-17 CONCURRENT: two simultaneous webhook deliveries for the same subscription always converge to the latest Stripe truth — never finishes ACTIVE after cancellation", async () => {
+    const subscriptionId = `sub_concurrent_${RUN_ID}`;
+    let fetchCount = 0;
+    const client = {
+      subscriptions: {
+        retrieve: vi.fn(async () => {
+          fetchCount += 1;
+          // The per-subscription advisory lock forces sequential fetch-then-commit: whichever
+          // transaction acquires the lock SECOND necessarily fetches (and applies) state strictly
+          // after the first transaction committed and released it. By construction here, that
+          // always means the second fetch sees "canceled" — and because it also commits second,
+          // canceled always wins in the database regardless of which of the two logical events
+          // (A or B) happened to win the lock race first.
+          const isSecondFetch = fetchCount >= 2;
+          return fakeCurrentSubscription({
+            id: subscriptionId,
+            livemode: false,
+            status: isSecondFetch ? "canceled" : "active",
+            stripeCustomerId: `cus_${RUN_ID}`,
+            providerPriceId,
+            canceledAt: isSecondFetch ? Math.floor(Date.now() / 1000) : null,
+          });
+        }),
+      },
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } as any;
+
+    const eventA = fakeSubscriptionEventEnvelope({ id: `evt_concurrent_a_${RUN_ID}`, livemode: false, stripeCustomerId: `cus_${RUN_ID}`, subscriptionId, type: "customer.subscription.updated" });
+    const eventB = fakeSubscriptionEventEnvelope({ id: `evt_concurrent_b_${RUN_ID}`, livemode: false, stripeCustomerId: `cus_${RUN_ID}`, subscriptionId, type: "customer.subscription.deleted" });
+
+    const results = await Promise.all([
+      processStripeWebhookEvent(eventA, client),
+      processStripeWebhookEvent(eventB, client),
+    ]);
+
+    expect(results.every((r) => r.outcome === "processed")).toBe(true);
+    expect(fetchCount).toBe(2);
+
+    const sub = await prisma.companySoftwareSubscription.findUnique({ where: { externalSubscriptionId: subscriptionId } });
+    expect(sub?.status).toBe("CANCELLED");
+  });
+
+  it("STRIPE-COMMERCIAL-17: different subscription IDs are processed independently and each converges to its own correct state", async () => {
+    const subscriptionIdA = `sub_indep_a_${RUN_ID}`;
+    const subscriptionIdB = `sub_indep_b_${RUN_ID}`;
+    const currentA = fakeCurrentSubscription({ id: subscriptionIdA, livemode: false, status: "active", stripeCustomerId: `cus_${RUN_ID}`, providerPriceId });
+    const currentB = fakeCurrentSubscription({ id: subscriptionIdB, livemode: false, status: "active", stripeCustomerId: `cus_${RUN_ID}`, providerPriceId });
+    const client = {
+      subscriptions: {
+        retrieve: vi.fn(async (id: string) => (id === subscriptionIdA ? currentA : currentB)),
+      },
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } as any;
+
+    const eventA = fakeSubscriptionEventEnvelope({ id: `evt_indep_a_${RUN_ID}`, livemode: false, stripeCustomerId: `cus_${RUN_ID}`, subscriptionId: subscriptionIdA });
+    const eventB = fakeSubscriptionEventEnvelope({ id: `evt_indep_b_${RUN_ID}`, livemode: false, stripeCustomerId: `cus_${RUN_ID}`, subscriptionId: subscriptionIdB });
+
+    const results = await Promise.all([
+      processStripeWebhookEvent(eventA, client),
+      processStripeWebhookEvent(eventB, client),
+    ]);
+    expect(results.every((r) => r.outcome === "processed")).toBe(true);
+
+    const subA = await prisma.companySoftwareSubscription.findUnique({ where: { externalSubscriptionId: subscriptionIdA } });
+    const subB = await prisma.companySoftwareSubscription.findUnique({ where: { externalSubscriptionId: subscriptionIdB } });
+    expect(subA?.status).toBe("ACTIVE");
+    expect(subB?.status).toBe("ACTIVE");
+  });
 });

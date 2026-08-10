@@ -1,11 +1,12 @@
 import type Stripe from "stripe";
 import type { CommerceProviderEnvironment, PrismaClient } from "@prisma/client";
-import { Prisma, SubscriptionStatus } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db/prisma";
 import { AppError } from "@/lib/errors/app-error";
 import {
   getConfiguredStripeMode,
   getStripeCommercialClient,
+  STRIPE_API_VERSION,
   StripeInvalidKeyError,
   StripeNotConfiguredError,
 } from "@/lib/payments/stripe-client";
@@ -19,15 +20,42 @@ import { resolveSoftwarePlanForCommerceProductCode } from "@/lib/entitlements/co
  * for subscription state; nothing here is ever triggered from a browser
  * success page. Every state mutation happens in the same DB transaction as
  * the StripeWebhookEvent idempotency-ledger insert (see processStripeWebhookEvent):
- * a duplicate event's ledger insert throws a unique-constraint violation,
- * which rolls back the whole transaction and is caught as a safe no-op —
- * never partial application of one without the other.
+ * a duplicate event's ledger insert throws a unique-constraint violation on
+ * stripeEventId specifically, which rolls back the whole transaction and is
+ * caught as a safe no-op — never partial application of one without the
+ * other.
+ *
+ * STRIPE-COMMERCIAL-5 (event-ordering hardening) — Stripe does not guarantee
+ * webhook delivery order. Every subscription-affecting event (the three
+ * customer.subscription.* events and both invoice.payment_* events)
+ * therefore never trusts the payload's embedded snapshot for the fields
+ * that determine entitlement (status, items/price, customer). Instead it
+ * re-fetches the CURRENT subscription from Stripe by ID, outside the DB
+ * transaction, using the correctly mode-gated commercial client, and
+ * applies THAT state. A stale "updated" event delivered after a "deleted"
+ * event still converges to canceled, because the fetch returns Stripe's
+ * current truth regardless of which event triggered it — there is
+ * deliberately only one state-application code path
+ * (applyCurrentSubscriptionState) for all five event types.
  */
 
 type TxClient = Omit<PrismaClient, "$connect" | "$disconnect" | "$on" | "$transaction" | "$use" | "$extends">;
 
-function isUniqueViolation(error: unknown): error is Prisma.PrismaClientKnownRequestError {
-  return error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002";
+/**
+ * STRIPE-COMMERCIAL-6 — narrower than a blanket "any P2002 means duplicate
+ * event" check. A unique-constraint violation on, say,
+ * CompanySoftwareSubscription.externalSubscriptionId (a genuine data
+ * conflict, e.g. two different Stripe subscriptions somehow resolving to
+ * the same externalSubscriptionId) must be rethrown so the webhook returns
+ * a failure and Stripe retries/alerts — swallowing it as "duplicate" would
+ * silently hide a real bug.
+ */
+export function isStripeWebhookEventIdConflict(error: unknown): boolean {
+  if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== "P2002") return false;
+  const target = error.meta?.target;
+  if (Array.isArray(target)) return target.some((field) => typeof field === "string" && field.includes("stripeEventId"));
+  if (typeof target === "string") return target.includes("stripeEventId");
+  return false;
 }
 
 function requireWebhookSecret(): string {
@@ -80,6 +108,28 @@ export function assertWebhookModeMatches(event: Stripe.Event): void {
   }
 }
 
+/**
+ * STRIPE-COMMERCIAL-9 — the Stripe webhook endpoint must be created (in the
+ * Stripe Dashboard, or via the API) pinned to API version STRIPE_API_VERSION
+ * (see stripe-client.ts). An event generated under a different API version
+ * can render object shapes this code does not expect (a known example:
+ * Invoice.subscription moved to Invoice.parent.subscription_details.subscription
+ * across versions) — rather than silently mis-parsing such an event, this
+ * fails safely with a clear, actionable error before any state mutation is
+ * attempted. `event.api_version` is null only for pre-2017 API versions,
+ * which this deployment can never actually receive, so a null pin is
+ * treated as a mismatch, not a pass-through.
+ */
+export function assertWebhookApiVersionMatches(event: Stripe.Event): void {
+  if (event.api_version !== STRIPE_API_VERSION) {
+    throw new AppError(
+      "STRIPE_WEBHOOK_API_VERSION_MISMATCH",
+      `This webhook event was generated with Stripe API version "${event.api_version ?? "unknown"}", but this deployment expects "${STRIPE_API_VERSION}". Recreate the Stripe webhook endpoint pinned to ${STRIPE_API_VERSION}.`,
+      400,
+    );
+  }
+}
+
 function extractStripeCustomerId(
   value: string | Stripe.Customer | Stripe.DeletedCustomer | null | undefined,
 ): string | null {
@@ -93,129 +143,9 @@ async function resolveCompanyIdForCustomer(tx: TxClient, stripeCustomerId: strin
   return billingCustomer?.companyId ?? null;
 }
 
-/**
- * Never trusts event/session metadata for tenant identity — the Stripe
- * customer ID on the event object is cross-referenced against
- * StripeBillingCustomer (a row this app created), which is the only source
- * of company identity a webhook is allowed to act on. An event for a Stripe
- * customer this app has no record of cannot mutate any company's state.
- */
-async function upsertSubscriptionFromStripe(tx: TxClient, subscription: Stripe.Subscription): Promise<void> {
-  const stripeCustomerId = extractStripeCustomerId(subscription.customer);
-  const companyId = await resolveCompanyIdForCustomer(tx, stripeCustomerId);
-  if (!companyId) return;
-
-  const item = subscription.items.data[0];
-  const providerPriceId = item?.price?.id;
-  if (!providerPriceId) return;
-
-  const environment: CommerceProviderEnvironment = subscription.livemode ? "LIVE" : "TEST";
-  const mapping = await findMappingByProviderPriceId("STRIPE", environment, providerPriceId, tx);
-  if (!mapping || !mapping.commercePriceId) return;
-
-  const commercePrice = await tx.commercePrice.findUnique({
-    where: { id: mapping.commercePriceId },
-    include: { product: true },
-  });
-  if (!commercePrice) return;
-
-  const softwarePlan = await resolveSoftwarePlanForCommerceProductCode(commercePrice.product.code, tx);
-  if (!softwarePlan) return;
-
-  const status = mapStripeSubscriptionStatusToQuantara(subscription.status);
-  const expiresAt = item?.current_period_end ? new Date(item.current_period_end * 1000) : null;
-  const startsAt = item?.current_period_start ? new Date(item.current_period_start * 1000) : null;
-  const cancelledAt = subscription.canceled_at ? new Date(subscription.canceled_at * 1000) : null;
-
-  const existing = await tx.companySoftwareSubscription.findUnique({
-    where: { externalSubscriptionId: subscription.id },
-  });
-
-  if (existing) {
-    if (existing.companyId !== companyId) return; // defensive — never move a subscription across tenants
-    await tx.companySoftwareSubscription.update({
-      where: { id: existing.id },
-      data: { softwarePlanId: softwarePlan.id, status, startsAt, expiresAt, cancelledAt },
-    });
-    return;
-  }
-
-  await tx.companySoftwareSubscription.create({
-    data: {
-      companyId,
-      softwarePlanId: softwarePlan.id,
-      status,
-      startsAt,
-      expiresAt,
-      cancelledAt,
-      externalSubscriptionId: subscription.id,
-      source: "stripe",
-    },
-  });
-}
-
-/**
- * Loads the existing CompanySoftwareSubscription for an externalSubscriptionId
- * and verifies it belongs to the company the event's Stripe customer resolves
- * to — never trusts externalSubscriptionId alone, since that would let an
- * event carrying an unrelated Stripe customer id mutate any company's
- * subscription merely by guessing/replaying a subscription id. Returns null
- * (a safe no-op for the caller) on any mismatch or unknown customer.
- */
-async function loadOwnedSubscription(
-  tx: TxClient,
-  externalSubscriptionId: string,
-  stripeCustomerId: string | null,
-) {
-  const existing = await tx.companySoftwareSubscription.findUnique({ where: { externalSubscriptionId } });
-  if (!existing) return null;
-  const companyId = await resolveCompanyIdForCustomer(tx, stripeCustomerId);
-  if (!companyId || existing.companyId !== companyId) return null;
-  return existing;
-}
-
-/** customer.subscription.deleted — explicit cancellation. Removes paid entitlement by moving status to CANCELLED (isActive in entitlement-service.ts is only true for ACTIVE/TRIAL). */
-async function cancelSubscriptionFromStripe(tx: TxClient, subscription: Stripe.Subscription): Promise<void> {
-  const existing = await loadOwnedSubscription(tx, subscription.id, extractStripeCustomerId(subscription.customer));
-  if (!existing) return;
-
-  await tx.companySoftwareSubscription.update({
-    where: { id: existing.id },
-    data: {
-      status: SubscriptionStatus.CANCELLED,
-      cancelledAt: subscription.canceled_at ? new Date(subscription.canceled_at * 1000) : new Date(),
-    },
-  });
-}
-
-/** Only ever raises a matched subscription to ACTIVE — never downgrades, and never acts on a subscription id this app has no record of. */
-async function handleInvoicePaymentSucceeded(tx: TxClient, invoice: Stripe.Invoice): Promise<void> {
-  const subscriptionId = extractInvoiceSubscriptionId(invoice);
-  if (!subscriptionId) return;
-
-  const existing = await loadOwnedSubscription(tx, subscriptionId, extractStripeCustomerId(invoice.customer));
-  if (!existing) return;
-  if (existing.status === SubscriptionStatus.ACTIVE) return;
-
-  await tx.companySoftwareSubscription.update({
-    where: { id: existing.id },
-    data: { status: SubscriptionStatus.ACTIVE },
-  });
-}
-
-/** A failed invoice denies paid entitlement (PAST_DUE) without overwriting an explicit CANCELLED state. */
-async function handleInvoicePaymentFailed(tx: TxClient, invoice: Stripe.Invoice): Promise<void> {
-  const subscriptionId = extractInvoiceSubscriptionId(invoice);
-  if (!subscriptionId) return;
-
-  const existing = await loadOwnedSubscription(tx, subscriptionId, extractStripeCustomerId(invoice.customer));
-  if (!existing) return;
-  if (existing.status === SubscriptionStatus.CANCELLED) return;
-
-  await tx.companySoftwareSubscription.update({
-    where: { id: existing.id },
-    data: { status: SubscriptionStatus.PAST_DUE },
-  });
+async function resolveCompanyIdForEvent(tx: TxClient, event: Stripe.Event): Promise<string | null> {
+  const obj = event.data.object as { customer?: string | Stripe.Customer | Stripe.DeletedCustomer | null };
+  return resolveCompanyIdForCustomer(tx, extractStripeCustomerId(obj.customer ?? null));
 }
 
 /**
@@ -229,9 +159,116 @@ function extractInvoiceSubscriptionId(invoice: Stripe.Invoice): string | null {
   return typeof subscription === "string" ? subscription : subscription.id;
 }
 
-async function resolveCompanyIdForEvent(tx: TxClient, event: Stripe.Event): Promise<string | null> {
-  const obj = event.data.object as { customer?: string | Stripe.Customer | Stripe.DeletedCustomer | null };
-  return resolveCompanyIdForCustomer(tx, extractStripeCustomerId(obj.customer ?? null));
+/** Which Stripe subscription ID this event is about, if any — used to fetch the CURRENT state before touching the database. Returns null for event types with no associated subscription (e.g. checkout.session.completed). */
+function extractRelevantSubscriptionId(event: Stripe.Event): string | null {
+  switch (event.type) {
+    case "customer.subscription.created":
+    case "customer.subscription.updated":
+    case "customer.subscription.deleted":
+      return (event.data.object as Stripe.Subscription).id;
+    case "invoice.payment_succeeded":
+    case "invoice.payment_failed":
+      return extractInvoiceSubscriptionId(event.data.object as Stripe.Invoice);
+    default:
+      return null;
+  }
+}
+
+/**
+ * Fetches Stripe's current view of a subscription. Never throws — a
+ * retrieval failure (e.g. the ID is unreachable under this mode's key)
+ * degrades to "no state to apply" (logged, still a successfully-processed
+ * webhook) rather than failing the whole webhook delivery, since Stripe
+ * subscriptions are never hard-deleted (cancellation just changes `status`)
+ * and a genuine retrieval failure here is an operational anomaly worth
+ * logging, not a reason to make Stripe retry indefinitely.
+ */
+async function fetchCurrentSubscription(stripe: Stripe, subscriptionId: string): Promise<Stripe.Subscription | null> {
+  try {
+    return await stripe.subscriptions.retrieve(subscriptionId);
+  } catch (error) {
+    console.error("[stripe-webhook] Failed to retrieve current subscription state for", subscriptionId, error);
+    return null;
+  }
+}
+
+/**
+ * The single state-application path for every subscription-affecting event.
+ * Always applies Stripe's CURRENT subscription snapshot (never the
+ * triggering event's payload), so this is safe to call from
+ * customer.subscription.created/updated/deleted and both invoice.payment_*
+ * handlers alike — whichever event happens to arrive, the result converges
+ * to the same current truth. Never trusts event/session metadata for tenant
+ * identity: the Stripe customer ID on the fetched subscription is
+ * cross-referenced against StripeBillingCustomer (a row this app created),
+ * the only source of company identity a webhook is allowed to act on.
+ */
+async function applyCurrentSubscriptionState(tx: TxClient, subscription: Stripe.Subscription): Promise<void> {
+  const stripeCustomerId = extractStripeCustomerId(subscription.customer);
+  const companyId = await resolveCompanyIdForCustomer(tx, stripeCustomerId);
+  if (!companyId) return;
+
+  const status = mapStripeSubscriptionStatusToQuantara(subscription.status);
+  const item = subscription.items.data[0];
+  const expiresAt = item?.current_period_end ? new Date(item.current_period_end * 1000) : null;
+  const startsAt = item?.current_period_start ? new Date(item.current_period_start * 1000) : null;
+  const cancelledAt = subscription.canceled_at ? new Date(subscription.canceled_at * 1000) : null;
+
+  /**
+   * Resolving which SoftwarePlan this subscription's price maps to is
+   * best-effort here, not a precondition for applying a status change to an
+   * ALREADY-EXISTING row. If the live-sync path (stripe-live-sync-service.ts)
+   * later archives the provider mapping for a price a customer already
+   * subscribed to, this lookup legitimately stops resolving — but a
+   * cancellation/failure webhook for that customer's subscription must still
+   * be able to move it to CANCELLED/PAST_DUE. Only *creating* a brand-new
+   * subscription record genuinely requires knowing the plan (there is
+   * nothing sensible to create otherwise).
+   */
+  let softwarePlanId: string | null = null;
+  const providerPriceId = item?.price?.id;
+  if (providerPriceId) {
+    const environment: CommerceProviderEnvironment = subscription.livemode ? "LIVE" : "TEST";
+    const mapping = await findMappingByProviderPriceId("STRIPE", environment, providerPriceId, tx);
+    if (mapping?.commercePriceId) {
+      const commercePrice = await tx.commercePrice.findUnique({
+        where: { id: mapping.commercePriceId },
+        include: { product: true },
+      });
+      if (commercePrice) {
+        const softwarePlan = await resolveSoftwarePlanForCommerceProductCode(commercePrice.product.code, tx);
+        softwarePlanId = softwarePlan?.id ?? null;
+      }
+    }
+  }
+
+  const existing = await tx.companySoftwareSubscription.findUnique({
+    where: { externalSubscriptionId: subscription.id },
+  });
+
+  if (existing) {
+    if (existing.companyId !== companyId) return; // defensive — never move a subscription across tenants
+    await tx.companySoftwareSubscription.update({
+      where: { id: existing.id },
+      data: { status, startsAt, expiresAt, cancelledAt, ...(softwarePlanId ? { softwarePlanId } : {}) },
+    });
+    return;
+  }
+
+  if (!softwarePlanId) return; // cannot create a new subscription record without knowing its plan
+
+  await tx.companySoftwareSubscription.create({
+    data: {
+      companyId,
+      softwarePlanId,
+      status,
+      startsAt,
+      expiresAt,
+      cancelledAt,
+      externalSubscriptionId: subscription.id,
+      source: "stripe",
+    },
+  });
 }
 
 export type StripeWebhookProcessResult =
@@ -248,8 +285,9 @@ const HANDLED_EVENT_TYPES = new Set<string>([
   "invoice.payment_failed",
 ]);
 
-export async function processStripeWebhookEvent(event: Stripe.Event): Promise<StripeWebhookProcessResult> {
+export async function processStripeWebhookEvent(event: Stripe.Event, overrideClient?: Stripe): Promise<StripeWebhookProcessResult> {
   assertWebhookModeMatches(event);
+  assertWebhookApiVersionMatches(event);
 
   if (!HANDLED_EVENT_TYPES.has(event.type)) {
     // Still record the event so a later Stripe retry of the *same* event never double-processes it if this event type becomes handled in the future.
@@ -259,15 +297,25 @@ export async function processStripeWebhookEvent(event: Stripe.Event): Promise<St
         await recordStripeWebhookEvent(tx, { stripeEventId: event.id, eventType: event.type, livemode: event.livemode, companyId });
       });
     } catch (error) {
-      if (isUniqueViolation(error)) return { outcome: "duplicate" };
+      if (isStripeWebhookEventIdConflict(error)) return { outcome: "duplicate" };
       throw error;
     }
     return { outcome: "ignored", eventType: event.type, reason: "UNHANDLED_EVENT_TYPE" };
   }
 
+  const subscriptionId = extractRelevantSubscriptionId(event);
+  let currentSubscription: Stripe.Subscription | null = null;
+  if (subscriptionId) {
+    const stripe = resolveWebhookStripeClient(overrideClient);
+    currentSubscription = await fetchCurrentSubscription(stripe, subscriptionId);
+  }
+
   try {
     return await prisma.$transaction(async (tx) => {
-      const companyId = await resolveCompanyIdForEvent(tx, event);
+      const companyId = currentSubscription
+        ? await resolveCompanyIdForCustomer(tx, extractStripeCustomerId(currentSubscription.customer))
+        : await resolveCompanyIdForEvent(tx, event);
+
       await recordStripeWebhookEvent(tx, {
         stripeEventId: event.id,
         eventType: event.type,
@@ -275,31 +323,20 @@ export async function processStripeWebhookEvent(event: Stripe.Event): Promise<St
         companyId,
       });
 
-      switch (event.type) {
-        case "checkout.session.completed":
-          // Intentionally a no-op beyond the ledger insert above — entitlement
-          // is never activated from checkout completion. The authoritative
-          // state change arrives via customer.subscription.created/updated.
-          break;
-        case "customer.subscription.created":
-        case "customer.subscription.updated":
-          await upsertSubscriptionFromStripe(tx, event.data.object as Stripe.Subscription);
-          break;
-        case "customer.subscription.deleted":
-          await cancelSubscriptionFromStripe(tx, event.data.object as Stripe.Subscription);
-          break;
-        case "invoice.payment_succeeded":
-          await handleInvoicePaymentSucceeded(tx, event.data.object as Stripe.Invoice);
-          break;
-        case "invoice.payment_failed":
-          await handleInvoicePaymentFailed(tx, event.data.object as Stripe.Invoice);
-          break;
+      if (event.type === "checkout.session.completed") {
+        // Intentionally a no-op beyond the ledger insert above — entitlement
+        // is never activated from checkout completion. The authoritative
+        // state change arrives via the current-subscription-state path below.
+      } else if (currentSubscription) {
+        await applyCurrentSubscriptionState(tx, currentSubscription);
       }
+      // else: a subscription/invoice event whose subscription could not be
+      // retrieved from Stripe — ledger-only, no state mutation attempted.
 
       return { outcome: "processed" as const, eventType: event.type };
     });
   } catch (error) {
-    if (isUniqueViolation(error)) return { outcome: "duplicate" };
+    if (isStripeWebhookEventIdConflict(error)) return { outcome: "duplicate" };
     throw error;
   }
 }

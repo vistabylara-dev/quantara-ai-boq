@@ -21,15 +21,27 @@ import {
  * price ID, company identity) is resolved here from server-controlled state.
  * Never accept amount/currency/providerPriceId/companyId/metadata from the
  * request body — see createCommerceCheckoutSession's single input field.
+ *
+ * STRIPE-COMMERCIAL-7 — one-time fulfillment (BOQ/report export unlocks, AI
+ * credit packs, bundles, ...) is not implemented anywhere in this codebase:
+ * no webhook path grants a one-time entitlement, no ledger consumes an AI
+ * credit. Until that genuinely exists, self-checkout accepts SUBSCRIPTION
+ * products with a MONTH/YEAR price only — a customer must never be charged
+ * for a one-time product that nothing will ever fulfill.
  */
 
-const SUPPORTED_CURRENCIES = new Set(["AED"]);
-const SUPPORTED_INTERVALS = new Set(["ONE_TIME", "MONTH", "YEAR"]);
+export const SUPPORTED_CHECKOUT_CURRENCIES = new Set(["AED"]);
+/** Deliberately MONTH/YEAR only — see the STRIPE-COMMERCIAL-7 note above. Exported so commerce-checkout-availability-service.ts applies the identical filter when reporting availability to the UI. */
+export const CHECKOUT_ELIGIBLE_INTERVALS = new Set(["MONTH", "YEAR"]);
+/** Non-final CompanySoftwareSubscription statuses — a company with one of these already has a live-or-pending Stripe subscription and must use the billing portal, not start a second checkout. Only CANCELLED/EXPIRED subscriptions may be superseded by a fresh checkout. */
+export const NON_FINAL_SUBSCRIPTION_STATUSES = ["TRIAL", "ACTIVE", "PAST_DUE", "SUSPENDED"] as const;
 
 export type CheckoutPriceRejectionReason =
   | "PRICE_NOT_FOUND"
   | "PRODUCT_INACTIVE"
+  | "PRODUCT_NOT_PUBLIC"
   | "PRODUCT_NOT_DIRECT_PURCHASE"
+  | "PRODUCT_NOT_SUBSCRIPTION"
   | "PRICE_INACTIVE"
   | "PRICE_NOT_APPROVED"
   | "ZERO_OR_NEGATIVE_AMOUNT"
@@ -44,6 +56,18 @@ export class CheckoutNotEligibleError extends AppError {
     super("CHECKOUT_PRICE_NOT_ELIGIBLE", message, 409);
     this.name = "CheckoutNotEligibleError";
     this.reason = reason;
+  }
+}
+
+/** STRIPE-COMMERCIAL-6 — a company must not be able to pay for two subscriptions simultaneously (e.g. Starter + Professional). Thrown before a Checkout Session is created; the route surfaces this as a safe, machine-readable code the UI maps to "Manage Billing" instead of a generic failure. */
+export class ExistingSubscriptionError extends AppError {
+  constructor() {
+    super(
+      "CHECKOUT_EXISTING_SUBSCRIPTION",
+      "This company already has an active or pending subscription. Manage it from the billing portal instead of starting a new checkout.",
+      409,
+    );
+    this.name = "ExistingSubscriptionError";
   }
 }
 
@@ -86,6 +110,12 @@ export function validateAppBaseUrl(liveMode: boolean): string {
   return raw.replace(/\/+$/, "");
 }
 
+/**
+ * Every check a price/product must pass before a customer can self-checkout
+ * it. Mirrors (and must stay in lockstep with) the availability logic in
+ * commerce-checkout-availability-service.ts, which reports these same facts
+ * to the UI without exposing Stripe price IDs.
+ */
 async function loadEligibleCommercePrice(priceCode: string) {
   const price = await prisma.commercePrice.findUnique({
     where: { code: priceCode },
@@ -94,15 +124,21 @@ async function loadEligibleCommercePrice(priceCode: string) {
 
   if (!price) throw new CheckoutNotEligibleError("PRICE_NOT_FOUND", "This price is not available for checkout.");
   if (!price.product.isActive) throw new CheckoutNotEligibleError("PRODUCT_INACTIVE", "This product is not currently available.");
+  if (!price.product.isPublic) throw new CheckoutNotEligibleError("PRODUCT_NOT_PUBLIC", "This product is not available for self-checkout.");
   if (price.product.purchaseMode !== "DIRECT") {
     throw new CheckoutNotEligibleError("PRODUCT_NOT_DIRECT_PURCHASE", "This product requires contacting sales and cannot be checked out directly.");
+  }
+  if (price.product.type !== "SUBSCRIPTION") {
+    throw new CheckoutNotEligibleError("PRODUCT_NOT_SUBSCRIPTION", "Only subscription products can be checked out directly right now.");
   }
   if (!price.isActive) throw new CheckoutNotEligibleError("PRICE_INACTIVE", "This price is no longer active.");
   if (price.reviewStatus !== "APPROVED") throw new CheckoutNotEligibleError("PRICE_NOT_APPROVED", "This price has not been approved for checkout.");
   if (price.isFromPrice) throw new CheckoutNotEligibleError("PRICE_NOT_APPROVED", "This price is an indicative amount and cannot be checked out directly.");
   if (price.amountMinor <= 0) throw new CheckoutNotEligibleError("ZERO_OR_NEGATIVE_AMOUNT", "This price is not checkout-eligible.");
-  if (!SUPPORTED_CURRENCIES.has(price.currency)) throw new CheckoutNotEligibleError("UNSUPPORTED_CURRENCY", "This price's currency is not supported for checkout.");
-  if (!SUPPORTED_INTERVALS.has(price.billingInterval)) throw new CheckoutNotEligibleError("UNSUPPORTED_INTERVAL", "This price's billing interval is not supported for checkout.");
+  if (!SUPPORTED_CHECKOUT_CURRENCIES.has(price.currency)) throw new CheckoutNotEligibleError("UNSUPPORTED_CURRENCY", "This price's currency is not supported for checkout.");
+  if (!CHECKOUT_ELIGIBLE_INTERVALS.has(price.billingInterval)) {
+    throw new CheckoutNotEligibleError("UNSUPPORTED_INTERVAL", "One-time purchases are not yet available for checkout.");
+  }
 
   return price;
 }
@@ -116,6 +152,20 @@ async function resolveProviderPriceMapping(environment: CommerceProviderEnvironm
     throw new CheckoutNotEligibleError("PROVIDER_MAPPING_NOT_SYNCED", "This price is not currently available for checkout.");
   }
   return mapping;
+}
+
+/** Exported so commerce-checkout-availability-service.ts can report the same "already subscribed" fact to the UI without duplicating this query. */
+export async function hasNonFinalStripeSubscription(companyId: string): Promise<boolean> {
+  const existing = await prisma.companySoftwareSubscription.findFirst({
+    where: { companyId, source: "stripe", status: { in: [...NON_FINAL_SUBSCRIPTION_STATUSES] } },
+    select: { id: true },
+  });
+  return existing !== null;
+}
+
+/** STRIPE-COMMERCIAL-6 — a company cannot start a second subscription checkout while a non-final Stripe subscription already exists (see NON_FINAL_SUBSCRIPTION_STATUSES). A CANCELLED/EXPIRED subscription never blocks a fresh checkout. */
+async function assertNoExistingNonFinalSubscription(companyId: string): Promise<void> {
+  if (await hasNonFinalStripeSubscription(companyId)) throw new ExistingSubscriptionError();
 }
 
 /**
@@ -164,13 +214,11 @@ export async function createCommerceCheckoutSession(
 
   const price = await loadEligibleCommercePrice(input.priceCode);
   const mapping = await resolveProviderPriceMapping(environment, price.id);
+  await assertNoExistingNonFinalSubscription(actor.companyId);
   const stripeCustomerId = await getOrCreateStripeCustomerForCompany(stripe, actor, liveMode);
 
-  const mode: Stripe.Checkout.SessionCreateParams.Mode =
-    price.billingInterval === "ONE_TIME" ? "payment" : "subscription";
-
   const session = await stripe.checkout.sessions.create({
-    mode,
+    mode: "subscription",
     customer: stripeCustomerId,
     line_items: [{ price: mapping.providerPriceId as string, quantity: 1 }],
     success_url: `${baseUrl}/settings/subscription?checkout=success&session_id={CHECKOUT_SESSION_ID}`,
@@ -181,13 +229,9 @@ export async function createCommerceCheckoutSession(
       quantara_price_code: price.code,
       quantara_environment: liveMode ? "live" : "test",
     },
-    ...(mode === "subscription"
-      ? {
-          subscription_data: {
-            metadata: { quantara_company_id: actor.companyId, quantara_price_code: price.code },
-          },
-        }
-      : {}),
+    subscription_data: {
+      metadata: { quantara_company_id: actor.companyId, quantara_price_code: price.code },
+    },
   });
 
   if (!session.url) {

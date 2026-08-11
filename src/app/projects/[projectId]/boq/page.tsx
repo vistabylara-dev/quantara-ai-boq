@@ -10,7 +10,7 @@ import { formatDate } from "@/lib/formatting/dates";
 import { withCalculatedBOQTotals } from "@/lib/calculations/boq-totals";
 import BoqEditor from "@/components/boq/boq-editor";
 import AddItemFromSourceModal, { type AddItemTab } from "@/components/boq/add-item-from-source-modal";
-import { BoqCreationMethodSelector, type BoqCreationMethod } from "@/components/boq/boq-creation-method-selector";
+import { BoqStartWizard, type BoqCreationMethod } from "@/components/boq/boq-start-wizard";
 import { BoqWorkflowStepper } from "@/components/boq/boq-workflow-stepper";
 import { computeBoqWorkflowState, type NextStepAction } from "@/lib/workflow/boq-workflow-state";
 
@@ -190,6 +190,7 @@ export default function ProjectBOQPage(props: PageProps) {
     try {
       const created = await apiClient.post<BOQ>(
         `/api/projects/${encodeURIComponent(params.projectId)}/boqs`,
+        {},
       );
       replaceRevision(created);
       if (openAddModal) {
@@ -479,11 +480,16 @@ export default function ProjectBOQPage(props: PageProps) {
       // already-working file/drawing upload workflow instead of a "coming soon" alert.
       router.push(`/projects/${encodeURIComponent(params.projectId)}/drawings`);
     } else if (method === "connect_app") {
-      // Honest routing (spec section 13): this navigates to the real integrations hub.
-      router.push("/integrations");
+      // Project context must survive the trip through the integrations hub —
+      // otherwise the user lands on a page with no idea which project they
+      // came from, and has to navigate back manually.
+      const encodedProjectId = encodeURIComponent(params.projectId);
+      router.push(
+        `/integrations?projectId=${encodedProjectId}&intent=boq-source&returnTo=${encodeURIComponent(`/projects/${params.projectId}/boq`)}`,
+      );
     }
-    // import_measurements / import_boq are rendered as disabled "Coming soon" cards in
-    // BoqCreationMethodSelector itself and can never reach this handler.
+    // import_measurements / import_boq render their own "not available yet" state
+    // with real alternatives inside BoqStartWizard and never reach this handler.
   }, [createInitialBOQ, params.projectId, revisions, router]);
 
   if (isLoading) {
@@ -615,7 +621,7 @@ export default function ProjectBOQPage(props: PageProps) {
       <div className="grid gap-6 xl:grid-cols-[1fr_360px]">
         <div className="space-y-6">
           {showCreationSelector || (!activeRevision && revisions.length === 0) ? (
-            <BoqCreationMethodSelector 
+            <BoqStartWizard
               hasDrafts={revisions.some(r => !isReadOnlyBOQ(r))}
               onSelectMethod={handleCreationMethodSelect}
             />

@@ -30,6 +30,7 @@ import {
 import Link from "next/link";
 import { apiClient, getApiErrorMessage } from "@/lib/api/client";
 import IntegrationsTabs from "./integrations-tabs";
+import { withProjectContext, ProjectContextBanner, useProjectContext } from "./project-context";
 
 const ICONS: Record<string, LucideIcon> = {
   Box, Boxes, Building, Building2, Calculator, ClipboardList, Cloud, Cog, Cpu,
@@ -110,6 +111,7 @@ function actionLabel(provider: Provider): string {
 }
 
 export default function IntegrationsMarketplace() {
+  const projectContext = useProjectContext();
   const [data, setData] = useState<ProvidersResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -209,6 +211,8 @@ export default function IntegrationsMarketplace() {
         </p>
       </header>
 
+      {projectContext && <ProjectContextBanner context={projectContext} />}
+
       <IntegrationsTabs />
 
       <div className="flex flex-wrap gap-3">
@@ -270,7 +274,7 @@ export default function IntegrationsMarketplace() {
       )}
 
       {selectedProvider && (
-        <ProviderDetailDrawer provider={selectedProvider} onClose={() => setSelectedProviderId(null)} />
+        <ProviderDetailDrawer provider={selectedProvider} projectContext={projectContext} onClose={() => setSelectedProviderId(null)} />
       )}
     </div>
   );
@@ -323,7 +327,15 @@ function ProviderCard({ provider, onSelect }: { provider: Provider; onSelect: (i
   );
 }
 
-function ProviderDetailDrawer({ provider, onClose }: { provider: Provider; onClose: () => void }) {
+function ProviderDetailDrawer({
+  provider,
+  projectContext,
+  onClose,
+}: {
+  provider: Provider;
+  projectContext: ReturnType<typeof useProjectContext>;
+  onClose: () => void;
+}) {
   const Icon = ICONS[provider.icon] ?? Plug;
   const isPlugin = provider.connectionType === "PLUGIN_DESKTOP";
 
@@ -393,7 +405,7 @@ function ProviderDetailDrawer({ provider, onClose }: { provider: Provider; onClo
 
         <div className="mt-6 flex flex-wrap gap-2">
           <Link
-            href={`/integrations/${provider.id}`}
+            href={withProjectContext(`/integrations/${provider.id}`, projectContext)}
             className="rounded-2xl border border-[#0EA5E9] bg-[#0EA5E9]/10 px-4 py-2 text-sm font-semibold text-[#0284C7] hover:bg-[#0EA5E9]/20 dark:border-[#22D3EE] dark:bg-[#22D3EE]/10 dark:text-[#22D3EE]"
           >
             View full details

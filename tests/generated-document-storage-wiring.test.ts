@@ -53,14 +53,17 @@ describe.each(SERVICE_FILES)("%s storage wiring", (relativePath) => {
   });
 
   it("routes every storage call actually present in this file through the resolved adapter, never the raw import", () => {
-    const usesPut = /\.putObject\(/.test(sourceWithoutComments);
-    const usesGet = /\.getObject\(/.test(sourceWithoutComments);
-    const usesDelete = /\.deleteObject\(/.test(sourceWithoutComments);
+    for (const method of ["putObject", "getObject", "deleteObject"] as const) {
+      const totalCalls = sourceWithoutComments.match(new RegExp(`\\.${method}\\(`, "g")) ?? [];
+      const qualifiedCalls = sourceWithoutComments.match(new RegExp(`getDocumentStorageAdapter\\(\\)\\.${method}\\(`, "g")) ?? [];
+      // Every call to this method must be qualified through the adapter — a file with one
+      // correct call and one leftover raw/hardcoded call would otherwise slip through, since
+      // the previous version only checked that a qualified call existed *somewhere*.
+      expect(qualifiedCalls.length).toBe(totalCalls.length);
+    }
     // At least one storage operation must actually be present — otherwise this file has no
     // business importing the storage factory at all, and the check above would be vacuous.
-    expect(usesPut || usesGet || usesDelete).toBe(true);
-    if (usesPut) expect(sourceWithoutComments).toMatch(/getDocumentStorageAdapter\(\)\.putObject/);
-    if (usesGet) expect(sourceWithoutComments).toMatch(/getDocumentStorageAdapter\(\)\.getObject/);
-    if (usesDelete) expect(sourceWithoutComments).toMatch(/getDocumentStorageAdapter\(\)\.deleteObject/);
+    const usesAnyStorageMethod = /\.(putObject|getObject|deleteObject)\(/.test(sourceWithoutComments);
+    expect(usesAnyStorageMethod).toBe(true);
   });
 });

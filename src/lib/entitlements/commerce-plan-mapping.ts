@@ -136,12 +136,24 @@ export async function seedCommerceLinkedSoftwarePlans(client: SoftwarePlanClient
   }
 }
 
-/** Resolves (creating if necessary) the SoftwarePlan a commerce product code maps to. Returns null for a non-subscription/non-mapped product code. */
+/**
+ * Resolves the SoftwarePlan a commerce product code maps to, creating it only
+ * if missing. Returns null for a non-subscription/non-mapped product code.
+ *
+ * Reads first rather than always upserting: this is called from every
+ * subscription-affecting webhook event inside the serialized reconciliation
+ * transaction. Always upserting would silently revert any operator edit to
+ * a commerce_* SoftwarePlan row (name, price, maxProjects, ...) on the very
+ * next webhook delivery, and would take an unnecessary row write/lock on
+ * every event.
+ */
 export async function resolveSoftwarePlanForCommerceProductCode(
   commerceProductCode: string,
   client: SoftwarePlanClient = prisma,
 ) {
   const spec = findCommerceLinkedPlanSpec(commerceProductCode);
   if (!spec) return null;
+  const existing = await client.softwarePlan.findUnique({ where: { key: spec.softwarePlanKey } });
+  if (existing) return existing;
   return ensureCommerceLinkedSoftwarePlan(spec, client);
 }

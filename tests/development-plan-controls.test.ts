@@ -27,6 +27,7 @@ describe("development plan-activation controls (integration, real local Postgres
   let testCompanyId: string;
   let testCompanyPlatformAdminId: string;
   let testCompanyPlatformOwnerId: string;
+  let testCompanyTwoId: string;
 
   beforeAll(async () => {
     const plan = await prisma.softwarePlan.create({ data: { key: `test_devplan_${RUN_ID}`, name: "Dev Plan Test", planType: "PRO" } });
@@ -49,13 +50,21 @@ describe("development plan-activation controls (integration, real local Postgres
       data: { companyId: testCompanyId, email: `devplan-test-owner-${RUN_ID}@example.com`, passwordHash: "hash", fullName: "Test Owner", role: "COMPANY_OWNER", platformRole: PlatformRole.PLATFORM_OWNER, isActive: true, emailVerifiedAt: new Date() },
     });
     testCompanyPlatformOwnerId = testOwner.id;
+
+    // A SECOND sandbox/test company — needed to exercise the user.companyId
+    // === actor.companyId check in isolation from the isTestCompany check:
+    // an actor claiming this company (also isTestCompany: true) would still
+    // pass the isTestCompany gate, so only the tenant-match check catches a
+    // user acting with a companyId that isn't actually theirs.
+    const testCompanyTwo = await prisma.company.create({ data: { legalName: `Sandbox Co Two ${RUN_ID}`, tradeName: "Sandbox Co Two", email: `devplan-sandbox-two-${RUN_ID}@example.com`, isTestCompany: true } });
+    testCompanyTwoId = testCompanyTwo.id;
   });
 
   afterAll(async () => {
-    await prisma.companySoftwareSubscription.deleteMany({ where: { companyId: { in: [realCompanyId, testCompanyId] } } });
+    await prisma.companySoftwareSubscription.deleteMany({ where: { companyId: { in: [realCompanyId, testCompanyId, testCompanyTwoId] } } });
     await prisma.softwarePlan.deleteMany({ where: { key: { contains: RUN_ID } } });
     await prisma.user.deleteMany({ where: { id: { in: [realCompanyOwnerId, testCompanyPlatformAdminId, testCompanyPlatformOwnerId] } } });
-    await prisma.company.deleteMany({ where: { id: { in: [realCompanyId, testCompanyId] } } });
+    await prisma.company.deleteMany({ where: { id: { in: [realCompanyId, testCompanyId, testCompanyTwoId] } } });
     await prisma.$disconnect();
   });
 
@@ -69,6 +78,17 @@ describe("development plan-activation controls (integration, real local Postgres
   it("rejects a non-platform-owner (PLATFORM_ADMIN) even on a sandbox/test company", async () => {
     const actor = actorFor(testCompanyPlatformAdminId, testCompanyId, `devplan-test-admin-${RUN_ID}@example.com`);
     await expect(activateDevelopmentSoftwarePlan(actor, planKey)).rejects.toBeInstanceOf(PermissionDeniedError);
+  });
+
+  it("rejects an actor whose claimed companyId is a different (even if also sandbox) company than the user's actual companyId", async () => {
+    // testCompanyPlatformOwnerId genuinely belongs to testCompanyId — this
+    // actor claims testCompanyTwoId instead. Both companies are
+    // isTestCompany: true, so only the tenant-match re-check (not the
+    // isTestCompany check) can catch this.
+    const actor = actorFor(testCompanyPlatformOwnerId, testCompanyTwoId, `devplan-test-owner-${RUN_ID}@example.com`);
+    await expect(activateDevelopmentSoftwarePlan(actor, planKey)).rejects.toBeInstanceOf(PermissionDeniedError);
+    const subs = await prisma.companySoftwareSubscription.count({ where: { companyId: testCompanyTwoId } });
+    expect(subs).toBe(0);
   });
 
   it("allows a platform owner acting on a sandbox/test company", async () => {

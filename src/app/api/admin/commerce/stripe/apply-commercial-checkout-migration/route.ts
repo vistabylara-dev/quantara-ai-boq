@@ -35,7 +35,7 @@ const CHECKSUM =
  * A transaction lock serializes concurrent attempts so an accidental
  * refresh/double-open cannot apply the migration twice.
  */
-export async function GET() {
+export async function POST() {
   try {
     await requirePlatformActor([PlatformRole.PLATFORM_OWNER]);
 
@@ -214,7 +214,11 @@ export async function GET() {
             await tx.$queryRaw<Array<{ conname: string }>>`
               SELECT conname::text AS conname
               FROM pg_constraint
-              WHERE conname IN (
+              WHERE conrelid IN (
+                '"StripeBillingCustomer"'::regclass,
+                '"StripeWebhookEvent"'::regclass
+              )
+              AND conname IN (
                 'StripeBillingCustomer_companyId_fkey',
                 'StripeWebhookEvent_companyId_fkey'
               )
@@ -302,4 +306,4 @@ export async function GET() {
   } catch (error) {
     return handleApiError(error);
   }
-}
+}3

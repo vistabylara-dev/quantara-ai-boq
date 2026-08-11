@@ -43,7 +43,10 @@ function mockStripeClient() {
     billingPortal: {
       sessions: { create: vi.fn(async () => ({ url: `https://billing.stripe.com/test/${RUN_ID}` })) },
     },
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    // ESLint's `@typescript-eslint/no-explicit-any` rule is not registered for tests/** in
+    // this repo's config, so a disable comment for it errors as "rule not found" — the cast
+    // itself is fine as plain `any` (this mock is extensively reconfigured post-creation via
+    // `.mockResolvedValueOnce`/`.mockImplementation`, which a `Stripe`-typed cast would break).
   } as any;
 }
 
@@ -105,7 +108,9 @@ function makeStatefulStripeClient() {
     billingPortal: {
       sessions: { create: vi.fn(async () => ({ url: `https://billing.stripe.com/test/${RUN_ID}` })) },
     },
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    // Same rationale as mockStripeClient() above: kept as `any` (no disable comment needed,
+    // since the rule isn't registered for tests/**) because callers reach into
+    // `.mock.calls`/`.mockResolvedValueOnce` on these methods after construction.
   } as any;
 
   return { client, sessions };

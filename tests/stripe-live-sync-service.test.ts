@@ -37,6 +37,9 @@ function mockStripeClient() {
       create: vi.fn(async () => ({ id: `prod_live_test_${RUN_ID}_${++globalProductCounter}` })),
       update: vi.fn(async (id: string) => ({ id })),
       retrieve: vi.fn(async (id: string) => ({ id, name: "Mock Live Product", active: true })),
+      // Defaults to "nothing recoverable" — the orphan-recovery search-before-create path
+      // (STRIPE-COMMERCIAL-22) then always falls through to products.create above.
+      search: vi.fn(async () => ({ data: [] })),
     },
     prices: {
       create: vi.fn(async () => ({ id: `price_live_test_${RUN_ID}_${++globalPriceCounter}` })),
@@ -44,6 +47,7 @@ function mockStripeClient() {
       // active: true by default — matches an eligible price's desired state, so tests that
       // don't care about drift see a clean "no drift" result. FIX D tests override this.
       retrieve: vi.fn(async (id: string) => ({ id, unit_amount: 14900, currency: "aed", recurring: { interval: "month" }, active: true })),
+      search: vi.fn(async () => ({ data: [] })),
     },
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
   } as any;
@@ -222,10 +226,19 @@ describe("stripe-live-sync-service (integration, real local Postgres, mocked Str
   });
 
   it("provider failures during synchronize are recorded safely as warnings, never crash the run", async () => {
-    const { price } = await makeEligibleProduct("provider-fail");
+    const { product, price } = await makeEligibleProduct("provider-fail");
     const plan = await buildLiveSyncPlan();
     const stripe = mockStripeClient();
-    stripe.products.create.mockRejectedValueOnce(Object.assign(new Error("boom"), { type: "StripeConnectionError" }));
+    // Keyed to the product under test rather than mockRejectedValueOnce (which would reject
+    // whichever product buildLiveSyncPlan's CREATE list happens to reach first — buildLiveSyncPlan
+    // covers every CommerceProduct in the database, not only this test's own fixture).
+    let created = 0;
+    stripe.products.create.mockImplementation(async (params: { name?: string }) => {
+      if (params?.name === product.name) {
+        throw Object.assign(new Error("boom"), { type: "StripeConnectionError" });
+      }
+      return { id: `prod_live_test_${RUN_ID}_ok_${++created}` };
+    });
 
     const result = await synchronizeLiveCommerceCatalogue(ownerActor(ownerUserId, ownerCompanyId), { catalogueFingerprint: plan.catalogueFingerprint, confirm: true }, { method: "POST", path: "/test" }, stripe);
     expect(result.run.status).toBe("COMPLETED_WITH_WARNINGS");

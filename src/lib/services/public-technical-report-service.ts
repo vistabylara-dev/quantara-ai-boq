@@ -2,8 +2,18 @@ import {
   validateTechnicalReportShareAccess,
   type TechnicalReportShareDenialReason,
 } from "@/lib/documents/technical-report-share";
-import { localDocumentStorageAdapter } from "@/lib/storage/local-document-storage-adapter";
+import { createStorageAdapter, resolveStorageProvider } from "@/lib/storage/storage-factory";
+import type { DocumentStorageAdapter } from "@/lib/storage/document-storage-adapter";
 import { AppError } from "@/lib/errors/app-error";
+
+/** Was hardcoded to the local-filesystem adapter — see technical-report-service.ts for the same production fix; the file this reads was written through that same "generated-documents" storage namespace. */
+let cachedDocumentStorageAdapter: DocumentStorageAdapter | null = null;
+function getDocumentStorageAdapter(): DocumentStorageAdapter {
+  if (!cachedDocumentStorageAdapter) {
+    cachedDocumentStorageAdapter = createStorageAdapter({ provider: resolveStorageProvider(), purpose: "generated-documents" });
+  }
+  return cachedDocumentStorageAdapter;
+}
 
 export type PublicTechnicalReportViewResult =
   | {
@@ -44,7 +54,7 @@ export async function downloadPublicTechnicalReport(rawToken: string) {
   if (!report.storageKey) {
     throw new AppError("TECHNICAL_REPORT_SHARE_NOT_READY", "This report is not ready for download yet.", 409);
   }
-  const buffer = await localDocumentStorageAdapter.getObject(report.storageKey);
+  const buffer = await getDocumentStorageAdapter().getObject(report.storageKey);
   return {
     buffer,
     fileName: report.fileName ?? `${report.name}.docx`,

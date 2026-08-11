@@ -22,9 +22,19 @@ import { mergeProposalSettings, type ClientProposalSettings } from "@/lib/propos
 import { extractRequestSignals } from "@/lib/proposals/request-context";
 import { findProposalByRawToken, validateProposalAccess, type ProposalAccessRecord } from "@/lib/proposals/proposal-token";
 import { assertNotRateLimited, approvalLimiter, commentLimiter, documentDownloadLimiter, passcodeAttemptLimiter, rejectionLimiter, revisionRequestLimiter } from "@/lib/security/rate-limiter";
-import { localDocumentStorageAdapter } from "@/lib/storage/local-document-storage-adapter";
+import { createStorageAdapter, resolveStorageProvider } from "@/lib/storage/storage-factory";
+import type { DocumentStorageAdapter } from "@/lib/storage/document-storage-adapter";
 
 const MAX_COMMENT_LENGTH = 4_000;
+
+/** Was hardcoded to the local-filesystem adapter — see technical-report-service.ts for the same production fix; both files this reads (generated technical reports and generated BOQ documents) are written through the same "generated-documents" storage namespace. */
+let cachedDocumentStorageAdapter: DocumentStorageAdapter | null = null;
+function getDocumentStorageAdapter(): DocumentStorageAdapter {
+  if (!cachedDocumentStorageAdapter) {
+    cachedDocumentStorageAdapter = createStorageAdapter({ provider: resolveStorageProvider(), purpose: "generated-documents" });
+  }
+  return cachedDocumentStorageAdapter;
+}
 
 async function resolveAccessRecord(rawToken: string): Promise<ProposalAccessRecord> {
   const result = await validateProposalAccess(rawToken);
@@ -349,7 +359,7 @@ export async function downloadProposalDocument(rawToken: string, documentId: str
     if (report.status !== "COMPLETED" || !report.storageKey) {
       throw new AppError("DOCUMENT_NOT_AUTHORIZED", "This document is not available for download.", 404);
     }
-    buffer = await localDocumentStorageAdapter.getObject(report.storageKey);
+    buffer = await getDocumentStorageAdapter().getObject(report.storageKey);
     fileName = report.fileName ?? `${report.name}.docx`;
     mimeType = report.mimeType ?? "application/octet-stream";
   } else {
@@ -362,7 +372,7 @@ export async function downloadProposalDocument(rawToken: string, documentId: str
     if (document.audience !== "CLIENT" || document.status !== "COMPLETED" || !document.storageKey) {
       throw new AppError("DOCUMENT_NOT_AUTHORIZED", "This document is not available for download.", 404);
     }
-    buffer = await localDocumentStorageAdapter.getObject(document.storageKey);
+    buffer = await getDocumentStorageAdapter().getObject(document.storageKey);
     fileName = document.fileName ?? `document.${document.type.toLowerCase()}`;
     mimeType = document.mimeType ?? "application/octet-stream";
   }

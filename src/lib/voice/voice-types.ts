@@ -67,6 +67,30 @@ export const voiceProposeRequestSchema = z.object({
   context: voiceCommandContextSchema,
 }).strict();
 
+/**
+ * Safe navigation intents ("take me to validation") never mutate anything,
+ * so they skip the propose/confirm/apply pipeline entirely — the frontend
+ * just navigates. Kept separate from VoiceCommandProposal so a navigation
+ * result can never accidentally be sent to /voice/apply.
+ */
+export const VOICE_NAVIGATION_DESTINATIONS = [
+  "sources",
+  "extraction",
+  "dimensions",
+  "calculation",
+  "boq_review",
+  "validation",
+  "output",
+] as const;
+
+export const voiceNavigationResultSchema = z.object({
+  kind: z.literal("navigation"),
+  destination: z.enum(VOICE_NAVIGATION_DESTINATIONS),
+  message: z.string(),
+}).strict();
+
+export type VoiceNavigationResult = z.infer<typeof voiceNavigationResultSchema>;
+
 export type VoiceProposeRequest = z.infer<typeof voiceProposeRequestSchema>;
 
 const proposalBaseShape = {

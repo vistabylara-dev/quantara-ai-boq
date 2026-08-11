@@ -29,8 +29,10 @@ import {
   type VoiceCommandContext,
   type VoiceCommandProposal,
   type VoiceCommandType,
+  type VoiceNavigationResult,
 } from "@/lib/voice/voice-types";
 import { createVoiceProposalToken, verifyVoiceProposalToken } from "@/lib/voice/voice-proposal-token";
+import { detectVoiceNavigationIntent } from "@/lib/voice/voice-navigation-intent";
 
 const BOQ_FIELD_BY_COMMAND = {
   SET_BOQ_QUANTITY: "quantity",
@@ -135,9 +137,14 @@ export async function proposeVoiceCommand(
   transcript: string,
   context: VoiceCommandContext,
   options: VoiceCommandServiceOptions = {},
-): Promise<VoiceCommandProposal> {
+): Promise<VoiceCommandProposal | VoiceNavigationResult> {
   requireCapability(actor, "boq:edit");
   const project = await getProjectRecord(actor.companyId, projectIdentifier);
+
+  // Navigation never mutates anything, so it's checked first and skips the
+  // whole propose/confirm/apply pipeline — the caller just navigates.
+  const navigation = detectVoiceNavigationIntent(transcript);
+  if (navigation) return navigation;
 
   if (context.type === "DIMENSION_CALCULATION") {
     const definition = getRequiredDimensions(context.calculationType);

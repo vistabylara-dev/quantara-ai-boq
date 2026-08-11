@@ -7,6 +7,7 @@ import { proposeVoiceCommand } from "@/lib/services/voice-boq-command-service";
 import { projectIdParamsSchema } from "@/lib/validation/boq-route-schemas";
 import { voiceProposeRequestSchema } from "@/lib/voice/voice-types";
 import { deriveVoiceProposalSigningKey } from "@/lib/voice/voice-proposal-token";
+import { createOpenAIVoiceCommandInterpreter } from "@/lib/voice/openai-command-interpreter";
 
 export const dynamic = "force-dynamic";
 
@@ -25,6 +26,7 @@ export async function POST(request: Request, context: RouteContext) {
     const body = await parseJsonBody(request, voiceProposeRequestSchema);
     const data = await proposeVoiceCommand(actor, projectId, body.transcript, body.context, {
       proposalSigningKey,
+      interpreter: createOpenAIVoiceCommandInterpreter(),
     });
     return apiSuccess(data);
   } catch (error) {

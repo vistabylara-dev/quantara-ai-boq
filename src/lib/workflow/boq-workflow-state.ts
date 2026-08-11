@@ -39,11 +39,42 @@ export type NextStepAction = {
     | "review_dimensions"
     | "review_calculations"
     | "open_boq"
+    | "view_boq"
     | "run_validation"
     | "lock_boq"
     | "view_output"
     | null;
 };
+
+/**
+ * Maps each stepper stage to the action that already exists for it via the
+ * "what should I do next" CTA — the stepper badges reuse the same handler
+ * instead of duplicating navigation/guard logic. "boq_review" gets its own
+ * "view_boq" action (scroll to the already-visible editor) rather than
+ * "open_boq", which pops the add-item modal — the wrong control for a step
+ * whose whole point is reviewing items that are already on screen.
+ */
+export const WORKFLOW_STEP_ACTIONS: Record<WorkflowStepId, NonNullable<NextStepAction["ctaAction"]>> = {
+  sources: "open_files",
+  extraction: "review_extractions",
+  dimensions: "review_dimensions",
+  calculation: "review_calculations",
+  boq_review: "view_boq",
+  validation: "run_validation",
+  output: "view_output",
+};
+
+const STEP_STATUS_REASON: Record<WorkflowStepStatus, string> = {
+  COMPLETE: "This stage is complete. Click to review it.",
+  CURRENT: "This is the current stage. Click to continue.",
+  NEEDS_ATTENTION: "This stage needs your attention. Click to resolve it.",
+  NOT_STARTED: "This stage hasn't started yet. Click to begin.",
+  NOT_REQUIRED: "This stage isn't required for this BOQ. Click to view it anyway.",
+};
+
+export function describeWorkflowStepReason(status: WorkflowStepStatus): string {
+  return STEP_STATUS_REASON[status];
+}
 
 export type WorkflowEntityFact = {
   id: string;
@@ -286,4 +317,42 @@ export function computeBoqWorkflowState(
 
 export function isBoqLockedForWorkflow(boq: BOQ | null): boolean {
   return Boolean(boq?.isLocked) || boq?.status === "locked" || boq?.status === "approved";
+}
+
+export type WorkflowGuidanceSummary = {
+  currentStage: WorkflowStep | null;
+  why: string;
+  doThisNow: string;
+  afterThat: WorkflowStep | null;
+};
+
+/**
+ * Structures the same facts already in `steps`/`nextAction` into the
+ * persistent "what should I do next" panel's labeled fields — no new
+ * business logic, just presentation of state computed above. "afterThat" is
+ * the next step in stepper order that isn't already COMPLETE/NOT_REQUIRED,
+ * so it never promises work that's already done or not applicable.
+ */
+export function summarizeWorkflowGuidance(
+  steps: WorkflowStep[],
+  nextAction: NextStepAction,
+): WorkflowGuidanceSummary {
+  const currentStage =
+    steps.find((step) => step.status === "NEEDS_ATTENTION")
+    ?? steps.find((step) => step.status === "CURRENT")
+    ?? [...steps].reverse().find((step) => step.status === "COMPLETE")
+    ?? null;
+
+  const currentIndex = currentStage ? steps.findIndex((step) => step.id === currentStage.id) : -1;
+  const afterThat =
+    currentIndex >= 0
+      ? steps.slice(currentIndex + 1).find((step) => step.status !== "COMPLETE" && step.status !== "NOT_REQUIRED") ?? null
+      : null;
+
+  return {
+    currentStage,
+    why: nextAction.message,
+    doThisNow: nextAction.ctaLabel,
+    afterThat,
+  };
 }

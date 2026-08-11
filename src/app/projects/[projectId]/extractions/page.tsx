@@ -10,6 +10,7 @@ import {
   summarizeExtractionReview,
   validateCorrectionDraft,
 } from "@/lib/guidance/project-workflow";
+import { GuideTip } from "@/components/guidance/guide-tip";
 
 type ProjectFileView = {
   id: string;
@@ -331,8 +332,19 @@ export default function ProjectExtractionsPage(props: { params: Promise<{ projec
   return (
     <div className="space-y-6">
       <section className="rounded-[32px] border border-[#D9E2EC] bg-white p-8 dark:border-[#1E2A42] dark:bg-[#0B1426]">
-        <p className="text-xs font-semibold uppercase tracking-[0.28em] text-[#7B879C] dark:text-[#7F8DA6]">Extraction review</p>
-        <h2 className="mt-2 text-3xl font-semibold text-[#0B1630] dark:text-white">Review extracted project information</h2>
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.28em] text-[#7B879C] dark:text-[#7F8DA6]">Extraction review</p>
+            <h2 className="mt-2 text-3xl font-semibold text-[#0B1630] dark:text-white">Review extracted project information</h2>
+          </div>
+          <GuideTip
+            title="Why do I need to review this?"
+            shortDescription="Review the information Quantara found in your project source."
+            whatQuantaraDoes="Shows values extracted from supported source content and flags anything that could not be interpreted safely — none of it is treated as fact until you say so."
+            whatProfessionalCanDo="Confirm correct information, correct anything inaccurate, or reject information that should not enter the BOQ. Confirmed information becomes available for measurement and BOQ preparation."
+            ariaLabel="Help: Review extraction"
+          />
+        </div>
         <p className="mt-3 max-w-3xl text-sm text-[#536078] dark:text-[#B8C4D8]">
           Quantara presents source-linked candidates for professional review. Nothing on this page is confirmed or added to a BOQ automatically.
         </p>

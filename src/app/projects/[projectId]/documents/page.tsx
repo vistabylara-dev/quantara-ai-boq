@@ -7,6 +7,7 @@ import type { Project } from "@/types/project";
 import { apiClient, getApiErrorMessage } from "@/lib/api/client";
 import { formatDate } from "@/lib/formatting/dates";
 import { computeDocumentReadiness } from "@/lib/workflow/document-readiness-state";
+import { GuideTip } from "@/components/guidance/guide-tip";
 
 type DocumentTemplateSummary = {
   id: string;
@@ -485,14 +486,23 @@ export default function ProjectDocumentsPage(props: PageProps) {
               );
             })()}
 
-            <button
-              type="button"
-              onClick={() => void generate()}
-              disabled={!canGenerate}
-              className="mt-6 w-full rounded-2xl border border-slate-700 bg-blue-600 px-4 py-3 text-sm font-semibold text-white hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {isGenerating ? "Generating…" : "Generate document"}
-            </button>
+            <div className="mt-6 flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => void generate()}
+                disabled={!canGenerate}
+                className="flex-1 rounded-2xl border border-slate-700 bg-blue-600 px-4 py-3 text-sm font-semibold text-white hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {isGenerating ? "Generating…" : "Generate document"}
+              </button>
+              <GuideTip
+                title="Generate document"
+                shortDescription="Creates a real document file from this exact BOQ revision and template."
+                whatQuantaraDoes="Quantara renders the selected format (PDF, XLSX, DOCX, CSV, or HTML) from this revision's locked totals and adds it to the generation history below."
+                whatProfessionalCanDo="PDF, XLSX, and DOCX require a locked revision. CSV and HTML drafts are available any time — switch Format above to try one now."
+                ariaLabel="Help: Generate document"
+              />
+            </div>
           </section>
 
           <section className="rounded-[32px] border border-slate-800 bg-slate-950 p-6">

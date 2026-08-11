@@ -18,6 +18,7 @@ import { apiClient, getApiErrorMessage } from "@/lib/api/client";
 import type { VoiceCommandProposal } from "@/lib/voice/voice-types";
 import { VoiceCommandButton } from "@/components/voice/voice-command-button";
 import { VoiceProposalCard } from "@/components/voice/voice-proposal-card";
+import { GuideTip } from "@/components/guidance/guide-tip";
 
 type BoqEditorProps = {
   boq: BOQ;
@@ -363,19 +364,28 @@ export default function BoqEditor({
               >
                 Create revision
               </button>
-              <button
-                type="button"
-                title={activeBoq.sections.every(s => s.items.length === 0) ? "Add at least one valid item before locking this revision." : ""}
-                onClick={() => {
-                  if (window.confirm(`Lock ${activeBoq.revision}? Locked revisions are immutable and cannot be edited.`)) {
-                    void onLock(currentPayload());
-                  }
-                }}
-                disabled={isReadOnly || isSaving || actionPending || voiceInteractionActive || activeBoq.sections.every(s => s.items.length === 0)}
-                className="rounded-2xl border border-slate-700 bg-[#1F2937] px-4 py-2 text-sm font-semibold text-slate-200 hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                Lock revision
-              </button>
+              <span className="inline-flex items-center gap-1.5">
+                <button
+                  type="button"
+                  title={activeBoq.sections.every(s => s.items.length === 0) ? "Add at least one valid item before locking this revision." : ""}
+                  onClick={() => {
+                    if (window.confirm(`Lock ${activeBoq.revision}? Locked revisions are immutable and cannot be edited.`)) {
+                      void onLock(currentPayload());
+                    }
+                  }}
+                  disabled={isReadOnly || isSaving || actionPending || voiceInteractionActive || activeBoq.sections.every(s => s.items.length === 0)}
+                  className="rounded-2xl border border-slate-700 bg-[#1F2937] px-4 py-2 text-sm font-semibold text-slate-200 hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  Lock revision
+                </button>
+                <GuideTip
+                  title="Lock revision"
+                  shortDescription="Locking freezes this BOQ revision so final documents can be generated from it."
+                  whatQuantaraDoes="Quantara re-runs verification, then permanently marks this exact revision as immutable — no items, quantities, or rates on it can change again."
+                  whatProfessionalCanDo="Lock only when you're professionally satisfied with the totals. To keep editing afterward, create a new revision from this one."
+                  ariaLabel="Help: Lock revision"
+                />
+              </span>
             </>
           )}
         </div>

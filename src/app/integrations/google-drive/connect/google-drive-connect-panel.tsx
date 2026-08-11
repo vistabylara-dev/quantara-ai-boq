@@ -5,6 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { CheckCircle2, ChevronLeft, ExternalLink, File, Folder, HardDrive, Loader2, Unplug } from "lucide-react";
 import { apiClient, getApiErrorMessage } from "@/lib/api/client";
+import { useProjectContext } from "../../project-context";
 
 type GoogleDriveRuntimeStatus = {
   configured: boolean;
@@ -64,8 +65,9 @@ function formatBytes(bytes: number | null): string {
 
 export default function GoogleDriveConnectPanel({ runtimeStatus }: { runtimeStatus: GoogleDriveRuntimeStatus }) {
   const searchParams = useSearchParams();
-  const contextProjectId = searchParams.get("projectId");
-  const returnTo = searchParams.get("returnTo");
+  const projectContext = useProjectContext();
+  const contextProjectId = projectContext?.projectId ?? null;
+  const returnTo = projectContext?.returnTo ?? null;
   const connectErrorCode = searchParams.get("connectError");
   const connectError = connectErrorCode
     ? CONNECT_ERROR_MESSAGES[connectErrorCode] ?? "Google Drive connection could not be completed. Please try again."

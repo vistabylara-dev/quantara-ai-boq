@@ -11,19 +11,33 @@ export type ProjectSourceContext = {
 };
 
 /**
+ * A same-origin, relative path scoped to this exact project — rules out
+ * open redirects (absolute or protocol-relative URLs) and rules out
+ * redirecting into a different project's workspace than the one that sent
+ * the user here.
+ */
+function isValidReturnTo(returnTo: string, projectId: string): boolean {
+  if (!returnTo.startsWith("/") || returnTo.startsWith("//")) return false;
+  const projectPrefix = `/projects/${encodeURIComponent(projectId)}`;
+  return returnTo === projectPrefix || returnTo.startsWith(`${projectPrefix}/`);
+}
+
+/**
  * Reads the project context a BOQ-start-wizard "Connect an Application"
  * click arrives with, so this otherwise-global page can stay scoped to the
  * project that sent the user here instead of stranding them with no way
- * back except the browser's back button.
+ * back except the browser's back button. Validated once, here, so every
+ * consumer gets a safe returnTo rather than re-parsing the raw query param.
  */
 export function useProjectContext(): ProjectSourceContext | null {
   const searchParams = useSearchParams();
   const projectId = searchParams.get("projectId");
   if (!projectId) return null;
+  const rawReturnTo = searchParams.get("returnTo");
   return {
     projectId,
     intent: searchParams.get("intent"),
-    returnTo: searchParams.get("returnTo"),
+    returnTo: rawReturnTo && isValidReturnTo(rawReturnTo, projectId) ? rawReturnTo : null,
   };
 }
 

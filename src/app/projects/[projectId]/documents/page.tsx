@@ -498,7 +498,7 @@ export default function ProjectDocumentsPage(props: PageProps) {
               <GuideTip
                 title="Generate document"
                 shortDescription="Creates a real document file from this exact BOQ revision and template."
-                whatQuantaraDoes="Quantara renders the selected format (PDF, XLSX, DOCX, CSV, or HTML) from this revision's locked totals and adds it to the generation history below."
+                whatQuantaraDoes="Quantara renders the selected format from this revision and adds it to the generation history below — PDF, XLSX, and DOCX use the revision's locked totals; CSV and HTML drafts use its current totals, locked or not."
                 whatProfessionalCanDo="PDF, XLSX, and DOCX require a locked revision. CSV and HTML drafts are available any time — switch Format above to try one now."
                 ariaLabel="Help: Generate document"
               />

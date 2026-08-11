@@ -1,5 +1,10 @@
+import { Suspense } from "react";
 import IntegrationsMarketplace from "./integrations-marketplace";
 
 export default function IntegrationsPage() {
-  return <IntegrationsMarketplace />;
+  return (
+    <Suspense fallback={null}>
+      <IntegrationsMarketplace />
+    </Suspense>
+  );
 }

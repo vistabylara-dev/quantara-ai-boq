@@ -5,6 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { CheckCircle2, ChevronLeft, ExternalLink, File, Folder, HardDrive, Loader2, Unplug } from "lucide-react";
 import { apiClient, getApiErrorMessage } from "@/lib/api/client";
+import { useProjectContext } from "../../project-context";
 
 type GoogleDriveRuntimeStatus = {
   configured: boolean;
@@ -64,6 +65,9 @@ function formatBytes(bytes: number | null): string {
 
 export default function GoogleDriveConnectPanel({ runtimeStatus }: { runtimeStatus: GoogleDriveRuntimeStatus }) {
   const searchParams = useSearchParams();
+  const projectContext = useProjectContext();
+  const contextProjectId = projectContext?.projectId ?? null;
+  const returnTo = projectContext?.returnTo ?? null;
   const connectErrorCode = searchParams.get("connectError");
   const connectError = connectErrorCode
     ? CONNECT_ERROR_MESSAGES[connectErrorCode] ?? "Google Drive connection could not be completed. Please try again."
@@ -136,6 +140,10 @@ export default function GoogleDriveConnectPanel({ runtimeStatus }: { runtimeStat
       setProjects(result);
       setSelectedProjectId((current) => {
         if (result.some((project) => project.id === current)) return current;
+        // Arrived here from a specific project's BOQ-source wizard — that
+        // project is the whole reason this connection is being made, so
+        // preselect it over any single-project fallback.
+        if (contextProjectId && result.some((project) => project.id === contextProjectId)) return contextProjectId;
         return result.length === 1 ? result[0].id : "";
       });
     } catch (error) {
@@ -143,7 +151,14 @@ export default function GoogleDriveConnectPanel({ runtimeStatus }: { runtimeStat
     } finally {
       setIsProjectsLoading(false);
     }
-  }, []);
+  }, [contextProjectId]);
+
+  useEffect(() => {
+    // Load projects up front when arriving with project context, so the
+    // "Connecting for <project>" banner shows the real name immediately
+    // instead of waiting for the user to pick a file first.
+    if (isConnected && contextProjectId && projects === null && !isProjectsLoading) void loadProjects();
+  }, [isConnected, contextProjectId, projects, isProjectsLoading, loadProjects]);
 
   const selectFile = (entry: DriveEntry) => {
     if (isImporting) return;
@@ -190,6 +205,15 @@ export default function GoogleDriveConnectPanel({ runtimeStatus }: { runtimeStat
 
   return (
     <div className="rounded-[32px] border border-[#D9E2EC] bg-white p-8 dark:border-[#1E2A42] dark:bg-[#0B1426]">
+      {contextProjectId && (
+        <div className="mb-6 rounded-2xl border border-blue-800 bg-blue-950/20 px-4 py-3 text-sm text-blue-800 dark:text-blue-200">
+          <p className="font-semibold">Connecting for {selectedProject?.name ?? "your project"}</p>
+          <p className="mt-1 text-xs opacity-80">
+            The file you import here goes straight into that project — nothing becomes an approved BOQ item without
+            your professional review.
+          </p>
+        </div>
+      )}
       {connectError && (
         <div className="mb-6 rounded-2xl border border-rose-700/40 bg-rose-950/10 px-4 py-3 text-sm text-[#D84A4A] dark:bg-rose-950/40 dark:text-rose-300">
           {connectError}
@@ -431,10 +455,14 @@ export default function GoogleDriveConnectPanel({ runtimeStatus }: { runtimeStat
                   </p>
                   <p className="mt-1 text-xs">Destination: {importSuccess.project.name} ({importSuccess.project.reference})</p>
                   <Link
-                    href={`/projects/${encodeURIComponent(importSuccess.project.id)}/files`}
-                    className="mt-3 inline-flex font-semibold hover:underline"
+                    href={
+                      returnTo && importSuccess.project.id === contextProjectId
+                        ? returnTo
+                        : `/projects/${encodeURIComponent(importSuccess.project.id)}/files`
+                    }
+                    className="mt-3 inline-flex min-h-10 items-center rounded-xl border border-emerald-600 bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-500"
                   >
-                    Open project files →
+                    Process this source →
                   </Link>
                 </div>
               )}

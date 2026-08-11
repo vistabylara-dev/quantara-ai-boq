@@ -183,7 +183,7 @@ test.describe.serial("P0 admin core — real browser acceptance", () => {
     // Ensure Internal audience to avoid the unrelated company-profile-completeness gate.
     await page.getByLabel("Audience").selectOption("INTERNAL");
 
-    await page.getByRole("button", { name: "Generate document" }).click();
+    await page.getByRole("button", { name: "Generate document", exact: true }).click();
     await expect(page.getByText("COMPLETED").first()).toBeVisible({ timeout: 30_000 });
     await page.screenshot({ path: path.join(SCREENSHOT_DIR, "08-document-generated.png") });
 

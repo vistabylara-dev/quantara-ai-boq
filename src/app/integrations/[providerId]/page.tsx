@@ -1,10 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { use, useCallback, useEffect, useState } from "react";
+import { Suspense, use, useCallback, useEffect, useState } from "react";
 import { ArrowLeft, Plug } from "lucide-react";
 import { apiClient, getApiErrorMessage } from "@/lib/api/client";
 import IntegrationsTabs from "../integrations-tabs";
+import { withProjectContext, ProjectContextBanner, useProjectContext } from "../project-context";
 
 type ProviderDetail = {
   id: string;
@@ -38,7 +39,16 @@ function actionLabel(provider: ProviderDetail): string {
 type PageProps = { params: Promise<{ providerId: string }> };
 
 export default function ProviderDetailPage(props: PageProps) {
+  return (
+    <Suspense fallback={null}>
+      <ProviderDetailPageContent {...props} />
+    </Suspense>
+  );
+}
+
+function ProviderDetailPageContent(props: PageProps) {
   const params = use(props.params);
+  const projectContext = useProjectContext();
   const [provider, setProvider] = useState<ProviderDetail | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
 
@@ -61,9 +71,13 @@ export default function ProviderDetailPage(props: PageProps) {
 
   return (
     <div className="space-y-6">
-      <Link href="/integrations" className="inline-flex items-center gap-1 text-xs text-[#7B879C] hover:text-[#0B1630] dark:text-[#7F8DA6] dark:hover:text-white">
+      <Link
+        href={withProjectContext("/integrations", projectContext)}
+        className="inline-flex items-center gap-1 text-xs text-[#7B879C] hover:text-[#0B1630] dark:text-[#7F8DA6] dark:hover:text-white"
+      >
         <ArrowLeft className="h-3.5 w-3.5" aria-hidden="true" /> Back to Integrations
       </Link>
+      {projectContext && <ProjectContextBanner context={projectContext} />}
       <IntegrationsTabs />
 
       {loadError && (
@@ -161,7 +175,7 @@ export default function ProviderDetailPage(props: PageProps) {
           <div className="mt-8 flex flex-wrap gap-2">
             {!provider.connection && (
               <Link
-                href={`/integrations/${provider.id}/connect`}
+                href={withProjectContext(`/integrations/${provider.id}/connect`, projectContext)}
                 className="rounded-2xl border border-[#D9E2EC] bg-[#EEF3F8] px-4 py-2 text-sm font-semibold text-[#536078] dark:border-[#1E2A42] dark:bg-[#111D33] dark:text-[#8CA0BE]"
               >
                 {actionLabel(provider)}
@@ -169,14 +183,14 @@ export default function ProviderDetailPage(props: PageProps) {
             )}
             {provider.connection && provider.id === "google-drive" && (
               <Link
-                href="/integrations/google-drive/connect"
+                href={withProjectContext("/integrations/google-drive/connect", projectContext)}
                 className="rounded-2xl border border-[#0EA5E9] bg-[#0EA5E9] px-4 py-2 text-sm font-semibold text-white hover:opacity-90 dark:border-[#22D3EE] dark:bg-[#22D3EE] dark:text-[#050B18]"
               >
                 {["ERROR", "REAUTH_REQUIRED"].includes(provider.connection.status) ? "Reconnect Google Drive" : "Browse files"}
               </Link>
             )}
             <Link
-              href="/integrations"
+              href={withProjectContext("/integrations", projectContext)}
               className="rounded-2xl border border-[#D9E2EC] bg-white px-4 py-2 text-sm font-semibold text-[#0B1630] hover:bg-[#EEF3F8] dark:border-[#1E2A42] dark:bg-[#0B1426] dark:text-white dark:hover:bg-[#111D33]"
             >
               Back to Marketplace

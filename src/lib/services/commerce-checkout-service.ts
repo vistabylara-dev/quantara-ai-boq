@@ -340,39 +340,52 @@ export async function createCommerceCheckoutSession(
       await assertNoExistingStripeSubscription(stripe, stripeCustomerId);
 
       /**
-       * An app-owned open session only gets reused when it is for THIS EXACT
-       * price (quantara_price_code matches too, not just the company). A
-       * Starter session must never be handed back to a customer who is now
-       * requesting Professional, or a monthly session to an annual request.
+       * STRIPE-COMMERCIAL-21 — invariant: after this function returns
+       * successfully, at most ONE Quantara-owned Checkout Session may be
+       * open for this company. An app-owned open session is only ever a
+       * reuse CANDIDATE when it is for THIS EXACT price (quantara_price_code
+       * matches too, not just the company) and carries a URL — a Starter
+       * session must never be handed back to a customer now requesting
+       * Professional, or a monthly session to an annual request. At most one
+       * candidate is chosen as the survivor; every OTHER app-owned open
+       * session — whether a different price/interval, or a duplicate open
+       * session for the SAME price — must be confirmed expired before this
+       * function returns or creates anything. Never touches a session
+       * lacking Quantara's own metadata — see findAppOwnedOpenCheckoutSessions.
        */
       const appOwnedOpenSessions = await findAppOwnedOpenCheckoutSessions(stripe, stripeCustomerId, actor.companyId);
-      const matchingSession = appOwnedOpenSessions.find((session) => session.metadata?.quantara_price_code === price.code);
-      if (matchingSession?.url) {
-        return { checkoutSessionId: matchingSession.id, checkoutUrl: matchingSession.url };
-      }
+      const reusableIndex = appOwnedOpenSessions.findIndex(
+        (session) => session.metadata?.quantara_price_code === price.code && Boolean(session.url),
+      );
+      const reusableSession = reusableIndex === -1 ? null : appOwnedOpenSessions[reusableIndex];
+      const extraSessions = appOwnedOpenSessions.filter((_session, index) => index !== reusableIndex);
 
       /**
-       * STRIPE-COMMERCIAL-19 — every OTHER app-owned open session (a stale
-       * attempt at a different price/interval) must be confirmed expired
-       * before a new one is created — never left open to be discovered by a
-       * later request. If ANY expiry cannot be confirmed, this fails closed:
-       * no new Checkout Session is created, and the caller must retry. The
-       * alternative (creating a new session anyway) would risk leaving two
-       * simultaneously-payable open sessions for the same company. Never
-       * touches a session lacking Quantara's own metadata — see
-       * findAppOwnedOpenCheckoutSessions.
+       * STRIPE-COMMERCIAL-19/21 — every extra open session (stale
+       * different-price attempts AND duplicate same-price attempts beyond
+       * the one chosen survivor) must be confirmed expired before either the
+       * survivor is returned or a new session is created — never left open
+       * to be discovered by a later request. If ANY expiry cannot be
+       * confirmed, this fails closed: neither the survivor is returned nor a
+       * new Checkout Session is created, and the caller must retry. The
+       * alternative (returning/creating anyway) would risk leaving two
+       * simultaneously-payable open sessions for the same company.
        */
-      for (const stale of appOwnedOpenSessions) {
+      for (const extra of extraSessions) {
         try {
-          await stripe.checkout.sessions.expire(stale.id);
+          await stripe.checkout.sessions.expire(extra.id);
         } catch (error) {
-          console.error("[commerce-checkout] Failed to expire stale open Checkout Session", stale.id, error);
+          console.error("[commerce-checkout] Failed to expire stale open Checkout Session", extra.id, error);
           throw new AppError(
             "STRIPE_STALE_SESSION_EXPIRE_FAILED",
             "Could not confirm cancellation of a previous checkout attempt. Please try again.",
             502,
           );
         }
+      }
+
+      if (reusableSession?.url) {
+        return { checkoutSessionId: reusableSession.id, checkoutUrl: reusableSession.url };
       }
 
       const session = await stripe.checkout.sessions.create(

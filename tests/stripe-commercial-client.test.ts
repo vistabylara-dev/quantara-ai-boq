@@ -104,5 +104,12 @@ describe("getStripeCommercialClient", () => {
     const state = getStripeCommercialConfigurationState();
     expect(state.liveMode).toBe(true);
     expect(JSON.stringify(state)).not.toContain("sk_live_commercial_fixture_67890");
+
+    process.env.STRIPE_MODE = "test";
+    expect(getStripeCommercialConfigurationState().liveMode).toBe(false);
+
+    process.env.STRIPE_SECRET_KEY = "sk_test_commercial_fixture_67890";
+    process.env.STRIPE_MODE = "live";
+    expect(getStripeCommercialConfigurationState().liveMode).toBe(false);
   });
 });

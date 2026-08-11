@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { PlatformRole } from "@prisma/client";
+import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db/prisma";
 import type { PlatformActor } from "@/lib/auth/platform-authorization";
 import { AppError, ConflictError, PermissionDeniedError } from "@/lib/errors/app-error";
@@ -165,9 +166,11 @@ export type LiveSyncPlan = Awaited<ReturnType<typeof buildLiveSyncPlan>>;
  * revoked, product turned private/non-DIRECT, ...) is archived — never left
  * representing itself as checkout-ready.
  */
-export async function buildLiveSyncPlan() {
-  const products = await listAllCommerceProductsWithPrices();
-  const mappings = await listMappingsForEnvironment(PROVIDER, ENVIRONMENT);
+type LiveSyncPlanClient = { commerceProduct: typeof prisma.commerceProduct; commerceProviderMapping: typeof prisma.commerceProviderMapping };
+
+export async function buildLiveSyncPlan(client: LiveSyncPlanClient = prisma) {
+  const products = await listAllCommerceProductsWithPrices(client);
+  const mappings = await listMappingsForEnvironment(PROVIDER, ENVIRONMENT, client);
   const productMappingByProductId = new Map(mappings.filter((m) => m.providerObjectType === "PRODUCT").map((m) => [m.commerceProductId, m]));
   const priceMappingByPriceId = new Map(mappings.filter((m) => m.providerObjectType === "PRICE" && m.commercePriceId).map((m) => [m.commercePriceId as string, m]));
 
@@ -285,12 +288,83 @@ function safeMetadata(kind: "product" | "price", code: string): Stripe.MetadataP
 }
 
 /**
+ * STRIPE-COMMERCIAL-22 — orphan-object recovery. `stripe.products.create`/
+ * `stripe.prices.create` can succeed while the process fails before
+ * `createMapping` persists the row (crash, connection drop, ...). The next
+ * run's plan then finds no mapping, still sees the price/product as eligible,
+ * and re-emits CREATE — minting a second live, chargeable Stripe object. The
+ * idempotency key above only protects a single request; Stripe idempotency
+ * keys are not retained indefinitely, so a retry made well after the first
+ * attempt is not guaranteed to be deduplicated by the key alone.
+ *
+ * Before creating, search Stripe for an existing LIVE object carrying this
+ * internal code in its trusted quantara_* metadata and adopt it instead of
+ * creating a new one. A search failure (including the Search API's
+ * occasional indexing lag) must never block a genuine create, so it falls
+ * through to the normal create path rather than throwing.
+ */
+async function findRecoverableStripeProduct(stripe: Stripe, productCode: string): Promise<Stripe.Product | null> {
+  try {
+    const result = await stripe.products.search({
+      query: `metadata['quantara_product_code']:'${productCode}' AND metadata['quantara_environment']:'live'`,
+      limit: 1,
+    });
+    const candidate = result.data[0];
+    if (!candidate || candidate.metadata?.quantara_product_code !== productCode) return null;
+    return candidate;
+  } catch (error) {
+    console.error("[stripe-live-sync] orphan product recovery search failed", productCode, error);
+    return null;
+  }
+}
+
+async function findRecoverableStripePrice(stripe: Stripe, priceCode: string, providerProductId: string): Promise<Stripe.Price | null> {
+  try {
+    const result = await stripe.prices.search({
+      query: `metadata['quantara_price_code']:'${priceCode}' AND metadata['quantara_environment']:'live'`,
+      limit: 1,
+    });
+    const candidate = result.data[0];
+    if (!candidate || candidate.metadata?.quantara_price_code !== priceCode) return null;
+    const candidateProductId = typeof candidate.product === "string" ? candidate.product : candidate.product?.id;
+    if (candidateProductId !== providerProductId) return null;
+    return candidate;
+  } catch (error) {
+    console.error("[stripe-live-sync] orphan price recovery search failed", priceCode, error);
+    return null;
+  }
+}
+
+/**
+ * STRIPE-COMMERCIAL-23 — a single global lock, not per-entity: two
+ * PLATFORM_OWNER requests both starting a live synchronization must never
+ * run concurrently, since both would pass the same-instant fingerprint
+ * check and then both apply the same CREATE/UPDATE/ARCHIVE actions against
+ * the live Stripe account. Distinct from CHECKOUT_LOCK_NAMESPACE (checkout
+ * creation, per-company) and STRIPE_WEBHOOK_LOCK_NAMESPACE (webhook
+ * processing, per-subscription) in the other two services, so none of the
+ * three lock domains can ever collide with each other.
+ */
+const LIVE_SYNC_LOCK_NAMESPACE = 231_874_509;
+
+async function acquireLiveSyncLock(tx: Prisma.TransactionClient): Promise<void> {
+  await tx.$executeRaw`SELECT pg_advisory_xact_lock(${LIVE_SYNC_LOCK_NAMESPACE}, hashtext('STRIPE:LIVE'))`;
+}
+
+/**
  * The only path that mutates live Stripe. PLATFORM_OWNER only, requires a
  * fresh matching catalogueFingerprint and explicit confirm:true — identical
  * safety shape to the test-mode synchronizeCommerceCatalogue, but every
  * created object and idempotency key is namespaced `live`/`quantara:live:*`
  * so it can never collide with a test-mode object, and the mapping is
  * recorded with environment: LIVE.
+ *
+ * The plan/fingerprint re-check, the entire apply loop, and the completion
+ * write all run inside one transaction holding the STRIPE:LIVE advisory
+ * lock, so a second concurrent request always waits for the first to fully
+ * commit before it re-reads state — it can never re-derive and apply the
+ * same stale plan. Unrelated operations (checkout creation, webhook
+ * processing, a dry run) never contend for this lock.
  */
 export async function synchronizeLiveCommerceCatalogue(
   actor: PlatformActor,
@@ -304,22 +378,44 @@ export async function synchronizeLiveCommerceCatalogue(
   }
 
   const stripe = requireLiveModeStripeClient(overrideClient);
-  const plan = await buildLiveSyncPlan();
+
+  return prisma.$transaction(
+    async (tx) => synchronizeLiveCommerceCatalogueLocked(tx, actor, input, requestMetadata, stripe),
+    // Generous timeout: this transaction holds the global live-sync advisory
+    // lock while walking the entire catalogue, making one or more real
+    // Stripe HTTP calls per product/price.
+    { maxWait: 10_000, timeout: 60_000 },
+  );
+}
+
+async function synchronizeLiveCommerceCatalogueLocked(
+  tx: Prisma.TransactionClient,
+  actor: PlatformActor,
+  input: LiveSynchronizeInput,
+  requestMetadata: PlatformRequestMetadata,
+  stripe: Stripe,
+) {
+  await acquireLiveSyncLock(tx);
+
+  const plan = await buildLiveSyncPlan(tx);
   if (plan.catalogueFingerprint !== input.catalogueFingerprint) {
     throw new ConflictError("STALE_SYNC_PLAN", "The catalogue changed since this plan was built. Run a new dry run and retry.");
   }
 
-  const products = await listAllCommerceProductsWithPrices();
+  const products = await listAllCommerceProductsWithPrices(tx);
   const productById = new Map(products.map((p) => [p.id, p]));
 
-  const run = await createSyncRun({
-    provider: PROVIDER,
-    environment: ENVIRONMENT,
-    operation: "SYNCHRONIZE",
-    initiatedByUserId: actor.userId,
-    dryRun: false,
-    catalogueFingerprint: plan.catalogueFingerprint,
-  });
+  const run = await createSyncRun(
+    {
+      provider: PROVIDER,
+      environment: ENVIRONMENT,
+      operation: "SYNCHRONIZE",
+      initiatedByUserId: actor.userId,
+      dryRun: false,
+      catalogueFingerprint: plan.catalogueFingerprint,
+    },
+    tx,
+  );
 
   let productsCreated = 0;
   let productsUpdated = 0;
@@ -335,24 +431,25 @@ export async function synchronizeLiveCommerceCatalogue(
     if (!product) continue;
     try {
       if (entry.action === "CREATE") {
-        const stripeProduct = await stripe.products.create(
+        const recoveredProduct = await findRecoverableStripeProduct(stripe, product.code);
+        const stripeProduct = recoveredProduct ?? await stripe.products.create(
           { name: product.name, description: product.description || undefined, active: true, metadata: safeMetadata("product", product.code) },
           { idempotencyKey: idempotencyKey("PRODUCT", product.code) },
         );
-        await createMapping({ provider: PROVIDER, environment: ENVIRONMENT, commerceProductId: product.id, providerProductId: stripeProduct.id, providerObjectType: "PRODUCT" });
+        await createMapping({ provider: PROVIDER, environment: ENVIRONMENT, commerceProductId: product.id, providerProductId: stripeProduct.id, providerObjectType: "PRODUCT" }, tx);
         productsCreated += 1;
       } else if (entry.action === "UPDATE") {
-        const mapping = await findProductMapping(PROVIDER, ENVIRONMENT, product.id);
+        const mapping = await findProductMapping(PROVIDER, ENVIRONMENT, product.id, tx);
         if (mapping) {
           await stripe.products.update(mapping.providerProductId, { name: product.name, description: product.description || undefined, active: true, metadata: safeMetadata("product", product.code) });
-          await updateMappingState(mapping.id, { providerActive: true, synchronizationStatus: "SYNCED", lastSynchronizedAt: new Date() });
+          await updateMappingState(mapping.id, { providerActive: true, synchronizationStatus: "SYNCED", lastSynchronizedAt: new Date() }, tx);
           productsUpdated += 1;
         }
       } else if (entry.action === "ARCHIVE") {
-        const mapping = await findProductMapping(PROVIDER, ENVIRONMENT, product.id);
+        const mapping = await findProductMapping(PROVIDER, ENVIRONMENT, product.id, tx);
         if (mapping) {
           await stripe.products.update(mapping.providerProductId, { active: false });
-          await updateMappingState(mapping.id, { providerActive: false, synchronizationStatus: "ARCHIVED", lastSynchronizedAt: new Date() });
+          await updateMappingState(mapping.id, { providerActive: false, synchronizationStatus: "ARCHIVED", lastSynchronizedAt: new Date() }, tx);
           productsArchived += 1;
         }
       }
@@ -371,13 +468,14 @@ export async function synchronizeLiveCommerceCatalogue(
 
     try {
       if (entry.action === "CREATE") {
-        const productMapping = await findProductMapping(PROVIDER, ENVIRONMENT, product.id);
+        const productMapping = await findProductMapping(PROVIDER, ENVIRONMENT, product.id, tx);
         if (!productMapping) {
           errors.push(`${entry.code}: PRODUCT_MAPPING_MISSING`);
           warningCount += 1;
           continue;
         }
-        const stripePrice = await stripe.prices.create(
+        const recoveredPrice = await findRecoverableStripePrice(stripe, price.code, productMapping.providerProductId);
+        const stripePrice = recoveredPrice ?? await stripe.prices.create(
           {
             product: productMapping.providerProductId,
             unit_amount: price.amountMinor,
@@ -387,31 +485,34 @@ export async function synchronizeLiveCommerceCatalogue(
           },
           { idempotencyKey: idempotencyKey("PRICE", price.code) },
         );
-        await createMapping({
-          provider: PROVIDER,
-          environment: ENVIRONMENT,
-          commerceProductId: product.id,
-          commercePriceId: price.id,
-          providerProductId: productMapping.providerProductId,
-          providerPriceId: stripePrice.id,
-          providerObjectType: "PRICE",
-        });
+        await createMapping(
+          {
+            provider: PROVIDER,
+            environment: ENVIRONMENT,
+            commerceProductId: product.id,
+            commercePriceId: price.id,
+            providerProductId: productMapping.providerProductId,
+            providerPriceId: stripePrice.id,
+            providerObjectType: "PRICE",
+          },
+          tx,
+        );
         pricesCreated += 1;
       } else if (entry.action === "REACTIVATE") {
         // STRIPE-COMMERCIAL-13 — the price was archived (Stripe Price
         // active:false) but has become eligible again; re-enable the
         // existing Stripe object rather than creating a new one.
-        const mapping = await findPriceMapping(PROVIDER, ENVIRONMENT, price.id);
+        const mapping = await findPriceMapping(PROVIDER, ENVIRONMENT, price.id, tx);
         if (mapping?.providerPriceId) {
           await stripe.prices.update(mapping.providerPriceId, { active: true });
-          await updateMappingState(mapping.id, { providerActive: true, synchronizationStatus: "SYNCED", lastSynchronizedAt: new Date() });
+          await updateMappingState(mapping.id, { providerActive: true, synchronizationStatus: "SYNCED", lastSynchronizedAt: new Date() }, tx);
           pricesReactivated += 1;
         }
       } else if (entry.action === "ARCHIVE") {
-        const mapping = await findPriceMapping(PROVIDER, ENVIRONMENT, price.id);
+        const mapping = await findPriceMapping(PROVIDER, ENVIRONMENT, price.id, tx);
         if (mapping?.providerPriceId) {
           await stripe.prices.update(mapping.providerPriceId, { active: false });
-          await updateMappingState(mapping.id, { providerActive: false, synchronizationStatus: "ARCHIVED", lastSynchronizedAt: new Date() });
+          await updateMappingState(mapping.id, { providerActive: false, synchronizationStatus: "ARCHIVED", lastSynchronizedAt: new Date() }, tx);
           pricesArchived += 1;
         }
       }
@@ -423,25 +524,29 @@ export async function synchronizeLiveCommerceCatalogue(
   }
 
   const status = errors.length === 0 ? "COMPLETED" : "COMPLETED_WITH_WARNINGS";
-  const completed = await completeSyncRun(run.id, {
-    status,
-    productsCreated,
-    productsUpdated,
-    productsUnchanged: plan.productsUnchanged,
-    productsArchived,
-    // CommerceSyncRun has no dedicated "reactivated" column (a REACTIVATE
-    // never mints a new Stripe object, so it isn't really a create) — folded
-    // into pricesCreated for the typed summary; the exact reactivated count
-    // is preserved separately in the audit log below.
-    pricesCreated: pricesCreated + pricesReactivated,
-    pricesUnchanged: plan.pricesUnchanged,
-    pricesArchived,
-    blockedCount: plan.blockedCount,
-    warningCount,
-    safeErrorCode: errors.length > 0 ? "PARTIAL_SYNC_FAILURES" : null,
-  });
+  const completed = await completeSyncRun(
+    run.id,
+    {
+      status,
+      productsCreated,
+      productsUpdated,
+      productsUnchanged: plan.productsUnchanged,
+      productsArchived,
+      // CommerceSyncRun has no dedicated "reactivated" column (a REACTIVATE
+      // never mints a new Stripe object, so it isn't really a create) — folded
+      // into pricesCreated for the typed summary; the exact reactivated count
+      // is preserved separately in the audit log below.
+      pricesCreated: pricesCreated + pricesReactivated,
+      pricesUnchanged: plan.pricesUnchanged,
+      pricesArchived,
+      blockedCount: plan.blockedCount,
+      warningCount,
+      safeErrorCode: errors.length > 0 ? "PARTIAL_SYNC_FAILURES" : null,
+    },
+    tx,
+  );
 
-  await prisma.platformAuditLog.create({
+  await tx.platformAuditLog.create({
     data: {
       actorUserId: actor.userId,
       actorPlatformRole: actor.platformRole,
@@ -466,6 +571,7 @@ export async function verifyLiveStripeMapping(actor: PlatformActor, requestMetad
 
   let verified = 0;
   let errored = 0;
+  let skipped = 0;
   const drift: { mappingId: string; providerObjectType: "PRODUCT" | "PRICE"; code: string; field: string; internalValue: string; providerValue: string }[] = [];
 
   for (const mapping of mappings) {
@@ -511,6 +617,15 @@ export async function verifyLiveStripeMapping(actor: PlatformActor, requestMetad
         }
         drift.push(...fieldDrift);
         await updateMappingState(mapping.id, { lastVerifiedAt: new Date(), synchronizationStatus: fieldDrift.length > 0 ? "DRIFTED" : "SYNCED" });
+      } else {
+        // A PRICE mapping missing commercePriceId or providerPriceId cannot
+        // be checked against Stripe at all — never count it as verified, and
+        // record it as an explicit error state rather than leaving it
+        // silently stale, so its lastVerifiedAt/synchronizationStatus never
+        // read as "checked and fine".
+        skipped += 1;
+        await updateMappingState(mapping.id, { lastVerifiedAt: new Date(), synchronizationStatus: "ERROR", lastErrorCode: "PRICE_MAPPING_INCOMPLETE" });
+        continue;
       }
       verified += 1;
     } catch {
@@ -521,7 +636,7 @@ export async function verifyLiveStripeMapping(actor: PlatformActor, requestMetad
 
   const run = await createSyncRun({ provider: PROVIDER, environment: ENVIRONMENT, operation: "VERIFY", initiatedByUserId: actor.userId, dryRun: false, catalogueFingerprint: computeLiveCatalogueFingerprint(products) });
   const completed = await completeSyncRun(run.id, {
-    status: errored > 0 ? "COMPLETED_WITH_WARNINGS" : "COMPLETED",
+    status: errored > 0 || skipped > 0 ? "COMPLETED_WITH_WARNINGS" : "COMPLETED",
     productsCreated: 0,
     productsUpdated: 0,
     productsUnchanged: verified,
@@ -530,7 +645,7 @@ export async function verifyLiveStripeMapping(actor: PlatformActor, requestMetad
     pricesUnchanged: 0,
     pricesArchived: 0,
     blockedCount: 0,
-    warningCount: errored,
+    warningCount: errored + skipped,
   });
 
   await prisma.platformAuditLog.create({
@@ -541,11 +656,11 @@ export async function verifyLiveStripeMapping(actor: PlatformActor, requestMetad
       targetType: "CommerceSyncRun",
       targetId: completed.id,
       requestMetadataJson: requestMetadataJson(requestMetadata),
-      afterJson: { verified, errored, driftCount: drift.length },
+      afterJson: { verified, errored, skipped, driftCount: drift.length },
     },
   });
 
-  return { run: toSyncRunDTO(completed), verified, errored, drift };
+  return { run: toSyncRunDTO(completed), verified, errored, skipped, drift };
 }
 
 export async function listLiveStripeSyncHistory(actor: PlatformActor, limit = 50) {

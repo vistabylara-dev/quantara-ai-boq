@@ -1,4 +1,5 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import type Stripe from "stripe";
 import { Prisma } from "@prisma/client";
 import { prisma } from "../src/lib/db/prisma";
 import {
@@ -22,8 +23,7 @@ function mockConstructingStripeClient(behavior: "throw" | "ok", event?: unknown)
         return event;
       }),
     },
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  } as any;
+  } as unknown as Stripe;
 }
 
 /** A fake Stripe.Event envelope — event.data.object is only ever used to extract the subscription/invoice ID; the actual state applied always comes from the mocked subscriptions.retrieve() below (see stripe-webhook-service.ts's fetch-current-state design). */
@@ -40,8 +40,7 @@ function fakeEvent(input: {
     livemode: input.livemode,
     api_version: input.apiVersion === undefined ? STRIPE_API_VERSION : input.apiVersion,
     data: { object: input.object },
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  } as any;
+  } as unknown as Stripe.Event;
 }
 
 function fakeSubscriptionEventEnvelope(input: {
@@ -125,8 +124,7 @@ async function getOrCreateRealCommerceProduct(code: string) {
 function mockClientReturningSubscription(subscription: unknown) {
   return {
     subscriptions: { retrieve: vi.fn(async () => subscription) },
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  } as any;
+  } as unknown as Stripe;
 }
 
 describe("stripe-subscription-status mapping (pure)", () => {
@@ -417,8 +415,7 @@ describe("processStripeWebhookEvent (integration, real local Postgres)", () => {
     const subscriptionId = `sub_retrieve_fail_${RUN_ID}`;
     const failingClient = {
       subscriptions: { retrieve: vi.fn(async () => { throw new Error("network error"); }) },
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    } as any;
+    } as unknown as Stripe;
     const event = fakeSubscriptionEventEnvelope({ id: `evt_retrieve_fail_${RUN_ID}`, livemode: false, stripeCustomerId: `cus_${RUN_ID}`, subscriptionId });
 
     await expect(processStripeWebhookEvent(event, failingClient)).rejects.toMatchObject({ code: "STRIPE_SUBSCRIPTION_RETRIEVAL_FAILED" });
@@ -482,8 +479,7 @@ describe("processStripeWebhookEvent (integration, real local Postgres)", () => {
           });
         }),
       },
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    } as any;
+    } as unknown as Stripe;
 
     const eventA = fakeSubscriptionEventEnvelope({ id: `evt_concurrent_a_${RUN_ID}`, livemode: false, stripeCustomerId: `cus_${RUN_ID}`, subscriptionId, type: "customer.subscription.updated" });
     const eventB = fakeSubscriptionEventEnvelope({ id: `evt_concurrent_b_${RUN_ID}`, livemode: false, stripeCustomerId: `cus_${RUN_ID}`, subscriptionId, type: "customer.subscription.deleted" });
@@ -509,8 +505,7 @@ describe("processStripeWebhookEvent (integration, real local Postgres)", () => {
       subscriptions: {
         retrieve: vi.fn(async (id: string) => (id === subscriptionIdA ? currentA : currentB)),
       },
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    } as any;
+    } as unknown as Stripe;
 
     const eventA = fakeSubscriptionEventEnvelope({ id: `evt_indep_a_${RUN_ID}`, livemode: false, stripeCustomerId: `cus_${RUN_ID}`, subscriptionId: subscriptionIdA });
     const eventB = fakeSubscriptionEventEnvelope({ id: `evt_indep_b_${RUN_ID}`, livemode: false, stripeCustomerId: `cus_${RUN_ID}`, subscriptionId: subscriptionIdB });

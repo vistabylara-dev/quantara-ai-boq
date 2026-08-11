@@ -38,12 +38,15 @@ export function toProviderMappingDTO(row: CommerceProviderMapping) {
 
 export type CommerceProviderMappingDTO = ReturnType<typeof toProviderMappingDTO>;
 
+type CommerceProviderMappingClient = { commerceProviderMapping: typeof prisma.commerceProviderMapping };
+
 export async function findProductMapping(
   provider: CommerceProvider,
   environment: CommerceProviderEnvironment,
   commerceProductId: string,
+  client: CommerceProviderMappingClient = prisma,
 ): Promise<CommerceProviderMapping | null> {
-  return prisma.commerceProviderMapping.findFirst({
+  return client.commerceProviderMapping.findFirst({
     where: { provider, environment, commerceProductId, providerObjectType: "PRODUCT" },
   });
 }
@@ -52,8 +55,9 @@ export async function findPriceMapping(
   provider: CommerceProvider,
   environment: CommerceProviderEnvironment,
   commercePriceId: string,
+  client: CommerceProviderMappingClient = prisma,
 ): Promise<CommerceProviderMapping | null> {
-  return prisma.commerceProviderMapping.findFirst({
+  return client.commerceProviderMapping.findFirst({
     where: { provider, environment, commercePriceId, providerObjectType: "PRICE" },
   });
 }
@@ -73,8 +77,9 @@ export async function findMappingByProviderPriceId(
 export async function listMappingsForEnvironment(
   provider: CommerceProvider,
   environment: CommerceProviderEnvironment,
+  client: CommerceProviderMappingClient = prisma,
 ): Promise<CommerceProviderMapping[]> {
-  return prisma.commerceProviderMapping.findMany({
+  return client.commerceProviderMapping.findMany({
     where: { provider, environment },
     orderBy: { createdAt: "asc" },
   });
@@ -157,7 +162,7 @@ function buildConflictForExisting(existing: CommerceProviderMapping, input: Crea
   });
 }
 
-export async function createMapping(input: CreateMappingInput): Promise<CommerceProviderMapping> {
+export async function createMapping(input: CreateMappingInput, client: CommerceProviderMappingClient = prisma): Promise<CommerceProviderMapping> {
   const data = {
     provider: input.provider,
     environment: input.environment,
@@ -173,7 +178,7 @@ export async function createMapping(input: CreateMappingInput): Promise<Commerce
 
   const existingByInternal =
     input.providerObjectType === "PRODUCT"
-      ? await prisma.commerceProviderMapping.findFirst({
+      ? await client.commerceProviderMapping.findFirst({
           where: {
             provider: input.provider,
             environment: input.environment,
@@ -181,7 +186,7 @@ export async function createMapping(input: CreateMappingInput): Promise<Commerce
             commerceProductId: input.commerceProductId,
           },
         })
-      : await prisma.commerceProviderMapping.findFirst({
+      : await client.commerceProviderMapping.findFirst({
           where: {
             provider: input.provider,
             environment: input.environment,
@@ -196,12 +201,12 @@ export async function createMapping(input: CreateMappingInput): Promise<Commerce
   }
 
   try {
-    return await prisma.commerceProviderMapping.create({ data });
+    return await client.commerceProviderMapping.create({ data });
   } catch (error) {
     if (!isKnownUniqueViolation(error)) throw error;
 
     const collisions: CommerceProviderMapping[] = [];
-    const byProviderProductId = await prisma.commerceProviderMapping.findFirst({
+    const byProviderProductId = await client.commerceProviderMapping.findFirst({
       where: {
         provider: input.provider,
         environment: input.environment,
@@ -211,7 +216,7 @@ export async function createMapping(input: CreateMappingInput): Promise<Commerce
     if (byProviderProductId) collisions.push(byProviderProductId);
 
     if (input.providerObjectType === "PRICE" && input.providerPriceId) {
-      const byProviderPriceId = await prisma.commerceProviderMapping.findFirst({
+      const byProviderPriceId = await client.commerceProviderMapping.findFirst({
         where: {
           provider: input.provider,
           environment: input.environment,
@@ -242,10 +247,14 @@ export type UpdateMappingStateInput = {
   lastErrorCode?: string | null;
 };
 
-export async function updateMappingState(mappingId: string, input: UpdateMappingStateInput): Promise<CommerceProviderMapping> {
+export async function updateMappingState(
+  mappingId: string,
+  input: UpdateMappingStateInput,
+  client: CommerceProviderMappingClient = prisma,
+): Promise<CommerceProviderMapping> {
   for (let attempt = 0; attempt < 3; attempt += 1) {
     try {
-      return await prisma.commerceProviderMapping.update({
+      return await client.commerceProviderMapping.update({
         where: { id: mappingId },
         data: input,
       });

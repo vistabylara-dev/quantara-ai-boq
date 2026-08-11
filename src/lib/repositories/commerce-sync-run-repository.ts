@@ -43,8 +43,11 @@ export type CreateSyncRunInput = {
   catalogueFingerprint: string;
 };
 
-export async function createSyncRun(input: CreateSyncRunInput): Promise<CommerceSyncRun> {
-  return prisma.commerceSyncRun.create({
+export async function createSyncRun(
+  input: CreateSyncRunInput,
+  client: { commerceSyncRun: typeof prisma.commerceSyncRun } = prisma,
+): Promise<CommerceSyncRun> {
+  return client.commerceSyncRun.create({
     data: {
       provider: input.provider,
       environment: input.environment,
@@ -71,8 +74,12 @@ export type CompleteSyncRunInput = {
   safeErrorCode?: string | null;
 };
 
-export async function completeSyncRun(syncRunId: string, input: CompleteSyncRunInput): Promise<CommerceSyncRun> {
-  return prisma.commerceSyncRun.update({
+export async function completeSyncRun(
+  syncRunId: string,
+  input: CompleteSyncRunInput,
+  client: { commerceSyncRun: typeof prisma.commerceSyncRun } = prisma,
+): Promise<CommerceSyncRun> {
+  return client.commerceSyncRun.update({
     where: { id: syncRunId },
     data: { ...input, completedAt: new Date() },
   });

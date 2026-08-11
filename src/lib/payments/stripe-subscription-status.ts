@@ -51,7 +51,7 @@ export function mapStripeSubscriptionStatusToQuantara(
   }
 }
 
-/** True only for statuses that must never grant paid entitlement — used as a defensive double-check at the call site, not a substitute for the mapping above. */
+/** True only for the Stripe statuses that do grant paid entitlement (`active`, `trialing`). Used as a defensive double-check at the call site, not a substitute for the mapping above. */
 export function stripeStatusGrantsEntitlement(stripeStatus: Stripe.Subscription.Status): boolean {
   return stripeStatus === "active" || stripeStatus === "trialing";
 }

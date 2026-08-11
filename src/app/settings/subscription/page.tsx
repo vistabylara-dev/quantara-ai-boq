@@ -95,17 +95,23 @@ export default function SubscriptionSettingsPage() {
     setIsLoading(true);
     setLoadError(null);
     try {
-      const [entitlementsData, plansData, availability] = await Promise.all([
+      // Checkout availability is optional: entitlements, current plan, trial
+      // usage, and data packages must still render even if Stripe checkout
+      // options fail to load — only the Upgrade section depends on this.
+      const [entitlementsData, plansData, availabilityResult] = await Promise.all([
         apiClient.get<{ entitlements: Entitlements; trialUsage: TrialUsage; packages: PackageSubscription[]; isTestCompany: boolean }>("/api/entitlements", signal),
         apiClient.get<SoftwarePlan[]>("/api/software-plans", signal),
-        apiClient.get<CheckoutAvailability>("/api/commerce/checkout-options", signal),
+        apiClient.get<CheckoutAvailability>("/api/commerce/checkout-options", signal).then(
+          (value) => value,
+          () => null,
+        ),
       ]);
       setEntitlements(entitlementsData.entitlements);
       setTrialUsage(entitlementsData.trialUsage);
       setPackages(entitlementsData.packages);
       setIsTestCompany(entitlementsData.isTestCompany);
       setPlans(plansData);
-      setCheckoutAvailability(availability);
+      setCheckoutAvailability(availabilityResult);
     } catch (error) {
       if (error instanceof DOMException && error.name === "AbortError") return;
       setLoadError(getApiErrorMessage(error));

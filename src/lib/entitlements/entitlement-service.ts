@@ -427,7 +427,7 @@ export async function startTrial(actor: CurrentActor): Promise<StartTrialResult>
 async function assertDevelopmentControlsAllowed(actor: CurrentActor): Promise<void> {
   const [company, user] = await Promise.all([
     prisma.company.findUniqueOrThrow({ where: { id: actor.companyId }, select: { isTestCompany: true } }),
-    prisma.user.findUniqueOrThrow({ where: { id: actor.userId }, select: { platformRole: true, isActive: true, emailVerifiedAt: true } }),
+    prisma.user.findUniqueOrThrow({ where: { id: actor.userId }, select: { companyId: true, platformRole: true, isActive: true, emailVerifiedAt: true } }),
   ]);
 
   if (!company.isTestCompany) {
@@ -437,7 +437,7 @@ async function assertDevelopmentControlsAllowed(actor: CurrentActor): Promise<vo
       403,
     );
   }
-  if (!user.isActive || !user.emailVerifiedAt || user.platformRole !== PlatformRole.PLATFORM_OWNER) {
+  if (user.companyId !== actor.companyId || !user.isActive || !user.emailVerifiedAt || user.platformRole !== PlatformRole.PLATFORM_OWNER) {
     throw new PermissionDeniedError("Development plan activation requires platform owner access.");
   }
 }

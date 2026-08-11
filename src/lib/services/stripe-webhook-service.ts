@@ -211,7 +211,14 @@ async function acquireSubscriptionLock(tx: TxClient, subscriptionId: string): Pr
  */
 async function fetchCurrentSubscription(stripe: Stripe, subscriptionId: string): Promise<Stripe.Subscription> {
   try {
-    return await stripe.subscriptions.retrieve(subscriptionId);
+    // STRIPE-COMMERCIAL-24 — this call runs while holding a per-subscription
+    // DB advisory lock inside a 30-second Prisma transaction. stripe@22.4.0
+    // defaults to an 80-second request timeout with 2 network retries; left
+    // unset, a single slow/hanging attempt could outlast the transaction
+    // timeout on its own. Bound both explicitly, well under 30s, so a
+    // genuinely unreachable Stripe fails fast into the retryable-failure path
+    // below rather than exhausting the transaction's own timeout.
+    return await stripe.subscriptions.retrieve(subscriptionId, undefined, { timeout: 8_000, maxNetworkRetries: 1 });
   } catch (error) {
     console.error("[stripe-webhook] Failed to retrieve current subscription state for", subscriptionId, error);
     throw new AppError(
@@ -277,7 +284,14 @@ async function applyCurrentSubscriptionState(tx: TxClient, subscription: Stripe.
   });
 
   if (existing) {
-    if (existing.companyId !== companyId) return; // defensive — never move a subscription across tenants
+    if (existing.companyId !== companyId) {
+      console.warn(
+        "[stripe-webhook] Tenant mismatch for subscription",
+        subscription.id,
+        "— stored company differs from the company resolved for the Stripe customer; no state applied.",
+      );
+      return; // defensive — never move a subscription across tenants
+    }
     await tx.companySoftwareSubscription.update({
       where: { id: existing.id },
       data: { status, startsAt, expiresAt, cancelledAt, ...(softwarePlanId ? { softwarePlanId } : {}) },

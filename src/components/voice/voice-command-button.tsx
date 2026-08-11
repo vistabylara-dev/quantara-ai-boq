@@ -1,9 +1,31 @@
 "use client";
 
 import { forwardRef, useCallback, useEffect, useId, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { Mic, Square } from "lucide-react";
 import { apiClient, getApiErrorMessage } from "@/lib/api/client";
-import type { VoiceCommandContext, VoiceCommandProposal, VoiceTranscriptionResult } from "@/lib/voice/voice-types";
+import type {
+  VoiceCommandContext,
+  VoiceCommandProposal,
+  VoiceNavigationResult,
+  VoiceTranscriptionResult,
+} from "@/lib/voice/voice-types";
+
+function isVoiceNavigationResult(value: VoiceCommandProposal | VoiceNavigationResult): value is VoiceNavigationResult {
+  return (value as VoiceNavigationResult).kind === "navigation";
+}
+
+const NAVIGATION_DESTINATION_PATH: Record<VoiceNavigationResult["destination"], (projectId: string) => string> = {
+  sources: (projectId) => `/projects/${encodeURIComponent(projectId)}/files`,
+  extraction: (projectId) => `/projects/${encodeURIComponent(projectId)}/extractions`,
+  // No dedicated dimensions/calculation page exists — both live inside the BOQ
+  // workspace's add-item modal, so voice lands there like the stepper does.
+  dimensions: (projectId) => `/projects/${encodeURIComponent(projectId)}/boq`,
+  calculation: (projectId) => `/projects/${encodeURIComponent(projectId)}/boq`,
+  boq_review: (projectId) => `/projects/${encodeURIComponent(projectId)}/boq`,
+  validation: (projectId) => `/projects/${encodeURIComponent(projectId)}/verification`,
+  output: (projectId) => `/projects/${encodeURIComponent(projectId)}/documents`,
+};
 
 export type VoiceCommandButtonContext = VoiceCommandContext;
 
@@ -81,6 +103,7 @@ export const VoiceCommandButton = forwardRef<HTMLButtonElement, VoiceCommandButt
   },
   forwardedRef,
 ) {
+  const router = useRouter();
   const generatedId = useId().replace(/:/g, "");
   const statusId = `voice-command-status-${generatedId}`;
   const disabledReasonId = `voice-command-disabled-${generatedId}`;
@@ -154,12 +177,20 @@ export const VoiceCommandButton = forwardRef<HTMLButtonElement, VoiceCommandButt
         setPhase("INTERPRETING");
         setStatusMessage("Preparing a structured change proposal…");
       }
-      const proposal = await apiClient.post<VoiceCommandProposal>(
+      const result = await apiClient.post<VoiceCommandProposal | VoiceNavigationResult>(
         `/api/projects/${encodeURIComponent(projectId)}/voice/propose`,
         { transcript: transcription.transcript, context },
         controller.signal,
       );
-      await onProposal(proposal);
+
+      if (isVoiceNavigationResult(result)) {
+        if (mountedRef.current) setStatusMessage(result.message);
+        finishInteraction();
+        router.push(NAVIGATION_DESTINATION_PATH[result.destination](projectId));
+        return;
+      }
+
+      await onProposal(result);
       if (mountedRef.current) setStatusMessage("Voice proposal ready for review.");
       finishInteraction();
     } catch (caught) {
@@ -168,7 +199,7 @@ export const VoiceCommandButton = forwardRef<HTMLButtonElement, VoiceCommandButt
     } finally {
       abortControllerRef.current = null;
     }
-  }, [context, failInteraction, finishInteraction, onProposal, projectId]);
+  }, [context, failInteraction, finishInteraction, onProposal, projectId, router]);
 
   const stopRecording = useCallback(() => {
     const recorder = recorderRef.current;

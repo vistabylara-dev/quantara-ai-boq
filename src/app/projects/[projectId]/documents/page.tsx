@@ -6,6 +6,7 @@ import type { BOQ } from "@/types/boq";
 import type { Project } from "@/types/project";
 import { apiClient, getApiErrorMessage } from "@/lib/api/client";
 import { formatDate } from "@/lib/formatting/dates";
+import { computeDocumentReadiness } from "@/lib/workflow/document-readiness-state";
 
 type DocumentTemplateSummary = {
   id: string;
@@ -71,6 +72,15 @@ export default function ProjectDocumentsPage(props: PageProps) {
   const [generateError, setGenerateError] = useState<string | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  // Captures the BOQ id and verification snapshot at the moment the
+  // confirmation panel opens, not the live selectedBoqId/verification —
+  // otherwise switching the revision dropdown while the panel is open would
+  // lock a different, un-reviewed revision, or show the wrong revision's
+  // totals/verification counts in the confirmation itself.
+  const [lockConfirmBoqId, setLockConfirmBoqId] = useState<string | null>(null);
+  const [lockConfirmVerification, setLockConfirmVerification] = useState<VerificationSummary | null>(null);
+  const [isLocking, setIsLocking] = useState(false);
+  const [lockError, setLockError] = useState<string | null>(null);
 
   const load = useCallback(async (signal?: AbortSignal) => {
     setIsLoading(true);
@@ -122,10 +132,42 @@ export default function ProjectDocumentsPage(props: PageProps) {
   const blockedByCriticals = Boolean(verification && verification.unresolvedCritical > 0);
   const canGenerate = Boolean(selectedBoqId && selectedTemplateId && !requiresLock && !blockedByCriticals && !isGenerating);
 
+  const readiness = useMemo(
+    () => computeDocumentReadiness({ selectedBoq, isLockedRevision, verification, isGenerating }),
+    [selectedBoq, isLockedRevision, verification, isGenerating],
+  );
+
   const refreshHistory = useCallback(async () => {
     const data = await apiClient.get<GeneratedDocumentView[]>(`/api/projects/${encodeURIComponent(params.projectId)}/documents`);
     setHistory(data);
   }, [params.projectId]);
+
+  const refreshBoqs = useCallback(async () => {
+    const revisions = await apiClient.get<BOQ[]>(`/api/projects/${encodeURIComponent(params.projectId)}/boqs`);
+    setBoqs(revisions);
+  }, [params.projectId]);
+
+  const confirmLock = useCallback(async () => {
+    if (!lockConfirmBoqId) return;
+    setIsLocking(true);
+    setLockError(null);
+    try {
+      await apiClient.post(`/api/boqs/${encodeURIComponent(lockConfirmBoqId)}/lock`, {});
+      setLockConfirmBoqId(null);
+      setLockConfirmVerification(null);
+      await refreshBoqs();
+      if (lockConfirmBoqId === selectedBoqId) {
+        const data = await apiClient.get<{ summary: VerificationSummary }>(`/api/boqs/${encodeURIComponent(lockConfirmBoqId)}/verification`);
+        setVerification(data.summary);
+      }
+    } catch (error) {
+      // Server remains authoritative — if it finds a new blocker (e.g. a critical
+      // exception introduced since this page loaded), surface it exactly as returned.
+      setLockError(getApiErrorMessage(error));
+    } finally {
+      setIsLocking(false);
+    }
+  }, [lockConfirmBoqId, refreshBoqs, selectedBoqId]);
 
   const generate = useCallback(async (overrides?: Partial<{ boqId: string; templateId: string; type: string; audience: string }>) => {
     setGenerateError(null);
@@ -359,16 +401,89 @@ export default function ProjectDocumentsPage(props: PageProps) {
               </select>
             </label>
 
-            {requiresLock && (
-              <p className="mt-4 rounded-2xl border border-amber-900 bg-amber-950/30 p-3 text-xs text-amber-300">
-                {selectedType} generation requires a locked BOQ revision. Lock this revision, or switch to CSV/HTML for a draft export.
-              </p>
+            <div
+              role="status"
+              className={`mt-4 rounded-2xl border p-4 text-xs ${
+                readiness.state === "LOCKED_READY"
+                  ? "border-emerald-900 bg-emerald-950/30 text-emerald-300"
+                  : readiness.state === "DRAFT_HAS_CRITICALS"
+                    ? "border-rose-900 bg-rose-950/30 text-rose-300"
+                    : "border-amber-900 bg-amber-950/30 text-amber-300"
+              }`}
+            >
+              <p className="font-semibold uppercase tracking-[0.18em]">{readiness.state.replace(/_/g, " ")}</p>
+              <p className="mt-2 text-slate-300">{readiness.why}</p>
+              {FINAL_ONLY_TYPES.has(selectedType) && readiness.state !== "LOCKED_READY" && readiness.state !== "GENERATING" && (
+                <p className="mt-2 text-slate-400">
+                  Draft export in CSV or HTML remains available now — switch Format above.
+                </p>
+              )}
+            </div>
+
+            {readiness.state === "DRAFT_READY_TO_LOCK" && !lockConfirmBoqId && (
+              <button
+                type="button"
+                onClick={() => { setLockConfirmBoqId(selectedBoqId); setLockConfirmVerification(verification); }}
+                className="mt-4 w-full rounded-2xl border border-blue-700 bg-blue-950/40 px-4 py-3 text-sm font-semibold text-blue-200 hover:bg-blue-900/40"
+              >
+                Review & lock revision
+              </button>
             )}
-            {blockedByCriticals && (
-              <p className="mt-4 rounded-2xl border border-rose-900 bg-rose-950/30 p-3 text-xs text-rose-300">
-                {verification?.unresolvedCritical} unresolved critical verification exception(s) block generation.
-              </p>
+
+            {(readiness.state === "DRAFT_UNVALIDATED" || readiness.state === "DRAFT_HAS_CRITICALS") && (
+              <Link
+                href={`/projects/${params.projectId}/verification`}
+                className="mt-4 inline-flex w-full items-center justify-center rounded-2xl border border-slate-700 bg-slate-900 px-4 py-3 text-sm font-semibold text-slate-200 hover:bg-slate-800"
+              >
+                {readiness.nextActionLabel}
+              </Link>
             )}
+
+            {readiness.state === "NO_BOQ" && (
+              <Link
+                href={`/projects/${params.projectId}/boq`}
+                className="mt-4 inline-flex w-full items-center justify-center rounded-2xl border border-slate-700 bg-slate-900 px-4 py-3 text-sm font-semibold text-slate-200 hover:bg-slate-800"
+              >
+                Open BOQ
+              </Link>
+            )}
+
+            {lockConfirmBoqId && (() => {
+              const lockConfirmBoq = boqs.find((boq) => boq.id === lockConfirmBoqId);
+              if (!lockConfirmBoq) return null;
+              return (
+              <div className="mt-4 rounded-2xl border border-blue-800 bg-blue-950/20 p-4 text-sm text-slate-200">
+                <p className="font-semibold text-white">Lock {lockConfirmBoq.revision}?</p>
+                <dl className="mt-3 space-y-1 text-xs text-slate-400">
+                  <div className="flex justify-between"><dt>Grand total</dt><dd className="text-slate-200">{lockConfirmBoq.totals.grandTotal.toLocaleString()}</dd></div>
+                  <div className="flex justify-between"><dt>Unresolved critical</dt><dd className="text-slate-200">{lockConfirmVerification?.unresolvedCritical ?? "—"}</dd></div>
+                  <div className="flex justify-between"><dt>Unresolved warning</dt><dd className="text-slate-200">{lockConfirmVerification?.unresolvedWarning ?? "—"}</dd></div>
+                </dl>
+                <p className="mt-3 rounded-xl border border-amber-900 bg-amber-950/30 p-2 text-xs text-amber-300">
+                  Locked revisions are immutable. This cannot be undone from this workspace.
+                </p>
+                {lockError && <p className="mt-2 text-xs text-rose-300" role="alert">{lockError}</p>}
+                <div className="mt-3 flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => { setLockConfirmBoqId(null); setLockConfirmVerification(null); setLockError(null); }}
+                    disabled={isLocking}
+                    className="flex-1 rounded-xl border border-slate-700 bg-slate-900 px-3 py-2 text-xs font-semibold text-slate-200 hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void confirmLock()}
+                    disabled={isLocking}
+                    className="flex-1 rounded-xl border border-blue-600 bg-blue-600 px-3 py-2 text-xs font-semibold text-white hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {isLocking ? "Locking…" : "Confirm lock"}
+                  </button>
+                </div>
+              </div>
+              );
+            })()}
 
             <button
               type="button"

@@ -366,7 +366,11 @@ export default function BoqEditor({
               <button
                 type="button"
                 title={activeBoq.sections.every(s => s.items.length === 0) ? "Add at least one valid item before locking this revision." : ""}
-                onClick={() => void onLock(currentPayload())}
+                onClick={() => {
+                  if (window.confirm(`Lock ${activeBoq.revision}? Locked revisions are immutable and cannot be edited.`)) {
+                    void onLock(currentPayload());
+                  }
+                }}
                 disabled={isReadOnly || isSaving || actionPending || voiceInteractionActive || activeBoq.sections.every(s => s.items.length === 0)}
                 className="rounded-2xl border border-slate-700 bg-[#1F2937] px-4 py-2 text-sm font-semibold text-slate-200 hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
               >

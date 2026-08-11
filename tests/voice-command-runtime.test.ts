@@ -11,7 +11,7 @@ import { lockBOQ, updateBOQItem } from "@/lib/repositories/boq-repository";
 import { runBOQVerification } from "@/lib/repositories/verification-repository";
 import {
   applyVoiceBOQCommand,
-  proposeVoiceCommand,
+  proposeVoiceCommand as proposeVoiceCommandRaw,
 } from "@/lib/services/voice-boq-command-service";
 import { createProjectWithDefaultBoq } from "@/lib/services/project-service";
 import { OpenAITranscriptionProvider } from "@/lib/voice/openai-transcription-provider";
@@ -38,6 +38,25 @@ import {
   verifyVoiceProposalToken,
 } from "@/lib/voice/voice-proposal-token";
 import { grantUnlimitedPlanForTests } from "./helpers/grant-unlimited-plan";
+
+/**
+ * proposeVoiceCommand now also returns a navigation result for phrases like
+ * "take me to validation" (which never mutate anything and skip the
+ * propose/confirm/apply pipeline entirely). None of this file's transcripts
+ * are navigation phrasings, so this just narrows the type for the existing
+ * mutation-proposal assertions below rather than changing any behavior.
+ */
+async function proposeMutation(
+  ...args: Parameters<typeof proposeVoiceCommandRaw>
+): ReturnType<typeof proposeVoiceCommandRaw> extends Promise<infer T>
+  ? Promise<Exclude<T, { kind: "navigation" }>>
+  : never {
+  const result = await proposeVoiceCommandRaw(...args);
+  if ("kind" in result && result.kind === "navigation") {
+    throw new Error(`Expected a mutation proposal but got a navigation result to "${result.destination}".`);
+  }
+  return result as never;
+}
 
 const RUN_ID = `${Date.now()}-${process.pid}`;
 const TEST_PROPOSAL_SIGNING_KEY = "voice-test-session-derived-signing-key-00000001";
@@ -508,7 +527,7 @@ describe("Release 1 voice proposal/apply integration (real local Postgres)", () 
   it("builds canonical dimension proposals without persisting a calculation or audit", async () => {
     const beforeCalculations = await prisma.quantityCalculation.count({ where: { companyId: companyAId } });
     const beforeAudits = await prisma.auditLog.count({ where: { companyId: companyAId } });
-    const proposal = await proposeVoiceCommand(actorA(), projectASlug, "change wall height to 3.6 metres", {
+    const proposal = await proposeMutation(actorA(), projectASlug, "change wall height to 3.6 metres", {
       type: "DIMENSION_CALCULATION",
       calculationType: "WALL_AREA",
       dimensionValues: [
@@ -530,7 +549,7 @@ describe("Release 1 voice proposal/apply integration (real local Postgres)", () 
 
   it("returns tenant-safe current BOQ values and proposal performs zero mutation", async () => {
     const before = await prisma.bOQItem.findUniqueOrThrow({ where: { id: itemAId } });
-    const proposal = await proposeVoiceCommand(actorA(), projectAId, "change this quantity to 25 square metres", {
+    const proposal = await proposeMutation(actorA(), projectAId, "change this quantity to 25 square metres", {
       type: "BOQ_ITEM",
       itemId: itemAId,
     }, { proposalSigningKey: TEST_PROPOSAL_SIGNING_KEY });
@@ -538,14 +557,14 @@ describe("Release 1 voice proposal/apply integration (real local Postgres)", () 
     const after = await prisma.bOQItem.findUniqueOrThrow({ where: { id: itemAId } });
     expect(after.quantity.equals(before.quantity)).toBe(true);
 
-    await expect(proposeVoiceCommand(actorB(), projectBSlug, "change this quantity to 99 square metres", {
+    await expect(proposeMutation(actorB(), projectBSlug, "change this quantity to 99 square metres", {
       type: "BOQ_ITEM",
       itemId: itemAId,
     }, { proposalSigningKey: TEST_PROPOSAL_SIGNING_KEY })).rejects.toThrow(NotFoundError);
   });
 
   it("applies only the confirmed field through the safe BOQ updater and writes an atomic voice audit without raw audio", async () => {
-    const proposal = await proposeVoiceCommand(actorA(), projectAId, "change this quantity to 25 square metres", {
+    const proposal = await proposeMutation(actorA(), projectAId, "change this quantity to 25 square metres", {
       type: "BOQ_ITEM",
       itemId: itemAId,
     }, { proposalSigningKey: TEST_PROPOSAL_SIGNING_KEY });
@@ -576,7 +595,7 @@ describe("Release 1 voice proposal/apply integration (real local Postgres)", () 
   });
 
   it("rejects a tampered client proposal before any BOQ mutation or voice audit", async () => {
-    const proposal = await proposeVoiceCommand(actorA(), projectAId, "change this quantity to 27 square metres", {
+    const proposal = await proposeMutation(actorA(), projectAId, "change this quantity to 27 square metres", {
       type: "BOQ_ITEM",
       itemId: itemAId,
     }, { proposalSigningKey: TEST_PROPOSAL_SIGNING_KEY });
@@ -597,7 +616,7 @@ describe("Release 1 voice proposal/apply integration (real local Postgres)", () 
   });
 
   it("always stale-checks the signed quantity unit before applying", async () => {
-    const proposal = await proposeVoiceCommand(actorA(), projectAId, "change this quantity to 30 square metres", {
+    const proposal = await proposeMutation(actorA(), projectAId, "change this quantity to 30 square metres", {
       type: "BOQ_ITEM",
       itemId: itemAId,
     }, { proposalSigningKey: TEST_PROPOSAL_SIGNING_KEY });
@@ -615,7 +634,7 @@ describe("Release 1 voice proposal/apply integration (real local Postgres)", () 
   });
 
   it("rejects a stale old-to-new proposal inside updateBOQItem's fresh field guard", async () => {
-    const proposal = await proposeVoiceCommand(actorA(), projectAId, "change description to acoustic gypsum partition", {
+    const proposal = await proposeMutation(actorA(), projectAId, "change description to acoustic gypsum partition", {
       type: "BOQ_ITEM",
       itemId: itemAId,
     }, { proposalSigningKey: TEST_PROPOSAL_SIGNING_KEY });
@@ -634,7 +653,7 @@ describe("Release 1 voice proposal/apply integration (real local Postgres)", () 
 
   it("adds and deletes BOQ items only after signed explicit confirmation", async () => {
     const beforeCount = await prisma.bOQItem.count({ where: { companyId: companyAId, sectionId: sectionAId } });
-    const addProposal = await proposeVoiceCommand(
+    const addProposal = await proposeMutation(
       actorA(),
       projectAId,
       "add item acoustic ceiling quantity 14 square metres rate 35 code AC-VOICE-01",
@@ -662,7 +681,7 @@ describe("Release 1 voice proposal/apply integration (real local Postgres)", () 
       where: { companyId: companyAId, entityId: added.id, action: "VOICE_BOQ_ITEM_ADDED" },
     })).not.toBeNull();
 
-    const deleteProposal = await proposeVoiceCommand(
+    const deleteProposal = await proposeMutation(
       actorA(),
       projectAId,
       "delete this item",
@@ -685,7 +704,7 @@ describe("Release 1 voice proposal/apply integration (real local Postgres)", () 
   });
 
   it("rejects a stale signed delete proposal after the BOQ version changes", async () => {
-    const proposal = await proposeVoiceCommand(
+    const proposal = await proposeMutation(
       actorA(),
       projectAId,
       "delete this item",
@@ -704,7 +723,7 @@ describe("Release 1 voice proposal/apply integration (real local Postgres)", () 
   });
 
   it("allows read-only proposal on a locked BOQ but rejects the confirmed persisted change", async () => {
-    const proposal = await proposeVoiceCommand(actorA(), lockProjectId, "change notes to verified by voice", {
+    const proposal = await proposeMutation(actorA(), lockProjectId, "change notes to verified by voice", {
       type: "BOQ_ITEM",
       itemId: lockItemId,
     }, { proposalSigningKey: TEST_PROPOSAL_SIGNING_KEY });

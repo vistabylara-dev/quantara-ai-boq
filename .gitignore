@@ -20,6 +20,9 @@ yarn-error.log*
 *.tsbuildinfo
 coverage
 .vercel
+test-results/
+playwright-report/
+artifacts/
 
 # Locally generated document files (never committed, never public)
 .storage/

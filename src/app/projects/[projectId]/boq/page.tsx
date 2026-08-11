@@ -408,6 +408,26 @@ export default function ProjectBOQPage(props: PageProps) {
         setShowAddItem(true);
         break;
 
+      case "view_boq":
+        // "BOQ Review" step: the editor is already rendered on this page —
+        // scroll to it instead of popping the add-item modal (that's a
+        // different action). Falls back to the empty-state creation flow
+        // when there's nothing to scroll to yet.
+        if (!activeRevision) {
+          const hasReviewedEntities = extractedEntities.some(
+            (entity) => entity.status === "CONFIRMED" || entity.status === "CORRECTED",
+          );
+          setAddItemInitialTab(hasReviewedEntities ? "reviewed" : "search");
+          void createInitialBOQ(true);
+          break;
+        }
+        {
+          const editorSection = document.getElementById("boq-editor-section");
+          editorSection?.scrollIntoView({ behavior: "smooth", block: "start" });
+          editorSection?.focus({ preventScroll: true });
+        }
+        break;
+
       case "run_validation":
         // Read-only professional verification workspace. Never locks the BOQ.
         router.push(`/projects/${encodedProjectId}/verification`);
@@ -600,6 +620,7 @@ export default function ProjectBOQPage(props: PageProps) {
               onSelectMethod={handleCreationMethodSelect}
             />
           ) : activeRevision ? (
+            <div id="boq-editor-section" tabIndex={-1} className="rounded-[32px] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-blue-500">
             <BoqEditor
               boq={activeRevision}
               projectId={params.projectId}
@@ -625,6 +646,7 @@ export default function ProjectBOQPage(props: PageProps) {
               hasUnsavedChanges={hasUnsavedChanges}
               onVoiceApplied={replaceRevision}
             />
+            </div>
           ) : (
             <div className="rounded-[32px] border border-slate-800 bg-slate-950 p-8 text-slate-300">
               <p className="text-lg font-semibold text-white">No active BOQ revision</p>

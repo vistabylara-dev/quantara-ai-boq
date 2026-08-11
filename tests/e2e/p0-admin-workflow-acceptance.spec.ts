@@ -34,7 +34,9 @@ test.use({
 
 async function gotoBoq(page: Page) {
   await page.goto(`/projects/${PROJECT_SLUG}/boq`);
-  await expect(page.getByText("BOQ Workflow")).toBeVisible({ timeout: 20_000 });
+  // First hit after any dev-server code change pays a one-time JIT-compile
+  // cost that can exceed 20s; subsequent navigations are fast.
+  await expect(page.getByText("BOQ Workflow")).toBeVisible({ timeout: 40_000 });
 }
 
 async function login(page: Page) {
@@ -65,7 +67,11 @@ test.describe.serial("P0 admin core — real browser acceptance", () => {
     // This spec mutates the real seeded item (voice quantity change) and locks
     // the real seeded BOQ — reset both to a known-good draft state first so the
     // run is idempotent across repeated executions, not just the first one.
+    // lockBOQ() also creates a BOQRevisionSnapshot keyed by (boqId,
+    // revisionNumber) — a previous successful run's snapshot must be removed
+    // too, or the next lock attempt hits a duplicate-key error.
     await prisma.bOQItem.update({ where: { id: SEED_ITEM_ID }, data: { quantity: 45 } });
+    await prisma.bOQRevisionSnapshot.deleteMany({ where: { boqId: SEED_BOQ_ID } });
     await prisma.bOQ.update({
       where: { id: SEED_BOQ_ID },
       data: { isLocked: false, status: BOQStatus.DRAFT, lockedAt: null, lockedByUserId: null },
@@ -77,7 +83,7 @@ test.describe.serial("P0 admin core — real browser acceptance", () => {
   });
 
   test("full workflow: navigation, guidance, voice, lock, PDF", async ({ page }) => {
-    test.setTimeout(180_000);
+    test.setTimeout(220_000);
 
     // ---- Login ----
     await login(page);
@@ -129,7 +135,9 @@ test.describe.serial("P0 admin core — real browser acceptance", () => {
 
     await speakAndPropose(page, itemMic, "change quantity to 60 cubic metres");
     const proposalCard = page.getByRole("region", { name: /Review the proposed change/i });
-    await expect(proposalCard).toBeVisible({ timeout: 15_000 });
+    // The first /voice/propose hit in a fresh dev server also pays a one-time
+    // route JIT-compile cost, on top of real interpretation work.
+    await expect(proposalCard).toBeVisible({ timeout: 30_000 });
     await expect(proposalCard.getByText("Change BOQ item C-001 quantity from 45 m3 to 60 m3.")).toBeVisible();
     await page.screenshot({ path: path.join(SCREENSHOT_DIR, "04-voice-proposal.png") });
 
@@ -166,15 +174,14 @@ test.describe.serial("P0 admin core — real browser acceptance", () => {
     await expect(page.getByText(/Locked revisions are immutable/)).toBeVisible();
     await page.screenshot({ path: path.join(SCREENSHOT_DIR, "06-lock-confirmation.png") });
     await page.getByRole("button", { name: "Confirm lock" }).click();
-    await expect(page.getByText(/is locked and ready/)).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByText(/is locked and ready/)).toBeVisible({ timeout: 30_000 });
 
     await page.screenshot({ path: path.join(SCREENSHOT_DIR, "07-documents-locked.png") });
 
-    await page.selectOption('select:near(:text("Format"))', "PDF").catch(() => undefined);
-    await page.getByRole("combobox").filter({ hasText: "" }).first();
+    await page.getByLabel("Format").selectOption("PDF");
+    await expect(page.getByLabel("Format")).toHaveValue("PDF");
     // Ensure Internal audience to avoid the unrelated company-profile-completeness gate.
-    const audienceSelect = page.locator("select").filter({ has: page.locator('option[value="INTERNAL"]') });
-    await audienceSelect.selectOption("INTERNAL");
+    await page.getByLabel("Audience").selectOption("INTERNAL");
 
     await page.getByRole("button", { name: "Generate document" }).click();
     await expect(page.getByText("COMPLETED").first()).toBeVisible({ timeout: 30_000 });

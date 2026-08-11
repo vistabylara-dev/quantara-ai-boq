@@ -36,6 +36,17 @@ export function computeDocumentReadiness(input: DocumentReadinessInput): Documen
   if (input.isGenerating) {
     return { state: "GENERATING", why: "Generating the document now.", nextActionLabel: null };
   }
+  // Checked even when locked: the lock endpoint requires zero criticals at the
+  // moment it locks, so this should be unreachable in practice — but if
+  // verification data on hand ever disagrees, generation eligibility must
+  // reflect that instead of unconditionally trusting the lock flag alone.
+  if (input.verification !== null && input.verification.unresolvedCritical > 0) {
+    return {
+      state: "DRAFT_HAS_CRITICALS",
+      why: `Final output cannot be finalized because ${input.verification.unresolvedCritical} critical validation issue(s) remain.`,
+      nextActionLabel: "Review validation issues",
+    };
+  }
   if (input.isLockedRevision) {
     return {
       state: "LOCKED_READY",
@@ -48,13 +59,6 @@ export function computeDocumentReadiness(input: DocumentReadinessInput): Documen
       state: "DRAFT_UNVALIDATED",
       why: "Validation status is currently unavailable for this revision. Status unavailable does not mean zero issues.",
       nextActionLabel: "Run validation",
-    };
-  }
-  if (input.verification.unresolvedCritical > 0) {
-    return {
-      state: "DRAFT_HAS_CRITICALS",
-      why: `Final output cannot be finalized because ${input.verification.unresolvedCritical} critical validation issue(s) remain.`,
-      nextActionLabel: "Review validation issues",
     };
   }
   return {

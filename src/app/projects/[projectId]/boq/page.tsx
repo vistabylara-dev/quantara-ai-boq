@@ -421,7 +421,11 @@ export default function ProjectBOQPage(props: PageProps) {
           void createInitialBOQ(true);
           break;
         }
-        document.getElementById("boq-editor-section")?.scrollIntoView({ behavior: "smooth", block: "start" });
+        {
+          const editorSection = document.getElementById("boq-editor-section");
+          editorSection?.scrollIntoView({ behavior: "smooth", block: "start" });
+          editorSection?.focus({ preventScroll: true });
+        }
         break;
 
       case "run_validation":
@@ -616,7 +620,7 @@ export default function ProjectBOQPage(props: PageProps) {
               onSelectMethod={handleCreationMethodSelect}
             />
           ) : activeRevision ? (
-            <div id="boq-editor-section">
+            <div id="boq-editor-section" tabIndex={-1} className="rounded-[32px] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-blue-500">
             <BoqEditor
               boq={activeRevision}
               projectId={params.projectId}

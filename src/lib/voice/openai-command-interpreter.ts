@@ -112,9 +112,17 @@ export class OpenAIVoiceCommandInterpreter implements NaturalLanguageVoiceInterp
             { role: "user", content: transcript },
           ],
         }),
+        // Bounded so a hung OpenAI request can never hang the whole voice
+        // interaction (or a serverless function) indefinitely — a timeout is
+        // just another "no opinion" case, same as any other fetch failure.
+        signal: AbortSignal.timeout(8_000),
       });
     } catch (error) {
-      console.error("[voice] OpenAI command interpretation request failed", error instanceof Error ? error.message : error);
+      const isTimeout = error instanceof Error && error.name === "TimeoutError";
+      console.error(
+        isTimeout ? "[voice] OpenAI command interpretation timed out" : "[voice] OpenAI command interpretation request failed",
+        isTimeout ? undefined : error instanceof Error ? error.message : error,
+      );
       return null;
     }
 

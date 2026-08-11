@@ -72,7 +72,13 @@ export default function ProjectDocumentsPage(props: PageProps) {
   const [generateError, setGenerateError] = useState<string | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
-  const [showLockConfirm, setShowLockConfirm] = useState(false);
+  // Captures the BOQ id and verification snapshot at the moment the
+  // confirmation panel opens, not the live selectedBoqId/verification —
+  // otherwise switching the revision dropdown while the panel is open would
+  // lock a different, un-reviewed revision, or show the wrong revision's
+  // totals/verification counts in the confirmation itself.
+  const [lockConfirmBoqId, setLockConfirmBoqId] = useState<string | null>(null);
+  const [lockConfirmVerification, setLockConfirmVerification] = useState<VerificationSummary | null>(null);
   const [isLocking, setIsLocking] = useState(false);
   const [lockError, setLockError] = useState<string | null>(null);
 
@@ -142,15 +148,18 @@ export default function ProjectDocumentsPage(props: PageProps) {
   }, [params.projectId]);
 
   const confirmLock = useCallback(async () => {
-    if (!selectedBoqId) return;
+    if (!lockConfirmBoqId) return;
     setIsLocking(true);
     setLockError(null);
     try {
-      await apiClient.post(`/api/boqs/${encodeURIComponent(selectedBoqId)}/lock`, {});
-      setShowLockConfirm(false);
+      await apiClient.post(`/api/boqs/${encodeURIComponent(lockConfirmBoqId)}/lock`, {});
+      setLockConfirmBoqId(null);
+      setLockConfirmVerification(null);
       await refreshBoqs();
-      const data = await apiClient.get<{ summary: VerificationSummary }>(`/api/boqs/${encodeURIComponent(selectedBoqId)}/verification`);
-      setVerification(data.summary);
+      if (lockConfirmBoqId === selectedBoqId) {
+        const data = await apiClient.get<{ summary: VerificationSummary }>(`/api/boqs/${encodeURIComponent(lockConfirmBoqId)}/verification`);
+        setVerification(data.summary);
+      }
     } catch (error) {
       // Server remains authoritative — if it finds a new blocker (e.g. a critical
       // exception introduced since this page loaded), surface it exactly as returned.
@@ -158,7 +167,7 @@ export default function ProjectDocumentsPage(props: PageProps) {
     } finally {
       setIsLocking(false);
     }
-  }, [refreshBoqs, selectedBoqId]);
+  }, [lockConfirmBoqId, refreshBoqs, selectedBoqId]);
 
   const generate = useCallback(async (overrides?: Partial<{ boqId: string; templateId: string; type: string; audience: string }>) => {
     setGenerateError(null);
@@ -411,10 +420,10 @@ export default function ProjectDocumentsPage(props: PageProps) {
               )}
             </div>
 
-            {readiness.state === "DRAFT_READY_TO_LOCK" && !showLockConfirm && (
+            {readiness.state === "DRAFT_READY_TO_LOCK" && !lockConfirmBoqId && (
               <button
                 type="button"
-                onClick={() => setShowLockConfirm(true)}
+                onClick={() => { setLockConfirmBoqId(selectedBoqId); setLockConfirmVerification(verification); }}
                 className="mt-4 w-full rounded-2xl border border-blue-700 bg-blue-950/40 px-4 py-3 text-sm font-semibold text-blue-200 hover:bg-blue-900/40"
               >
                 Review & lock revision
@@ -439,13 +448,16 @@ export default function ProjectDocumentsPage(props: PageProps) {
               </Link>
             )}
 
-            {showLockConfirm && selectedBoq && (
+            {lockConfirmBoqId && (() => {
+              const lockConfirmBoq = boqs.find((boq) => boq.id === lockConfirmBoqId);
+              if (!lockConfirmBoq) return null;
+              return (
               <div className="mt-4 rounded-2xl border border-blue-800 bg-blue-950/20 p-4 text-sm text-slate-200">
-                <p className="font-semibold text-white">Lock {selectedBoq.revision}?</p>
+                <p className="font-semibold text-white">Lock {lockConfirmBoq.revision}?</p>
                 <dl className="mt-3 space-y-1 text-xs text-slate-400">
-                  <div className="flex justify-between"><dt>Grand total</dt><dd className="text-slate-200">{selectedBoq.totals.grandTotal.toLocaleString()}</dd></div>
-                  <div className="flex justify-between"><dt>Unresolved critical</dt><dd className="text-slate-200">{verification?.unresolvedCritical ?? "—"}</dd></div>
-                  <div className="flex justify-between"><dt>Unresolved warning</dt><dd className="text-slate-200">{verification?.unresolvedWarning ?? "—"}</dd></div>
+                  <div className="flex justify-between"><dt>Grand total</dt><dd className="text-slate-200">{lockConfirmBoq.totals.grandTotal.toLocaleString()}</dd></div>
+                  <div className="flex justify-between"><dt>Unresolved critical</dt><dd className="text-slate-200">{lockConfirmVerification?.unresolvedCritical ?? "—"}</dd></div>
+                  <div className="flex justify-between"><dt>Unresolved warning</dt><dd className="text-slate-200">{lockConfirmVerification?.unresolvedWarning ?? "—"}</dd></div>
                 </dl>
                 <p className="mt-3 rounded-xl border border-amber-900 bg-amber-950/30 p-2 text-xs text-amber-300">
                   Locked revisions are immutable. This cannot be undone from this workspace.
@@ -454,7 +466,7 @@ export default function ProjectDocumentsPage(props: PageProps) {
                 <div className="mt-3 flex gap-2">
                   <button
                     type="button"
-                    onClick={() => { setShowLockConfirm(false); setLockError(null); }}
+                    onClick={() => { setLockConfirmBoqId(null); setLockConfirmVerification(null); setLockError(null); }}
                     disabled={isLocking}
                     className="flex-1 rounded-xl border border-slate-700 bg-slate-900 px-3 py-2 text-xs font-semibold text-slate-200 hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
                   >
@@ -470,7 +482,8 @@ export default function ProjectDocumentsPage(props: PageProps) {
                   </button>
                 </div>
               </div>
-            )}
+              );
+            })()}
 
             <button
               type="button"

@@ -4,20 +4,38 @@ import { describe, expect, it } from "vitest";
 
 /**
  * Static wiring check, not a behavioral test — deliberately so. The actual
- * defect this guards against (document-generation-service.ts hardcoded to
- * the local-filesystem storage adapter, which threw ENOENT on Vercel's
- * read-only serverless bundle) was invisible to every existing behavioral
- * test, because the test environment's own storage provider resolves to
- * "local" either way — the local adapter is correct in tests, it's only
- * wrong in production. Reading the source directly is what actually
- * distinguishes "uses the factory, which happens to return local right
- * now" from "hardcoded to local, period."
+ * defect this guards against (a generated-document service hardcoded to the
+ * local-filesystem storage adapter, which throws on Vercel's read-only
+ * serverless bundle) is invisible to every existing behavioral test, because
+ * the test environment's own storage provider resolves to "local" either way
+ * — the local adapter is correct in tests, it's only wrong in production.
+ * Reading the source directly is what actually distinguishes "uses the
+ * factory, which happens to return local right now" from "hardcoded to
+ * local, period."
+ *
+ * P0-SOURCE-STORAGE-READ — originally written for document-generation-
+ * service.ts only (BOQ documents). Extended to cover
+ * technical-report-service.ts, public-technical-report-service.ts, and
+ * public-proposal-service.ts after a fresh production run
+ * (2026-08-11) reproduced the identical bug in technical-report-service.ts:
+ * generateReportDocument()'s putObject() call threw on Vercel's read-only
+ * filesystem, surfacing as a 500 TECHNICAL_REPORT_GENERATION_FAILED. The two
+ * public-*-service.ts files read bytes back through the same hardcoded local
+ * adapter and would have failed identically on the client-facing download
+ * path even after the write-side fix, since the file is actually written to
+ * Blob storage in production.
  */
-const SOURCE_PATH = path.join(process.cwd(), "src/lib/services/document-generation-service.ts");
-const source = readFileSync(SOURCE_PATH, "utf-8");
-const sourceWithoutComments = source.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/.*$/gm, "");
+const SERVICE_FILES = [
+  "src/lib/services/document-generation-service.ts",
+  "src/lib/services/technical-report-service.ts",
+  "src/lib/services/public-technical-report-service.ts",
+  "src/lib/services/public-proposal-service.ts",
+] as const;
 
-describe("document-generation-service storage wiring", () => {
+describe.each(SERVICE_FILES)("%s storage wiring", (relativePath) => {
+  const source = readFileSync(path.join(process.cwd(), relativePath), "utf-8");
+  const sourceWithoutComments = source.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/.*$/gm, "");
+
   it("does not import local-document-storage-adapter", () => {
     expect(source).not.toMatch(/from\s*["']@\/lib\/storage\/local-document-storage-adapter["']/);
   });
@@ -34,9 +52,15 @@ describe("document-generation-service storage wiring", () => {
     expect(source).toMatch(/purpose:\s*["']generated-documents["']/);
   });
 
-  it("routes generation storage (putObject), secure download (getObject), and deletion (deleteObject) through the resolved adapter", () => {
-    expect(sourceWithoutComments).toMatch(/getDocumentStorageAdapter\(\)\.putObject/);
-    expect(sourceWithoutComments).toMatch(/getDocumentStorageAdapter\(\)\.getObject/);
-    expect(sourceWithoutComments).toMatch(/getDocumentStorageAdapter\(\)\.deleteObject/);
+  it("routes every storage call actually present in this file through the resolved adapter, never the raw import", () => {
+    const usesPut = /\.putObject\(/.test(sourceWithoutComments);
+    const usesGet = /\.getObject\(/.test(sourceWithoutComments);
+    const usesDelete = /\.deleteObject\(/.test(sourceWithoutComments);
+    // At least one storage operation must actually be present — otherwise this file has no
+    // business importing the storage factory at all, and the check above would be vacuous.
+    expect(usesPut || usesGet || usesDelete).toBe(true);
+    if (usesPut) expect(sourceWithoutComments).toMatch(/getDocumentStorageAdapter\(\)\.putObject/);
+    if (usesGet) expect(sourceWithoutComments).toMatch(/getDocumentStorageAdapter\(\)\.getObject/);
+    if (usesDelete) expect(sourceWithoutComments).toMatch(/getDocumentStorageAdapter\(\)\.deleteObject/);
   });
 });

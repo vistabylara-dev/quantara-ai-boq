@@ -18,10 +18,26 @@ import {
   markReportFailed,
   updateReportFieldValues,
 } from "@/lib/repositories/generated-technical-report-repository";
-import { localDocumentStorageAdapter } from "@/lib/storage/local-document-storage-adapter";
+import { createStorageAdapter, resolveStorageProvider } from "@/lib/storage/storage-factory";
+import type { DocumentStorageAdapter } from "@/lib/storage/document-storage-adapter";
 import { generateTechnicalReportDocx } from "@/lib/documents/generators/technical-report-docx-generator";
 
 const SUPPORTED_OUTPUT_TYPES: GeneratedDocumentType[] = [GeneratedDocumentType.DOCX];
+
+/**
+ * Was hardcoded to the local-filesystem adapter — the local disk a Vercel
+ * serverless function sees is ephemeral and read-only outside /tmp, so both
+ * the write on generate and the read on download failed in production. Same
+ * fix, same "generated-documents" storage namespace, as the identical
+ * pattern already used by document-generation-service.ts for BOQ documents.
+ */
+let cachedDocumentStorageAdapter: DocumentStorageAdapter | null = null;
+function getDocumentStorageAdapter(): DocumentStorageAdapter {
+  if (!cachedDocumentStorageAdapter) {
+    cachedDocumentStorageAdapter = createStorageAdapter({ provider: resolveStorageProvider(), purpose: "generated-documents" });
+  }
+  return cachedDocumentStorageAdapter;
+}
 
 export type CreateReportFromTemplateInput = {
   templateId: string;
@@ -114,7 +130,7 @@ export async function generateReportDocument(actor: CurrentActor, reportId: stri
     const fileName = `${safeName}-${record.id.slice(0, 8)}.docx`;
     const storageKey = `technical-reports/${actor.companyId}/${project.id}/${record.id}.docx`;
 
-    await localDocumentStorageAdapter.putObject({
+    await getDocumentStorageAdapter().putObject({
       key: storageKey,
       body: fileBuffer,
       contentType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
@@ -142,7 +158,7 @@ export async function getReportForDownload(actor: CurrentActor, reportId: string
   if (record.status !== "COMPLETED" || !record.storageKey) {
     throw new AppError("TECHNICAL_REPORT_NOT_READY", "This report has not been generated yet.", 409);
   }
-  const buffer = await localDocumentStorageAdapter.getObject(record.storageKey);
+  const buffer = await getDocumentStorageAdapter().getObject(record.storageKey);
   return {
     buffer,
     fileName: record.fileName ?? `${record.name}.docx`,
@@ -154,7 +170,7 @@ export async function deleteReport(actor: CurrentActor, reportId: string) {
   requireCapability(actor, "technical-reports:delete");
   const result = await deleteGeneratedTechnicalReport(actor.companyId, reportId);
   if (result.storageKey) {
-    await localDocumentStorageAdapter.deleteObject(result.storageKey).catch(() => undefined);
+    await getDocumentStorageAdapter().deleteObject(result.storageKey).catch(() => undefined);
   }
   return result;
 }

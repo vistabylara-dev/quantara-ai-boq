@@ -118,6 +118,7 @@ describe("commerce-checkout-service (integration, real local Postgres, mocked St
   let fourthCompanyId: string;
   let raceCompanyId: string;
   let raceCompanyBId: string;
+  let cleanupCompanyId: string;
   let userId: string;
   const originalKey = process.env.STRIPE_SECRET_KEY;
   const originalMode = process.env.STRIPE_MODE;
@@ -136,6 +137,8 @@ describe("commerce-checkout-service (integration, real local Postgres, mocked St
     raceCompanyId = raceCompany.id;
     const raceCompanyB = await prisma.company.create({ data: { legalName: `Race Co B ${RUN_ID}`, tradeName: "Race Co B", email: `checkout-race-b-${RUN_ID}@example.com` } });
     raceCompanyBId = raceCompanyB.id;
+    const cleanupCompany = await prisma.company.create({ data: { legalName: `Cleanup Co ${RUN_ID}`, tradeName: "Cleanup Co", email: `checkout-cleanup-${RUN_ID}@example.com` } });
+    cleanupCompanyId = cleanupCompany.id;
     const user = await prisma.user.create({ data: { companyId, email: `checkout-owner-${RUN_ID}@example.com`, passwordHash: "hash", fullName: "Owner", role: "COMPANY_OWNER", isActive: true, emailVerifiedAt: new Date() } });
     userId = user.id;
   });
@@ -156,7 +159,7 @@ describe("commerce-checkout-service (integration, real local Postgres, mocked St
   });
 
   afterAll(async () => {
-    const allCompanyIds = [companyId, otherCompanyId, thirdCompanyId, fourthCompanyId, raceCompanyId, raceCompanyBId];
+    const allCompanyIds = [companyId, otherCompanyId, thirdCompanyId, fourthCompanyId, raceCompanyId, raceCompanyBId, cleanupCompanyId];
     await prisma.commerceProduct.deleteMany({ where: { code: { contains: RUN_ID } } });
     await prisma.companySoftwareSubscription.deleteMany({ where: { companyId: { in: allCompanyIds } } });
     await prisma.softwarePlan.deleteMany({ where: { key: { contains: RUN_ID } } });
@@ -657,6 +660,115 @@ describe("commerce-checkout-service (integration, real local Postgres, mocked St
       const firstKey = stripe.checkout.sessions.create.mock.calls[0][1]?.idempotencyKey;
       const secondKey = stripe.checkout.sessions.create.mock.calls[1][1]?.idempotencyKey;
       expect(firstKey).not.toBe(secondKey);
+    });
+  });
+
+  describe("STRIPE-COMMERCIAL-21: at most one Quantara-owned open Checkout Session survives, even when a match is found among several", () => {
+    async function seedBillingCustomer(companyForTest: string, stripeCustomerId: string) {
+      await prisma.stripeBillingCustomer.create({ data: { companyId: companyForTest, stripeCustomerId, livemode: false } });
+    }
+
+    it("(A) a matching requested-price open session plus a stale different-price open session: the stale one is expired, the match is reused, no new session is created, exactly one remains open", async () => {
+      const { product: matchProduct, price: matchPrice } = await makeApprovedDirectPrice();
+      const { product: staleProduct, price: stalePrice } = await makeApprovedDirectPrice();
+      await createMapping({ provider: "STRIPE", environment: "TEST", commerceProductId: matchProduct.id, commercePriceId: matchPrice.id, providerProductId: `prod_cleanup_a_match_${RUN_ID}`, providerPriceId: `price_cleanup_a_match_${RUN_ID}`, providerObjectType: "PRICE" });
+      await createMapping({ provider: "STRIPE", environment: "TEST", commerceProductId: staleProduct.id, commercePriceId: stalePrice.id, providerProductId: `prod_cleanup_a_stale_${RUN_ID}`, providerPriceId: `price_cleanup_a_stale_${RUN_ID}`, providerObjectType: "PRICE" });
+
+      const seededCustomerId = `cus_seeded_a_${RUN_ID}`;
+      await seedBillingCustomer(cleanupCompanyId, seededCustomerId);
+      const { client: stripe, sessions } = makeStatefulStripeClient();
+      const matchingSessionId = `cs_cleanup_a_match_${RUN_ID}`;
+      const staleSessionId = `cs_cleanup_a_stale_${RUN_ID}`;
+      sessions.set(matchingSessionId, {
+        id: matchingSessionId,
+        url: `https://checkout.stripe.com/test/cleanup_a_match_${RUN_ID}`,
+        status: "open",
+        customer: seededCustomerId,
+        metadata: { quantara_company_id: cleanupCompanyId, quantara_price_code: matchPrice.code },
+      });
+      sessions.set(staleSessionId, {
+        id: staleSessionId,
+        url: `https://checkout.stripe.com/test/cleanup_a_stale_${RUN_ID}`,
+        status: "open",
+        customer: seededCustomerId,
+        metadata: { quantara_company_id: cleanupCompanyId, quantara_price_code: stalePrice.code },
+      });
+
+      const actor = actorFor(userId, cleanupCompanyId, `checkout-cleanup-${RUN_ID}@example.com`);
+      const result = await createCommerceCheckoutSession(actor, { priceCode: matchPrice.code }, stripe);
+
+      expect(result.checkoutSessionId).toBe(matchingSessionId);
+      expect(stripe.checkout.sessions.create).not.toHaveBeenCalled();
+      expect(stripe.checkout.sessions.expire).toHaveBeenCalledTimes(1);
+      expect(stripe.checkout.sessions.expire).toHaveBeenCalledWith(staleSessionId);
+      const openForCustomer = Array.from(sessions.values()).filter((s) => s.customer === seededCustomerId && s.status === "open");
+      expect(openForCustomer).toHaveLength(1);
+      expect(openForCustomer[0].id).toBe(matchingSessionId);
+    });
+
+    it("(B) two matching same-price open sessions: one is chosen and reused, the duplicate is expired, no new session is created, exactly one remains open", async () => {
+      const { product, price } = await makeApprovedDirectPrice();
+      await createMapping({ provider: "STRIPE", environment: "TEST", commerceProductId: product.id, commercePriceId: price.id, providerProductId: `prod_cleanup_b_${RUN_ID}`, providerPriceId: `price_cleanup_b_${RUN_ID}`, providerObjectType: "PRICE" });
+
+      // (A) already claimed cleanupCompanyId's single (companyId, livemode) StripeBillingCustomer
+      // row, so this test uses its own throwaway company + customer.
+      const seededCustomerId = `cus_seeded_b_${RUN_ID}`;
+      const company = await prisma.company.create({ data: { legalName: `Cleanup Co B ${RUN_ID}`, tradeName: "Cleanup Co B", email: `checkout-cleanup-b-${RUN_ID}@example.com` } });
+      await seedBillingCustomer(company.id, seededCustomerId);
+
+      const { client: stripe, sessions } = makeStatefulStripeClient();
+      const duplicateOneId = `cs_cleanup_b_one_${RUN_ID}`;
+      const duplicateTwoId = `cs_cleanup_b_two_${RUN_ID}`;
+      sessions.set(duplicateOneId, {
+        id: duplicateOneId,
+        url: `https://checkout.stripe.com/test/cleanup_b_one_${RUN_ID}`,
+        status: "open",
+        customer: seededCustomerId,
+        metadata: { quantara_company_id: company.id, quantara_price_code: price.code },
+      });
+      sessions.set(duplicateTwoId, {
+        id: duplicateTwoId,
+        url: `https://checkout.stripe.com/test/cleanup_b_two_${RUN_ID}`,
+        status: "open",
+        customer: seededCustomerId,
+        metadata: { quantara_company_id: company.id, quantara_price_code: price.code },
+      });
+
+      const actor = actorFor(userId, company.id, `checkout-cleanup-b-${RUN_ID}@example.com`);
+      const result = await createCommerceCheckoutSession(actor, { priceCode: price.code }, stripe);
+
+      expect([duplicateOneId, duplicateTwoId]).toContain(result.checkoutSessionId);
+      expect(stripe.checkout.sessions.create).not.toHaveBeenCalled();
+      expect(stripe.checkout.sessions.expire).toHaveBeenCalledTimes(1);
+      const openForCustomer = Array.from(sessions.values()).filter((s) => s.customer === seededCustomerId && s.status === "open");
+      expect(openForCustomer).toHaveLength(1);
+      expect(openForCustomer[0].id).toBe(result.checkoutSessionId);
+
+      await prisma.company.deleteMany({ where: { id: company.id } });
+      await prisma.stripeBillingCustomer.deleteMany({ where: { stripeCustomerId: seededCustomerId } });
+    });
+
+    it("(C) if cleanup of a stale session fails while a valid matching session exists, the whole request fails closed — no session is returned, none is created", async () => {
+      const { product: matchProduct, price: matchPrice } = await makeApprovedDirectPrice();
+      const { product: staleProduct, price: stalePrice } = await makeApprovedDirectPrice();
+      await createMapping({ provider: "STRIPE", environment: "TEST", commerceProductId: matchProduct.id, commercePriceId: matchPrice.id, providerProductId: `prod_cleanup_c_match_${RUN_ID}`, providerPriceId: `price_cleanup_c_match_${RUN_ID}`, providerObjectType: "PRICE" });
+      await createMapping({ provider: "STRIPE", environment: "TEST", commerceProductId: staleProduct.id, commercePriceId: stalePrice.id, providerProductId: `prod_cleanup_c_stale_${RUN_ID}`, providerPriceId: `price_cleanup_c_stale_${RUN_ID}`, providerObjectType: "PRICE" });
+
+      const actor = actorFor(userId, fourthCompanyId, `checkout-fourth-${RUN_ID}@example.com`);
+      const stripe = mockStripeClient();
+      const matchingSessionId = `cs_cleanup_c_match_${RUN_ID}`;
+      const staleSessionId = `cs_cleanup_c_stale_${RUN_ID}`;
+      stripe.checkout.sessions.list.mockResolvedValueOnce({
+        data: [
+          { id: matchingSessionId, url: `https://checkout.stripe.com/test/cleanup_c_match_${RUN_ID}`, metadata: { quantara_company_id: fourthCompanyId, quantara_price_code: matchPrice.code } },
+          { id: staleSessionId, url: `https://checkout.stripe.com/test/cleanup_c_stale_${RUN_ID}`, metadata: { quantara_company_id: fourthCompanyId, quantara_price_code: stalePrice.code } },
+        ],
+        has_more: false,
+      });
+      stripe.checkout.sessions.expire.mockRejectedValue(new Error("Stripe network timeout"));
+
+      await expect(createCommerceCheckoutSession(actor, { priceCode: matchPrice.code }, stripe)).rejects.toMatchObject({ code: "STRIPE_STALE_SESSION_EXPIRE_FAILED" });
+      expect(stripe.checkout.sessions.create).not.toHaveBeenCalled();
     });
   });
 });

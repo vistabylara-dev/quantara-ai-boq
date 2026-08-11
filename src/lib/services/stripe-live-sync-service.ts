@@ -297,42 +297,123 @@ function safeMetadata(kind: "product" | "price", code: string): Stripe.MetadataP
  * keys are not retained indefinitely, so a retry made well after the first
  * attempt is not guaranteed to be deduplicated by the key alone.
  *
- * Before creating, search Stripe for an existing LIVE object carrying this
- * internal code in its trusted quantara_* metadata and adopt it instead of
- * creating a new one. A search failure (including the Search API's
- * occasional indexing lag) must never block a genuine create, so it falls
- * through to the normal create path rather than throwing.
+ * Deliberately does NOT use Stripe's Search API for this decision. Stripe
+ * documents that Search indexing can lag behind writes (and can fall
+ * further behind — "up to an hour" — during outages), so an empty or
+ * failed Search result is not proof nothing exists, and a Search HIT can't
+ * prove nothing else ALSO exists (needed to detect and fail closed on a
+ * genuine duplicate). Both of those are load-bearing for this decision, so
+ * Search cannot safely replace it — the resolvers below always walk a
+ * complete, paginated Stripe LIST and match on trusted quantara_* metadata,
+ * which is the only source that can conclusively answer "zero", "exactly
+ * one", or "more than one".
  */
-async function findRecoverableStripeProduct(stripe: Stripe, productCode: string): Promise<Stripe.Product | null> {
+type ProductRecoveryDecision =
+  | { decision: "create" }
+  | { decision: "adopt"; product: Stripe.Product }
+  | { decision: "fail"; code: string; message: string };
+
+async function resolveExistingLiveProduct(stripe: Stripe, productCode: string): Promise<ProductRecoveryDecision> {
+  const candidates: Stripe.Product[] = [];
+  let startingAfter: string | undefined;
   try {
-    const result = await stripe.products.search({
-      query: `metadata['quantara_product_code']:'${productCode}' AND metadata['quantara_environment']:'live'`,
-      limit: 1,
-    });
-    const candidate = result.data[0];
-    if (!candidate || candidate.metadata?.quantara_product_code !== productCode) return null;
-    return candidate;
+    for (;;) {
+      const page = await stripe.products.list({ limit: 100, starting_after: startingAfter });
+      for (const item of page.data) {
+        if (item.metadata?.quantara_product_code === productCode && item.metadata?.quantara_environment === "live") {
+          candidates.push(item);
+        }
+      }
+      if (!page.has_more || page.data.length === 0) break;
+      startingAfter = page.data[page.data.length - 1].id;
+    }
   } catch (error) {
-    console.error("[stripe-live-sync] orphan product recovery search failed", productCode, error);
-    return null;
+    console.error("[stripe-live-sync] authoritative product recovery LIST failed", productCode, error);
+    return {
+      decision: "fail",
+      code: "STRIPE_PRODUCT_RECOVERY_LIST_FAILED",
+      message: "Could not confirm whether a live Stripe Product already exists for this product before creating one. No object was created.",
+    };
   }
+
+  if (candidates.length === 0) return { decision: "create" };
+  if (candidates.length > 1) {
+    return {
+      decision: "fail",
+      code: "STRIPE_PRODUCT_RECOVERY_MULTIPLE_CANDIDATES",
+      message: "Multiple live Stripe Products carry this product's quantara_product_code metadata. Manual review is required — no object was created.",
+    };
+  }
+  return { decision: "adopt", product: candidates[0] };
 }
 
-async function findRecoverableStripePrice(stripe: Stripe, priceCode: string, providerProductId: string): Promise<Stripe.Price | null> {
+type PriceRecoveryDecision =
+  | { decision: "create" }
+  | { decision: "adopt"; price: Stripe.Price }
+  | { decision: "fail"; code: string; message: string };
+
+/**
+ * A recovered Price is adopted only when it matches the internal record on
+ * every financially-meaningful field, not merely on quantara_price_code — a
+ * code match with a different amount/currency/interval/product is far more
+ * likely to indicate stale or corrupted metadata than a genuine orphan, and
+ * silently adopting it would let the wrong amount go live.
+ */
+async function resolveExistingLivePrice(
+  stripe: Stripe,
+  priceCode: string,
+  providerProductId: string,
+  expected: { amountMinor: number; currency: string; billingInterval: "MONTH" | "YEAR" | "ONE_TIME" },
+): Promise<PriceRecoveryDecision> {
+  const candidates: Stripe.Price[] = [];
+  let startingAfter: string | undefined;
   try {
-    const result = await stripe.prices.search({
-      query: `metadata['quantara_price_code']:'${priceCode}' AND metadata['quantara_environment']:'live'`,
-      limit: 1,
-    });
-    const candidate = result.data[0];
-    if (!candidate || candidate.metadata?.quantara_price_code !== priceCode) return null;
-    const candidateProductId = typeof candidate.product === "string" ? candidate.product : candidate.product?.id;
-    if (candidateProductId !== providerProductId) return null;
-    return candidate;
+    for (;;) {
+      const page = await stripe.prices.list({ product: providerProductId, limit: 100, starting_after: startingAfter });
+      for (const item of page.data) {
+        if (item.metadata?.quantara_price_code === priceCode && item.metadata?.quantara_environment === "live") {
+          candidates.push(item);
+        }
+      }
+      if (!page.has_more || page.data.length === 0) break;
+      startingAfter = page.data[page.data.length - 1].id;
+    }
   } catch (error) {
-    console.error("[stripe-live-sync] orphan price recovery search failed", priceCode, error);
-    return null;
+    console.error("[stripe-live-sync] authoritative price recovery LIST failed", priceCode, error);
+    return {
+      decision: "fail",
+      code: "STRIPE_PRICE_RECOVERY_LIST_FAILED",
+      message: "Could not confirm whether a live Stripe Price already exists for this price before creating one. No object was created.",
+    };
   }
+
+  if (candidates.length === 0) return { decision: "create" };
+  if (candidates.length > 1) {
+    return {
+      decision: "fail",
+      code: "STRIPE_PRICE_RECOVERY_MULTIPLE_CANDIDATES",
+      message: "Multiple live Stripe Prices carry this price's quantara_price_code metadata. Manual review is required — no object was created.",
+    };
+  }
+
+  const [candidate] = candidates;
+  const candidateProductId = typeof candidate.product === "string" ? candidate.product : candidate.product?.id;
+  const expectedInterval = expected.billingInterval === "ONE_TIME" ? null : expected.billingInterval === "MONTH" ? "month" : "year";
+  const matchesExactly =
+    candidateProductId === providerProductId &&
+    candidate.unit_amount === expected.amountMinor &&
+    candidate.currency.toUpperCase() === expected.currency.toUpperCase() &&
+    (candidate.recurring?.interval ?? null) === expectedInterval;
+
+  if (!matchesExactly) {
+    return {
+      decision: "fail",
+      code: "STRIPE_PRICE_RECOVERY_DRIFT",
+      message: "A live Stripe Price carrying this price's metadata was found, but its product/amount/currency/interval does not match the internal record. Manual review is required — no object was created or adopted.",
+    };
+  }
+
+  return { decision: "adopt", price: candidate };
 }
 
 /**
@@ -431,11 +512,18 @@ async function synchronizeLiveCommerceCatalogueLocked(
     if (!product) continue;
     try {
       if (entry.action === "CREATE") {
-        const recoveredProduct = await findRecoverableStripeProduct(stripe, product.code);
-        const stripeProduct = recoveredProduct ?? await stripe.products.create(
-          { name: product.name, description: product.description || undefined, active: true, metadata: safeMetadata("product", product.code) },
-          { idempotencyKey: idempotencyKey("PRODUCT", product.code) },
-        );
+        const recovery = await resolveExistingLiveProduct(stripe, product.code);
+        if (recovery.decision === "fail") {
+          errors.push(`${entry.code}: ${recovery.code}`);
+          warningCount += 1;
+          continue;
+        }
+        const stripeProduct = recovery.decision === "adopt"
+          ? recovery.product
+          : await stripe.products.create(
+              { name: product.name, description: product.description || undefined, active: true, metadata: safeMetadata("product", product.code) },
+              { idempotencyKey: idempotencyKey("PRODUCT", product.code) },
+            );
         await createMapping({ provider: PROVIDER, environment: ENVIRONMENT, commerceProductId: product.id, providerProductId: stripeProduct.id, providerObjectType: "PRODUCT" }, tx);
         productsCreated += 1;
       } else if (entry.action === "UPDATE") {
@@ -474,17 +562,28 @@ async function synchronizeLiveCommerceCatalogueLocked(
           warningCount += 1;
           continue;
         }
-        const recoveredPrice = await findRecoverableStripePrice(stripe, price.code, productMapping.providerProductId);
-        const stripePrice = recoveredPrice ?? await stripe.prices.create(
-          {
-            product: productMapping.providerProductId,
-            unit_amount: price.amountMinor,
-            currency: price.currency.toLowerCase(),
-            metadata: safeMetadata("price", price.code),
-            ...(price.billingInterval === "ONE_TIME" ? {} : { recurring: { interval: price.billingInterval === "MONTH" ? "month" : "year" } }),
-          },
-          { idempotencyKey: idempotencyKey("PRICE", price.code) },
-        );
+        const recovery = await resolveExistingLivePrice(stripe, price.code, productMapping.providerProductId, {
+          amountMinor: price.amountMinor,
+          currency: price.currency,
+          billingInterval: price.billingInterval,
+        });
+        if (recovery.decision === "fail") {
+          errors.push(`${entry.code}: ${recovery.code}`);
+          warningCount += 1;
+          continue;
+        }
+        const stripePrice = recovery.decision === "adopt"
+          ? recovery.price
+          : await stripe.prices.create(
+              {
+                product: productMapping.providerProductId,
+                unit_amount: price.amountMinor,
+                currency: price.currency.toLowerCase(),
+                metadata: safeMetadata("price", price.code),
+                ...(price.billingInterval === "ONE_TIME" ? {} : { recurring: { interval: price.billingInterval === "MONTH" ? "month" : "year" } }),
+              },
+              { idempotencyKey: idempotencyKey("PRICE", price.code) },
+            );
         await createMapping(
           {
             provider: PROVIDER,

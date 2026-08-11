@@ -37,9 +37,9 @@ function mockStripeClient() {
       create: vi.fn(async () => ({ id: `prod_live_test_${RUN_ID}_${++globalProductCounter}` })),
       update: vi.fn(async (id: string) => ({ id })),
       retrieve: vi.fn(async (id: string) => ({ id, name: "Mock Live Product", active: true })),
-      // Defaults to "nothing recoverable" — the orphan-recovery search-before-create path
+      // Defaults to "nothing recoverable" — the authoritative orphan-recovery LIST scan
       // (STRIPE-COMMERCIAL-22) then always falls through to products.create above.
-      search: vi.fn(async () => ({ data: [] })),
+      list: vi.fn(async () => ({ data: [], has_more: false })),
     },
     prices: {
       create: vi.fn(async () => ({ id: `price_live_test_${RUN_ID}_${++globalPriceCounter}` })),
@@ -47,9 +47,13 @@ function mockStripeClient() {
       // active: true by default — matches an eligible price's desired state, so tests that
       // don't care about drift see a clean "no drift" result. FIX D tests override this.
       retrieve: vi.fn(async (id: string) => ({ id, unit_amount: 14900, currency: "aed", recurring: { interval: "month" }, active: true })),
-      search: vi.fn(async () => ({ data: [] })),
+      list: vi.fn(async () => ({ data: [], has_more: false })),
     },
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    // ESLint's `@typescript-eslint/no-explicit-any` rule is not registered for tests/** in
+    // this repo's config, so a disable comment for it errors as "rule not found". The cast
+    // itself stays as plain `any` (not `unknown as Stripe`): several of these methods are
+    // reconfigured post-creation via `.mockImplementation` below, which a `Stripe`-typed
+    // cast would break.
   } as any;
 }
 
@@ -365,5 +369,283 @@ describe("stripe-live-sync-service (integration, real local Postgres, mocked Str
     expect(reactivatedMapping?.providerActive).toBe(true);
     expect(reactivatedMapping?.synchronizationStatus).toBe("SYNCED");
     expect(stripe.prices.update).toHaveBeenCalledWith(archivedMapping?.providerPriceId, { active: true });
+  });
+
+  describe("STRIPE-COMMERCIAL-22: orphan recovery is decided by an authoritative LIST scan, never by Search absence/presence", () => {
+    type FakeProduct = { id: string; name: string; active: boolean; metadata: Record<string, string> };
+    type FakePrice = { id: string; unit_amount: number; currency: string; recurring: { interval: string } | null; active: boolean; product: string; metadata: Record<string, string> };
+
+    // A stateful mock backing products.list/prices.list from real in-memory state, so a
+    // pre-seeded "orphan" (an object with no corresponding CommerceProviderMapping row) is
+    // actually discoverable by the same LIST-based resolver the production code runs —
+    // unlike the plain mockStripeClient() above, which always reports an empty catalogue.
+    function makeRecoveryStripeClient() {
+      const products = new Map<string, FakeProduct>();
+      const prices = new Map<string, FakePrice>();
+      const client: any = {
+        products: {
+          // Uses the module-level counters (not a local one) — buildLiveSyncPlan() scans the
+          // WHOLE catalogue, including any still-unmapped product left behind by an earlier
+          // test in this file (e.g. the deliberately-failed "provider-fail" fixture above), so
+          // one test's syncOne() call can end up creating objects for more than just its own
+          // fixture. A counter reset to 0 per test previously let two different tests mint the
+          // identical fake providerProductId string, which collided on the real unique
+          // (provider, environment, providerProductId) database constraint.
+          create: vi.fn(async (params: { name: string; active?: boolean; metadata?: Record<string, string> }) => {
+            const id = `prod_live_test_${RUN_ID}_${++globalProductCounter}`;
+            products.set(id, { id, name: params.name, active: params.active ?? true, metadata: params.metadata ?? {} });
+            return { id };
+          }),
+          update: vi.fn(async (id: string) => ({ id })),
+          retrieve: vi.fn(async (id: string) => products.get(id) ?? { id, name: "Mock Live Product", active: true }),
+          list: vi.fn(async () => ({ data: Array.from(products.values()), has_more: false })),
+        },
+        prices: {
+          create: vi.fn(async (params: { product: string; unit_amount: number; currency: string; recurring?: { interval: string }; metadata?: Record<string, string> }) => {
+            const id = `price_live_test_${RUN_ID}_${++globalPriceCounter}`;
+            prices.set(id, { id, unit_amount: params.unit_amount, currency: params.currency, recurring: params.recurring ?? null, active: true, product: params.product, metadata: params.metadata ?? {} });
+            return { id };
+          }),
+          update: vi.fn(async (id: string) => ({ id })),
+          retrieve: vi.fn(async (id: string) => prices.get(id) ?? { id, unit_amount: 14900, currency: "aed", recurring: { interval: "month" }, active: true }),
+          list: vi.fn(async (params: { product?: string }) => ({
+            data: Array.from(prices.values()).filter((p) => !params.product || p.product === params.product),
+            has_more: false,
+          })),
+        },
+      };
+      return { client, products, prices };
+    }
+
+    async function syncOne(stripe: ReturnType<typeof makeRecoveryStripeClient>["client"]) {
+      const plan = await buildLiveSyncPlan();
+      return synchronizeLiveCommerceCatalogue(ownerActor(ownerUserId, ownerCompanyId), { catalogueFingerprint: plan.catalogueFingerprint, confirm: true }, { method: "POST", path: "/test" }, stripe);
+    }
+
+    // buildLiveSyncPlan() scans the WHOLE catalogue, not just one test's own fixture — a
+    // still-unmapped product/price deliberately left behind by an earlier fail-closed test in
+    // this same describe block (or by the "provider-fail"/"stale-check" fixtures higher up in
+    // this file) gets reprocessed by every later syncOne() call too, since it self-heals the
+    // moment a later test's fresh, unseeded recovery client finds no orphan for it and
+    // legitimately creates one. A blanket `.not.toHaveBeenCalled()`/`.toHaveBeenCalledTimes(n)`
+    // on the shared create spy is therefore not reliable across this describe block — these
+    // helpers check only whether create was invoked for THIS test's own product/price code.
+    function wasProductCreateCalledFor(stripe: any, productCode: string): boolean {
+      return stripe.products.create.mock.calls.some(([params]: [{ metadata?: Record<string, string> }]) => params?.metadata?.quantara_product_code === productCode);
+    }
+    function wasPriceCreateCalledFor(stripe: any, priceCode: string): boolean {
+      return stripe.prices.create.mock.calls.some(([params]: [{ metadata?: Record<string, string> }]) => params?.metadata?.quantara_price_code === priceCode);
+    }
+
+    it("(1) LIST finds one exact orphan Product: adopted, products.create is NOT called", async () => {
+      const { product, price } = await makeEligibleProduct("recover-product-orphan");
+      const { client: stripe, products } = makeRecoveryStripeClient();
+      const orphanId = `prod_live_preexisting_${RUN_ID}`;
+      products.set(orphanId, { id: orphanId, name: product.name, active: true, metadata: { quantara_product_code: product.code, quantara_environment: "live" } });
+
+      await syncOne(stripe);
+
+      expect(wasProductCreateCalledFor(stripe, product.code)).toBe(false);
+      const mapping = await findProductMapping("STRIPE", "LIVE", product.id);
+      expect(mapping?.providerProductId).toBe(orphanId);
+      // The price still needs its own Price object — only the Product step is under test here.
+      void price;
+    });
+
+    it("(2) LIST completely succeeds with zero candidates: normal create proceeds for both Product and Price", async () => {
+      const { product, price } = await makeEligibleProduct("recover-normal-create");
+      const { client: stripe } = makeRecoveryStripeClient();
+
+      await syncOne(stripe);
+
+      expect(wasProductCreateCalledFor(stripe, product.code)).toBe(true);
+      expect(wasPriceCreateCalledFor(stripe, price.code)).toBe(true);
+      const productMapping = await findProductMapping("STRIPE", "LIVE", product.id);
+      const priceMapping = await findPriceMapping("STRIPE", "LIVE", price.id);
+      expect(productMapping).not.toBeNull();
+      expect(priceMapping).not.toBeNull();
+    });
+
+    it("(3) products.list itself fails: fails closed, products.create is NOT called for this product", async () => {
+      const { product } = await makeEligibleProduct("recover-product-list-fail");
+      const { client: stripe } = makeRecoveryStripeClient();
+      // Persistent (not -Once): the catalogue may contain other still-unmapped products from
+      // earlier tests, and every one of their list() calls must also fail closed here — a
+      // single-shot rejection could let a later, unrelated product's list() call succeed.
+      stripe.products.list.mockRejectedValue(new Error("Stripe unreachable"));
+
+      const result = await syncOne(stripe);
+
+      expect(wasProductCreateCalledFor(stripe, product.code)).toBe(false);
+      expect(result.errors.some((e: string) => e.includes(`${product.code}: STRIPE_PRODUCT_RECOVERY_LIST_FAILED`))).toBe(true);
+      const mapping = await findProductMapping("STRIPE", "LIVE", product.id);
+      expect(mapping).toBeNull();
+    });
+
+    it("(4) prices.list itself fails: fails closed, prices.create is NOT called for this price", async () => {
+      const { product, price } = await makeEligibleProduct("recover-price-list-fail");
+      const { client: stripe } = makeRecoveryStripeClient();
+      stripe.prices.list.mockRejectedValue(new Error("Stripe unreachable"));
+
+      const result = await syncOne(stripe);
+
+      // The Product step is unaffected (only prices.list is made to fail), so this product's
+      // own mapping is created normally.
+      expect(wasProductCreateCalledFor(stripe, product.code)).toBe(true);
+      expect(wasPriceCreateCalledFor(stripe, price.code)).toBe(false);
+      expect(result.errors.some((e: string) => e.includes(`${price.code}: STRIPE_PRICE_RECOVERY_LIST_FAILED`))).toBe(true);
+      const mapping = await findPriceMapping("STRIPE", "LIVE", price.id);
+      expect(mapping).toBeNull();
+    });
+
+    it("(5) multiple candidate Products carry the same quantara_product_code: fails closed, no Product is arbitrarily chosen, no create", async () => {
+      const { product } = await makeEligibleProduct("recover-product-multi");
+      const { client: stripe, products } = makeRecoveryStripeClient();
+      products.set(`prod_dup_a_${RUN_ID}`, { id: `prod_dup_a_${RUN_ID}`, name: product.name, active: true, metadata: { quantara_product_code: product.code, quantara_environment: "live" } });
+      products.set(`prod_dup_b_${RUN_ID}`, { id: `prod_dup_b_${RUN_ID}`, name: product.name, active: true, metadata: { quantara_product_code: product.code, quantara_environment: "live" } });
+
+      const result = await syncOne(stripe);
+
+      expect(wasProductCreateCalledFor(stripe, product.code)).toBe(false);
+      expect(result.errors.some((e: string) => e.includes(`${product.code}: STRIPE_PRODUCT_RECOVERY_MULTIPLE_CANDIDATES`))).toBe(true);
+      const mapping = await findProductMapping("STRIPE", "LIVE", product.id);
+      expect(mapping).toBeNull();
+    });
+
+    it("(6) multiple candidate Prices carry the same quantara_price_code: fails closed, no Price is arbitrarily chosen, no create", async () => {
+      const { product, price } = await makeEligibleProduct("recover-price-multi");
+      const { client: stripe, products, prices } = makeRecoveryStripeClient();
+      const providerProductId = `prod_for_price_multi_${RUN_ID}`;
+      products.set(providerProductId, { id: providerProductId, name: product.name, active: true, metadata: { quantara_product_code: product.code, quantara_environment: "live" } });
+      prices.set(`price_dup_a_${RUN_ID}`, { id: `price_dup_a_${RUN_ID}`, unit_amount: price.amountMinor, currency: "aed", recurring: { interval: "month" }, active: true, product: providerProductId, metadata: { quantara_price_code: price.code, quantara_environment: "live" } });
+      prices.set(`price_dup_b_${RUN_ID}`, { id: `price_dup_b_${RUN_ID}`, unit_amount: price.amountMinor, currency: "aed", recurring: { interval: "month" }, active: true, product: providerProductId, metadata: { quantara_price_code: price.code, quantara_environment: "live" } });
+
+      const result = await syncOne(stripe);
+
+      expect(wasPriceCreateCalledFor(stripe, price.code)).toBe(false);
+      expect(result.errors.some((e: string) => e.includes(`${price.code}: STRIPE_PRICE_RECOVERY_MULTIPLE_CANDIDATES`))).toBe(true);
+      const mapping = await findPriceMapping("STRIPE", "LIVE", price.id);
+      expect(mapping).toBeNull();
+    });
+
+    it("(7) recovered Price candidate has the wrong amount: fails closed, not adopted, no create, no mapping", async () => {
+      const { product, price } = await makeEligibleProduct("recover-price-wrong-amount");
+      const { client: stripe, products, prices } = makeRecoveryStripeClient();
+      const providerProductId = `prod_for_wrong_amount_${RUN_ID}`;
+      products.set(providerProductId, { id: providerProductId, name: product.name, active: true, metadata: { quantara_product_code: product.code, quantara_environment: "live" } });
+      prices.set(`price_wrong_amount_${RUN_ID}`, { id: `price_wrong_amount_${RUN_ID}`, unit_amount: price.amountMinor + 100, currency: "aed", recurring: { interval: "month" }, active: true, product: providerProductId, metadata: { quantara_price_code: price.code, quantara_environment: "live" } });
+
+      const result = await syncOne(stripe);
+
+      expect(wasPriceCreateCalledFor(stripe, price.code)).toBe(false);
+      expect(result.errors.some((e: string) => e.includes(`${price.code}: STRIPE_PRICE_RECOVERY_DRIFT`))).toBe(true);
+      expect(await findPriceMapping("STRIPE", "LIVE", price.id)).toBeNull();
+    });
+
+    it("(8) recovered Price candidate has the wrong currency: fails closed", async () => {
+      const { product, price } = await makeEligibleProduct("recover-price-wrong-currency");
+      const { client: stripe, products, prices } = makeRecoveryStripeClient();
+      const providerProductId = `prod_for_wrong_currency_${RUN_ID}`;
+      products.set(providerProductId, { id: providerProductId, name: product.name, active: true, metadata: { quantara_product_code: product.code, quantara_environment: "live" } });
+      prices.set(`price_wrong_currency_${RUN_ID}`, { id: `price_wrong_currency_${RUN_ID}`, unit_amount: price.amountMinor, currency: "usd", recurring: { interval: "month" }, active: true, product: providerProductId, metadata: { quantara_price_code: price.code, quantara_environment: "live" } });
+
+      const result = await syncOne(stripe);
+
+      expect(wasPriceCreateCalledFor(stripe, price.code)).toBe(false);
+      expect(result.errors.some((e: string) => e.includes(`${price.code}: STRIPE_PRICE_RECOVERY_DRIFT`))).toBe(true);
+      expect(await findPriceMapping("STRIPE", "LIVE", price.id)).toBeNull();
+    });
+
+    it("(9) recovered Price candidate has the wrong billing interval: fails closed", async () => {
+      const { product, price } = await makeEligibleProduct("recover-price-wrong-interval");
+      const { client: stripe, products, prices } = makeRecoveryStripeClient();
+      const providerProductId = `prod_for_wrong_interval_${RUN_ID}`;
+      products.set(providerProductId, { id: providerProductId, name: product.name, active: true, metadata: { quantara_product_code: product.code, quantara_environment: "live" } });
+      prices.set(`price_wrong_interval_${RUN_ID}`, { id: `price_wrong_interval_${RUN_ID}`, unit_amount: price.amountMinor, currency: "aed", recurring: { interval: "year" }, active: true, product: providerProductId, metadata: { quantara_price_code: price.code, quantara_environment: "live" } });
+
+      const result = await syncOne(stripe);
+
+      expect(wasPriceCreateCalledFor(stripe, price.code)).toBe(false);
+      expect(result.errors.some((e: string) => e.includes(`${price.code}: STRIPE_PRICE_RECOVERY_DRIFT`))).toBe(true);
+      expect(await findPriceMapping("STRIPE", "LIVE", price.id)).toBeNull();
+    });
+
+    it("(10) recovered Price candidate belongs to the wrong Stripe Product: fails closed", async () => {
+      const { product, price } = await makeEligibleProduct("recover-price-wrong-product");
+      const { client: stripe, products, prices } = makeRecoveryStripeClient();
+      const correctProviderProductId = `prod_correct_${RUN_ID}`;
+      const wrongProviderProductId = `prod_wrong_${RUN_ID}`;
+      products.set(correctProviderProductId, { id: correctProviderProductId, name: product.name, active: true, metadata: { quantara_product_code: product.code, quantara_environment: "live" } });
+      // The price candidate's metadata code matches, but it hangs off a DIFFERENT Stripe Product
+      // than the one this run resolves for the internal product. Stripe's real prices.list API,
+      // scoped by `product`, would never actually return a price attached to a different
+      // product — this exercises the defensive re-check as a belt-and-suspenders guard against
+      // an unexpected/malformed provider response, so the mock's list() deliberately does NOT
+      // apply the production code's `product` filter here (all other tests in this describe
+      // block rely on the default filtered behavior; only this one needs the raw list).
+      const wrongProductPriceId = `price_wrong_product_${RUN_ID}`;
+      prices.set(wrongProductPriceId, { id: wrongProductPriceId, unit_amount: price.amountMinor, currency: "aed", recurring: { interval: "month" }, active: true, product: wrongProviderProductId, metadata: { quantara_price_code: price.code, quantara_environment: "live" } });
+      stripe.prices.list.mockImplementation(async (params: { product?: string }) => ({
+        data: params.product === correctProviderProductId ? [prices.get(wrongProductPriceId)] : Array.from(prices.values()).filter((p) => p.product === params.product),
+        has_more: false,
+      }));
+
+      const result = await syncOne(stripe);
+
+      expect(wasPriceCreateCalledFor(stripe, price.code)).toBe(false);
+      expect(result.errors.some((e: string) => e.includes(`${price.code}: STRIPE_PRICE_RECOVERY_DRIFT`))).toBe(true);
+      expect(await findPriceMapping("STRIPE", "LIVE", price.id)).toBeNull();
+    });
+
+    it("(11) an exactly-matching recovered Price is adopted: mapping created, prices.create is NOT called", async () => {
+      const { product, price } = await makeEligibleProduct("recover-price-exact");
+      const { client: stripe, products, prices } = makeRecoveryStripeClient();
+      const providerProductId = `prod_for_exact_${RUN_ID}`;
+      const orphanPriceId = `price_exact_orphan_${RUN_ID}`;
+      products.set(providerProductId, { id: providerProductId, name: product.name, active: true, metadata: { quantara_product_code: product.code, quantara_environment: "live" } });
+      prices.set(orphanPriceId, { id: orphanPriceId, unit_amount: price.amountMinor, currency: "aed", recurring: { interval: "month" }, active: true, product: providerProductId, metadata: { quantara_price_code: price.code, quantara_environment: "live" } });
+
+      await syncOne(stripe);
+
+      expect(wasPriceCreateCalledFor(stripe, price.code)).toBe(false);
+      const mapping = await findPriceMapping("STRIPE", "LIVE", price.id);
+      expect(mapping?.providerPriceId).toBe(orphanPriceId);
+    });
+
+    it("(12) simulates a genuine Stripe-create-succeeded/DB-mapping-failed orphan: a later retry's LIST finds it and adopts the SAME object, minting no second one", async () => {
+      const { product, price } = await makeEligibleProduct("recover-retry-after-partial-failure");
+      const { client: stripe, products, prices } = makeRecoveryStripeClient();
+
+      // First attempt: Stripe create succeeds for both Product and Price (the mock records
+      // them in `products`/`prices`), but we simulate the process crashing before the second
+      // (Price) createMapping call ever ran, by deleting the CommerceProviderMapping rows this
+      // run just wrote — reproducing exactly the DB state a real partial failure leaves behind:
+      // live Stripe objects that exist, with no mapping row pointing at them.
+      const firstRun = await syncOne(stripe);
+      expect(firstRun.errors).toHaveLength(0);
+      await prisma.commerceProviderMapping.deleteMany({ where: { commerceProductId: product.id } });
+      expect(await findProductMapping("STRIPE", "LIVE", product.id)).toBeNull();
+      expect(await findPriceMapping("STRIPE", "LIVE", price.id)).toBeNull();
+      const stripeProductIdFromFirstRun = Array.from(products.values()).find((p) => p.metadata.quantara_product_code === product.code)?.id;
+      const stripePriceIdFromFirstRun = Array.from(prices.values()).find((p) => p.metadata.quantara_price_code === price.code)?.id;
+
+      // Retry: the plan sees no mapping (exactly like after a real partial failure) and would
+      // normally re-emit CREATE, but the authoritative LIST scan now finds the SAME objects the
+      // first attempt already created.
+      const retryResult = await syncOne(stripe);
+
+      expect(retryResult.errors).toHaveLength(0);
+      // Not called again FOR THIS product/price specifically (the retry's syncOne() may still
+      // legitimately call create for unrelated still-unmapped fixtures left behind by earlier
+      // tests in this describe block — that pollution is not what this test is about).
+      expect(stripe.products.create.mock.calls.filter(([params]: [{ metadata?: Record<string, string> }]) => params?.metadata?.quantara_product_code === product.code)).toHaveLength(1);
+      expect(stripe.prices.create.mock.calls.filter(([params]: [{ metadata?: Record<string, string> }]) => params?.metadata?.quantara_price_code === price.code)).toHaveLength(1);
+      expect(Array.from(products.values()).filter((p) => p.metadata.quantara_product_code === product.code)).toHaveLength(1);
+      expect(Array.from(prices.values()).filter((p) => p.metadata.quantara_price_code === price.code)).toHaveLength(1);
+      const recoveredProductMapping = await findProductMapping("STRIPE", "LIVE", product.id);
+      const recoveredPriceMapping = await findPriceMapping("STRIPE", "LIVE", price.id);
+      expect(recoveredProductMapping?.providerProductId).toBe(stripeProductIdFromFirstRun);
+      expect(recoveredPriceMapping?.providerPriceId).toBe(stripePriceIdFromFirstRun);
+    });
   });
 });

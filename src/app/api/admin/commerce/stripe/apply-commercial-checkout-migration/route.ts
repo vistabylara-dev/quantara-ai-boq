@@ -51,20 +51,42 @@ export async function POST() {
           `LOCK TABLE "_prisma_migrations" IN EXCLUSIVE MODE`,
         );
 
-        const existingMigration = await tx.$queryRaw<
-          Array<{ migration_name: string; checksum: string }>
+        /*
+         * A row existing in _prisma_migrations for this migration_name is not
+         * by itself proof the migration successfully applied — Prisma writes
+         * the row BEFORE running the migration's SQL, then sets finished_at
+         * only on success. A crashed/rolled-back/still-running attempt
+         * leaves a row with the right migration_name and checksum but
+         * finished_at IS NULL and/or rolled_back_at IS NOT NULL. Trusting
+         * migration_name + checksum alone (the previous version of this
+         * check) would report a genuinely failed migration as "already
+         * applied" and skip the DDL below entirely, leaving the database
+         * without the tables/indexes/constraints this route exists to
+         * create — and with no automated way to notice.
+         */
+        const existingMigrations = await tx.$queryRaw<
+          Array<{
+            checksum: string;
+            started_at: Date;
+            finished_at: Date | null;
+            rolled_back_at: Date | null;
+            applied_steps_count: number;
+          }>
         >`
           SELECT
-            migration_name::text AS migration_name,
-            checksum::text AS checksum
+            checksum::text AS checksum,
+            started_at,
+            finished_at,
+            rolled_back_at,
+            applied_steps_count
           FROM "_prisma_migrations"
           WHERE migration_name = ${MIGRATION_NAME}
+          ORDER BY started_at ASC
         `;
 
-        if (existingMigration.length > 0) {
-          const recorded = existingMigration[0];
-
-          if (recorded.checksum !== CHECKSUM) {
+        if (existingMigrations.length > 0) {
+          const mismatched = existingMigrations.find((row) => row.checksum !== CHECKSUM);
+          if (mismatched) {
             throw new AppError(
               "STRIPE_MIGRATION_CHECKSUM_MISMATCH",
               "The Stripe commercial checkout migration is already recorded with a different checksum. Stop and review before continuing.",
@@ -72,12 +94,30 @@ export async function POST() {
             );
           }
 
-          return {
-            alreadyApplied: true,
-            log: [
-              `${MIGRATION_NAME}: already recorded with the expected checksum; no database changes were made.`,
-            ],
-          };
+          const cleanlyApplied = existingMigrations.find(
+            (row) => row.finished_at !== null && row.rolled_back_at === null && row.applied_steps_count > 0,
+          );
+          if (cleanlyApplied) {
+            return {
+              alreadyApplied: true,
+              log: [
+                `${MIGRATION_NAME}: already recorded with the expected checksum and a completed, non-rolled-back application; no database changes were made.`,
+              ],
+            };
+          }
+
+          // Every existing row for this migration is unfinished, rolled back, or
+          // otherwise ambiguous (0 applied_steps_count with no finished_at). Never
+          // infer "safe to (re)run" from that state automatically — the DDL below
+          // is IF-NOT-EXISTS-guarded and safe to retry, but an ambiguous prior
+          // attempt (e.g. one that partially ran outside this route, or crashed
+          // mid-transaction) needs a human to confirm the actual database state
+          // before this route proceeds, not a fully automated retry.
+          throw new AppError(
+            "STRIPE_MIGRATION_STATE_AMBIGUOUS",
+            "An existing _prisma_migrations row for this migration is unfinished or rolled back rather than cleanly applied. Manual review of the actual database schema is required before retrying — no changes were made.",
+            409,
+          );
         }
 
         /*
@@ -306,4 +346,4 @@ export async function POST() {
   } catch (error) {
     return handleApiError(error);
   }
-}3
+}

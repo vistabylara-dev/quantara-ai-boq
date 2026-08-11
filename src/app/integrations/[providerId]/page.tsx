@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { use, useCallback, useEffect, useState } from "react";
+import { Suspense, use, useCallback, useEffect, useState } from "react";
 import { ArrowLeft, Plug } from "lucide-react";
 import { apiClient, getApiErrorMessage } from "@/lib/api/client";
 import IntegrationsTabs from "../integrations-tabs";
@@ -39,6 +39,14 @@ function actionLabel(provider: ProviderDetail): string {
 type PageProps = { params: Promise<{ providerId: string }> };
 
 export default function ProviderDetailPage(props: PageProps) {
+  return (
+    <Suspense fallback={null}>
+      <ProviderDetailPageContent {...props} />
+    </Suspense>
+  );
+}
+
+function ProviderDetailPageContent(props: PageProps) {
   const params = use(props.params);
   const projectContext = useProjectContext();
   const [provider, setProvider] = useState<ProviderDetail | null>(null);

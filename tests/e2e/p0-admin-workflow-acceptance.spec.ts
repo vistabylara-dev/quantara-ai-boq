@@ -107,7 +107,9 @@ test.describe.serial("P0 admin core — real browser acceptance", () => {
 
     await gotoBoq(page);
     await page.getByRole("button", { name: /^Output/ }).click();
-    await page.waitForURL(new RegExp(`/projects/${PROJECT_SLUG}/documents`), { timeout: 20_000 });
+    // First hit of /documents in this run — same cold-compile risk as the
+    // other first-hit navigations in this file (see gotoBoq's comment above).
+    await page.waitForURL(new RegExp(`/projects/${PROJECT_SLUG}/documents`), { timeout: 40_000 });
 
     // "BOQ Review" stays on this page and scrolls to the editor rather than
     // opening the add-item modal.

@@ -610,6 +610,14 @@ export default function BoqEditor({
                         />
                       </td>
                       <td className="px-4 py-3">
+                        {item.isPremiumSource && (
+                          <span
+                            className="mb-1 inline-flex items-center gap-1 rounded-full border border-amber-700 bg-amber-950/40 px-2 py-0.5 text-[0.65rem] font-semibold uppercase tracking-wide text-amber-300"
+                            title="This line uses a Premium catalogue item. Unlocking the package is only required for a clean final export."
+                          >
+                            <span aria-hidden="true">👑</span> Premium
+                          </span>
+                        )}
                         <input
                           type="text"
                           value={item.description}

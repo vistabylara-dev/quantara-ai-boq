@@ -342,6 +342,14 @@ export default function ProjectExtractionsPage(props: { params: Promise<{ projec
             shortDescription="Review the information Quantara found in your project source."
             whatQuantaraDoes="Shows values extracted from supported source content and flags anything that could not be interpreted safely — none of it is treated as fact until you say so."
             whatProfessionalCanDo="Confirm correct information, correct anything inaccurate, or reject information that should not enter the BOQ. Confirmed information becomes available for measurement and BOQ preparation."
+            cta={{
+              label: "Review extracted project information",
+              onAction: () => {
+                const reviewItems = document.getElementById("extraction-review-items");
+                reviewItems?.scrollIntoView({ behavior: "smooth", block: "start" });
+                reviewItems?.focus({ preventScroll: true });
+              },
+            }}
             ariaLabel="Help: Review extraction"
           />
         </div>
@@ -404,7 +412,11 @@ export default function ProjectExtractionsPage(props: { params: Promise<{ projec
       )}
 
       {entities.length === 0 ? (
-        <section className="rounded-[32px] border border-dashed border-[#D9E2EC] bg-white p-10 text-center dark:border-[#1E2A42] dark:bg-[#0B1426]">
+        <section
+          id="extraction-review-items"
+          tabIndex={-1}
+          className="rounded-[32px] border border-dashed border-[#D9E2EC] bg-white p-10 text-center focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#009FE3] dark:border-[#1E2A42] dark:bg-[#0B1426]"
+        >
           <h3 className="text-xl font-semibold text-[#0B1630] dark:text-white">No extracted BOQ candidates are available yet.</h3>
           <p className="mx-auto mt-3 max-w-2xl text-sm text-[#536078] dark:text-[#B8C4D8]">
             Your source files remain available in the project. Review their real processing state before continuing; scanned or unsupported documents may not produce structured data.
@@ -417,7 +429,12 @@ export default function ProjectExtractionsPage(props: { params: Promise<{ projec
           </Link>
         </section>
       ) : (
-        <section className="space-y-4" aria-label="Extracted candidates">
+        <section
+          id="extraction-review-items"
+          tabIndex={-1}
+          className="space-y-4 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#009FE3]"
+          aria-label="Extracted candidates"
+        >
           {entities.map((entity) => {
             const sourceFile = sourceFiles.get(entity.projectFileId);
             const reviewable = isReviewableExtractionStatus(entity.status);

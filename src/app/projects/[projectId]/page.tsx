@@ -127,7 +127,11 @@ export default function ProjectOverviewPage(props: PageProps) {
 
   return (
     <div className="space-y-6">
-      <div className="rounded-[32px] border border-slate-800 bg-slate-950 p-8">
+      <div
+        id="project-overview-section"
+        tabIndex={-1}
+        className="rounded-[32px] border border-slate-800 bg-slate-950 p-8 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-blue-500"
+      >
         <div className="grid gap-6 lg:grid-cols-3">
           <div>
             <p className="text-sm uppercase tracking-[0.28em] text-slate-500">Project</p>

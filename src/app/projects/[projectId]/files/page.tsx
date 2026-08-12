@@ -457,7 +457,14 @@ export default function ProjectFilesPage(props: {
                 shortDescription="Drawings, schedules, spreadsheets, and supported connected sources become traceable project evidence."
                 whatQuantaraDoes="Quantara preserves each source, its origin, current processing state, and any captured pages or tables that can be proven."
                 whatProfessionalCanDo="Add sources, inspect processing, review captured results, and open any available project workspace without a Guide-imposed lock."
-                cta={{ label: "Review source list", href: `/projects/${encodeURIComponent(params.projectId)}/files` }}
+                cta={{
+                  label: "Review source list",
+                  onAction: () => {
+                    const sourceList = document.getElementById("project-source-list");
+                    sourceList?.scrollIntoView({ behavior: "smooth", block: "start" });
+                    sourceList?.focus({ preventScroll: true });
+                  },
+                }}
                 ariaLabel="Open guidance for project sources"
               />
             </div>
@@ -497,7 +504,11 @@ export default function ProjectFilesPage(props: {
       </div>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-[420px_1fr]">
-        <div className="rounded-2xl border border-slate-800 bg-slate-950 p-4">
+        <div
+          id="project-source-list"
+          tabIndex={-1}
+          className="rounded-2xl border border-slate-800 bg-slate-950 p-4 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-blue-500"
+        >
           <div className="flex items-center justify-between gap-3">
             <div>
               <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-400">Sources</h2>

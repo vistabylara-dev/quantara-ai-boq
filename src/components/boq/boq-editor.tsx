@@ -148,6 +148,9 @@ export default function BoqEditor({
   const isReadOnly = Boolean(activeBoq.isLocked) || activeBoq.status === "locked" || activeBoq.status === "approved";
   const voiceInteractionActive = voiceBusyItemId !== null || pendingVoiceProposal !== null || isApplyingVoice;
   const editorControlsDisabled = isReadOnly || actionPending || voiceInteractionActive;
+  const lockDisabled = editorControlsDisabled
+    || isSaving
+    || activeBoq.sections.every((section) => section.items.length === 0);
 
   useEffect(() => {
     setVoiceBusyItemId(null);
@@ -366,8 +369,9 @@ export default function BoqEditor({
               >
                 Create revision
               </button>
-              <span className="inline-flex items-center gap-1.5">
+              <div className="inline-flex items-center gap-1.5">
                 <button
+                  id="boq-lock-button"
                   type="button"
                   title={activeBoq.sections.every(s => s.items.length === 0) ? "Add at least one valid item before locking this revision." : ""}
                   onClick={() => {
@@ -375,7 +379,7 @@ export default function BoqEditor({
                       void onLock(currentPayload());
                     }
                   }}
-                  disabled={isReadOnly || isSaving || actionPending || voiceInteractionActive || activeBoq.sections.every(s => s.items.length === 0)}
+                  disabled={lockDisabled}
                   className="rounded-2xl border border-slate-700 bg-[#1F2937] px-4 py-2 text-sm font-semibold text-slate-200 hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   Lock revision
@@ -384,10 +388,20 @@ export default function BoqEditor({
                   title="Lock revision"
                   shortDescription="Locking freezes this BOQ revision so final documents can be generated from it."
                   whatQuantaraDoes="Quantara re-runs verification, then permanently marks this exact revision as immutable — no items, quantities, or rates on it can change again."
-                  whatProfessionalCanDo="Lock only when you're professionally satisfied with the totals. To keep editing afterward, create a new revision from this one."
+                  whatProfessionalCanDo={lockDisabled
+                    ? "Review the current revision state. Locking is available only for an editable BOQ with at least one item and no save or voice action in progress."
+                    : "Lock only when you're professionally satisfied with the totals. To keep editing afterward, create a new revision from this one."}
+                  cta={lockDisabled ? undefined : {
+                    label: "Lock revision",
+                    onAction: () => {
+                      const lockButton = document.getElementById("boq-lock-button");
+                      lockButton?.scrollIntoView({ behavior: "smooth", block: "center" });
+                      lockButton?.focus({ preventScroll: true });
+                    },
+                  }}
                   ariaLabel="Help: Lock revision"
                 />
-              </span>
+              </div>
             </>
           )}
         </div>

@@ -4,8 +4,6 @@ export const GUIDE_NAVIGATION_MODE = "ADVISORY" as const;
 
 export type GuideNavigationGap = Readonly<{
   id:
-    | "DIMENSIONS_DEEP_LINK"
-    | "CALCULATIONS_DEEP_LINK"
     | "POST_BOQ_REVIEW_ROUTE"
     | "EXTRACTION_ITEM_DEEP_LINK"
     | "VALIDATION_DETAIL_DEEP_LINK"
@@ -16,20 +14,6 @@ export type GuideNavigationGap = Readonly<{
 }>;
 
 export const GUIDE_NAVIGATION_GAPS = [
-  {
-    id: "DIMENSIONS_DEEP_LINK",
-    stageIds: ["DIMENSIONS"],
-    description:
-      "There is no dedicated dimensions route or consumed dimensions query parameter yet.",
-    fallbackRoute: "/projects/:projectId/boq",
-  },
-  {
-    id: "CALCULATIONS_DEEP_LINK",
-    stageIds: ["CALCULATIONS"],
-    description:
-      "There is no dedicated calculations route or consumed calculations query parameter yet.",
-    fallbackRoute: "/projects/:projectId/boq",
-  },
   {
     id: "POST_BOQ_REVIEW_ROUTE",
     stageIds: ["REVIEW"],
@@ -65,6 +49,47 @@ export type GuideStageHrefOptions = Readonly<{
   fileId?: string | null;
 }>;
 
+/**
+ * Read-only UI intents that the Guide may request from the BOQ workspace.
+ * These values may reveal or focus existing controls, but they must never be
+ * treated as authorization or perform a BOQ mutation by themselves.
+ */
+export const GUIDE_BOQ_ACTIONS = [
+  "review_dimensions",
+  "review_calculations",
+  "view_boq",
+] as const;
+
+export type GuideBoqAction = (typeof GUIDE_BOQ_ACTIONS)[number];
+
+const GUIDE_BOQ_ACTION_SET = new Set<string>(GUIDE_BOQ_ACTIONS);
+
+export function getGuideBoqAction(value: unknown): GuideBoqAction | null {
+  return typeof value === "string" && GUIDE_BOQ_ACTION_SET.has(value)
+    ? value as GuideBoqAction
+    : null;
+}
+
+type GuideSearchParams = Pick<URLSearchParams, "entries" | "getAll">;
+
+/**
+ * Parses only the exact query contract emitted by Guide navigation. Duplicate
+ * actions and additional parameters are rejected instead of being partially
+ * interpreted.
+ */
+export function parseGuideBoqAction(searchParams: GuideSearchParams): GuideBoqAction | null {
+  const entries = Array.from(searchParams.entries());
+  const actionValues = searchParams.getAll("action");
+  if (
+    entries.length !== 1
+    || entries[0]?.[0] !== "action"
+    || actionValues.length !== 1
+  ) {
+    return null;
+  }
+  return getGuideBoqAction(actionValues[0]);
+}
+
 function encodeRequiredSegment(value: string, label: string): string {
   const normalized = value.trim();
   if (!normalized) {
@@ -89,8 +114,9 @@ export function getProjectExtractionsHref(projectId: string): string {
   return `${getProjectOverviewHref(projectId)}/extractions`;
 }
 
-export function getProjectBoqHref(projectId: string): string {
-  return `${getProjectOverviewHref(projectId)}/boq`;
+export function getProjectBoqHref(projectId: string, action?: GuideBoqAction): string {
+  const baseHref = `${getProjectOverviewHref(projectId)}/boq`;
+  return action ? `${baseHref}?action=${action}` : baseHref;
 }
 
 export function getProjectVerificationHref(projectId: string): string {
@@ -127,9 +153,11 @@ export function getGuideStageHref(
     case "REVIEW":
       return getProjectExtractionsHref(projectId);
     case "DIMENSIONS":
+      return getProjectBoqHref(projectId, "review_dimensions");
     case "CALCULATIONS":
+      return getProjectBoqHref(projectId, "review_calculations");
     case "BOQ":
-      return getProjectBoqHref(projectId);
+      return getProjectBoqHref(projectId, "view_boq");
     case "VALIDATION":
       return getProjectVerificationHref(projectId);
     case "OUTPUT":
@@ -195,6 +223,10 @@ export function isSupportedGuideHref(href: string): boolean {
   const destination = segments[2];
   if (!SUPPORTED_PROJECT_DESTINATIONS.has(destination)) {
     return false;
+  }
+
+  if (destination === "boq") {
+    return parsed.search === "" || parseGuideBoqAction(parsed.searchParams) !== null;
   }
 
   if (destination !== "files") {

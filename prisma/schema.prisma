@@ -395,7 +395,7 @@ model CompanySoftwareSubscription {
   startsAt               DateTime?
   expiresAt              DateTime?
   cancelledAt            DateTime?
-  externalSubscriptionId String?
+  externalSubscriptionId String?                   @unique
   source                 String                   @default("development")
   createdAt              DateTime                 @default(now())
   updatedAt              DateTime                 @updatedAt
@@ -407,6 +407,43 @@ model CompanySoftwareSubscription {
   @@index([companyId])
   @@index([softwarePlanId])
   @@index([status])
+}
+
+/// Stripe webhook idempotency ledger. The raw webhook payload, card data,
+/// API keys, and webhook signing secret are never stored here. Processing
+/// code must create this row in the same database transaction as the state
+/// change it protects, so a failed transaction can be retried safely.
+model StripeWebhookEvent {
+  id            String   @id @default(uuid()) @db.Uuid
+  stripeEventId String   @unique
+  eventType     String
+  livemode      Boolean
+  companyId     String?  @db.Uuid
+  processedAt   DateTime @default(now())
+  company       Company? @relation(fields: [companyId], references: [id], onDelete: SetNull)
+
+  @@index([companyId])
+  @@index([eventType])
+  @@index([processedAt])
+}
+
+/// Stripe customer identity is kept in a standalone table instead of adding a
+/// scalar column to the hot Company table. This lets the application deploy
+/// safely before this migration is applied: pre-existing Company queries do
+/// not suddenly select a not-yet-created column. One company may have one
+/// Stripe customer in test mode and one in live mode.
+model StripeBillingCustomer {
+  id               String   @id @default(uuid()) @db.Uuid
+  companyId        String   @db.Uuid
+  stripeCustomerId String   @unique
+  livemode         Boolean
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  company          Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, livemode])
+  @@index([companyId])
+  @@index([livemode])
 }
 
 model CompanyTrialUsage {
@@ -1457,6 +1494,8 @@ model Company {
   findingBoqLinks             FindingBoqLink[]
   externalConnections         ExternalConnection[]
   integrationEvents           IntegrationEvent[]
+  stripeWebhookEvents         StripeWebhookEvent[]
+  stripeBillingCustomers      StripeBillingCustomer[]
 }
 
 model User {

@@ -137,24 +137,26 @@ describe("CATALOGUE-PHASE7-STRICT-CLOSEOUT: canonical package integrity engine (
     });
     await addItemsToPackage(pkg.id, [foreignItem.id]);
 
-    const before = await computePackageIntegrity(dataset);
-    expect(before.strictComplete).toBe(false);
-    expect(before.extraMembershipCount).toBe(1);
-    expect(before.missingMembershipCount).toBe(0);
+    try {
+      const before = await computePackageIntegrity(dataset);
+      expect(before.strictComplete).toBe(false);
+      expect(before.extraMembershipCount).toBe(1);
+      expect(before.missingMembershipCount).toBe(0);
 
-    const result = await reconcileGovernedPackageMembership(ownerActor(), "hvac-library", before.integrityFingerprint);
-    expect(result.extrasRemoved).toBe(1);
-    expect(result.missingAdded).toBe(0);
-    expect(result.afterMembershipCount).toBe(before.expectedRowCount);
+      const result = await reconcileGovernedPackageMembership(ownerActor(), "hvac-library", before.integrityFingerprint);
+      expect(result.extrasRemoved).toBe(1);
+      expect(result.missingAdded).toBe(0);
+      expect(result.afterMembershipCount).toBe(before.expectedRowCount);
 
-    const after = await computePackageIntegrity(dataset);
-    expect(after.strictComplete).toBe(true);
+      const after = await computePackageIntegrity(dataset);
+      expect(after.strictComplete).toBe(true);
 
-    const foreignItemStillExists = await prisma.masterItem.findUnique({ where: { id: foreignItem.id } });
-    expect(foreignItemStillExists).not.toBeNull();
-
-    await prisma.masterItem.delete({ where: { id: foreignItem.id } });
-    await prisma.masterCatalogueImportBatch.delete({ where: { id: foreignBatch.id } });
+      const foreignItemStillExists = await prisma.masterItem.findUnique({ where: { id: foreignItem.id } });
+      expect(foreignItemStillExists).not.toBeNull();
+    } finally {
+      await prisma.masterItem.delete({ where: { id: foreignItem.id } });
+      await prisma.masterCatalogueImportBatch.delete({ where: { id: foreignBatch.id } });
+    }
   });
 
   it("missing membership -> strictComplete false, and reconcile adds only the missing row", async () => {
@@ -244,17 +246,19 @@ describe("CATALOGUE-PHASE7-STRICT-CLOSEOUT: canonical package integrity engine (
     });
     await addItemsToPackage(pkg.id, [foreignItem.id]);
 
-    const before = await computePackageIntegrity(dataset);
-    await reconcileGovernedPackageMembership(ownerActor(), "hvac-library", before.integrityFingerprint);
+    try {
+      const before = await computePackageIntegrity(dataset);
+      await reconcileGovernedPackageMembership(ownerActor(), "hvac-library", before.integrityFingerprint);
 
-    const itemStillExists = await prisma.masterItem.findUnique({ where: { id: foreignItem.id } });
-    const versionStillExists = await prisma.masterItemVersion.findUnique({ where: { id: version.id } });
-    expect(itemStillExists).not.toBeNull();
-    expect(versionStillExists).not.toBeNull();
-
-    await prisma.masterItemVersion.delete({ where: { id: version.id } });
-    await prisma.masterItem.delete({ where: { id: foreignItem.id } });
-    await prisma.masterCatalogueImportBatch.delete({ where: { id: foreignBatch.id } });
+      const itemStillExists = await prisma.masterItem.findUnique({ where: { id: foreignItem.id } });
+      const versionStillExists = await prisma.masterItemVersion.findUnique({ where: { id: version.id } });
+      expect(itemStillExists).not.toBeNull();
+      expect(versionStillExists).not.toBeNull();
+    } finally {
+      await prisma.masterItemVersion.deleteMany({ where: { id: version.id } });
+      await prisma.masterItem.deleteMany({ where: { id: foreignItem.id } });
+      await prisma.masterCatalogueImportBatch.delete({ where: { id: foreignBatch.id } });
+    }
   });
 
   it("cross-package overlap detector — negative control: no real overlap among governed packages here", async () => {
@@ -284,19 +288,21 @@ describe("CATALOGUE-PHASE7-STRICT-CLOSEOUT: canonical package integrity engine (
     const sharedMembership = await prisma.industryDataPackageItem.findFirstOrThrow({ where: { packageId: pkgA.id } });
     await addItemsToPackage(pkgB.id, [sharedMembership.masterItemId]);
 
-    const overlaps = await computeCrossPackageOverlap(ownerActor());
-    const found = overlaps.some(
-      (o) =>
-        (o.packageKeyA === "hvac-library" && o.packageKeyB === "plumbing-library") ||
-        (o.packageKeyB === "hvac-library" && o.packageKeyA === "plumbing-library"),
-    );
-    expect(found).toBe(true);
-
-    await prisma.industryDataPackageItem.deleteMany({ where: { packageId: pkgB.id } });
-    await prisma.industryDataPackage.delete({ where: { id: pkgB.id } });
+    try {
+      const overlaps = await computeCrossPackageOverlap(ownerActor());
+      const found = overlaps.some(
+        (o) =>
+          (o.packageKeyA === "hvac-library" && o.packageKeyB === "plumbing-library") ||
+          (o.packageKeyB === "hvac-library" && o.packageKeyA === "plumbing-library"),
+      );
+      expect(found).toBe(true);
+    } finally {
+      await prisma.industryDataPackageItem.deleteMany({ where: { packageId: pkgB.id } });
+      await prisma.industryDataPackage.delete({ where: { id: pkgB.id } });
+    }
   });
 
-  it("reconcile against a foreign package's own defect never mutates hvac-library", async () => {
+  it("hvac-library remains strictly complete after the full suite", async () => {
     const dataset = requireDatasetDefinition(HVAC_DATASET_ID);
     const before = await computePackageIntegrity(dataset);
     expect(before.strictComplete).toBe(true);

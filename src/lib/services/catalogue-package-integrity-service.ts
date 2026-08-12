@@ -263,25 +263,38 @@ export async function reconcileGovernedPackageMembership(
   }
 
   const batchIds = await getDatasetBatchIds(dataset.datasetId);
-  const expectedItems = await prisma.masterItem.findMany({ where: { sourceBatchId: { in: batchIds } }, select: { id: true } });
-  const expectedIdSet = new Set(expectedItems.map((i) => i.id));
-  const actualMembership = await prisma.industryDataPackageItem.findMany({ where: { packageId: before.packageId }, select: { id: true, masterItemId: true } });
-  const actualIdSet = new Set(actualMembership.map((m) => m.masterItemId));
-
-  const missingItemIds = expectedItems.filter((i) => !actualIdSet.has(i.id)).map((i) => i.id);
-  const extraMembershipIds = actualMembership.filter((m) => !expectedIdSet.has(m.masterItemId)).map((m) => m.id);
-
   const packageId = before.packageId;
+
+  // CodeRabbit — expected/actual sets must be read INSIDE the transaction,
+  // not before it. Reading them outside and only comparing a row count as
+  // the in-transaction guard is a TOCTOU gap: a concurrent writer could
+  // delete one row and insert a different one between the read and the
+  // write. The count stays equal (guard passes), but the stale
+  // missing/extra sets computed from the pre-transaction read no longer
+  // match reality — the concurrent foreign row survives and a real expected
+  // row goes missing, while this call still reports success.
   const result = await prisma.$transaction(async (tx) => {
-    // Re-verify inside the transaction to close the race window between the pre-check above and this write.
-    const currentCount = await tx.industryDataPackageItem.count({ where: { packageId } });
-    if (currentCount !== before.actualPackageMembershipCount) {
+    const expectedItems = await tx.masterItem.findMany({ where: { sourceBatchId: { in: batchIds } }, select: { id: true } });
+    const expectedIdSet = new Set(expectedItems.map((i) => i.id));
+    const actualMembership = await tx.industryDataPackageItem.findMany({ where: { packageId }, select: { id: true, masterItemId: true } });
+    const actualIdSet = new Set(actualMembership.map((m) => m.masterItemId));
+
+    if (actualMembership.length !== before.actualPackageMembershipCount) {
       throw new AppError("INTEGRITY_CHANGED", "Package membership changed between fingerprint verification and the write — aborting.", 409);
     }
 
+    const missingItemIds = expectedItems.filter((i) => !actualIdSet.has(i.id)).map((i) => i.id);
+    const extraMembershipIds = actualMembership.filter((m) => !expectedIdSet.has(m.masterItemId)).map((m) => m.id);
+
     if (missingItemIds.length > 0) {
+      // sortOrder has no unique constraint, but package readers order by it
+      // — assigning 0..n-1 to new rows would tie with existing rows'
+      // sortOrder and leave relative order unspecified. Allocate after the
+      // current maximum instead.
+      const maxSortOrder = await tx.industryDataPackageItem.aggregate({ where: { packageId }, _max: { sortOrder: true } });
+      const startOrder = (maxSortOrder._max.sortOrder ?? -1) + 1;
       await tx.industryDataPackageItem.createMany({
-        data: missingItemIds.map((masterItemId, index) => ({ packageId, masterItemId, sortOrder: index })),
+        data: missingItemIds.map((masterItemId, index) => ({ packageId, masterItemId, sortOrder: startOrder + index })),
         skipDuplicates: true,
       });
     }
@@ -300,7 +313,7 @@ export async function reconcileGovernedPackageMembership(
       );
     }
 
-    return { afterMembershipCount };
+    return { afterMembershipCount, missingAdded: missingItemIds.length, extrasRemoved: extraMembershipIds.length };
   });
 
   await recordPlatformActionAudit({
@@ -314,8 +327,8 @@ export async function reconcileGovernedPackageMembership(
       packageKey,
       beforeMembershipCount: before.actualPackageMembershipCount,
       expectedCount: before.expectedRowCount,
-      missingAdded: missingItemIds.length,
-      extrasRemoved: extraMembershipIds.length,
+      missingAdded: result.missingAdded,
+      extrasRemoved: result.extrasRemoved,
       afterMembershipCount: result.afterMembershipCount,
       beforePackageCounter: before.packageCounterCount,
       afterPackageCounter: result.afterMembershipCount,
@@ -328,8 +341,8 @@ export async function reconcileGovernedPackageMembership(
     packageKey,
     beforeMembershipCount: before.actualPackageMembershipCount,
     expectedCount: before.expectedRowCount,
-    missingAdded: missingItemIds.length,
-    extrasRemoved: extraMembershipIds.length,
+    missingAdded: result.missingAdded,
+    extrasRemoved: result.extrasRemoved,
     afterMembershipCount: result.afterMembershipCount,
     beforePackageCounter: before.packageCounterCount,
     afterPackageCounter: result.afterMembershipCount,

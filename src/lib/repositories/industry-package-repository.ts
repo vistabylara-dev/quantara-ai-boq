@@ -91,8 +91,15 @@ export async function createPackage(input: {
  * below always reflects whatever is actually in the table.
  */
 export async function addItemsToPackage(packageId: string, masterItemIds: string[]) {
+  // sortOrder has no unique constraint, but package readers order by it —
+  // always assigning 0..n-1 would tie with any existing rows' sortOrder on
+  // a package that already has members (e.g. a re-publish or a membership
+  // repair), leaving their relative order unspecified. Allocate after the
+  // current maximum instead.
+  const maxSortOrder = await prisma.industryDataPackageItem.aggregate({ where: { packageId }, _max: { sortOrder: true } });
+  const startOrder = (maxSortOrder._max.sortOrder ?? -1) + 1;
   await prisma.industryDataPackageItem.createMany({
-    data: masterItemIds.map((masterItemId, index) => ({ packageId, masterItemId, sortOrder: index })),
+    data: masterItemIds.map((masterItemId, index) => ({ packageId, masterItemId, sortOrder: startOrder + index })),
     skipDuplicates: true,
   });
   const count = await prisma.industryDataPackageItem.count({ where: { packageId } });

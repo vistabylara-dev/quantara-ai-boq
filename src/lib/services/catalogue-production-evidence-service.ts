@@ -79,7 +79,7 @@ export async function getProductionCatalogueEvidence(owner: PlatformActor) {
         hasJob: Boolean(job),
         jobStatus: job?.status ?? null,
         packageActive,
-        packageItemCount: integrity.packageCounterCount,
+        packageItemCount: integrity.actualPackageMembershipCount,
         strictComplete: integrity.strictComplete,
       });
 

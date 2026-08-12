@@ -295,13 +295,18 @@ describe("CATALOGUE-PHASE7-RECOVERY: strict dataset completeness predicate (inte
       },
     });
 
-    await teardownTrackedHvacData();
+    try {
+      await teardownTrackedHvacData();
 
-    const survived = await prisma.masterItem.findUnique({ where: { id: foreignItem.id } });
-    expect(survived).not.toBeNull();
-
-    // Real cleanup of the fixture this test itself introduced.
-    await prisma.masterItem.delete({ where: { id: foreignItem.id } });
-    await prisma.masterCatalogueImportBatch.delete({ where: { id: foreignBatch.id } });
+      const survived = await prisma.masterItem.findUnique({ where: { id: foreignItem.id } });
+      expect(survived).not.toBeNull();
+    } finally {
+      // Real cleanup of the fixture this test itself introduced — in a
+      // finally block, since a failed survival assertion would otherwise
+      // leave this HVAC-prefixed MasterItem in place and trip the residue
+      // guard on every later run of this suite.
+      await prisma.masterItem.deleteMany({ where: { id: foreignItem.id } });
+      await prisma.masterCatalogueImportBatch.delete({ where: { id: foreignBatch.id } });
+    }
   });
 });

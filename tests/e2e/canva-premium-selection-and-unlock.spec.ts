@@ -27,6 +27,12 @@ const prisma = new PrismaClient();
 const COMPANY_ID = "00000000-0000-4000-8000-000000000001";
 const CLIENT_ID = "00000000-0000-4000-8000-000000000201";
 
+// Item codes commonly contain regex-special characters (., -, (, +) — never
+// interpolate one into `new RegExp` unescaped.
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 let projectSlug: string;
 let premiumItemId: string;
 let premiumItemCode: string;
@@ -119,7 +125,7 @@ test.describe.serial("CANVA-MODEL-1 — premium selection without payment, unloc
     // The search API route itself pays a one-time dev-server JIT-compile cost
     // on its first hit in a fresh run, on top of the 250ms debounce — give it
     // real headroom rather than a fixed sleep plus a short assertion window.
-    const premiumResult = page.getByRole("button", { name: new RegExp(premiumItemCode) }).first();
+    const premiumResult = page.getByRole("button", { name: new RegExp(escapeRegExp(premiumItemCode)) }).first();
     await expect(premiumResult).toBeVisible({ timeout: 30_000 });
     await expect(page.getByText("Premium", { exact: true }).first()).toBeVisible();
     await premiumResult.click();
@@ -141,7 +147,7 @@ test.describe.serial("CANVA-MODEL-1 — premium selection without payment, unloc
     // A zero-rate item is a real, pre-existing lock blocker (ZERO_SELLING_RATE
     // is a CRITICAL verification rule, unrelated to the commercial gate) — give
     // the item a real rate so this test actually reaches the lock/export step.
-    const itemRow = page.getByRole("row", { name: new RegExp(premiumItemCode) });
+    const itemRow = page.getByRole("row", { name: new RegExp(escapeRegExp(premiumItemCode)) });
     await itemRow.getByRole("spinbutton").nth(1).fill("500");
     const saveDraftButton = page.getByRole("button", { name: "Save draft" });
     await saveDraftButton.click();

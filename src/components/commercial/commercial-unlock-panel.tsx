@@ -20,6 +20,18 @@ function formatMoney(amountMinor: number, currency: string): string {
   return `${currency} ${(amountMinor / 100).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
+// The checkout-session endpoint belongs to another layer and isn't
+// implemented in this repo yet — never redirect the browser to whatever it
+// returns without confirming it's a real absolute http(s) URL first.
+function isSafeCheckoutUrl(value: string): boolean {
+  try {
+    const url = new URL(value, window.location.origin);
+    return url.protocol === "https:" || url.protocol === "http:";
+  } catch {
+    return false;
+  }
+}
+
 function RequirementRow({ requirement }: { requirement: CommercialRequirement }) {
   const offer = requirement.offers[0];
   return (
@@ -74,7 +86,7 @@ export function CommercialUnlockPanel({ boqId, decision, onWorkSaved }: Commerci
         "/api/commerce/checkout-session",
         { boqId, manifestFingerprint: decision.manifestFingerprint },
       );
-      if (result.checkoutUrl) {
+      if (result.checkoutUrl && isSafeCheckoutUrl(result.checkoutUrl)) {
         window.location.href = result.checkoutUrl;
         return;
       }

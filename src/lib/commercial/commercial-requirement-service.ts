@@ -68,10 +68,25 @@ export async function resolveBoqCommercialRequirements(companyId: string, boqId:
     for (const itemId of premiumItemIds) {
       const hasAccess = await companyHasPackageAccessForItem(companyId, itemId);
       if (hasAccess) continue;
+      const boqItemIdsForThisItem = items.filter((i) => i.sourceMasterItemId === itemId).map((i) => i.id);
       const candidatePackageIds = [...(packageIdsByItem.get(itemId) ?? [])].sort();
       const targetPackageId = candidatePackageIds[0];
-      if (!targetPackageId) continue;
-      const boqItemIdsForThisItem = items.filter((i) => i.sourceMasterItemId === itemId).map((i) => i.id);
+      if (!targetPackageId) {
+        // A Premium item with no package membership at all can never be
+        // satisfied by any purchase — fail closed with a blocking,
+        // non-purchasable requirement instead of silently allowing export.
+        requirements.push({
+          type: "PACKAGE",
+          key: `unconfigured-${itemId}`,
+          displayName: "Unconfigured premium item",
+          reason: "This BOQ contains a premium item that isn't part of any purchasable package yet. Contact support to resolve this before exporting.",
+          fulfilled: false,
+          usageCount: 1,
+          boqItemIds: boqItemIdsForThisItem,
+          offers: [],
+        });
+        continue;
+      }
       const list = unsatisfiedByPackage.get(targetPackageId) ?? [];
       list.push({ itemId, boqItemIds: boqItemIdsForThisItem });
       unsatisfiedByPackage.set(targetPackageId, list);

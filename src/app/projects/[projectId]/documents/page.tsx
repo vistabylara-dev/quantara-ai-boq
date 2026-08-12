@@ -172,7 +172,7 @@ export default function ProjectDocumentsPage(props: PageProps) {
     }
   }, [lockConfirmBoqId, refreshBoqs, selectedBoqId]);
 
-  const [commercialDecision, setCommercialDecision] = useState<CommercialAccessDecision | null>(null);
+  const [commercialDecision, setCommercialDecision] = useState<{ boqId: string; decision: CommercialAccessDecision } | null>(null);
 
   const generate = useCallback(async (overrides?: Partial<{ boqId: string; templateId: string; type: string; audience: string }>) => {
     const boqId = overrides?.boqId ?? selectedBoqId;
@@ -188,7 +188,11 @@ export default function ProjectDocumentsPage(props: PageProps) {
       try {
         const decision = await apiClient.get<CommercialAccessDecision>(`/api/boqs/${encodeURIComponent(boqId)}/commercial-requirements`);
         if (decision.status !== "ALLOW") {
-          setCommercialDecision(decision);
+          // Regenerate (overrides.boqId) can target a different BOQ than
+          // selectedBoqId — track the id the decision was actually resolved
+          // for, so the panel's checkout request stays aligned with the
+          // manifest fingerprint instead of silently using the wrong BOQ.
+          setCommercialDecision({ boqId, decision });
           return;
         }
       } catch (error) {
@@ -511,11 +515,11 @@ export default function ProjectDocumentsPage(props: PageProps) {
               );
             })()}
 
-            {commercialDecision && selectedBoqId && (
+            {commercialDecision && (
               <div className="mt-6">
                 <CommercialUnlockPanel
-                  boqId={selectedBoqId}
-                  decision={commercialDecision}
+                  boqId={commercialDecision.boqId}
+                  decision={commercialDecision.decision}
                   onWorkSaved={() => setGenerateError(null)}
                 />
                 <button

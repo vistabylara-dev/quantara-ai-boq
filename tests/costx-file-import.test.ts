@@ -88,7 +88,7 @@ describe("CostX CSV File Import", () => {
         description: "Description",
         quantity: "Quantity",
         unit: "Unit",
-        sellingRate: "Rate",
+        cost: "Rate",
       },
     });
 
@@ -113,11 +113,15 @@ describe("CostX CSV File Import", () => {
     const items = await prisma.bOQItem.findMany({ where: { section: { boqId } }, orderBy: { itemNumber: "asc" } });
     expect(items.length).toBe(4);
     
+    expect(items[0].itemCode).toBe("STR.01");
     expect(items[0].description).toBe("Concrete Column C1");
     expect(items[0].quantity.toString()).toBe("12.5");
     expect(items[0].unit).toBe("m3");
-    
+    expect(items[0].unitCost.toString()).toBe("350");
+
+    expect(items[3].itemCode).toBe("STR.04");
     expect(items[3].description).toBe("Formwork for columns");
     expect(items[3].quantity.toString()).toBe("85");
+    expect(items[3].unitCost.toString()).toBe("45");
   });
 });

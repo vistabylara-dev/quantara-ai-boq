@@ -28,6 +28,23 @@ function ownerActor(): PlatformActor {
   return { userId: ownerUserId, companyId, platformRole: PlatformRole.PLATFORM_OWNER, fullName: "DC Owner", email: `${RUN_ID}-owner@example.com` };
 }
 
+/**
+ * Same guard as catalogue-storage-capacity-recovery.test.ts — this file's
+ * beforeAll unconditionally clears HVAC catalogue data to establish a known
+ * baseline before testing the completeness predicate against it. That must
+ * never run against anything but an isolated local test database.
+ */
+function assertIsolatedLocalTestDatabase(): void {
+  const databaseUrl = process.env.DATABASE_URL;
+  if (!databaseUrl) throw new Error("DATABASE_URL is required for this integration test");
+  const parsed = new URL(databaseUrl);
+  const isLocalHost = parsed.hostname === "localhost" || parsed.hostname === "127.0.0.1";
+  const isTestDatabase = /(?:test|e2e)/i.test(parsed.pathname);
+  if (!isLocalHost || !isTestDatabase) {
+    throw new Error("Refusing catalogue test cleanup outside an isolated local test database");
+  }
+}
+
 async function hvacItemWhere() {
   const mechanical = await prisma.masterDiscipline.findUnique({ where: { key: "mechanical" } });
   return { disciplineId: mechanical?.id ?? "__no_mechanical_discipline__", itemCode: { startsWith: "HVAC-" } } as const;
@@ -61,6 +78,7 @@ async function driveHvacToComplete() {
 
 describe("CATALOGUE-PHASE7-RECOVERY: strict dataset completeness predicate (integration, real local Postgres, real HVAC dataset)", () => {
   beforeAll(async () => {
+    assertIsolatedLocalTestDatabase();
     await cleanupHvacPackage();
     await cleanupHvacItems();
     await prisma.masterCatalogueImportJob.deleteMany({ where: { datasetId: HVAC_DATASET_ID } });

@@ -7,6 +7,7 @@ import type { Project } from "@/types/project";
 import { apiClient, getApiErrorMessage } from "@/lib/api/client";
 import { formatCurrency } from "@/lib/formatting/currency";
 import { formatDate } from "@/lib/formatting/dates";
+import { useTranslations } from "@/lib/i18n/locale-provider";
 
 type AffectedItem = {
   itemNumber: number;
@@ -49,6 +50,7 @@ type PageProps = {
 };
 
 export default function ProjectVerificationPage(props: PageProps) {
+  const t = useTranslations();
   const params = use(props.params);
   const [project, setProject] = useState<Project | null>(null);
   const [boqs, setBoqs] = useState<BOQ[]>([]);
@@ -203,7 +205,7 @@ export default function ProjectVerificationPage(props: PageProps) {
             disabled={!verification || isRerunning || resolvingId !== null}
             className="rounded-2xl border border-slate-700 bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {isRerunning ? "Running checks…" : "Re-run verification"}
+            {isRerunning ? t("validation.runningChecks") : t("validation.rerun")}
           </button>
         </div>
       </div>

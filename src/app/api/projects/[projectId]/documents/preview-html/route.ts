@@ -11,7 +11,7 @@ import { generateHtml } from "@/lib/documents/generators/html-generator";
 import { previewHtmlQuerySchema } from "@/lib/validation/document-schema";
 import { projectIdParamsSchema } from "@/lib/validation/boq-route-schemas";
 import { NotFoundError } from "@/lib/errors/app-error";
-import { resolveBoqCommercialRequirements, PREVIEW_LOCKED_WATERMARK_TEXT } from "@/lib/commercial/commercial-requirement-service";
+import { resolveBoqCommercialRequirements, previewLockedWatermarkText } from "@/lib/commercial/commercial-requirement-service";
 
 export const dynamic = "force-dynamic";
 
@@ -41,10 +41,11 @@ export async function GET(request: Request, context: RouteContext) {
     const params = await context.params;
     const { projectId } = projectIdParamsSchema.parse(params);
     const url = new URL(request.url);
-    const { boqId, templateId, audience } = previewHtmlQuerySchema.parse({
+    const { boqId, templateId, audience, locale } = previewHtmlQuerySchema.parse({
       boqId: url.searchParams.get("boqId"),
       templateId: url.searchParams.get("templateId"),
       audience: url.searchParams.get("audience") ?? undefined,
+      locale: url.searchParams.get("locale") ?? undefined,
     });
 
     const project = await getProjectRecord(actor.companyId, projectId);
@@ -92,7 +93,7 @@ export async function GET(request: Request, context: RouteContext) {
       generatedByName: actor.fullName,
       isDraft: !boqRecord.isLocked,
       showInternalCostFieldsToClient: template.contentConfig.showInternalCostFieldsToClient,
-      watermarkText: isCommerciallyLocked ? PREVIEW_LOCKED_WATERMARK_TEXT : null,
+      watermarkText: isCommerciallyLocked ? previewLockedWatermarkText(locale) : null,
     });
 
     const html = generateHtml({ data: documentData, style: template.styleConfig, content: template.contentConfig });

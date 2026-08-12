@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { SUPPORTED_LOCALES } from "@/lib/i18n/config";
 
 export const generateDocumentSchema = z
   .object({
@@ -17,6 +18,10 @@ export const previewHtmlQuerySchema = z
     boqId: z.string().uuid("A valid BOQ ID is required."),
     templateId: z.string().uuid("A valid template ID is required."),
     audience: z.enum(["INTERNAL", "CLIENT"]).default("CLIENT"),
+    // UI-language presentation only (e.g. which language the watermark
+    // overlay renders in) — never changes the underlying BOQ/company/client
+    // data, which is never auto-translated.
+    locale: z.enum(SUPPORTED_LOCALES).default("en"),
   })
   .strict();
 

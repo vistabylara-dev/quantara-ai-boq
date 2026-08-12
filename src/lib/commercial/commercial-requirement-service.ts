@@ -3,6 +3,7 @@ import { prisma } from "@/lib/db/prisma";
 import { getBOQRecord } from "@/lib/repositories/boq-repository";
 import { canGenerateDocument } from "@/lib/entitlements/entitlement-service";
 import { companyHasPackageAccessForItem } from "@/lib/entitlements/package-entitlement-service";
+import type { Locale } from "@/lib/i18n/config";
 import type { CommercialAccessDecision, CommercialOffer, CommercialRequirement } from "./commercial-types";
 
 /**
@@ -11,8 +12,21 @@ import type { CommercialAccessDecision, CommercialOffer, CommercialRequirement }
  * a Next.js route file may only export its HTTP method handlers plus a
  * small set of route-config values — any other named export fails the
  * generated route type check.
+ *
+ * ARABIC-RTL-LOCALIZATION — presentation-only per-locale variants. This is
+ * never the security boundary (that's the real server commercial-decision
+ * check below); it only changes which language the overlay text renders in.
  */
-export const PREVIEW_LOCKED_WATERMARK_TEXT = "QUANTARA PREVIEW — DRAFT — UNLOCK TO DOWNLOAD";
+const PREVIEW_LOCKED_WATERMARK_TEXT_BY_LOCALE: Record<Locale, string> = {
+  en: "QUANTARA PREVIEW — DRAFT — UNLOCK TO DOWNLOAD",
+  ar: "معاينة QUANTARA — مسودة — افتح النسخة النهائية للتنزيل",
+};
+
+export const PREVIEW_LOCKED_WATERMARK_TEXT = PREVIEW_LOCKED_WATERMARK_TEXT_BY_LOCALE.en;
+
+export function previewLockedWatermarkText(locale: Locale): string {
+  return PREVIEW_LOCKED_WATERMARK_TEXT_BY_LOCALE[locale];
+}
 
 /**
  * CANVA-MODEL-1 — the single place "what does this BOQ need to unlock a

@@ -2,6 +2,9 @@ import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import ConditionalAppShell from "@/components/layout/conditional-app-shell";
 import { THEME_MODE_KEY } from "@/lib/theme";
+import { directionForLocale } from "@/lib/i18n/config";
+import { getServerLocale } from "@/lib/i18n/server-locale";
+import { LocaleProvider } from "@/lib/i18n/locale-provider";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -65,17 +68,23 @@ const THEME_INIT_SCRIPT = `
 })();
 `;
 
-export default function RootLayout({ children }: { children: ReactNode }) {
+export default async function RootLayout({ children }: { children: ReactNode }) {
+  const locale = await getServerLocale();
+  const direction = directionForLocale(locale);
+
   return (
-    // THEME_INIT_SCRIPT deliberately sets data-theme on this element before
-    // React hydrates (see its own comment above) — the server can never
-    // render that attribute since it depends on the client's localStorage,
-    // so the mismatch is expected and intentional, not a real bug for React
-    // to warn about on every single page load.
-    <html lang="en" suppressHydrationWarning>
+    // lang/dir are read from the persisted cookie server-side (see
+    // get-server-locale.ts) — correct on the FIRST response, never a
+    // post-hydration flip. THEME_INIT_SCRIPT separately sets data-theme on
+    // this element before React hydrates (see its own comment above) — the
+    // server can never render that attribute since it depends on the
+    // client's localStorage, so that one mismatch is expected/intentional.
+    <html lang={locale} dir={direction} suppressHydrationWarning>
       <body>
         <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
-        <ConditionalAppShell>{children}</ConditionalAppShell>
+        <LocaleProvider initialLocale={locale}>
+          <ConditionalAppShell>{children}</ConditionalAppShell>
+        </LocaleProvider>
       </body>
     </html>
   );

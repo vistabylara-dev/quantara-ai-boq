@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { apiClient, getApiErrorMessage } from "@/lib/api/client";
+import { useTranslations } from "@/lib/i18n/locale-provider";
 
 /**
  * CANVA-HUMAN-JOURNEY-FINAL — the "we did not guess" recovery panel for a
@@ -34,6 +35,7 @@ function panelStateForDecision(decision: RecoveryStateResponse["decision"]): Pan
 }
 
 export function PageRecoveryPanel({ projectId, fileId, pageNumber }: Props) {
+  const t = useTranslations();
   const [state, setState] = useState<PanelState>("loading");
   const [itemCode, setItemCode] = useState("");
   const [description, setDescription] = useState("");
@@ -63,7 +65,7 @@ export function PageRecoveryPanel({ projectId, fileId, pageNumber }: Props) {
 
   const saveManualRow = useCallback(async () => {
     if (!itemCode.trim() || !description.trim()) {
-      setError("Item code and description are required.");
+      setError(t("source.recovery.requiredFieldsError"));
       return;
     }
     setIsSaving(true);
@@ -82,7 +84,7 @@ export function PageRecoveryPanel({ projectId, fileId, pageNumber }: Props) {
     } finally {
       setIsSaving(false);
     }
-  }, [basePath, description, itemCode, notes, quantity, unit]);
+  }, [basePath, description, itemCode, notes, quantity, unit, t]);
 
   const markNoData = useCallback(async () => {
     setIsSaving(true);
@@ -100,7 +102,7 @@ export function PageRecoveryPanel({ projectId, fileId, pageNumber }: Props) {
   if (state === "loading") {
     return (
       <div role="status" className="rounded-2xl border border-slate-800 bg-slate-900 p-4 text-sm text-slate-400">
-        Checking page {pageNumber} recovery status…
+        {t("source.recovery.checking", { page: pageNumber })}
       </div>
     );
   }
@@ -108,7 +110,7 @@ export function PageRecoveryPanel({ projectId, fileId, pageNumber }: Props) {
   if (state === "structured-replacement") {
     return (
       <div role="status" className="rounded-2xl border border-emerald-900 bg-emerald-950/20 p-4 text-sm text-emerald-200">
-        Page {pageNumber} was replaced with a structured Excel/CSV source.
+        {t("source.recovery.structuredReplacement", { page: pageNumber })}
       </div>
     );
   }
@@ -116,12 +118,12 @@ export function PageRecoveryPanel({ projectId, fileId, pageNumber }: Props) {
   if (state === "saved") {
     return (
       <div role="status" className="rounded-2xl border border-emerald-900 bg-emerald-950/20 p-4 text-sm text-emerald-200">
-        <p className="font-semibold text-white">Added. Please check this information before using it in your BOQ.</p>
+        <p className="font-semibold text-white">{t("source.recovery.added")}</p>
         <a
           href={`/projects/${encodeURIComponent(projectId)}/extractions`}
           className="mt-3 inline-flex rounded-2xl border border-emerald-800 bg-emerald-900/40 px-4 py-2 text-xs font-semibold text-emerald-200 hover:bg-emerald-900/60"
         >
-          Check My Information
+          {t("source.recovery.checkMyInformation")}
         </a>
       </div>
     );
@@ -130,15 +132,15 @@ export function PageRecoveryPanel({ projectId, fileId, pageNumber }: Props) {
   if (state === "no-data-confirmed") {
     return (
       <div role="status" className="rounded-2xl border border-slate-800 bg-slate-900 p-4 text-sm text-slate-300">
-        Marked — page {pageNumber} has no BOQ information.
+        {t("source.recovery.noDataConfirmed", { page: pageNumber })}
       </div>
     );
   }
 
   return (
     <div className="rounded-2xl border border-amber-900/70 bg-amber-950/10 p-4">
-      <p className="text-sm font-semibold text-amber-200">Page {pageNumber} needs your help</p>
-      <p className="mt-1 text-xs text-slate-400">We couldn&apos;t safely rebuild this table. We did not guess.</p>
+      <p className="text-sm font-semibold text-amber-200">{t("source.recovery.needsHelpTitle", { page: pageNumber })}</p>
+      <p className="mt-1 text-xs text-slate-400">{t("source.review.couldNotRebuild")}</p>
 
       {state === "closed" && (
         <div className="mt-3 flex flex-wrap gap-2">
@@ -147,13 +149,13 @@ export function PageRecoveryPanel({ projectId, fileId, pageNumber }: Props) {
             onClick={() => setState("manual-form")}
             className="rounded-2xl border border-blue-700 bg-blue-600 px-4 py-2 text-xs font-semibold text-white hover:bg-blue-500"
           >
-            Type The Missing Information
+            {t("source.recovery.typeInformation")}
           </button>
           <a
             href={`/projects/${encodeURIComponent(projectId)}/files`}
             className="rounded-2xl border border-slate-700 bg-slate-900 px-4 py-2 text-xs font-semibold text-slate-200 hover:bg-slate-800"
           >
-            Use Excel/CSV Instead
+            {t("source.recovery.useExcelInstead")}
           </a>
           <button
             type="button"
@@ -161,14 +163,14 @@ export function PageRecoveryPanel({ projectId, fileId, pageNumber }: Props) {
             disabled={isSaving}
             className="rounded-2xl border border-slate-700 bg-slate-900 px-4 py-2 text-xs font-semibold text-slate-200 hover:bg-slate-800 disabled:opacity-50"
           >
-            Mark As No BOQ Information
+            {t("source.recovery.markNoData")}
           </button>
           <button
             type="button"
             onClick={() => setState("closed")}
             className="rounded-2xl border border-slate-800 px-4 py-2 text-xs font-semibold text-slate-400 hover:text-slate-200"
           >
-            Continue With The Other Information
+            {t("source.recovery.continueOther")}
           </button>
         </div>
       )}
@@ -178,34 +180,35 @@ export function PageRecoveryPanel({ projectId, fileId, pageNumber }: Props) {
           <input
             value={itemCode}
             onChange={(e) => setItemCode(e.target.value)}
-            placeholder="Item code"
+            placeholder={t("source.recovery.itemCodePlaceholder")}
             className="w-full rounded-xl border border-slate-800 bg-slate-900 px-3 py-2 text-sm text-white outline-none focus:border-blue-500"
           />
           <input
             value={description}
             onChange={(e) => setDescription(e.target.value)}
-            placeholder="Description"
+            placeholder={t("source.recovery.descriptionPlaceholder")}
             className="w-full rounded-xl border border-slate-800 bg-slate-900 px-3 py-2 text-sm text-white outline-none focus:border-blue-500"
           />
           <div className="flex gap-2">
             <input
               value={quantity}
               onChange={(e) => setQuantity(e.target.value)}
-              placeholder="Quantity"
+              placeholder={t("source.recovery.quantityPlaceholder")}
               type="number"
-              className="w-1/2 rounded-xl border border-slate-800 bg-slate-900 px-3 py-2 text-sm text-white outline-none focus:border-blue-500"
+              dir="ltr"
+              className="w-1/2 rounded-xl border border-slate-800 bg-slate-900 px-3 py-2 text-sm text-white outline-none focus:border-blue-500 text-start"
             />
             <input
               value={unit}
               onChange={(e) => setUnit(e.target.value)}
-              placeholder="Unit"
+              placeholder={t("source.recovery.unitPlaceholder")}
               className="w-1/2 rounded-xl border border-slate-800 bg-slate-900 px-3 py-2 text-sm text-white outline-none focus:border-blue-500"
             />
           </div>
           <textarea
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
-            placeholder="Notes"
+            placeholder={t("source.recovery.notesPlaceholder")}
             className="w-full rounded-xl border border-slate-800 bg-slate-900 px-3 py-2 text-sm text-white outline-none focus:border-blue-500"
           />
           <div className="flex gap-2">
@@ -215,14 +218,14 @@ export function PageRecoveryPanel({ projectId, fileId, pageNumber }: Props) {
               disabled={isSaving}
               className="rounded-2xl border border-blue-700 bg-blue-600 px-4 py-2 text-xs font-semibold text-white hover:bg-blue-500 disabled:opacity-50"
             >
-              {isSaving ? "Saving…" : "Save"}
+              {isSaving ? t("source.recovery.saving") : t("source.recovery.save")}
             </button>
             <button
               type="button"
               onClick={() => setState("closed")}
               className="rounded-2xl border border-slate-700 bg-slate-900 px-4 py-2 text-xs font-semibold text-slate-200 hover:bg-slate-800"
             >
-              Cancel
+              {t("common.cancel")}
             </button>
           </div>
         </div>

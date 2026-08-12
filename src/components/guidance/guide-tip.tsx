@@ -98,11 +98,13 @@ export function GuideTip({
 
     function handleKeyDown(event: KeyboardEvent) {
       if (event.key !== "Escape") return;
-      // Restore focus before marking the disclosure dismissed. Focusing the
-      // trigger emits a focus event synchronously when focus was inside the
-      // CTA; applying the dismissed state last prevents that event from
-      // immediately reopening the panel.
-      triggerRef.current?.focus();
+      const focusBelongsToThisTip = document.activeElement !== null
+        && containerRef.current?.contains(document.activeElement) === true;
+      // Restore focus only for keyboard interaction within this disclosure.
+      // A hover-open tip must not take focus from an unrelated control.
+      if (focusBelongsToThisTip) {
+        triggerRef.current?.focus();
+      }
       setIsPinned(false);
       setIsDismissed(true);
       setIsHovering(false);

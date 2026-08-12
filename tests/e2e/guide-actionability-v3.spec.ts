@@ -64,6 +64,53 @@ const boq = {
   },
 };
 
+const guideItem = {
+  id: "guide-actionability-v3-item",
+  itemNumber: 1,
+  itemCode: "GUIDE-01",
+  category: "Measured Works",
+  description: "Guide fixture item",
+  specification: "Deterministic test specification",
+  quantity: 1,
+  unit: "m2",
+  unitCost: 100,
+  freightCost: 0,
+  installationCost: 0,
+  additionalCost: 0,
+  landedCost: 100,
+  marginMode: "markup",
+  marginPercentage: 10,
+  sellingRate: 110,
+  totalAmount: 110,
+  wastagePercentage: 0,
+  taxApplicable: true,
+  sourceReference: "guide-source.pdf",
+  roomOrZone: "Test zone",
+  drawingReference: "A-001",
+  confidenceScore: 100,
+  status: "DRAFT",
+  notes: "",
+  options: [],
+};
+
+const editableBoq = {
+  ...boq,
+  sections: [
+    {
+      ...boq.sections[0],
+      items: [guideItem],
+    },
+  ],
+};
+
+const lockedBoq = {
+  ...editableBoq,
+  status: "locked",
+  isLocked: true,
+  lockedAt: FIXTURE_DATE,
+  lockedByUserId: "guide-user",
+};
+
 const projectFile = {
   id: FILE_ID,
   projectId: PROJECT_ID,
@@ -319,6 +366,21 @@ async function openProjectGuide(page: Page) {
   ).toBeVisible({ timeout: 40_000 });
 }
 
+async function overrideProjectBoqs(page: Page, revisions: unknown[]) {
+  await page.route(`**/api/projects/${PROJECT_ID}/boqs`, async (route) => {
+    if (route.request().method() !== "GET") {
+      await route.fallback();
+      return;
+    }
+
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ ok: true, data: revisions }),
+    });
+  });
+}
+
 async function followStageRecommendation(
   page: Page,
   destination: {
@@ -363,7 +425,7 @@ test.describe("Quantara Guide actionability V3", () => {
     // Moving from the trigger into the popover must not close it before a
     // professional can click the recommended action.
     await cta.hover();
-    await page.waitForTimeout(150);
+    await page.waitForTimeout(300);
     await expect(cta).toBeVisible();
     await cta.click();
 
@@ -371,6 +433,25 @@ test.describe("Quantara Guide actionability V3", () => {
     await expect(
       page.getByRole("heading", { name: "Source documents and processing" }),
     ).toBeVisible({ timeout: 40_000 });
+  });
+
+  test("Escape closes a hover-open tip without stealing unrelated focus", async ({ page }) => {
+    await openProjectGuide(page);
+
+    const trigger = page.getByRole("button", { name: "Open guidance for Sources" });
+    const dialog = page.getByRole("dialog", { name: "Sources" });
+    const unrelatedControl = page.getByRole("link", { name: project.clientName, exact: true });
+
+    await trigger.hover();
+    await expect(dialog).toBeVisible();
+    await unrelatedControl.focus();
+    await expect(dialog).toBeVisible();
+    await expect(unrelatedControl).toBeFocused();
+
+    await page.keyboard.press("Escape");
+
+    await expect(dialog).not.toBeVisible();
+    await expect(unrelatedControl).toBeFocused();
   });
 
   test("Project Setup local CTA produces an observable same-page focus result", async ({ page }) => {
@@ -492,13 +573,7 @@ test.describe("Quantara Guide actionability V3", () => {
   });
 
   test("a BOQ-less Guide dimension intent focuses creation choices without creating a BOQ", async ({ page }) => {
-    await page.route(`**/api/projects/${PROJECT_ID}/boqs`, async (route) => {
-      await route.fulfill({
-        status: 200,
-        contentType: "application/json",
-        body: JSON.stringify({ ok: true, data: [] }),
-      });
-    });
+    await overrideProjectBoqs(page, []);
 
     await page.goto(`${BOQ_PATH}?action=review_dimensions`);
     await expect(
@@ -508,6 +583,75 @@ test.describe("Quantara Guide actionability V3", () => {
 
     await expect(page.locator("#boq-start-workflow")).toBeFocused();
     await expect(page.getByRole("heading", { name: "Add item", exact: true })).toHaveCount(0);
+  });
+
+  test("locked BOQ Guide actions preserve read-only state without mutations", async ({ page, apiHarness }) => {
+    await overrideProjectBoqs(page, [lockedBoq]);
+    await page.goto(BOQ_PATH);
+    await expect(
+      page.getByRole("heading", { name: `${project.name} BOQ` }),
+    ).toBeVisible({ timeout: 40_000 });
+
+    const quantityInput = page
+      .locator("#boq-editor-section tbody tr")
+      .first()
+      .locator("td")
+      .nth(3)
+      .getByRole("spinbutton");
+    await expect(page.getByText("This revision is locked and read-only.")).toBeVisible();
+    await expect(quantityInput).toBeDisabled();
+
+    for (const action of ["review_dimensions", "review_calculations"]) {
+      await page.evaluate((href) => window.history.pushState(null, "", href), `${BOQ_PATH}?action=${action}`);
+      await expectPath(page, BOQ_PATH);
+      await expect(page.getByRole("alert").filter({
+        hasText: "This BOQ revision is locked. Create a new revision before adding or changing reviewed measurements.",
+      })).toBeVisible();
+      await expect(page.getByRole("heading", { name: "Add item", exact: true })).toHaveCount(0);
+      await expect(quantityInput).toBeDisabled();
+      await page.getByRole("button", { name: "Dismiss" }).click();
+    }
+
+    await page.evaluate((href) => window.history.pushState(null, "", href), `${BOQ_PATH}?action=view_boq`);
+    await expectPath(page, BOQ_PATH);
+    await expect(page.locator("#boq-editor-section")).toBeFocused();
+    await expect(quantityInput).toBeDisabled();
+    expect(apiHarness.nonGetRequests).toEqual([]);
+  });
+
+  test("unsaved BOQ Guide actions preserve edits and existing guards without mutations", async ({ page, apiHarness }) => {
+    await overrideProjectBoqs(page, [editableBoq]);
+    await page.goto(BOQ_PATH);
+    await expect(
+      page.getByRole("heading", { name: `${project.name} BOQ` }),
+    ).toBeVisible({ timeout: 40_000 });
+
+    const quantityInput = page
+      .locator("#boq-editor-section tbody tr")
+      .first()
+      .locator("td")
+      .nth(3)
+      .getByRole("spinbutton");
+    await quantityInput.fill("2");
+    await expect(quantityInput).toHaveValue("2");
+    await expect(page.getByRole("button", { name: "Add item", exact: true }).first()).toBeDisabled();
+
+    for (const action of ["review_dimensions", "review_calculations"]) {
+      await page.evaluate((href) => window.history.pushState(null, "", href), `${BOQ_PATH}?action=${action}`);
+      await expectPath(page, BOQ_PATH);
+      await expect(page.getByRole("alert").filter({
+        hasText: "Save the current BOQ changes before adding or importing another item. Your unsaved edits will not be discarded.",
+      })).toBeVisible();
+      await expect(page.getByRole("heading", { name: "Add item", exact: true })).toHaveCount(0);
+      await expect(quantityInput).toHaveValue("2");
+      await page.getByRole("button", { name: "Dismiss" }).click();
+    }
+
+    await page.evaluate((href) => window.history.pushState(null, "", href), `${BOQ_PATH}?action=view_boq`);
+    await expectPath(page, BOQ_PATH);
+    await expect(page.locator("#boq-editor-section")).toBeFocused();
+    await expect(quantityInput).toHaveValue("2");
+    expect(apiHarness.nonGetRequests).toEqual([]);
   });
 
   test("direct BOQ intent normalizes and visibly focuses the existing editor", async ({ page }) => {

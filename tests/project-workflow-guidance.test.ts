@@ -79,7 +79,7 @@ describe("deterministic project workflow guidance", () => {
     expect(result.nextStep).toEqual({
       message: "Extraction review is complete. Continue to the BOQ workspace to review the dimensions used for professional quantities.",
       ctaLabel: "Review Dimensions",
-      href: "/projects/dubai-tower/boq",
+      href: "/projects/dubai-tower/boq?action=review_dimensions",
     });
     expect(stateOf(result, "EXTRACTION")).toBe("COMPLETE");
     expect(stateOf(result, "DIMENSIONS")).toBe("CURRENT");

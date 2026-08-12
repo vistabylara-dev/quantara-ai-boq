@@ -1,6 +1,8 @@
+"use client";
+
 import Link from "next/link";
 import { CheckCircle2 } from "lucide-react";
-import { GuideTip } from "@/components/guidance/guide-tip";
+import { GuideTip, type GuideTipAction } from "@/components/guidance/guide-tip";
 import { getGuideStageDefinition } from "@/lib/guidance/guide-registry";
 import { getGuideStageHref } from "@/lib/guidance/guide-navigation";
 import type {
@@ -30,6 +32,12 @@ function getCurrentStage(stages: ProjectWorkflowStage[]): ProjectWorkflowStage |
     ?? [...stages].reverse().find((stage) => stage.state === "COMPLETE")
     ?? null
   );
+}
+
+function focusProjectOverview() {
+  const overview = document.getElementById("project-overview-section");
+  overview?.scrollIntoView({ behavior: "smooth", block: "start" });
+  overview?.focus({ preventScroll: true });
 }
 
 export function ProjectWorkflowGuide({ workflow }: { workflow: ProjectWorkflowResult }) {
@@ -75,6 +83,12 @@ export function ProjectWorkflowGuide({ workflow }: { workflow: ProjectWorkflowRe
       <ol className="mt-6 grid gap-2 sm:grid-cols-3 xl:grid-cols-9" aria-label="Project workflow stages">
         {workflow.stages.map((stage, index) => {
           const definition = getGuideStageDefinition(stage.id);
+          const cta: GuideTipAction = stage.id === "PROJECT_SETUP"
+            ? { label: definition.suggestedActionLabel, onAction: focusProjectOverview }
+            : {
+                label: definition.suggestedActionLabel,
+                href: getGuideStageHref(stage.id, workflow.projectId),
+              };
           return (
             <li
               key={stage.id}
@@ -88,10 +102,7 @@ export function ProjectWorkflowGuide({ workflow }: { workflow: ProjectWorkflowRe
                   shortDescription={`${definition.shortDescription} ${definition.professionalPurpose}`}
                   whatQuantaraDoes={definition.whatQuantaraDoes}
                   whatProfessionalCanDo={definition.whatUserCanDo}
-                  cta={{
-                    label: definition.suggestedActionLabel,
-                    href: getGuideStageHref(stage.id, workflow.projectId),
-                  }}
+                  cta={cta}
                   ariaLabel={`Open guidance for ${definition.title}`}
                 />
               </div>

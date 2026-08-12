@@ -13,6 +13,7 @@ import AddItemFromSourceModal, { type AddItemTab } from "@/components/boq/add-it
 import { BoqStartWizard, type BoqCreationMethod } from "@/components/boq/boq-start-wizard";
 import { BoqWorkflowStepper } from "@/components/boq/boq-workflow-stepper";
 import { computeBoqWorkflowState, type NextStepAction } from "@/lib/workflow/boq-workflow-state";
+import { parseGuideBoqAction } from "@/lib/guidance/guide-navigation";
 
 type PageProps = {
   params: Promise<{
@@ -69,7 +70,7 @@ export default function ProjectBOQPage(props: PageProps) {
   const [workflowFactsWarning, setWorkflowFactsWarning] = useState<string | null>(null);
   const [validationWarningCount, setValidationWarningCount] = useState<number | null>(null);
   const [validationPreviewError, setValidationPreviewError] = useState<string | null>(null);
-  const hasTriggeredAction = useRef(false);
+  const handledActionSignatureRef = useRef<string | null>(null);
 
   const loadWorkspace = useCallback(async (signal?: AbortSignal) => {
     setIsLoading(true);
@@ -220,17 +221,94 @@ export default function ProjectBOQPage(props: PageProps) {
     }
   }, [pendingAction, persistDraft, replaceRevision]);
 
-  useEffect(() => {
-    if (isLoading || hasTriggeredAction.current) return;
-    const action = searchParams.get("action");
-    if (!action) return;
+  const focusBoqStartWorkflow = useCallback(() => {
+    setShowCreationSelector(true);
+    requestAnimationFrame(() => {
+      const startWorkflow = document.getElementById("boq-start-workflow");
+      startWorkflow?.scrollIntoView({ behavior: "smooth", block: "start" });
+      startWorkflow?.focus({ preventScroll: true });
+    });
+  }, []);
 
-    hasTriggeredAction.current = true;
-    if (action === "create-initial" && revisions.length === 0) {
+  const openReviewedWorkflow = useCallback((allowCreate: boolean) => {
+    if (!activeBoq) {
+      if (allowCreate) {
+        void createInitialBOQ(true);
+        setAddItemInitialTab("reviewed");
+      } else {
+        // Guide query state is advisory and never permission to create a BOQ.
+        focusBoqStartWorkflow();
+      }
+      return;
+    }
+
+    if (isReadOnlyBOQ(activeBoq)) {
+      setActionError(
+        "This BOQ revision is locked. Create a new revision before adding or changing reviewed measurements.",
+      );
+      return;
+    }
+
+    if (hasUnsavedChanges) {
+      setActionError(
+        "Save the current BOQ changes before adding or importing another item. Your unsaved edits will not be discarded.",
+      );
+      return;
+    }
+
+    // This is the existing reviewed-measurement and calculation entry surface.
+    // Opening it never selects, imports, saves, or confirms professional data.
+    setAddItemInitialTab("reviewed");
+    setShowAddItem(true);
+  }, [activeBoq, createInitialBOQ, focusBoqStartWorkflow, hasUnsavedChanges]);
+
+  const focusBoqWorkspace = useCallback((allowCreate: boolean) => {
+    if (!activeBoq) {
+      if (allowCreate) {
+        const hasReviewedEntities = extractedEntities.some(
+          (entity) => entity.status === "CONFIRMED" || entity.status === "CORRECTED",
+        );
+        setAddItemInitialTab(hasReviewedEntities ? "reviewed" : "search");
+        void createInitialBOQ(true);
+      } else {
+        focusBoqStartWorkflow();
+      }
+      return;
+    }
+
+    const editorSection = document.getElementById("boq-editor-section");
+    editorSection?.scrollIntoView({ behavior: "smooth", block: "start" });
+    editorSection?.focus({ preventScroll: true });
+  }, [activeBoq, createInitialBOQ, extractedEntities, focusBoqStartWorkflow]);
+
+  useEffect(() => {
+    if (isLoading) return;
+    const actionValues = searchParams.getAll("action");
+    if (actionValues.length === 0) {
+      handledActionSignatureRef.current = null;
+      return;
+    }
+
+    const actionSignature = searchParams.toString();
+    if (handledActionSignatureRef.current === actionSignature) return;
+    handledActionSignatureRef.current = actionSignature;
+
+    const guideAction = parseGuideBoqAction(searchParams);
+    const action = actionValues.length === 1 ? actionValues[0] : null;
+
+    if (guideAction === "review_dimensions" || guideAction === "review_calculations") {
+      openReviewedWorkflow(false);
+    } else if (guideAction === "view_boq") {
+      focusBoqWorkspace(false);
+    } else if (action === "create-initial" && revisions.length === 0) {
+      // Preserve the existing, explicitly requested project-overview action.
       void createInitialBOQ();
     } else if (action === "new-revision" && activeBoq && isReadOnlyBOQ(activeBoq)) {
+      // Preserve the existing, explicitly requested revision action.
       void createRevision(activeBoq);
     } else if (action === "import-reviewed") {
+      // Preserve the existing reviewed-import action. It is intentionally not
+      // part of the Guide-safe action whitelist because it may create a BOQ.
       setAddItemInitialTab("reviewed");
 
       const editableRevision = revisions.find((revision) => !isReadOnlyBOQ(revision));
@@ -247,12 +325,23 @@ export default function ProjectBOQPage(props: PageProps) {
         );
       }
     }
-    
-    // Clean up URL
+
+    // Every supported, malformed, or unknown action is one-shot URL state.
+    // Remove it after interpretation while preserving unrelated query state.
     const url = new URL(window.location.href);
     url.searchParams.delete("action");
     router.replace(url.pathname + url.search);
-  }, [isLoading, searchParams, revisions, activeBoq, createInitialBOQ, createRevision, router]);
+  }, [
+    activeBoq,
+    createInitialBOQ,
+    createRevision,
+    focusBoqWorkspace,
+    isLoading,
+    openReviewedWorkflow,
+    revisions,
+    router,
+    searchParams,
+  ]);
 
   const lockRevision = useCallback(async (draft: BOQ) => {
     if (isReadOnlyBOQ(draft) || pendingAction) return;
@@ -357,25 +446,7 @@ export default function ProjectBOQPage(props: PageProps) {
 
       case "review_dimensions":
       case "review_calculations":
-        if (!activeRevision) {
-          void createInitialBOQ(true);
-          setAddItemInitialTab("reviewed");
-          break;
-        }
-        if (isReadOnlyBOQ(activeRevision)) {
-          setActionError(
-            "This BOQ revision is locked. Create a new revision before adding or changing reviewed measurements.",
-          );
-          break;
-        }
-        if (hasUnsavedChanges) {
-          setActionError(
-            "Save the current BOQ changes before adding or importing another item. Your unsaved edits will not be discarded.",
-          );
-          break;
-        }
-        setAddItemInitialTab("reviewed");
-        setShowAddItem(true);
+        openReviewedWorkflow(true);
         break;
 
       case "open_boq":
@@ -414,19 +485,7 @@ export default function ProjectBOQPage(props: PageProps) {
         // scroll to it instead of popping the add-item modal (that's a
         // different action). Falls back to the empty-state creation flow
         // when there's nothing to scroll to yet.
-        if (!activeRevision) {
-          const hasReviewedEntities = extractedEntities.some(
-            (entity) => entity.status === "CONFIRMED" || entity.status === "CORRECTED",
-          );
-          setAddItemInitialTab(hasReviewedEntities ? "reviewed" : "search");
-          void createInitialBOQ(true);
-          break;
-        }
-        {
-          const editorSection = document.getElementById("boq-editor-section");
-          editorSection?.scrollIntoView({ behavior: "smooth", block: "start" });
-          editorSection?.focus({ preventScroll: true });
-        }
+        focusBoqWorkspace(true);
         break;
 
       case "run_validation":
@@ -448,7 +507,9 @@ export default function ProjectBOQPage(props: PageProps) {
     createInitialBOQ,
     extractedEntities,
     hasUnsavedChanges,
+    focusBoqWorkspace,
     lockRevision,
+    openReviewedWorkflow,
     params.projectId,
     router,
   ]);
@@ -621,10 +682,16 @@ export default function ProjectBOQPage(props: PageProps) {
       <div className="grid gap-6 xl:grid-cols-[1fr_360px]">
         <div className="space-y-6">
           {showCreationSelector || (!activeRevision && revisions.length === 0) ? (
-            <BoqStartWizard
-              hasDrafts={revisions.some(r => !isReadOnlyBOQ(r))}
-              onSelectMethod={handleCreationMethodSelect}
-            />
+            <div
+              id="boq-start-workflow"
+              tabIndex={-1}
+              className="rounded-[32px] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-blue-500"
+            >
+              <BoqStartWizard
+                hasDrafts={revisions.some(r => !isReadOnlyBOQ(r))}
+                onSelectMethod={handleCreationMethodSelect}
+              />
+            </div>
           ) : activeRevision ? (
             <div id="boq-editor-section" tabIndex={-1} className="rounded-[32px] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-blue-500">
             <BoqEditor

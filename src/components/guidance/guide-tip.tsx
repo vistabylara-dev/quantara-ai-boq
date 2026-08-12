@@ -4,10 +4,19 @@ import { Lightbulb } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 
-export type GuideTipAction = {
+export type GuideTipLinkAction = {
   label: string;
   href: string;
+  onAction?: never;
 };
+
+export type GuideTipLocalAction = {
+  label: string;
+  onAction: () => void;
+  href?: never;
+};
+
+export type GuideTipAction = GuideTipLinkAction | GuideTipLocalAction;
 
 export type GuideTipProps = {
   title: string;
@@ -48,11 +57,41 @@ export function GuideTip({
   const containerRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
+  const hoverCloseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const generatedId = useId();
   const panelId = `guide-tip-${generatedId.replace(/:/g, "")}`;
   const titleId = `${panelId}-title`;
   const descriptionId = `${panelId}-description`;
   const isOpen = isPinned || (!isDismissed && (isHovering || hasFocusWithin));
+
+  function cancelHoverClose() {
+    if (hoverCloseTimerRef.current === null) return;
+    clearTimeout(hoverCloseTimerRef.current);
+    hoverCloseTimerRef.current = null;
+  }
+
+  function handleHoverEnter() {
+    cancelHoverClose();
+    setIsHovering(true);
+    setIsDismissed(false);
+  }
+
+  function handleHoverLeave() {
+    cancelHoverClose();
+    // The desktop disclosure is fixed and intentionally separated from its
+    // trigger by a small visual gap. Keep it mounted while the pointer crosses
+    // that gap so its CTA remains reachable without requiring a click-pin.
+    hoverCloseTimerRef.current = setTimeout(() => {
+      setIsHovering(false);
+      hoverCloseTimerRef.current = null;
+    }, 180);
+  }
+
+  useEffect(() => () => {
+    if (hoverCloseTimerRef.current !== null) {
+      clearTimeout(hoverCloseTimerRef.current);
+    }
+  }, []);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -145,11 +184,8 @@ export function GuideTip({
     <div
       ref={containerRef}
       className={`relative inline-flex ${className}`.trim()}
-      onMouseEnter={() => {
-        setIsHovering(true);
-        setIsDismissed(false);
-      }}
-      onMouseLeave={() => setIsHovering(false)}
+      onMouseEnter={handleHoverEnter}
+      onMouseLeave={handleHoverLeave}
       onFocusCapture={() => {
         setHasFocusWithin(true);
         setIsDismissed(false);
@@ -180,6 +216,8 @@ export function GuideTip({
           role="dialog"
           aria-labelledby={titleId}
           aria-describedby={descriptionId}
+          onMouseEnter={handleHoverEnter}
+          onMouseLeave={handleHoverLeave}
           style={desktopPanelPosition ?? undefined}
           className="fixed inset-x-4 bottom-4 z-50 max-h-[calc(100vh-2rem)] overflow-y-auto rounded-2xl border border-[#009FE3]/35 bg-white p-5 text-left text-[#08152E] shadow-[0_18px_60px_rgba(8,21,46,0.22),0_0_24px_rgba(0,159,227,0.1)] dark:border-[#21C7F3]/35 dark:bg-[#091326] dark:text-white dark:shadow-[0_18px_60px_rgba(0,0,0,0.5),0_0_26px_rgba(33,199,243,0.12)] sm:inset-x-auto sm:bottom-auto sm:max-w-[calc(100vw-2rem)]"
         >
@@ -213,12 +251,27 @@ export function GuideTip({
           </dl>
 
           {cta ? (
-            <Link
-              href={cta.href}
-              className="mt-4 inline-flex min-h-10 items-center rounded-xl border border-[#009FE3] bg-[#009FE3] px-3.5 py-2 text-xs font-semibold text-white transition hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#009FE3] dark:border-[#21C7F3] dark:bg-[#21C7F3] dark:text-[#040A16] dark:focus-visible:outline-[#21C7F3]"
-            >
-              {cta.label}
-            </Link>
+            typeof cta.href === "string" ? (
+              <Link
+                href={cta.href}
+                className="mt-4 inline-flex min-h-10 items-center rounded-xl border border-[#009FE3] bg-[#009FE3] px-3.5 py-2 text-xs font-semibold text-white transition hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#009FE3] dark:border-[#21C7F3] dark:bg-[#21C7F3] dark:text-[#040A16] dark:focus-visible:outline-[#21C7F3]"
+              >
+                {cta.label}
+              </Link>
+            ) : (
+              <button
+                type="button"
+                onClick={() => {
+                  setIsPinned(false);
+                  setIsDismissed(true);
+                  setIsHovering(false);
+                  cta.onAction();
+                }}
+                className="mt-4 inline-flex min-h-10 items-center rounded-xl border border-[#009FE3] bg-[#009FE3] px-3.5 py-2 text-xs font-semibold text-white transition hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#009FE3] dark:border-[#21C7F3] dark:bg-[#21C7F3] dark:text-[#040A16] dark:focus-visible:outline-[#21C7F3]"
+              >
+                {cta.label}
+              </button>
+            )
           ) : null}
         </div>
       ) : null}

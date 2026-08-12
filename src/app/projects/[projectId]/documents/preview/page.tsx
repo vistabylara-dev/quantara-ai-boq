@@ -139,6 +139,14 @@ export default function DocumentPreviewPage(props: PageProps) {
                 shortDescription={t("preview.helpShort")}
                 whatQuantaraDoes={t("preview.helpQuantara")}
                 whatProfessionalCanDo={t("preview.helpProfessional")}
+                cta={selectedBoq && previewUrl && !isCheckingUnlock ? {
+                  label: t("preview.downloadCleanVersion"),
+                  onAction: () => {
+                    const downloadButton = document.getElementById("clean-download-button");
+                    downloadButton?.scrollIntoView({ behavior: "smooth", block: "center" });
+                    downloadButton?.focus({ preventScroll: true });
+                  },
+                } : undefined}
                 ariaLabel={t("preview.helpAriaLabel")}
               />
             </div>
@@ -201,6 +209,7 @@ export default function DocumentPreviewPage(props: PageProps) {
             </div>
             <div className="ms-auto">
               <button
+                id="clean-download-button"
                 type="button"
                 onClick={() => void downloadCleanVersion()}
                 disabled={isCheckingUnlock || !previewUrl}

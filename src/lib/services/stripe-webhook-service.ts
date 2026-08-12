@@ -267,7 +267,7 @@ async function applyCurrentSubscriptionState(tx: TxClient, subscription: Stripe.
 
     const product = commercePrice.product;
 
-    if (product.type === "SUBSCRIPTION" || product.type === "AI_CREDIT_PACK" || !product.industryPackageId) {
+    if (!product.industryPackageId) {
       // Treat as software/platform subscription
       const softwarePlan = await resolveSoftwarePlanForCommerceProductCode(product.code, tx);
       const softwarePlanId = softwarePlan?.id ?? null;

@@ -24,7 +24,12 @@ export async function POST(request: Request) {
     requireCapability(actor, "entitlements:manage");
 
     const input = await parseJsonBody(request, commerceCheckoutRequestSchema);
-    const result = await createCommerceCheckoutSession(actor, input);
+    const intentPayload = {
+      intent: input.checkoutMode === "BOQ_UNLOCK" ? "BOQ_FINAL_OUTPUT" as const : "LEGACY_PRICE_CODE" as const,
+      priceCode: input.priceCode,
+      boqId: input.boqId
+    };
+    const result = await createCommerceCheckoutSession(actor, intentPayload);
     return apiSuccess(result);
   } catch (error) {
     return handleApiError(error);

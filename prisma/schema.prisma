@@ -1459,6 +1459,7 @@ model Company {
   clientProposals             ClientProposal[]
   clientProposalDocuments     ClientProposalDocument[]
   clientProposalEvents        ClientProposalEvent[]
+  commerceCheckoutLeases      CommerceCheckoutLease[]
   emailDispatches             EmailDispatch[]
   softwareSubscriptions       CompanySoftwareSubscription[]
   trialUsageRecords           CompanyTrialUsage[]
@@ -3972,4 +3973,28 @@ model ProjectFileUploadSession {
   @@index([projectId])
   @@index([expiresAt])
   @@index([status])
+}
+model CommerceCheckoutLease {
+  companyId String   @id @db.Uuid
+  expiresAt DateTime
+  token     String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  company   Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+}
+
+model CommerceWebhookLease {
+  stripeEventId String   @id
+  expiresAt     DateTime
+  token         String
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model CommerceSyncLease {
+  stripeSubscriptionId String   @id
+  expiresAt            DateTime
+  token                String
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
 }

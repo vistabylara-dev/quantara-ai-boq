@@ -1443,6 +1443,9 @@ model Company {
   findingBoqLinks             FindingBoqLink[]
   externalConnections         ExternalConnection[]
   integrationEvents           IntegrationEvent[]
+  companyAiCreditBalance      CompanyAiCreditBalance?
+  aiCreditTransactions        AiCreditTransaction[]
+  companyInvoices             CompanyInvoice[]
 }
 
 model User {
@@ -1490,6 +1493,7 @@ model User {
   externalConnectionsMade                ExternalConnection[]
   synchronizationRunsActed               SynchronizationRun[]             @relation("SynchronizationRunActor")
   integrationEventsActed                 IntegrationEvent[]               @relation("IntegrationEventActor")
+  aiCreditTransactions                   AiCreditTransaction[]
 
   @@index([companyId])
   @@index([role])
@@ -3487,4 +3491,95 @@ model IntegrationEvent {
   @@index([externalConnectionId])
   @@index([projectIntegrationId])
   @@index([eventType])
+}
+
+// ---------- Phase 2: Commercial Ledger and AI Credits ----------
+
+enum AiCreditTransactionType {
+  SUBSCRIPTION_GRANT
+  TOP_UP_PURCHASE
+  QUESTION_ASKED
+  REPORT_GENERATED
+  EXPIRED
+  ADMIN_ADJUSTMENT
+}
+
+model CompanyAiCreditBalance {
+  id               String   @id @default(uuid()) @db.Uuid
+  companyId        String   @unique @db.Uuid
+  availableCredits Int      @default(0)
+  lastResetAt      DateTime @default(now())
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  company          Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([companyId])
+}
+
+model AiCreditTransaction {
+  id              String                  @id @default(uuid()) @db.Uuid
+  companyId       String                  @db.Uuid
+  userId          String?                 @db.Uuid
+  amount          Int
+  transactionType AiCreditTransactionType
+  description     String
+  createdAt       DateTime                @default(now())
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  user    User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([companyId])
+  @@index([userId])
+  @@index([createdAt])
+}
+
+model CompanyInvoice {
+  id              String   @id @default(uuid()) @db.Uuid
+  companyId       String   @db.Uuid
+  amountDue       Decimal  @db.Decimal(12, 2)
+  amountPaid      Decimal  @db.Decimal(12, 2)
+  currency        String   @default("USD")
+  status          String
+  invoicePdfUrl   String?
+  stripeInvoiceId String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([companyId])
+  @@index([status])
+}
+
+// ---------- Phase 8: Early Access & Contact Sales ----------
+
+model EarlyAccessRegistration {
+  id              String   @id @default(uuid()) @db.Uuid
+  userId          String?  @db.Uuid
+  email           String
+  interestTier    String   // Starter, Professional, Business
+  status          String   @default("pending") // pending, invited
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([email])
+}
+
+model ContactSalesRequest {
+  id                 String   @id @default(uuid()) @db.Uuid
+  fullName           String
+  businessEmail      String
+  company            String
+  country            String
+  accountingPlatform String
+  businessSize       String
+  numberOfEntities   String
+  useCase            String
+  contactMethod      String
+  privacyConsent     Boolean
+  deliveryStatus     String   @default("stored") // stored, email_pending, email_sent, email_failed
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@index([businessEmail])
 }

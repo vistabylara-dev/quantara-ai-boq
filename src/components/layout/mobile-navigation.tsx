@@ -48,7 +48,10 @@ export default function MobileNavigation({ open, onClose }: MobileNavigationProp
         <div className="flex items-center justify-between">
           <div>
             <p className="text-xs uppercase tracking-[0.24em] text-[#7B879C] dark:text-[#7F8DA6]">Workspace</p>
-            <h2 className="text-xl font-semibold text-[#08152E] dark:text-white">Quantara AI</h2>
+            <div className="flex items-center gap-2 mt-1">
+              <img src="/logo.png" alt="" className="h-6 w-auto object-contain" />
+              <h2 className="text-xl font-semibold text-[#08152E] dark:text-white">Quantara AI</h2>
+            </div>
           </div>
           <button
             type="button"

@@ -1,4 +1,17 @@
-import { MasterCatalogueImportJobStatus, MasterCatalogueImportStatus } from "@prisma/client";
+export enum MasterCatalogueImportJobStatus {
+  DRY_RUN_COMPLETE = "DRY_RUN_COMPLETE",
+  PAUSED = "PAUSED",
+  IMPORT_RUNNING = "IMPORT_RUNNING",
+  COMPLETED = "COMPLETED",
+  COMPLETED_WITH_WARNINGS = "COMPLETED_WITH_WARNINGS",
+  FAILED = "FAILED",
+  CANCELLED = "CANCELLED",
+  ROLLED_BACK = "ROLLED_BACK"
+}
+
+export enum MasterCatalogueImportStatus {
+  EXECUTED = "EXECUTED"
+}
 import { prisma } from "@/lib/db/prisma";
 import { AppError, NotFoundError, PermissionDeniedError } from "@/lib/errors/app-error";
 import type { PlatformActor } from "@/lib/auth/platform-authorization";

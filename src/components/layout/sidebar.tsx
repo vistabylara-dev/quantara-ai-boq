@@ -62,7 +62,10 @@ export default function Sidebar() {
         {!collapsed && (
           <div className="space-y-1">
             <p className="terminal-text text-[9px] uppercase tracking-[0.4em] text-[#00F0FF]">System Active</p>
-            <h2 className="text-xl font-bold text-white tracking-widest uppercase">Quantara AI</h2>
+            <div className="flex items-center gap-2">
+              <img src="/logo.png" alt="" className="h-6 w-auto object-contain" />
+              <h2 className="text-xl font-bold text-white tracking-widest uppercase">Quantara AI</h2>
+            </div>
           </div>
         )}
         <button

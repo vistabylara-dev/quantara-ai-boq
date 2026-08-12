@@ -1,5 +1,6 @@
 import { test, expect, type Page } from "@playwright/test";
-import { PrismaClient } from "@prisma/client";
+import { PrismaClient, type CommercePriceReviewStatus } from "@prisma/client";
+import { assertIsolatedLocalTestDatabase } from "../helpers/isolated-database-guard";
 
 /**
  * CANVA-MODEL-1 owner acceptance — proves the two concrete, load-bearing
@@ -38,7 +39,7 @@ let premiumItemId: string;
 let premiumItemCode: string;
 let premiumPackageId: string;
 let premiumPackageName: string;
-let approvedPriceIds: string[] = [];
+let priceOriginalStatuses: { id: string; reviewStatus: CommercePriceReviewStatus }[] = [];
 
 async function login(page: Page) {
   await page.goto("/login");
@@ -52,6 +53,8 @@ async function login(page: Page) {
 
 test.describe.serial("CANVA-MODEL-1 — premium selection without payment, unlock screen at clean export", () => {
   test.beforeAll(async () => {
+    assertIsolatedLocalTestDatabase("canva-premium-selection-and-unlock E2E setup");
+
     // Scoped to a package with a real, seeded CommerceProduct/CommercePrice
     // link (see prisma/seed-data/commerce-products.ts's
     // INDUSTRY_ACCESS_CANDIDATES) — needed so the unlock panel's per-price
@@ -78,12 +81,16 @@ test.describe.serial("CANVA-MODEL-1 — premium selection without payment, unloc
     // Restored in afterAll — this mutates shared seed data, not a
     // test-created row.
     const commerceProduct = await prisma.commerceProduct.findFirstOrThrow({ where: { industryPackageId: premiumPackageId } });
-    approvedPriceIds = (await prisma.commercePrice.findMany({
+    const pricesToApprove = await prisma.commercePrice.findMany({
       where: { productId: commerceProduct.id, billingInterval: "MONTH", reviewStatus: { not: "APPROVED" } },
-      select: { id: true },
-    })).map((p) => p.id);
+      select: { id: true, reviewStatus: true },
+    });
+    // Track each price's true original status so teardown restores exactly
+    // what was there before, rather than blanket-overwriting e.g. a
+    // REJECTED price to REQUIRES_REVIEW.
+    priceOriginalStatuses = pricesToApprove.map((p) => ({ id: p.id, reviewStatus: p.reviewStatus }));
     await prisma.commercePrice.updateMany({
-      where: { id: { in: approvedPriceIds } },
+      where: { id: { in: pricesToApprove.map((p) => p.id) } },
       data: { reviewStatus: "APPROVED" },
     });
 
@@ -108,8 +115,8 @@ test.describe.serial("CANVA-MODEL-1 — premium selection without payment, unloc
   });
 
   test.afterAll(async () => {
-    if (approvedPriceIds.length > 0) {
-      await prisma.commercePrice.updateMany({ where: { id: { in: approvedPriceIds } }, data: { reviewStatus: "REQUIRES_REVIEW" } });
+    for (const { id, reviewStatus } of priceOriginalStatuses) {
+      await prisma.commercePrice.update({ where: { id }, data: { reviewStatus } });
     }
     const project = await prisma.project.findFirst({ where: { companyId: COMPANY_ID, slug: projectSlug } });
     if (project) {

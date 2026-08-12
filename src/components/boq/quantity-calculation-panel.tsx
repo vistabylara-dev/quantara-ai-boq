@@ -124,6 +124,10 @@ export function QuantityCalculationPanel({ projectId, calculationType, extracted
           : dim,
       ),
     );
+    // Invalidate the stale preview immediately — otherwise the "Yes — Use
+    // {value}" button can transiently show the PREVIOUS dimensions' result
+    // while the fresh preview request for the new dimensions is in flight.
+    setPreview({ result: null, missing: [] });
     setSavedCalculation(null);
     setPendingVoiceProposal(null);
     setVoiceProposalError(null);

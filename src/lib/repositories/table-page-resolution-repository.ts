@@ -1,5 +1,7 @@
 import { prisma } from "@/lib/db/prisma";
-import type { TablePageResolution, TablePageResolutionDecision } from "@prisma/client";
+import type { Prisma, TablePageResolution, TablePageResolutionDecision } from "@prisma/client";
+
+type DbClient = typeof prisma | Prisma.TransactionClient;
 
 export async function getTablePageResolution(
   companyId: string,
@@ -17,16 +19,19 @@ export async function getTablePageResolution(
  * separate from parser evidence (ExtractedTable/ExtractedEntity rows for
  * this page, if any, are never touched here).
  */
-export async function recordTablePageResolutionDecision(input: {
-  companyId: string;
-  projectId: string;
-  projectFileId: string;
-  pageNumber: number;
-  extractionJobId?: string | null;
-  decision: TablePageResolutionDecision;
-  decidedByUserId: string;
-}): Promise<TablePageResolution> {
-  return prisma.tablePageResolution.upsert({
+export async function recordTablePageResolutionDecision(
+  input: {
+    companyId: string;
+    projectId: string;
+    projectFileId: string;
+    pageNumber: number;
+    extractionJobId?: string | null;
+    decision: TablePageResolutionDecision;
+    decidedByUserId: string;
+  },
+  db: DbClient = prisma,
+): Promise<TablePageResolution> {
+  return db.tablePageResolution.upsert({
     where: { projectFileId_pageNumber: { projectFileId: input.projectFileId, pageNumber: input.pageNumber } },
     update: {
       decision: input.decision,

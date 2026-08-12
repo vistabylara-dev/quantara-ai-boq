@@ -1,5 +1,6 @@
 import { test, expect, type Page } from "@playwright/test";
-import { PrismaClient } from "@prisma/client";
+import { PrismaClient, type CommercePriceReviewStatus } from "@prisma/client";
+import { assertIsolatedLocalTestDatabase } from "../helpers/isolated-database-guard";
 
 /**
  * CANVA-HUMAN-JOURNEY-FINAL — the master acceptance test for this segment's
@@ -53,7 +54,7 @@ let premiumItemCode: string;
 let premiumPackageId: string;
 let premiumPackageName: string;
 let boqId: string;
-let approvedPriceIds: string[] = [];
+let priceOriginalStatuses: { id: string; reviewStatus: CommercePriceReviewStatus }[] = [];
 
 async function login(page: Page) {
   await page.goto("/login");
@@ -65,6 +66,8 @@ async function login(page: Page) {
 
 test.describe.serial("CANVA-HUMAN-JOURNEY-FINAL — premium selection, watermarked preview, unlock, checkout return states", () => {
   test.beforeAll(async () => {
+    assertIsolatedLocalTestDatabase("first-time-user-canva-boq-journey E2E setup");
+
     const membership = await prisma.industryDataPackageItem.findFirstOrThrow({
       where: { masterItem: { isPremium: true, status: "ACTIVE" }, package: { key: "mechanical-hvac-professional" } },
       include: { masterItem: true, package: true },
@@ -76,11 +79,18 @@ test.describe.serial("CANVA-HUMAN-JOURNEY-FINAL — premium selection, watermark
     await prisma.companyPackageSubscription.deleteMany({ where: { companyId: COMPANY_ID, packageId: premiumPackageId } });
 
     const commerceProduct = await prisma.commerceProduct.findFirstOrThrow({ where: { industryPackageId: premiumPackageId } });
-    approvedPriceIds = (await prisma.commercePrice.findMany({
+    const pricesToApprove = await prisma.commercePrice.findMany({
       where: { productId: commerceProduct.id, billingInterval: "MONTH", reviewStatus: { not: "APPROVED" } },
-      select: { id: true },
-    })).map((p) => p.id);
-    await prisma.commercePrice.updateMany({ where: { id: { in: approvedPriceIds } }, data: { reviewStatus: "APPROVED" } });
+      select: { id: true, reviewStatus: true },
+    });
+    // Track each price's true original status (not just "not approved") so
+    // teardown restores exactly what was there before, rather than
+    // blanket-overwriting e.g. a REJECTED price to REQUIRES_REVIEW.
+    priceOriginalStatuses = pricesToApprove.map((p) => ({ id: p.id, reviewStatus: p.reviewStatus }));
+    await prisma.commercePrice.updateMany({
+      where: { id: { in: pricesToApprove.map((p) => p.id) } },
+      data: { reviewStatus: "APPROVED" },
+    });
 
     await prisma.client.upsert({
       where: { id: CLIENT_ID },
@@ -103,8 +113,8 @@ test.describe.serial("CANVA-HUMAN-JOURNEY-FINAL — premium selection, watermark
   });
 
   test.afterAll(async () => {
-    if (approvedPriceIds.length > 0) {
-      await prisma.commercePrice.updateMany({ where: { id: { in: approvedPriceIds } }, data: { reviewStatus: "REQUIRES_REVIEW" } });
+    for (const { id, reviewStatus } of priceOriginalStatuses) {
+      await prisma.commercePrice.update({ where: { id }, data: { reviewStatus } });
     }
     await prisma.companyPackageSubscription.deleteMany({ where: { companyId: COMPANY_ID, packageId: premiumPackageId } });
     const project = await prisma.project.findFirst({ where: { companyId: COMPANY_ID, slug: projectSlug } });

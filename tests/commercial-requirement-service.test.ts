@@ -59,8 +59,11 @@ async function seedCompanyWithUser(suffix: string) {
 describe("resolveBoqCommercialRequirements: real commerce-catalog offer derivation", () => {
   const cleanupCompanyIds: string[] = [];
 
+  beforeAll(() => {
+    assertIsolatedLocalTestDatabase("commercial-requirement-service test setup");
+  });
+
   afterAll(async () => {
-    assertIsolatedLocalTestDatabase("commercial-requirement-service test cleanup");
     for (const companyId of cleanupCompanyIds) {
       await prisma.bOQItem.deleteMany({ where: { companyId } });
       await prisma.bOQSection.deleteMany({ where: { companyId } });

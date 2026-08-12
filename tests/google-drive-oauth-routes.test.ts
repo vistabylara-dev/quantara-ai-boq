@@ -131,6 +131,8 @@ describe("Google Drive OAuth browser routes", () => {
     const location = response.headers.get("location") ?? "";
 
     expect(location).toContain("projectId=proj-1");
+    expect(location).toContain("intent=boq-source");
+    expect(location).toContain(`returnTo=${encodeURIComponent("/projects/proj-1/boq")}`);
     expect(location).toContain("connectError=GOOGLE_DRIVE_TOKEN_ERROR");
   });
 

@@ -173,6 +173,10 @@ export default function ProjectFilesPage(props: {
   const [currentJobStatuses, setCurrentJobStatuses] = useState<Record<string, string | null>>({});
   const [currentJobStatusesByEngine, setCurrentJobStatusesByEngine] = useState<Record<string, Record<string, string>>>({});
   const [activeJob, setActiveJob] = useState<ExtractionJobView | null>(null);
+  // Persists across loadDetail() calls (unlike activeJob, which is cleared
+  // on every selection) — the source of truth for which pages still need
+  // PageRecoveryPanel, whether or not a job just ran in this component instance.
+  const [latestExtractionJob, setLatestExtractionJob] = useState<ExtractionJobView | null>(null);
   const [workflowSnapshot, setWorkflowSnapshot] = useState<ProjectWorkflowSnapshot | null>(null);
   const [selectedFileId, setSelectedFileId] = useState<string | null>(null);
   const [pages, setPages] = useState<PageView[]>([]);
@@ -230,6 +234,7 @@ export default function ProjectFilesPage(props: {
     setTableResultsAvailable(null);
     setDetailWarning(null);
     setActiveJob(null);
+    setLatestExtractionJob(null);
 
     const [pagesResult, tablesResult, jobsResult] = await Promise.allSettled([
       apiClient.get<{ pages: PageView[]; classification: string; ocrStatus: string }>(
@@ -258,6 +263,10 @@ export default function ProjectFilesPage(props: {
         ...current,
         [fileId]: latestEngineStatuses(jobsResult.value),
       }));
+      // Jobs are returned newest-first — the first TABLE_EXTRACTION job is
+      // the persisted record of what still needs recovery, independent of
+      // whether a job just ran in this component instance.
+      setLatestExtractionJob(jobsResult.value.find((job) => job.engineType === "TABLE_EXTRACTION") ?? null);
     }
 
     if (
@@ -728,9 +737,9 @@ export default function ProjectFilesPage(props: {
                 </p>
               )}
 
-              {activeJob && selectedFileId && resultSummarySkippedPages(activeJob).length > 0 && (
+              {selectedFileId && latestExtractionJob && resultSummarySkippedPages(latestExtractionJob).length > 0 && (
                 <div className="space-y-3">
-                  {resultSummarySkippedPages(activeJob).map((pageNumber) => (
+                  {resultSummarySkippedPages(latestExtractionJob).map((pageNumber) => (
                     <PageRecoveryPanel
                       key={pageNumber}
                       projectId={params.projectId}

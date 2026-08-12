@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { apiClient, getApiErrorMessage } from "@/lib/api/client";
 
 /**
@@ -17,10 +17,24 @@ type Props = {
   pageNumber: number;
 };
 
-type PanelState = "closed" | "manual-form" | "saved" | "no-data-confirmed";
+type PanelState = "loading" | "closed" | "manual-form" | "saved" | "no-data-confirmed" | "structured-replacement";
+
+type RecoveryStateResponse = {
+  decision: "UNRESOLVED" | "MANUAL_DATA_ADDED" | "NO_BOQ_DATA_CONFIRMED" | "STRUCTURED_REPLACEMENT_PROVIDED";
+  decidedAt: string | null;
+};
+
+function panelStateForDecision(decision: RecoveryStateResponse["decision"]): PanelState {
+  switch (decision) {
+    case "MANUAL_DATA_ADDED": return "saved";
+    case "NO_BOQ_DATA_CONFIRMED": return "no-data-confirmed";
+    case "STRUCTURED_REPLACEMENT_PROVIDED": return "structured-replacement";
+    default: return "closed";
+  }
+}
 
 export function PageRecoveryPanel({ projectId, fileId, pageNumber }: Props) {
-  const [state, setState] = useState<PanelState>("closed");
+  const [state, setState] = useState<PanelState>("loading");
   const [itemCode, setItemCode] = useState("");
   const [description, setDescription] = useState("");
   const [quantity, setQuantity] = useState("");
@@ -30,6 +44,22 @@ export function PageRecoveryPanel({ projectId, fileId, pageNumber }: Props) {
   const [error, setError] = useState<string | null>(null);
 
   const basePath = `/api/projects/${encodeURIComponent(projectId)}/files/${encodeURIComponent(fileId)}/pages/${pageNumber}`;
+
+  // Restore the persisted decision on mount — a page already resolved in an
+  // earlier session must not present as unresolved just because this
+  // component instance is new.
+  useEffect(() => {
+    let cancelled = false;
+    setState("loading");
+    apiClient.get<RecoveryStateResponse>(`${basePath}/recovery`)
+      .then((resolution) => {
+        if (!cancelled) setState(panelStateForDecision(resolution.decision));
+      })
+      .catch(() => {
+        if (!cancelled) setState("closed");
+      });
+    return () => { cancelled = true; };
+  }, [basePath]);
 
   const saveManualRow = useCallback(async () => {
     if (!itemCode.trim() || !description.trim()) {
@@ -66,6 +96,22 @@ export function PageRecoveryPanel({ projectId, fileId, pageNumber }: Props) {
       setIsSaving(false);
     }
   }, [basePath]);
+
+  if (state === "loading") {
+    return (
+      <div role="status" className="rounded-2xl border border-slate-800 bg-slate-900 p-4 text-sm text-slate-400">
+        Checking page {pageNumber} recovery status…
+      </div>
+    );
+  }
+
+  if (state === "structured-replacement") {
+    return (
+      <div role="status" className="rounded-2xl border border-emerald-900 bg-emerald-950/20 p-4 text-sm text-emerald-200">
+        Page {pageNumber} was replaced with a structured Excel/CSV source.
+      </div>
+    );
+  }
 
   if (state === "saved") {
     return (
@@ -162,7 +208,6 @@ export function PageRecoveryPanel({ projectId, fileId, pageNumber }: Props) {
             placeholder="Notes"
             className="w-full rounded-xl border border-slate-800 bg-slate-900 px-3 py-2 text-sm text-white outline-none focus:border-blue-500"
           />
-          {error && <p className="text-xs text-rose-300">{error}</p>}
           <div className="flex gap-2">
             <button
               type="button"
@@ -182,6 +227,8 @@ export function PageRecoveryPanel({ projectId, fileId, pageNumber }: Props) {
           </div>
         </div>
       )}
+
+      {error && <p className="mt-3 text-xs text-rose-300">{error}</p>}
     </div>
   );
 }

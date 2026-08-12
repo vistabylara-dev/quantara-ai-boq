@@ -22,7 +22,10 @@ export function assertIsolatedLocalTestDatabase(context = "this operation"): voi
   }
   const parsed = new URL(databaseUrl);
   const isLocalHost = parsed.hostname === "localhost" || parsed.hostname === "127.0.0.1";
-  const isIsolatedName = /(?:test|e2e|canva|workflow)/i.test(parsed.pathname);
+  const databaseName = decodeURIComponent(parsed.pathname.replace(/^\//, ""));
+  // Delimiter-aware: a bare substring match would wrongly accept a database
+  // literally named e.g. "quantara-latest" ("latest" contains "test").
+  const isIsolatedName = /(?:^|[-_])(?:test|e2e|canva|workflow)(?:[-_]|$)/i.test(databaseName);
   if (!isLocalHost || !isIsolatedName) {
     throw new Error(
       `Refusing ${context}: DATABASE_URL does not point at an isolated local test database. ` +

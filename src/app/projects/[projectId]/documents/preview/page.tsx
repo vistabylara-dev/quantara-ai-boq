@@ -35,7 +35,7 @@ export default function DocumentPreviewPage(props: PageProps) {
   const [loadError, setLoadError] = useState<string | null>(null);
   const iframeRef = useRef<HTMLIFrameElement>(null);
 
-  const [commercialDecision, setCommercialDecision] = useState<CommercialAccessDecision | null>(null);
+  const [commercialDecision, setCommercialDecision] = useState<{ boqId: string; decision: CommercialAccessDecision } | null>(null);
   const [isCheckingUnlock, setIsCheckingUnlock] = useState(false);
   const [downloadError, setDownloadError] = useState<string | null>(null);
   const [generatedOk, setGeneratedOk] = useState(false);
@@ -76,21 +76,26 @@ export default function DocumentPreviewPage(props: PageProps) {
   const selectedBoq = useMemo(() => boqs.find((boq) => boq.id === selectedBoqId) ?? null, [boqs, selectedBoqId]);
 
   const downloadCleanVersion = useCallback(async () => {
-    if (!selectedBoqId || !selectedTemplateId) return;
+    const boqId = selectedBoqId;
+    if (!boqId || !selectedTemplateId) return;
     setDownloadError(null);
     setCommercialDecision(null);
     setGeneratedOk(false);
     setIsCheckingUnlock(true);
     try {
       const decision = await apiClient.get<CommercialAccessDecision>(
-        `/api/boqs/${encodeURIComponent(selectedBoqId)}/commercial-requirements`,
+        `/api/boqs/${encodeURIComponent(boqId)}/commercial-requirements`,
       );
       if (decision.status !== "ALLOW") {
-        setCommercialDecision(decision);
+        // Pair the decision with the boqId it was actually resolved for —
+        // if the user changes the BOQ selector while this request is
+        // in-flight, the panel must stay aligned with the manifest
+        // fingerprint instead of silently using the now-current selection.
+        setCommercialDecision({ boqId, decision });
         return;
       }
       await apiClient.post(`/api/projects/${encodeURIComponent(params.projectId)}/documents/generate`, {
-        boqId: selectedBoqId,
+        boqId,
         templateId: selectedTemplateId,
         documentType: "PDF",
         audience: selectedAudience,
@@ -218,8 +223,8 @@ export default function DocumentPreviewPage(props: PageProps) {
 
       {commercialDecision && (
         <CommercialUnlockPanel
-          boqId={selectedBoqId}
-          decision={commercialDecision}
+          boqId={commercialDecision.boqId}
+          decision={commercialDecision.decision}
           onWorkSaved={() => setDownloadError(null)}
         />
       )}

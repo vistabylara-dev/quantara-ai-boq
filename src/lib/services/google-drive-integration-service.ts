@@ -87,7 +87,12 @@ export function parseGoogleDriveOAuthIntent(value: string | null): GoogleDriveOA
 function isValidReturnTo(returnTo: string, projectId: string): boolean {
   if (!returnTo.startsWith("/") || returnTo.startsWith("//")) return false;
   const projectPrefix = `/projects/${encodeURIComponent(projectId)}`;
-  return returnTo === projectPrefix || returnTo.startsWith(`${projectPrefix}/`);
+  // Resolve against a throwaway base and check the NORMALIZED pathname —
+  // checking the raw string lets a dot-segment value like
+  // "/projects/<id>/../../settings" pass the prefix check while actually
+  // resolving outside the project after real browser navigation.
+  const normalizedUrl = new URL(returnTo, "https://oauth-context.invalid");
+  return normalizedUrl.pathname === projectPrefix || normalizedUrl.pathname.startsWith(`${projectPrefix}/`);
 }
 
 export type GoogleDriveOAuthContext = {

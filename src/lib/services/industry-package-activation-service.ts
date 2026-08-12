@@ -1,4 +1,4 @@
-import { MasterCatalogueImportJobStatus } from "@prisma/client";
+import { MasterCatalogueImportJobStatus, MasterItemVersionStatus } from "@prisma/client";
 import { prisma } from "@/lib/db/prisma";
 import { AppError, NotFoundError, PermissionDeniedError } from "@/lib/errors/app-error";
 import type { PlatformActor } from "@/lib/auth/platform-authorization";
@@ -43,13 +43,28 @@ const PUBLISHABLE_STATUSES: MasterCatalogueImportJobStatus[] = [
  * dataset's items" by only the latest job's own batch would silently miss
  * every item that happened to be unchanged on the most recent run. Collect
  * every batch this datasetId has ever produced instead.
+ *
+ * This is always a small list (one row per import job, never per item) —
+ * safe to use directly in an `IN` clause. getDatasetItemIds(), below, is
+ * NOT: for a large dataset (e.g. 80k+ rows) its returned array is too big to
+ * safely pass back into another query's `IN` clause — Postgres' bind
+ * parameter limit is 65,535, and a plain `masterItemId: { in: itemIds } }`
+ * silently 500s once a dataset crosses it. Any query that needs "every
+ * version/membership row for this dataset's items" should filter through
+ * this batchIds list via the masterItem relation instead (see
+ * catalogue-production-evidence-service.ts and isDatasetFullyActive below)
+ * — never by re-passing the full item-ID array.
  */
-export async function getDatasetItemIds(datasetId: string): Promise<string[]> {
+export async function getDatasetBatchIds(datasetId: string): Promise<string[]> {
   const jobs = await prisma.masterCatalogueImportJob.findMany({
     where: { datasetId, legacyBatchId: { not: null } },
     select: { legacyBatchId: true },
   });
-  const batchIds = jobs.map((j) => j.legacyBatchId).filter((id): id is string => Boolean(id));
+  return jobs.map((j) => j.legacyBatchId).filter((id): id is string => Boolean(id));
+}
+
+export async function getDatasetItemIds(datasetId: string): Promise<string[]> {
+  const batchIds = await getDatasetBatchIds(datasetId);
   if (batchIds.length === 0) return [];
   const items = await prisma.masterItem.findMany({ where: { sourceBatchId: { in: batchIds } }, select: { id: true } });
   return items.map((item) => item.id);
@@ -146,13 +161,51 @@ export async function activateDataset(owner: PlatformActor, datasetId: string) {
   };
 }
 
-async function isDatasetFullyActive(dataset: DatasetDefinition): Promise<boolean> {
+/**
+ * CATALOGUE-PHASE7-RECOVERY — replaces a weaker predicate that treated any
+ * package with `itemCount > 0` and status ACTIVE plus *some* completed job
+ * as "fully active." That allowed a dataset stuck mid-recovery (e.g. a
+ * cancelled job that partially imported, or a package published from a
+ * stale batch) to read as done. This checks every fact the dataset actually
+ * needs to be considered complete: exact row count (not just non-zero),
+ * exact explicit package membership (not the denormalized counter alone —
+ * that counter is cross-checked against the real join-table rows here, not
+ * trusted on its own), and that every item has a published version. Package
+ * membership is always through the explicit IndustryDataPackageItem join
+ * table, never inferred from disciplineId, so packages that legitimately
+ * share a discipline never get confused for one another here.
+ */
+export async function isDatasetFullyActive(dataset: DatasetDefinition): Promise<boolean> {
+  const expectedRowCount = dataset.files.reduce((sum, f) => sum + f.expectedRowCount, 0);
+
   const pkg = await prisma.industryDataPackage.findUnique({ where: { key: dataset.targetPackageCode } });
-  if (!pkg || pkg.itemCount === 0 || pkg.status !== "ACTIVE") return false;
+  if (!pkg || pkg.status !== "ACTIVE") return false;
+
   const completedJob = await prisma.masterCatalogueImportJob.findFirst({
     where: { datasetId: dataset.datasetId, status: { in: [MasterCatalogueImportJobStatus.COMPLETED, MasterCatalogueImportJobStatus.COMPLETED_WITH_WARNINGS] } },
   });
-  return Boolean(completedJob);
+  if (!completedJob) return false;
+
+  const batchIds = await getDatasetBatchIds(dataset.datasetId);
+  if (batchIds.length === 0) return false;
+
+  const itemCount = await prisma.masterItem.count({ where: { sourceBatchId: { in: batchIds } } });
+  if (itemCount !== expectedRowCount) return false;
+
+  const membershipCount = await prisma.industryDataPackageItem.count({
+    where: { packageId: pkg.id, masterItem: { sourceBatchId: { in: batchIds } } },
+  });
+  if (membershipCount !== expectedRowCount) return false;
+  if (pkg.itemCount !== membershipCount) return false;
+
+  const publishedItemIds = await prisma.masterItemVersion.findMany({
+    where: { status: MasterItemVersionStatus.PUBLISHED, masterItem: { sourceBatchId: { in: batchIds } } },
+    select: { masterItemId: true },
+    distinct: ["masterItemId"],
+  });
+  if (publishedItemIds.length !== itemCount) return false;
+
+  return true;
 }
 
 const DEFAULT_ALL_DATASETS_BUDGET_MS = 240_000;

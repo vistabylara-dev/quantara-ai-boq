@@ -3,7 +3,7 @@ import { prisma } from "@/lib/db/prisma";
 import type { PlatformActor } from "@/lib/auth/platform-authorization";
 import { PermissionDeniedError } from "@/lib/errors/app-error";
 import { listDatasetDefinitions } from "@/lib/services/catalogue-dataset-registry";
-import { getDatasetItemIds } from "@/lib/services/industry-package-activation-service";
+import { getDatasetBatchIds } from "@/lib/services/industry-package-activation-service";
 
 /**
  * CATALOGUE-100-VERIFY — single read-only pass computing the entire
@@ -57,10 +57,13 @@ export async function getProductionCatalogueEvidence(owner: PlatformActor) {
       const discipline = await prisma.masterDiscipline.findUnique({ where: { key: dataset.disciplineKey } });
       const job = await prisma.masterCatalogueImportJob.findFirst({ where: { datasetId: dataset.datasetId }, orderBy: { createdAt: "desc" } });
 
-      const itemIds = job ? await getDatasetItemIds(dataset.datasetId) : [];
-      const itemCount = itemIds.length;
-      const publishedVersionCount = itemIds.length > 0
-        ? await prisma.masterItemVersion.count({ where: { status: "PUBLISHED", masterItemId: { in: itemIds } } })
+      // Scoped through the batch relation rather than a `masterItemId: { in: itemIds } }`
+      // list — for a large dataset (e.g. 80k+ rows) that list would exceed
+      // Postgres' 65,535 bind-parameter limit and 500 the whole route.
+      const batchIds = job ? await getDatasetBatchIds(dataset.datasetId) : [];
+      const itemCount = batchIds.length > 0 ? await prisma.masterItem.count({ where: { sourceBatchId: { in: batchIds } } }) : 0;
+      const publishedVersionCount = batchIds.length > 0
+        ? await prisma.masterItemVersion.count({ where: { status: "PUBLISHED", masterItem: { sourceBatchId: { in: batchIds } } } })
         : 0;
 
       const pkg = await prisma.industryDataPackage.findUnique({ where: { key: dataset.targetPackageCode } });

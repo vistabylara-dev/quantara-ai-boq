@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect } from "react";
 import { NAVIGATION_ITEMS } from "./navigation-items";
+import { useTranslations } from "@/lib/i18n/locale-provider";
 
 type MobileNavigationProps = {
   open: boolean;
@@ -13,6 +14,7 @@ type MobileNavigationProps = {
 
 export default function MobileNavigation({ open, onClose }: MobileNavigationProps) {
   const pathname = usePathname();
+  const t = useTranslations();
 
   useEffect(() => {
     if (!open) return;
@@ -42,30 +44,30 @@ export default function MobileNavigation({ open, onClose }: MobileNavigationProp
       <div
         role="dialog"
         aria-modal="true"
-        aria-label="Primary navigation"
-        className="absolute inset-y-0 left-0 flex w-72 max-w-[85vw] flex-col gap-6 overflow-y-auto bg-white dark:bg-[#091326] px-6 py-6 text-[#08152E] dark:text-[#F4F8FF] shadow-xl"
+        aria-label={t("navigation.primaryNav")}
+        className="absolute inset-y-0 start-0 flex w-72 max-w-[85vw] flex-col gap-6 overflow-y-auto bg-white dark:bg-[#091326] px-6 py-6 text-[#08152E] dark:text-[#F4F8FF] shadow-xl"
       >
         <div className="flex items-center justify-between">
           <div>
-            <p className="text-xs uppercase tracking-[0.24em] text-[#7B879C] dark:text-[#7F8DA6]">Workspace</p>
-            <h2 className="text-xl font-semibold text-[#08152E] dark:text-white">Quantara</h2>
+            <p className="text-xs uppercase tracking-[0.24em] text-[#7B879C] dark:text-[#7F8DA6]">{t("navigation.workspaceHeading")}</p>
+            <h2 className="text-xl font-semibold text-[#08152E] dark:text-white">{t("common.appName")}</h2>
           </div>
           <button
             type="button"
             onClick={onClose}
-            aria-label="Close navigation"
+            aria-label={t("a11y.closeNavigation")}
             className="flex h-9 w-9 items-center justify-center rounded-xl border border-[#D5E0EC] dark:border-[#20304D] text-[#536078] dark:text-[#7F8DA6] hover:bg-[#EAF1F8] dark:hover:bg-[#101D34] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#38BDF8] dark:focus-visible:outline-[#21C7F3]"
           >
             <X className="h-4 w-4" aria-hidden="true" />
           </button>
         </div>
 
-        <nav className="flex flex-1 flex-col gap-2" aria-label="Primary">
+        <nav className="flex flex-1 flex-col gap-2" aria-label={t("navigation.primaryNav")}>
           {NAVIGATION_ITEMS.map((item) => {
             const isActive = pathname === item.href || pathname?.startsWith(`${item.href}/`);
             return (
               <Link
-                key={item.label}
+                key={item.href}
                 href={item.href}
                 aria-current={isActive ? "page" : undefined}
                 className={`min-h-[44px] rounded-2xl border px-4 py-3 text-sm font-medium transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#38BDF8] dark:focus-visible:outline-[#21C7F3] ${
@@ -74,7 +76,7 @@ export default function MobileNavigation({ open, onClose }: MobileNavigationProp
                     : "border-[#D5E0EC] dark:border-[#20304D] bg-[#EAF1F8] dark:bg-[#101D34] text-[#08152E] dark:text-[#F4F8FF] hover:border-[#B9C7D6] dark:hover:border-[#31405F]"
                 }`}
               >
-                {item.label}
+                {t(item.labelKey)}
               </Link>
             );
           })}

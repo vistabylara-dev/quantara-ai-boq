@@ -19,6 +19,7 @@ import type { VoiceCommandProposal } from "@/lib/voice/voice-types";
 import { VoiceCommandButton } from "@/components/voice/voice-command-button";
 import { VoiceProposalCard } from "@/components/voice/voice-proposal-card";
 import { GuideTip } from "@/components/guidance/guide-tip";
+import { useTranslations } from "@/lib/i18n/locale-provider";
 
 type BoqEditorProps = {
   boq: BOQ;
@@ -122,6 +123,7 @@ export default function BoqEditor({
   hasUnsavedChanges = false,
   onVoiceApplied,
 }: BoqEditorProps) {
+  const t = useTranslations();
   const [isSaving, setIsSaving] = useState(false);
   const [rateDrawerItemId, setRateDrawerItemId] = useState<string | null>(null);
   const [isApplyingRate, setIsApplyingRate] = useState(false);
@@ -354,7 +356,7 @@ export default function BoqEditor({
                 disabled={isReadOnly || isSaving || actionPending || voiceInteractionActive}
                 className="rounded-2xl border border-slate-700 bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-50"
               >
-                {isSaving ? "Saving…" : "Save draft"}
+                {isSaving ? t("source.recovery.saving") : t("common.saveDraft")}
               </button>
               <button
                 type="button"

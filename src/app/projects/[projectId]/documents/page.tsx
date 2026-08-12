@@ -10,6 +10,7 @@ import { computeDocumentReadiness } from "@/lib/workflow/document-readiness-stat
 import { GuideTip } from "@/components/guidance/guide-tip";
 import { CommercialUnlockPanel } from "@/components/commercial/commercial-unlock-panel";
 import type { CommercialAccessDecision } from "@/lib/commercial/commercial-types";
+import { useTranslations } from "@/lib/i18n/locale-provider";
 
 type DocumentTemplateSummary = {
   id: string;
@@ -58,6 +59,7 @@ function formatFileSize(bytes: number | null): string {
 type PageProps = { params: Promise<{ projectId: string }> };
 
 export default function ProjectDocumentsPage(props: PageProps) {
+  const t = useTranslations();
   const params = use(props.params);
   const [project, setProject] = useState<Project | null>(null);
   const [boqs, setBoqs] = useState<BOQ[]>([]);
@@ -265,7 +267,7 @@ export default function ProjectDocumentsPage(props: PageProps) {
           href={`/projects/${params.projectId}/documents/preview?boqId=${selectedBoqId}&templateId=${selectedTemplateId}&audience=${selectedAudience}`}
           className="mt-4 inline-flex rounded-2xl border border-blue-700 bg-blue-600 px-5 py-3 text-sm font-semibold text-white hover:bg-blue-500"
         >
-          Preview My Professional BOQ
+          {t("documents.previewMyProfessionalBoq")}
         </Link>
       </div>
 
@@ -284,7 +286,7 @@ export default function ProjectDocumentsPage(props: PageProps) {
         <section className="rounded-[32px] border border-slate-800 bg-slate-950 p-8">
           <h3 className="text-xl font-semibold text-white">Generation history</h3>
           <div className="mt-6 overflow-x-auto rounded-3xl border border-slate-800 bg-slate-900">
-            <table className="min-w-full text-left text-sm text-slate-300">
+            <table className="min-w-full text-start text-sm text-slate-300">
               <thead className="bg-slate-950 text-slate-400">
                 <tr>
                   <th className="px-4 py-3">Type</th>
@@ -304,12 +306,12 @@ export default function ProjectDocumentsPage(props: PageProps) {
                     <td className="px-4 py-3 font-semibold text-white">{doc.type}</td>
                     <td className="px-4 py-3">
                       R{String(doc.revisionNumber).padStart(2, "0")}
-                      {doc.isDraft && <span className="ml-2 rounded-full bg-amber-950/60 px-2 py-0.5 text-[0.65rem] uppercase tracking-[0.2em] text-amber-300">draft</span>}
+                      {doc.isDraft && <span className="ms-2 rounded-full bg-amber-950/60 px-2 py-0.5 text-[0.65rem] uppercase tracking-[0.2em] text-amber-300">draft</span>}
                     </td>
                     <td className="px-4 py-3">
                       {doc.templateName}
                       {doc.templateVersionNumber !== null && (
-                        <span className="ml-1.5 text-xs text-slate-500">v{doc.templateVersionNumber}</span>
+                        <span className="ms-1.5 text-xs text-slate-500">v{doc.templateVersionNumber}</span>
                       )}
                     </td>
                     <td className="px-4 py-3">{doc.audience}</td>

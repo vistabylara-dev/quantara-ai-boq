@@ -8,6 +8,7 @@ import { apiClient, getApiErrorMessage } from "@/lib/api/client";
 import { CommercialUnlockPanel } from "@/components/commercial/commercial-unlock-panel";
 import type { CommercialAccessDecision } from "@/lib/commercial/commercial-types";
 import { GuideTip } from "@/components/guidance/guide-tip";
+import { useLocale } from "@/lib/i18n/locale-provider";
 
 type DocumentTemplateSummary = {
   id: string;
@@ -23,6 +24,7 @@ type PageProps = {
 export default function DocumentPreviewPage(props: PageProps) {
   const params = use(props.params);
   const searchParams = use(props.searchParams);
+  const { locale, t } = useLocale();
   const [project, setProject] = useState<Project | null>(null);
   const [boqs, setBoqs] = useState<BOQ[]>([]);
   const [templates, setTemplates] = useState<DocumentTemplateSummary[]>([]);
@@ -65,9 +67,9 @@ export default function DocumentPreviewPage(props: PageProps) {
 
   const previewUrl = useMemo(() => {
     if (!selectedBoqId || !selectedTemplateId) return null;
-    const query = new URLSearchParams({ boqId: selectedBoqId, templateId: selectedTemplateId, audience: selectedAudience });
+    const query = new URLSearchParams({ boqId: selectedBoqId, templateId: selectedTemplateId, audience: selectedAudience, locale });
     return `/api/projects/${encodeURIComponent(params.projectId)}/documents/preview-html?${query.toString()}`;
-  }, [params.projectId, selectedAudience, selectedBoqId, selectedTemplateId]);
+  }, [locale, params.projectId, selectedAudience, selectedBoqId, selectedTemplateId]);
 
   const handlePrint = useCallback(() => {
     iframeRef.current?.contentWindow?.print();
@@ -111,7 +113,7 @@ export default function DocumentPreviewPage(props: PageProps) {
   if (isLoading) {
     return (
       <div className="rounded-[32px] border border-slate-800 bg-slate-950 p-8 text-slate-300">
-        <p className="text-lg font-semibold text-white">Loading preview</p>
+        <p className="text-lg font-semibold text-white">{t("preview.loadingPreview")}</p>
       </div>
     );
   }
@@ -119,8 +121,8 @@ export default function DocumentPreviewPage(props: PageProps) {
   if (loadError || !project) {
     return (
       <div className="rounded-[32px] border border-slate-800 bg-slate-950 p-8 text-slate-300">
-        <p className="text-lg font-semibold text-white">Preview unavailable</p>
-        <p className="mt-2 text-sm text-rose-300">{loadError ?? "This project could not be loaded."}</p>
+        <p className="text-lg font-semibold text-white">{t("preview.previewUnavailable")}</p>
+        <p className="mt-2 text-sm text-rose-300">{loadError ?? t("preview.projectLoadFailed")}</p>
       </div>
     );
   }
@@ -131,17 +133,17 @@ export default function DocumentPreviewPage(props: PageProps) {
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <div className="flex items-center gap-2">
-              <p className="text-sm uppercase tracking-[0.28em] text-slate-500">Your professional BOQ is ready</p>
+              <p className="text-sm uppercase tracking-[0.28em] text-slate-500">{t("preview.title")}</p>
               <GuideTip
-                title="Professional preview"
-                shortDescription="See exactly what you'll receive before you commit to downloading."
-                whatQuantaraDoes="Renders your real BOQ data — sections, items, quantities, rates, totals — in the same layout as the final document. If commercial requirements aren't met yet, a visible watermark marks this as a preview."
-                whatProfessionalCanDo="Review everything, then use Download Clean Version when you're ready. The watermark never appears on what you actually download once unlocked."
-                ariaLabel="Help: Professional preview"
+                title={t("preview.helpTitle")}
+                shortDescription={t("preview.helpShort")}
+                whatQuantaraDoes={t("preview.helpQuantara")}
+                whatProfessionalCanDo={t("preview.helpProfessional")}
+                ariaLabel={t("preview.helpAriaLabel")}
               />
             </div>
             <h2 className="mt-2 text-2xl font-semibold text-white">{project.name}</h2>
-            <p className="mt-2 text-sm text-slate-400">Light, print-safe layout independent of the app theme.</p>
+            <p className="mt-2 text-sm text-slate-400">{t("preview.printSafeLayout")}</p>
           </div>
           <div className="flex flex-wrap gap-3">
             <select
@@ -167,8 +169,8 @@ export default function DocumentPreviewPage(props: PageProps) {
               onChange={(event) => setSelectedAudience(event.target.value as "INTERNAL" | "CLIENT")}
               className="rounded-2xl border border-slate-800 bg-slate-900 px-4 py-2 text-sm text-white outline-none focus:border-blue-500"
             >
-              <option value="CLIENT">Client view</option>
-              <option value="INTERNAL">Internal view</option>
+              <option value="CLIENT">{t("preview.clientView")}</option>
+              <option value="INTERNAL">{t("preview.internalView")}</option>
             </select>
             <button
               type="button"
@@ -176,7 +178,7 @@ export default function DocumentPreviewPage(props: PageProps) {
               disabled={!previewUrl}
               className="rounded-2xl border border-slate-700 bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              Print
+              {t("preview.print")}
             </button>
           </div>
         </div>
@@ -184,27 +186,27 @@ export default function DocumentPreviewPage(props: PageProps) {
         {selectedBoq && (
           <div className="mt-6 flex flex-wrap items-center gap-6 rounded-2xl border border-slate-800 bg-slate-900/50 px-5 py-4">
             <div>
-              <p className="text-xs uppercase tracking-[0.24em] text-slate-500">Sections</p>
+              <p className="text-xs uppercase tracking-[0.24em] text-slate-500">{t("preview.sections")}</p>
               <p className="text-lg font-semibold text-white">{selectedBoq.sections.length}</p>
             </div>
             <div>
-              <p className="text-xs uppercase tracking-[0.24em] text-slate-500">Items</p>
+              <p className="text-xs uppercase tracking-[0.24em] text-slate-500">{t("preview.items")}</p>
               <p className="text-lg font-semibold text-white">{selectedBoq.sections.reduce((sum, s) => sum + s.items.length, 0)}</p>
             </div>
             <div>
-              <p className="text-xs uppercase tracking-[0.24em] text-slate-500">Grand total</p>
-              <p className="text-lg font-semibold text-white">
+              <p className="text-xs uppercase tracking-[0.24em] text-slate-500">{t("preview.grandTotal")}</p>
+              <p className="text-lg font-semibold text-white" dir="ltr">
                 {project.currency} {selectedBoq.totals.grandTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </p>
             </div>
-            <div className="ml-auto">
+            <div className="ms-auto">
               <button
                 type="button"
                 onClick={() => void downloadCleanVersion()}
                 disabled={isCheckingUnlock || !previewUrl}
                 className="rounded-2xl border border-slate-700 bg-emerald-600 px-5 py-3 text-sm font-semibold text-white hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-50"
               >
-                {isCheckingUnlock ? "Checking…" : "Download Clean Version"}
+                {isCheckingUnlock ? t("preview.checking") : t("preview.downloadCleanVersion")}
               </button>
             </div>
           </div>
@@ -213,9 +215,9 @@ export default function DocumentPreviewPage(props: PageProps) {
         {downloadError && <p className="mt-3 text-xs text-rose-300">{downloadError}</p>}
         {generatedOk && (
           <p className="mt-3 text-xs text-emerald-300">
-            Your clean document is generating.{" "}
+            {t("preview.generating")}{" "}
             <Link href={`/projects/${encodeURIComponent(params.projectId)}/documents`} className="underline hover:text-emerald-200">
-              View it in Documents →
+              {t("preview.viewInDocuments")} <span aria-hidden="true" className="inline-block rtl:-scale-x-100">{"→"}</span>
             </Link>
           </p>
         )}
@@ -231,9 +233,9 @@ export default function DocumentPreviewPage(props: PageProps) {
 
       <div className="overflow-hidden rounded-[32px] border border-slate-800 bg-white">
         {previewUrl ? (
-          <iframe ref={iframeRef} src={previewUrl} title="Document preview" className="h-[1200px] w-full border-0" />
+          <iframe ref={iframeRef} src={previewUrl} title={t("preview.documentPreviewIframeTitle")} className="h-[1200px] w-full border-0" />
         ) : (
-          <div className="p-8 text-center text-slate-500">Select a revision and template to preview.</div>
+          <div className="p-8 text-center text-slate-500">{t("preview.selectRevisionAndTemplate")}</div>
         )}
       </div>
     </div>

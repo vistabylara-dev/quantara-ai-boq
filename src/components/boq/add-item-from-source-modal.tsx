@@ -6,6 +6,7 @@ import type { QuantityCalculationType } from "@prisma/client";
 import { apiClient, getApiErrorMessage } from "@/lib/api/client";
 import { listSupportedCalculationTypes, getRequiredDimensions } from "@/lib/calculations/required-dimensions-registry";
 import { QuantityCalculationPanel } from "@/components/boq/quantity-calculation-panel";
+import { useTranslations } from "@/lib/i18n/locale-provider";
 
 type Section = { id: string; title: string };
 
@@ -76,6 +77,7 @@ export default function AddItemFromSourceModal({
   onClose,
   onAdded,
 }: Props) {
+  const t = useTranslations();
   const [tab, setTab] = useState<AddItemTab>(initialTab);
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<SearchResultItem[]>([]);
@@ -352,19 +354,19 @@ export default function AddItemFromSourceModal({
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
       <div className="max-h-[85vh] w-full max-w-2xl overflow-y-auto rounded-[32px] border border-slate-800 bg-slate-950 p-8">
         <div className="flex items-center justify-between">
-          <h3 className="text-xl font-semibold text-white">Add item</h3>
-          <button type="button" onClick={onClose} className="rounded-2xl border border-slate-700 bg-slate-900 px-3 py-2 text-xs text-slate-300 hover:bg-slate-800">Close</button>
+          <h3 className="text-xl font-semibold text-white">{t("boqCreate.addItem")}</h3>
+          <button type="button" onClick={onClose} className="rounded-2xl border border-slate-700 bg-slate-900 px-3 py-2 text-xs text-slate-300 hover:bg-slate-800">{t("common.close")}</button>
         </div>
 
         <div className="mt-4 flex flex-wrap gap-2">
           <button type="button" onClick={() => setTab("reviewed")} className={`rounded-full px-4 py-2 text-sm ${tab === "reviewed" ? "bg-blue-600 text-white" : "border border-slate-800 bg-slate-900 text-slate-300"}`}>
-            Reviewed Extraction
+            {t("boqCreate.reviewedExtraction")}
           </button>
           <button type="button" onClick={() => setTab("search")} className={`rounded-full px-4 py-2 text-sm ${tab === "search" ? "bg-blue-600 text-white" : "border border-slate-800 bg-slate-900 text-slate-300"}`}>
-            Search Catalogue / My Library
+            {t("boqCreate.searchCatalogueMyLibrary")}
           </button>
           <button type="button" onClick={() => setTab("manual")} className={`rounded-full px-4 py-2 text-sm ${tab === "manual" ? "bg-blue-600 text-white" : "border border-slate-800 bg-slate-900 text-slate-300"}`}>
-            Enter Item Manually
+            {t("boqCreate.enterManually")}
           </button>
         </div>
 
@@ -409,7 +411,7 @@ export default function AddItemFromSourceModal({
                     key={entity.id}
                     type="button"
                     onClick={() => selectReviewedEntity(entity)}
-                    className={`w-full rounded-2xl border px-4 py-3 text-left text-sm ${
+                    className={`w-full rounded-2xl border px-4 py-3 text-start text-sm ${
                       selectedEntity?.id === entity.id
                         ? "border-blue-500 bg-blue-950/40"
                         : "border-slate-800 bg-slate-900 hover:border-slate-700"
@@ -629,11 +631,11 @@ export default function AddItemFromSourceModal({
             <input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search company library, master data, previous projects, supplier catalogue…"
+              placeholder={t("boqCreate.fullSearchPlaceholder")}
               className="w-full rounded-2xl border border-slate-800 bg-slate-900 px-4 py-3 text-white outline-none focus:border-blue-500"
             />
             <div className="mt-3 max-h-72 space-y-2 overflow-y-auto">
-              {isSearching && <p className="text-xs text-slate-500">Searching…</p>}
+              {isSearching && <p className="text-xs text-slate-500">{t("boqCreate.searching")}</p>}
               {results.map((item) =>
                 item.locked ? (
                   // CANVA-MODEL-1 — a Premium result stays fully selectable and
@@ -642,61 +644,64 @@ export default function AddItemFromSourceModal({
                   // CLEAN FINAL EXPORT is gated later, via the commercial
                   // requirements panel — the professional never hits a paywall
                   // just for wanting to use a premium spec while building.
-                  <button
+                  <div
                     key={`${item.source}-${item.id}`}
-                    type="button"
-                    onClick={() => setSelected(item)}
-                    className={`w-full rounded-2xl border px-4 py-3 text-left text-sm ${selected?.id === item.id ? "border-amber-500 bg-amber-950/40" : "border-amber-900/60 bg-amber-950/20 hover:border-amber-700"}`}
+                    className={`w-full rounded-2xl border px-4 py-3 text-start text-sm ${selected?.id === item.id ? "border-amber-500 bg-amber-950/40" : "border-amber-900/60 bg-amber-950/20 hover:border-amber-700"}`}
                   >
-                    <div className="flex items-center justify-between">
-                      <span className="inline-flex items-center gap-1.5 text-amber-100">
-                        <span aria-hidden="true">👑</span>
-                        {item.name}
-                      </span>
-                      <span className="rounded-full border border-amber-700 bg-amber-900/40 px-2 py-0.5 text-[0.65rem] font-semibold uppercase tracking-wide text-amber-300">Premium</span>
-                    </div>
-                    <p className="mt-1 text-xs text-amber-400">{item.packageNames?.[0] ?? "Industry Library"}</p>
-                    <p className="text-xs text-slate-500">{item.itemCode} · {item.unit}</p>
-                    <div className="mt-2 flex flex-wrap gap-2" onClick={(e) => e.stopPropagation()}>
+                    {/* A single interactive control for selection — Link/button below are SIBLINGS,
+                        not nested inside it, so no control is ever nested inside another (invalid
+                        markup that breaks keyboard focus and click handling). */}
+                    <button type="button" onClick={() => setSelected(item)} className="w-full text-start">
+                      <div className="flex items-center justify-between">
+                        <span className="inline-flex items-center gap-1.5 text-amber-100">
+                          <span aria-hidden="true">👑</span>
+                          {item.name}
+                        </span>
+                        <span className="rounded-full border border-amber-700 bg-amber-900/40 px-2 py-0.5 text-[0.65rem] font-semibold uppercase tracking-wide text-amber-300">{t("boq.premium")}</span>
+                      </div>
+                      <p className="mt-1 text-xs text-amber-400">{item.packageNames?.[0] ?? t("boqCreate.industryLibrary")}</p>
+                      <p className="text-xs text-slate-500"><span dir="ltr" className="inline-block">{item.itemCode}</span> · {item.unit}</p>
+                    </button>
+                    <div className="mt-2 flex flex-wrap gap-2">
                       <Link href="/marketplace" className="rounded-xl border border-amber-700 bg-amber-900/40 px-3 py-1.5 text-xs font-semibold text-amber-200 hover:bg-amber-900/70">
-                        View Library
+                        {t("boqCreate.viewLibrary")}
                       </Link>
                       <button
                         type="button"
                         onClick={() => switchToManualFromLocked(item)}
                         className="rounded-xl border border-slate-700 bg-slate-900 px-3 py-1.5 text-xs font-semibold text-slate-200 hover:bg-slate-800"
                       >
-                        Enter Manually
+                        {t("boqCreate.enterManually")}
                       </button>
                     </div>
-                  </button>
+                  </div>
                 ) : (
                   <button
                     key={`${item.source}-${item.id}`}
                     type="button"
                     onClick={() => setSelected(item)}
-                    className={`w-full rounded-2xl border px-4 py-3 text-left text-sm ${selected?.id === item.id ? "border-blue-500 bg-blue-950/40" : "border-slate-800 bg-slate-900 hover:border-slate-700"}`}
+                    className={`w-full rounded-2xl border px-4 py-3 text-start text-sm ${selected?.id === item.id ? "border-blue-500 bg-blue-950/40" : "border-slate-800 bg-slate-900 hover:border-slate-700"}`}
                   >
                     <div className="flex items-center justify-between">
                       <span className="text-white">{item.name}</span>
                       <span className="text-[0.65rem] uppercase tracking-wide text-slate-500">{item.source.replace(/_/g, " ")}</span>
                     </div>
-                    <p className="text-xs text-slate-500">{item.itemCode} · {item.unit}</p>
+                    <p className="text-xs text-slate-500"><span dir="ltr" className="inline-block">{item.itemCode}</span> · {item.unit}</p>
                   </button>
                 ),
               )}
-              {!isSearching && results.length === 0 && <p className="text-xs text-slate-500">No results.</p>}
+              {!isSearching && results.length === 0 && <p className="text-xs text-slate-500">{t("boqCreate.noResults")}</p>}
             </div>
 
             <label className="mt-4 block text-sm text-slate-300">
-              <span className="text-slate-400">Quantity</span>
-              <input value={quantity} onChange={(e) => setQuantity(e.target.value)} className="mt-2 w-full max-w-xs rounded-2xl border border-slate-800 bg-slate-900 px-4 py-3 text-white outline-none focus:border-blue-500" />
+              <span className="text-slate-400">{t("boqCreate.quantityLabel")}</span>
+              <input dir="ltr" value={quantity} onChange={(e) => setQuantity(e.target.value)} className="mt-2 w-full max-w-xs rounded-2xl border border-slate-800 bg-slate-900 px-4 py-3 text-white outline-none focus:border-blue-500 text-start" />
             </label>
 
             {error && <p className="mt-3 text-xs text-rose-300">{error}</p>}
             {selected?.locked && (
               <p className="mt-3 text-xs text-amber-300">
-                👑 This is a Premium item. You can use it now — unlocking a clean final export for a BOQ that uses it happens later, when you&apos;re ready to download.
+                👑 {t("boqCreate.premiumUsableExplanation")}
               </p>
             )}
             <button
@@ -705,7 +710,7 @@ export default function AddItemFromSourceModal({
               disabled={isSaving || !selected || !sectionId}
               className="mt-4 rounded-2xl border border-slate-700 bg-blue-600 px-5 py-3 text-sm font-semibold text-white hover:bg-blue-500 disabled:opacity-50"
             >
-              {isSaving ? "Adding…" : selected?.locked ? "Use This Item" : "Add to BOQ"}
+              {isSaving ? t("boqCreate.adding") : selected?.locked ? t("boqCreate.useThisItem") : t("boqCreate.addToBoq")}
             </button>
           </div>
         )}

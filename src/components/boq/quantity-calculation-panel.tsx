@@ -8,6 +8,7 @@ import type { FormulaResult } from "@/lib/calculations/quantity-formulas";
 import type { VoiceCommandProposal } from "@/lib/voice/voice-types";
 import { VoiceCommandButton } from "@/components/voice/voice-command-button";
 import { applyConfirmedDimensionVoiceProposal, VoiceProposalCard } from "@/components/voice/voice-proposal-card";
+import { useTranslations } from "@/lib/i18n/locale-provider";
 
 /**
  * Guided BOQ measurement workflow (Release 1), spec sections 2-6 — the
@@ -55,6 +56,7 @@ export type QuantityCalculationPanelProps = {
 };
 
 export function QuantityCalculationPanel({ projectId, calculationType, extractedEntityId, onConfirmed, onCancel }: QuantityCalculationPanelProps) {
+  const t = useTranslations();
   const definition = useMemo(() => getRequiredDimensions(calculationType), [calculationType]);
   const [dimensionValues, setDimensionValues] = useState<DimensionValueState[]>([]);
   const [isLoadingPrefill, setIsLoadingPrefill] = useState(true);
@@ -193,7 +195,7 @@ export function QuantityCalculationPanel({ projectId, calculationType, extracted
       (dimension) => dimension.key === pendingVoiceProposal.dimensionKey,
     )?.value ?? null;
     if (currentValue !== pendingVoiceProposal.expectedOldValue) {
-      setVoiceProposalError("This dimension changed after the proposal was prepared. Cancel it and record a new instruction.");
+      setVoiceProposalError(t("measurement.voiceDimensionChanged"));
       return;
     }
 
@@ -204,7 +206,7 @@ export function QuantityCalculationPanel({ projectId, calculationType, extracted
     setVoiceProposalError(null);
     setPendingVoiceProposal(null);
     requestAnimationFrame(() => voiceButtonRef.current?.focus());
-  }, [dimensionValues, pendingVoiceProposal]);
+  }, [dimensionValues, pendingVoiceProposal, t]);
 
   const voiceInteractionLocked = isVoiceBusy || pendingVoiceProposal !== null;
 
@@ -244,7 +246,7 @@ export function QuantityCalculationPanel({ projectId, calculationType, extracted
   if (!definition) {
     return (
       <div className="rounded-3xl border border-amber-900 bg-amber-950/30 p-5 text-sm text-amber-200">
-        No deterministic formula is available for calculation type &quot;{calculationType}&quot; yet. Enter the quantity directly.
+        {t("measurement.noFormulaAvailable", { type: calculationType })}
       </div>
     );
   }
@@ -254,7 +256,7 @@ export function QuantityCalculationPanel({ projectId, calculationType, extracted
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <p className="text-sm uppercase tracking-[0.24em] text-slate-500">{definition.label}</p>
-          <p className="mt-1 text-xs text-slate-500">Result unit: {definition.resultUnit}</p>
+          <p className="mt-1 text-xs text-slate-500">{t("measurement.resultUnit", { unit: definition.resultUnit })}</p>
         </div>
         <VoiceCommandButton
           ref={voiceButtonRef}
@@ -263,36 +265,36 @@ export function QuantityCalculationPanel({ projectId, calculationType, extracted
           onProposal={handleDimensionVoiceProposal}
           onBusyChange={setIsVoiceBusy}
           disabled={isLoadingPrefill || pendingVoiceProposal !== null}
-          disabledReason={pendingVoiceProposal ? "Review or cancel the current voice proposal first." : "Wait for known evidence to load."}
-          ariaLabel={`Record a voice instruction for ${definition.label} dimensions`}
+          disabledReason={pendingVoiceProposal ? t("measurement.voiceReviewOrCancel") : t("measurement.voiceWaitForEvidence")}
+          ariaLabel={t("measurement.voiceRecordInstruction", { label: definition.label })}
         />
       </div>
 
       {isLoadingPrefill ? (
-        <p className="text-sm text-slate-400">Loading known evidence…</p>
+        <p className="text-sm text-slate-400">{t("measurement.loadingKnownEvidence")}</p>
       ) : (
         <div className="space-y-3">
-          <p className="text-sm font-semibold text-white">Now let&apos;s calculate the quantity.</p>
+          <p className="text-sm font-semibold text-white">{t("measurement.nowLetsCalculate")}</p>
           {dimensionValues.map((dim) => (
             <div key={dim.key} className="rounded-2xl border border-slate-800 bg-slate-900 p-4">
               <div className="flex items-center justify-between gap-3">
                 <label htmlFor={`dim-${dim.key}`} className="text-sm font-semibold text-white">
                   {dim.label} {dim.unit ? <span className="text-slate-500">({dim.unit})</span> : null}
-                  {!dim.required && <span className="ml-2 text-[0.65rem] uppercase tracking-wide text-slate-500">Optional</span>}
+                  {!dim.required && <span className="ms-2 text-[0.65rem] uppercase tracking-wide text-slate-500">{t("measurement.optional")}</span>}
                 </label>
                 {dim.reviewStatus === "MISSING" && dim.required ? (
                   <span className="rounded-full bg-rose-950/60 px-2 py-1 text-[0.65rem] font-semibold uppercase tracking-wide text-rose-300">
-                    Required — Not Found
+                    {t("measurement.requiredNotFound")}
                   </span>
                 ) : dim.source === "extracted_entity" ? (
                   <span className="rounded-full bg-blue-950/60 px-2 py-1 text-[0.65rem] uppercase tracking-wide text-blue-300">
-                    From extracted data {dim.confidence !== null ? `(${dim.confidence.toFixed(0)}%)` : ""}
+                    {t("measurement.fromExtractedData")} {dim.confidence !== null ? `(${dim.confidence.toFixed(0)}%)` : ""}
                   </span>
                 ) : dim.source === "detected_room" ? (
-                  <span className="rounded-full bg-purple-950/60 px-2 py-1 text-[0.65rem] uppercase tracking-wide text-purple-300">From detected room</span>
+                  <span className="rounded-full bg-purple-950/60 px-2 py-1 text-[0.65rem] uppercase tracking-wide text-purple-300">{t("measurement.fromDetectedRoom")}</span>
                 ) : dim.source === "manual_professional_input" ? (
                   <span className="rounded-full bg-emerald-950/60 px-2 py-1 text-[0.65rem] uppercase tracking-wide text-emerald-300">
-                    Manual professional input
+                    {t("measurement.manualProfessionalInput")}
                   </span>
                 ) : null}
               </div>
@@ -300,11 +302,12 @@ export function QuantityCalculationPanel({ projectId, calculationType, extracted
                 id={`dim-${dim.key}`}
                 type="number"
                 inputMode="decimal"
+                dir="ltr"
                 value={dim.value ?? ""}
                 onChange={(e) => updateValue(dim.key, e.target.value)}
                 disabled={voiceInteractionLocked}
-                placeholder="Enter value"
-                className="mt-3 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white outline-none focus:border-blue-500 disabled:cursor-not-allowed disabled:opacity-60"
+                placeholder={t("measurement.enterValue")}
+                className="mt-3 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white outline-none focus:border-blue-500 disabled:cursor-not-allowed disabled:opacity-60 text-start"
               />
             </div>
           ))}
@@ -334,27 +337,27 @@ export function QuantityCalculationPanel({ projectId, calculationType, extracted
       ) : null}
 
       <div className="rounded-2xl border border-slate-800 bg-slate-900 p-4">
-        <p className="text-xs uppercase tracking-[0.24em] text-slate-500">Engineering calculation</p>
+        <p className="text-xs uppercase tracking-[0.24em] text-slate-500">{t("measurement.engineeringCalculation")}</p>
         {preview.missing.length > 0 ? (
-          <p className="mt-2 text-sm text-amber-300">Missing: {preview.missing.map((m) => m.label).join(", ")}</p>
+          <p className="mt-2 text-sm text-amber-300">{t("measurement.missing", { fields: preview.missing.map((m) => m.label).join(", ") })}</p>
         ) : preview.result ? (
           <div className="mt-2 space-y-2">
-            <p className="font-mono text-sm text-slate-200">{preview.result.formula}</p>
+            <p dir="ltr" className="font-mono text-sm text-slate-200 text-start">{preview.result.formula}</p>
             {preview.result.deductions && Object.keys(preview.result.deductions).length > 0 && (
-              <p className="text-xs text-slate-400">Deductions: {JSON.stringify(preview.result.deductions)}</p>
+              <p className="text-xs text-slate-400">{t("measurement.deductions", { value: JSON.stringify(preview.result.deductions) })}</p>
             )}
             {preview.result.allowances && Object.keys(preview.result.allowances).length > 0 && (
-              <p className="text-xs text-slate-400">Allowances: {JSON.stringify(preview.result.allowances)}</p>
+              <p className="text-xs text-slate-400">{t("measurement.allowances", { value: JSON.stringify(preview.result.allowances) })}</p>
             )}
             <p className="text-lg font-semibold text-white">
-              Result: {preview.result.resultValue} {preview.result.resultUnit}
+              {t("measurement.result", { value: preview.result.resultValue, unit: preview.result.resultUnit })}
             </p>
             {!savedCalculation && (
-              <p className="mt-2 text-sm text-slate-300">Does this look correct?</p>
+              <p className="mt-2 text-sm text-slate-300">{t("measurement.doesThisLookCorrect")}</p>
             )}
           </div>
         ) : (
-          <p className="mt-2 text-sm text-slate-500">Enter all required dimensions to see the calculation.</p>
+          <p className="mt-2 text-sm text-slate-500">{t("measurement.enterAllRequired")}</p>
         )}
       </div>
 
@@ -369,10 +372,10 @@ export function QuantityCalculationPanel({ projectId, calculationType, extracted
             className="rounded-2xl border border-slate-700 bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {isSaving
-              ? "Calculating…"
+              ? t("measurement.calculating")
               : preview.result
-                ? `Yes — Use ${preview.result.resultValue} ${preview.result.resultUnit}`
-                : "Calculate"}
+                ? t("measurement.useValue", { value: preview.result.resultValue, unit: preview.result.resultUnit })
+                : t("measurement.calculate")}
           </button>
         ) : savedCalculation.status !== "CONFIRMED" ? (
           <button
@@ -381,16 +384,16 @@ export function QuantityCalculationPanel({ projectId, calculationType, extracted
             disabled={isConfirming || voiceInteractionLocked}
             className="rounded-2xl border border-slate-700 bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {isConfirming ? "Confirming…" : `Yes — Use ${savedCalculation.resultValue} ${savedCalculation.resultUnit}`}
+            {isConfirming ? t("measurement.confirming") : t("measurement.useValue", { value: savedCalculation.resultValue, unit: savedCalculation.resultUnit })}
           </button>
         ) : (
           <span className="rounded-2xl border border-emerald-800 bg-emerald-950/50 px-4 py-2 text-sm font-semibold text-emerald-300">
-            Confirmed: {savedCalculation.resultValue} {savedCalculation.resultUnit}
+            {t("measurement.confirmed", { value: savedCalculation.resultValue, unit: savedCalculation.resultUnit })}
           </span>
         )}
         {onCancel && (
           <button type="button" onClick={onCancel} className="rounded-2xl border border-slate-700 px-4 py-2 text-sm font-semibold text-slate-300 hover:bg-slate-900">
-            Cancel
+            {t("common.cancel")}
           </button>
         )}
       </div>

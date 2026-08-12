@@ -3,7 +3,7 @@ import { prisma } from "@/lib/db/prisma";
 import type { PlatformActor } from "@/lib/auth/platform-authorization";
 import { PermissionDeniedError } from "@/lib/errors/app-error";
 import { listDatasetDefinitions } from "@/lib/services/catalogue-dataset-registry";
-import { getDatasetBatchIds } from "@/lib/services/industry-package-activation-service";
+import { computePackageIntegrity, computeCrossPackageOverlap, type CataloguePackageIntegrity } from "@/lib/services/catalogue-package-integrity-service";
 
 /**
  * CATALOGUE-100-VERIFY — single read-only pass computing the entire
@@ -31,20 +31,30 @@ type PipelineStage =
   | "CUSTOMER_ACTIVE"
   | "FAILED";
 
+/**
+ * CATALOGUE-PHASE7-STRICT-CLOSEOUT — CUSTOMER_ACTIVE now requires
+ * integrity.strictComplete, not just "package ACTIVE and itemCount > 0."
+ * That weaker check let a package with foreign/stale membership rows (real
+ * incident: hvac-library, civil-works-library, closeout-library, and
+ * bim-digital-deliverables-library all showed non-expected itemCounts)
+ * still read as CUSTOMER_ACTIVE. A package that's ACTIVE with real items
+ * but wrong membership is PACKAGED, not CUSTOMER_ACTIVE — truthful about
+ * what's actually verified, not just non-empty.
+ */
 function classifyStage(input: {
   hasJob: boolean;
   jobStatus: MasterCatalogueImportJobStatus | null;
-  itemCount: number;
   packageActive: boolean;
   packageItemCount: number;
+  strictComplete: boolean;
 }): PipelineStage {
   if (!input.hasJob) return "SOURCE_ONLY";
   if (input.jobStatus === "FAILED") return "FAILED";
   if (input.jobStatus === "DRY_RUN_COMPLETE" || input.jobStatus === "REGISTERED" || input.jobStatus === "VALIDATING" || input.jobStatus === "DRY_RUN_RUNNING") return "DRY_RUN_ONLY";
   if (input.jobStatus === "PAUSED" || input.jobStatus === "IMPORT_RUNNING" || input.jobStatus === "AWAITING_CONFIRMATION") return "IMPORTING";
   // COMPLETED / COMPLETED_WITH_WARNINGS / CANCELLED / ROLLED_BACK from here
-  if (input.packageActive && input.packageItemCount > 0) return "CUSTOMER_ACTIVE";
-  if (input.packageItemCount > 0) return "PACKAGED";
+  if (input.strictComplete) return "CUSTOMER_ACTIVE";
+  if (input.packageActive && input.packageItemCount > 0) return "PACKAGED";
   return "IMPORTED";
 }
 
@@ -57,25 +67,20 @@ export async function getProductionCatalogueEvidence(owner: PlatformActor) {
       const discipline = await prisma.masterDiscipline.findUnique({ where: { key: dataset.disciplineKey } });
       const job = await prisma.masterCatalogueImportJob.findFirst({ where: { datasetId: dataset.datasetId }, orderBy: { createdAt: "desc" } });
 
-      // Scoped through the batch relation rather than a `masterItemId: { in: itemIds } }`
-      // list — for a large dataset (e.g. 80k+ rows) that list would exceed
-      // Postgres' 65,535 bind-parameter limit and 500 the whole route.
-      const batchIds = job ? await getDatasetBatchIds(dataset.datasetId) : [];
-      const itemCount = batchIds.length > 0 ? await prisma.masterItem.count({ where: { sourceBatchId: { in: batchIds } } }) : 0;
-      const publishedVersionCount = batchIds.length > 0
-        ? await prisma.masterItemVersion.count({ where: { status: "PUBLISHED", masterItem: { sourceBatchId: { in: batchIds } } } })
-        : 0;
+      // Single canonical integrity computation — item/membership/published
+      // counts, missing/extra membership, and strictComplete all come from
+      // here, never re-derived independently in this route.
+      const integrity: CataloguePackageIntegrity = await computePackageIntegrity(dataset);
 
       const pkg = await prisma.industryDataPackage.findUnique({ where: { key: dataset.targetPackageCode } });
       const packageActive = pkg?.status === "ACTIVE";
-      const packageItemCount = pkg?.itemCount ?? 0;
 
       const stage = classifyStage({
         hasJob: Boolean(job),
         jobStatus: job?.status ?? null,
-        itemCount,
         packageActive,
-        packageItemCount,
+        packageItemCount: integrity.packageCounterCount,
+        strictComplete: integrity.strictComplete,
       });
 
       return {
@@ -87,7 +92,7 @@ export async function getProductionCatalogueEvidence(owner: PlatformActor) {
         targetPackageCode: dataset.targetPackageCode,
         files: dataset.files.map((f) => ({ fileName: f.fileName, approvedChecksum: f.approvedChecksum, expectedRowCount: f.expectedRowCount })),
         fileCount: dataset.files.length,
-        expectedRowCount: dataset.files.reduce((sum, f) => sum + f.expectedRowCount, 0),
+        expectedRowCount: integrity.expectedRowCount,
         job: job
           ? {
               id: job.id,
@@ -107,16 +112,27 @@ export async function getProductionCatalogueEvidence(owner: PlatformActor) {
               completedAt: job.completedAt?.toISOString() ?? null,
             }
           : null,
-        itemCount,
-        publishedVersionCount,
+        itemCount: integrity.datasetItemCount,
+        publishedVersionCount: integrity.publishedDistinctItemCount,
+        datasetItemCount: integrity.datasetItemCount,
+        actualPackageMembershipCount: integrity.actualPackageMembershipCount,
+        expectedItemsPresentInPackageCount: integrity.expectedItemsPresentInPackageCount,
+        missingMembershipCount: integrity.missingMembershipCount,
+        extraMembershipCount: integrity.extraMembershipCount,
+        packageCounterCount: integrity.packageCounterCount,
+        publishedDistinctItemCount: integrity.publishedDistinctItemCount,
+        hasCompletedGovernedJob: integrity.hasCompletedGovernedJob,
+        strictComplete: integrity.strictComplete,
         package: pkg
           ? { id: pkg.id, key: pkg.key, name: pkg.name, status: pkg.status, itemCount: pkg.itemCount, isFeatured: pkg.isFeatured }
           : null,
-        marketplaceVisible: packageActive && packageItemCount > 0,
+        marketplaceVisible: integrity.strictComplete,
         stage,
       };
     }),
   );
+
+  const overlaps = await computeCrossPackageOverlap(owner);
 
   const summary = {
     totalDatasets: rows.length,
@@ -129,6 +145,11 @@ export async function getProductionCatalogueEvidence(owner: PlatformActor) {
     totalPublishedVersions: rows.reduce((sum, r) => sum + r.publishedVersionCount, 0),
     totalPackagesActive: rows.filter((r) => r.package?.status === "ACTIVE").length,
     totalPackagesMarketplaceVisible: rows.filter((r) => r.marketplaceVisible).length,
+    strictCompleteDatasets: rows.filter((r) => r.strictComplete).length,
+    packagesWithMissingMembership: rows.filter((r) => r.missingMembershipCount > 0).length,
+    packagesWithExtraMembership: rows.filter((r) => r.extraMembershipCount > 0).length,
+    packageCounterMismatches: rows.filter((r) => r.package && r.package.itemCount !== r.actualPackageMembershipCount).length,
+    crossPackageOverlapPairs: overlaps.length,
   };
 
   return { generatedAt: new Date().toISOString(), summary, datasets: rows };

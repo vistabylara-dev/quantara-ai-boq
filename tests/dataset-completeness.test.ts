@@ -24,6 +24,12 @@ const HVAC_DATASET_ID = "quantara-master-hvac-v1";
 let companyId = "";
 let ownerUserId = "";
 
+// CATALOGUE-PHASE7-STRICT-CLOSEOUT — teardown provenance. Only IDs this run
+// itself produced are ever deleted; a record created by another concurrent
+// process after beforeAll's residue check is never touched, even if it
+// matches the same dataset/package scope.
+const createdJobIds = new Set<string>();
+
 function ownerActor(): PlatformActor {
   return { userId: ownerUserId, companyId, platformRole: PlatformRole.PLATFORM_OWNER, fullName: "DC Owner", email: `${RUN_ID}-owner@example.com` };
 }
@@ -50,30 +56,72 @@ async function hvacItemWhere() {
   return { disciplineId: mechanical?.id ?? "__no_mechanical_discipline__", itemCode: { startsWith: "HVAC-" } } as const;
 }
 
-async function cleanupHvacItems() {
-  const where = await hvacItemWhere();
-  const items = await prisma.masterItem.findMany({ where });
-  for (const item of items) {
-    await prisma.masterItemClassification.deleteMany({ where: { masterItemId: item.id } });
-    await prisma.masterItemVersion.deleteMany({ where: { masterItemId: item.id } });
-  }
-  await prisma.masterItem.deleteMany({ where });
-}
-
-async function cleanupHvacPackage() {
-  const pkg = await prisma.industryDataPackage.findUnique({ where: { key: "hvac-library" } });
-  if (!pkg) return;
-  await prisma.industryDataPackageItem.deleteMany({ where: { packageId: pkg.id } });
-  await prisma.industryDataPackage.delete({ where: { id: pkg.id } });
+/** Wraps activateDataset/registerAndDryRun calls so every job ID this run ever touches is tracked for surgical teardown. */
+async function activateDatasetTracked() {
+  const result = await activateDataset(ownerActor(), HVAC_DATASET_ID);
+  createdJobIds.add(result.jobId);
+  return result;
 }
 
 async function driveHvacToComplete() {
   const dataset = requireDatasetDefinition(HVAC_DATASET_ID);
-  let last = await activateDataset(ownerActor(), HVAC_DATASET_ID);
+  let last = await activateDatasetTracked();
   while (!last.isComplete) {
-    last = await activateDataset(ownerActor(), HVAC_DATASET_ID);
+    last = await activateDatasetTracked();
   }
   return dataset;
+}
+
+/**
+ * Deletes only what this test run created, derived from createdJobIds ->
+ * their legacyBatchIds -> MasterItems whose sourceBatchId is one of those
+ * batches. A foreign MasterItem sharing the same itemCode/discipline but a
+ * different sourceBatchId (created by another process after beforeAll's
+ * residue check) is never matched here and survives teardown intact. The
+ * package itself is only deleted if, after removing this run's own
+ * membership rows, zero membership rows remain — any surviving row means a
+ * foreign process added to this package concurrently, and teardown fails
+ * closed (leaves the package and reports it) rather than guessing.
+ */
+async function teardownTrackedHvacData(): Promise<void> {
+  if (createdJobIds.size === 0) return;
+
+  const trackedJobs = await prisma.masterCatalogueImportJob.findMany({
+    where: { id: { in: [...createdJobIds] } },
+    select: { id: true, legacyBatchId: true },
+  });
+  const trackedBatchIds = trackedJobs.map((j) => j.legacyBatchId).filter((id): id is string => Boolean(id));
+
+  const trackedItems = trackedBatchIds.length > 0
+    ? await prisma.masterItem.findMany({ where: { sourceBatchId: { in: trackedBatchIds } }, select: { id: true } })
+    : [];
+  const trackedItemIds = trackedItems.map((i) => i.id);
+
+  if (trackedItemIds.length > 0) {
+    await prisma.industryDataPackageItem.deleteMany({ where: { masterItemId: { in: trackedItemIds } } });
+    await prisma.masterItemClassification.deleteMany({ where: { masterItemId: { in: trackedItemIds } } });
+    await prisma.masterItemVersion.deleteMany({ where: { masterItemId: { in: trackedItemIds } } });
+    await prisma.masterItem.deleteMany({ where: { id: { in: trackedItemIds } } });
+  }
+
+  await prisma.masterCatalogueImportJob.deleteMany({ where: { id: { in: [...createdJobIds] } } });
+  if (trackedBatchIds.length > 0) {
+    await prisma.masterCatalogueImportBatch.deleteMany({ where: { id: { in: trackedBatchIds } } });
+  }
+
+  const pkg = await prisma.industryDataPackage.findUnique({ where: { key: "hvac-library" } });
+  if (pkg) {
+    const remainingMembership = await prisma.industryDataPackageItem.count({ where: { packageId: pkg.id } });
+    if (remainingMembership === 0) {
+      await prisma.industryDataPackage.delete({ where: { id: pkg.id } });
+    } else {
+      // eslint-disable-next-line no-console
+      console.warn(
+        `dataset-completeness.test.ts teardown: leaving "hvac-library" (id=${pkg.id}) in place — ` +
+          `${remainingMembership} membership row(s) remain that this run did not create.`,
+      );
+    }
+  }
 }
 
 describe("CATALOGUE-PHASE7-RECOVERY: strict dataset completeness predicate (integration, real local Postgres, real HVAC dataset)", () => {
@@ -122,10 +170,7 @@ describe("CATALOGUE-PHASE7-RECOVERY: strict dataset completeness predicate (inte
   });
 
   afterAll(async () => {
-    await cleanupHvacPackage();
-    await cleanupHvacItems();
-    await prisma.masterCatalogueImportJob.deleteMany({ where: { datasetId: HVAC_DATASET_ID } });
-    if (ownerUserId) await prisma.masterCatalogueImportBatch.deleteMany({ where: { actorUserId: ownerUserId } });
+    await teardownTrackedHvacData();
     if (companyId) await prisma.user.deleteMany({ where: { companyId } });
     if (companyId) await prisma.company.deleteMany({ where: { id: companyId } });
     await prisma.$disconnect();
@@ -141,15 +186,16 @@ describe("CATALOGUE-PHASE7-RECOVERY: strict dataset completeness predicate (inte
     async () => {
       const dataset = requireDatasetDefinition(HVAC_DATASET_ID);
       const dryRun = await registerAndDryRun(ownerActor(), HVAC_DATASET_ID);
+      createdJobIds.add(dryRun.id);
       const confirmed = await confirmExecution(ownerActor(), dryRun.id);
       expect(confirmed.status).not.toBe(MasterCatalogueImportJobStatus.COMPLETED);
       expect(confirmed.processedRows).toBeLessThan(confirmed.totalRows);
       expect(await isDatasetFullyActive(dataset)).toBe(false);
 
       // Drain to completion so the next test starts from a clean, terminal job.
-      let last = await activateDataset(ownerActor(), HVAC_DATASET_ID);
+      let last = await activateDatasetTracked();
       while (!last.isComplete) {
-        last = await activateDataset(ownerActor(), HVAC_DATASET_ID);
+        last = await activateDatasetTracked();
       }
     },
     150_000,
@@ -218,5 +264,44 @@ describe("CATALOGUE-PHASE7-RECOVERY: strict dataset completeness predicate (inte
     await prisma.masterCatalogueImportJob.updateMany({ where: { datasetId: HVAC_DATASET_ID }, data: { status: MasterCatalogueImportJobStatus.CANCELLED } });
 
     expect(await isDatasetFullyActive(dataset)).toBe(false);
+  });
+
+  it("test teardown — a foreign concurrent record outside this run's tracked provenance survives teardown", async () => {
+    // Simulates "another process created a matching record after beforeAll" —
+    // a MasterItem sharing the HVAC discipline/prefix but with a distinct,
+    // untracked sourceBatchId (a fabricated batch id this run never produced).
+    const mechanical = await prisma.masterDiscipline.findUniqueOrThrow({ where: { key: "mechanical" } });
+    const foreignBatch = await prisma.masterCatalogueImportBatch.create({
+      data: {
+        actorUserId: ownerUserId,
+        disciplineId: mechanical.id,
+        uploadedFileName: "foreign-concurrent-process.csv",
+        checksum: `foreign-${RUN_ID}`,
+        status: "EXECUTED",
+        totalRows: 1,
+      },
+    });
+    const foreignItem = await prisma.masterItem.create({
+      data: {
+        disciplineId: mechanical.id,
+        categoryId: (await prisma.masterCategory.findFirstOrThrow({ where: { disciplineId: mechanical.id } })).id,
+        itemCode: `HVAC-FOREIGN-${RUN_ID}`,
+        name: "Foreign concurrent item",
+        shortDescription: "Foreign concurrent item",
+        fullDescription: "Foreign concurrent item",
+        defaultUnit: "no",
+        isPremium: true,
+        sourceBatchId: foreignBatch.id,
+      },
+    });
+
+    await teardownTrackedHvacData();
+
+    const survived = await prisma.masterItem.findUnique({ where: { id: foreignItem.id } });
+    expect(survived).not.toBeNull();
+
+    // Real cleanup of the fixture this test itself introduced.
+    await prisma.masterItem.delete({ where: { id: foreignItem.id } });
+    await prisma.masterCatalogueImportBatch.delete({ where: { id: foreignBatch.id } });
   });
 });

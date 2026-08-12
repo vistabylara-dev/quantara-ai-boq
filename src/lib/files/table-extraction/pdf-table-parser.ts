@@ -2,6 +2,7 @@ import { PDFParse } from "pdf-parse";
 import type { ParsedTable } from "./types";
 import { parsePdfGridTable } from "./pdf-table-grid-normalization";
 import { parseStructuralScheduleTextFallback } from "./pdf-text-schedule-fallback";
+import { parsePositionalTextFallback } from "./pdf-positional-text-fallback";
 
 export type PdfExtractionResult = {
   tables: ParsedTable[];
@@ -11,6 +12,8 @@ export type PdfExtractionResult = {
   /** Subset of skippedTablePages where pdf-parse threw the known incomplete-grid geometry error. */
   geometryFailedPages: number[];
   textFallbackPages: number[];
+  /** Subset of textFallbackPages recovered via the generic positional (column-band) fallback, not the FOOTING/BEAM schedule regexes. */
+  positionalFallbackPages: number[];
 };
 
 function isKnownPdfTableGeometryError(error: unknown): boolean {
@@ -31,6 +34,7 @@ export async function parsePdfTables(buffer: Buffer): Promise<PdfExtractionResul
         skippedTablePages: [],
         geometryFailedPages: [],
         textFallbackPages: [],
+        positionalFallbackPages: [],
       };
     }
 
@@ -38,6 +42,7 @@ export async function parsePdfTables(buffer: Buffer): Promise<PdfExtractionResul
     const skippedTablePages: number[] = [];
     const geometryFailedPages: number[] = [];
     const textFallbackPages: number[] = [];
+    const positionalFallbackPages: number[] = [];
 
     for (const textPage of pagesWithText) {
       const beforePageCount = tables.length;
@@ -62,10 +67,30 @@ export async function parsePdfTables(buffer: Buffer): Promise<PdfExtractionResul
         if (fallback.length > 0) {
           tables.push(...fallback);
           textFallbackPages.push(textPage.num);
+          continue;
+        }
+
+        // Third fallback: pdf-parse's own line/cell reconstruction (real
+        // PDF text-coordinate row/column clustering — see
+        // pdf-positional-text-fallback.ts), tried only after both the grid
+        // and the known-schedule regex fallback found nothing. A fresh
+        // getText() call for just this page, since the earlier one used
+        // default separators unsuitable for column detection.
+        const positionalText = await parser.getText({
+          partial: [textPage.num],
+          pageJoiner: "",
+          lineEnforce: true,
+          cellSeparator: "\t",
+        });
+        const positionalFallback = parsePositionalTextFallback(positionalText.text, textPage.num);
+        if (positionalFallback.length > 0) {
+          tables.push(...positionalFallback);
+          textFallbackPages.push(textPage.num);
+          positionalFallbackPages.push(textPage.num);
         } else {
-          // Record every page where neither vector-grid extraction nor the safe
-          // structural text fallback recovered a table. geometryFailedPages
-          // separately distinguishes a parser failure from a normal non-table page.
+          // Record every page where neither vector-grid extraction nor either
+          // text fallback recovered a table. geometryFailedPages separately
+          // distinguishes a parser failure from a normal non-table page.
           skippedTablePages.push(textPage.num);
         }
       }
@@ -77,6 +102,7 @@ export async function parsePdfTables(buffer: Buffer): Promise<PdfExtractionResul
       skippedTablePages,
       geometryFailedPages,
       textFallbackPages,
+      positionalFallbackPages,
     };
   } finally {
     await parser.destroy();

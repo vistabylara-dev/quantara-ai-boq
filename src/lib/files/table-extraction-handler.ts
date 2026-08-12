@@ -67,12 +67,19 @@ extractionJobQueue.registerHandler(ExtractionEngineType.TABLE_EXTRACTION, async 
   }
 
   if (parsedTables.length === 0 && geometryFailedPages.length > 0) {
+    // CANVA-HUMAN-JOURNEY-FINAL — never lead with "could not be safely
+    // reconstructed" as the primary message. Nothing was guessed; that's a
+    // reason for confidence, not an apology. The friendly framing lives
+    // here (not just in the UI) so every consumer of resultSummary.message
+    // — including this NEEDS_REVIEW banner — gets it consistently.
+    const pageCount = skippedTablePages.length;
     return {
       status: ExtractionJobStatus.NEEDS_REVIEW,
       resultSummary: {
         message:
-          `Schedule-table grid geometry on page(s) ${geometryFailedPages.join(", ")} could not be safely reconstructed. `
-          + "Those pages were not converted into BOQ candidates; review the rendered pages or provide a structured CSV/XLSX schedule.",
+          `Great — nothing was guessed. ${pageCount} page${pageCount === 1 ? "" : "s"} `
+          + `need${pageCount === 1 ? "s" : ""} your help before we can safely turn ${pageCount === 1 ? "it" : "them"} into BOQ candidates. `
+          + "Review the rendered page, type the missing information, or provide a structured CSV/XLSX schedule instead.",
         warningCode: "PDF_TABLE_GEOMETRY_UNSUPPORTED",
         tablesFound: 0,
         skippedTablePages,
@@ -117,8 +124,9 @@ extractionJobQueue.registerHandler(ExtractionEngineType.TABLE_EXTRACTION, async 
             geometryFailedPages,
             warningCode: "PDF_TABLE_GEOMETRY_UNSUPPORTED",
             message:
-              `Reliable tables were captured from supported pages. Page(s) ${geometryFailedPages.join(", ")} contained `
-              + "grid geometry that could not be safely reconstructed and had no safe structural text fallback.",
+              `Great — we found useful information. ${parsedTables.reduce((sum, t) => sum + t.rows.length, 0)} rows are ready to review, `
+              + `and ${geometryFailedPages.length} page${geometryFailedPages.length === 1 ? "" : "s"} need${geometryFailedPages.length === 1 ? "s" : ""} your help. `
+              + "Nothing uncertain was guessed.",
           }
         : {}),
       ...(textFallbackPages.length > 0

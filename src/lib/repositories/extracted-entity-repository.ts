@@ -89,8 +89,8 @@ export type CreateExtractedEntityInput = {
   status?: ExtractedEntity["status"];
 };
 
-export async function createExtractedEntity(companyId: string, input: CreateExtractedEntityInput): Promise<ExtractedEntity> {
-  return prisma.extractedEntity.create({
+export async function createExtractedEntity(companyId: string, input: CreateExtractedEntityInput, db: DbClient = prisma): Promise<ExtractedEntity> {
+  return db.extractedEntity.create({
     data: {
       companyId,
       projectId: input.projectId,

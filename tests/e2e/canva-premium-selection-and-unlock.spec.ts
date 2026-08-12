@@ -1,5 +1,6 @@
 import { test, expect, type Page } from "@playwright/test";
-import { PrismaClient } from "@prisma/client";
+import { PrismaClient, type CommercePriceReviewStatus } from "@prisma/client";
+import { assertIsolatedLocalTestDatabase } from "../helpers/isolated-database-guard";
 
 /**
  * CANVA-MODEL-1 owner acceptance — proves the two concrete, load-bearing
@@ -38,6 +39,7 @@ let premiumItemId: string;
 let premiumItemCode: string;
 let premiumPackageId: string;
 let premiumPackageName: string;
+let priceOriginalStatuses: { id: string; reviewStatus: CommercePriceReviewStatus }[] = [];
 
 async function login(page: Page) {
   await page.goto("/login");
@@ -51,8 +53,15 @@ async function login(page: Page) {
 
 test.describe.serial("CANVA-MODEL-1 — premium selection without payment, unlock screen at clean export", () => {
   test.beforeAll(async () => {
+    assertIsolatedLocalTestDatabase("canva-premium-selection-and-unlock E2E setup");
+
+    // Scoped to a package with a real, seeded CommerceProduct/CommercePrice
+    // link (see prisma/seed-data/commerce-products.ts's
+    // INDUSTRY_ACCESS_CANDIDATES) — needed so the unlock panel's per-price
+    // "Unlock" button actually renders (checkoutAvailable requires a real
+    // price), not just the package name/reason text.
     const membership = await prisma.industryDataPackageItem.findFirstOrThrow({
-      where: { masterItem: { isPremium: true, status: "ACTIVE" } },
+      where: { masterItem: { isPremium: true, status: "ACTIVE" }, package: { key: "mechanical-hvac-professional" } },
       include: { masterItem: true, package: true },
     });
     premiumItemId = membership.masterItemId;
@@ -64,6 +73,26 @@ test.describe.serial("CANVA-MODEL-1 — premium selection without payment, unloc
     // package the test premium item belongs to, or "no payment screen" and
     // "unlock screen appears" would trivially pass for the wrong reason.
     await prisma.companyPackageSubscription.deleteMany({ where: { companyId: COMPANY_ID, packageId: premiumPackageId } });
+
+    // CommercePrice.reviewStatus defaults to REQUIRES_REVIEW (never silently
+    // APPROVED) — approve the real seeded monthly price for this one test
+    // package so the unlock panel's buy button renders, proving the full
+    // UI rather than only its degraded "not yet available" fallback state.
+    // Restored in afterAll — this mutates shared seed data, not a
+    // test-created row.
+    const commerceProduct = await prisma.commerceProduct.findFirstOrThrow({ where: { industryPackageId: premiumPackageId } });
+    const pricesToApprove = await prisma.commercePrice.findMany({
+      where: { productId: commerceProduct.id, billingInterval: "MONTH", reviewStatus: { not: "APPROVED" } },
+      select: { id: true, reviewStatus: true },
+    });
+    // Track each price's true original status so teardown restores exactly
+    // what was there before, rather than blanket-overwriting e.g. a
+    // REJECTED price to REQUIRES_REVIEW.
+    priceOriginalStatuses = pricesToApprove.map((p) => ({ id: p.id, reviewStatus: p.reviewStatus }));
+    await prisma.commercePrice.updateMany({
+      where: { id: { in: pricesToApprove.map((p) => p.id) } },
+      data: { reviewStatus: "APPROVED" },
+    });
 
     await prisma.client.upsert({
       where: { id: CLIENT_ID },
@@ -86,6 +115,9 @@ test.describe.serial("CANVA-MODEL-1 — premium selection without payment, unloc
   });
 
   test.afterAll(async () => {
+    for (const { id, reviewStatus } of priceOriginalStatuses) {
+      await prisma.commercePrice.update({ where: { id }, data: { reviewStatus } });
+    }
     const project = await prisma.project.findFirst({ where: { companyId: COMPANY_ID, slug: projectSlug } });
     if (project) {
       const boqs = await prisma.bOQ.findMany({ where: { projectId: project.id } });
@@ -177,8 +209,8 @@ test.describe.serial("CANVA-MODEL-1 — premium selection without payment, unloc
     // First hit of the new /commercial-requirements route in this run also
     // pays its own JIT-compile cost.
     await expect(page.getByRole("dialog", { name: "Your professional BOQ is ready" })).toBeVisible({ timeout: 30_000 });
-    await expect(page.getByText(premiumPackageName)).toBeVisible();
-    await expect(page.getByRole("button", { name: "Unlock My BOQ" })).toBeVisible();
+    await expect(page.getByText(premiumPackageName, { exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: `Unlock ${premiumPackageName}` })).toBeVisible();
 
     // No payment screen was ever reached just by requesting the unlock view either.
     expect(paymentScreenSeen).toHaveLength(0);

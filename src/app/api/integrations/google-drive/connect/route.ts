@@ -17,13 +17,24 @@ export const dynamic = "force-dynamic";
  * with an HTTP redirect rather than a JSON envelope. On auth failure it
  * sends the user to /login instead of a bare 401, since a real click landed
  * here.
+ *
+ * Reads projectId/intent/returnTo off the query string (forwarded by the
+ * "Connect with Google" link) and signs them into the OAuth state so the
+ * callback can restore exactly where the user started — first-time
+ * connectors previously lost this context the moment the browser left for
+ * Google, unlike the already-connected in-app path.
  */
 export async function GET(request: Request) {
   try {
     const actor = await getCurrentActor();
     setActorContext(actor);
 
-    const { state, cookieValue } = createGoogleDriveOAuthState(actor);
+    const url = new URL(request.url);
+    const { state, cookieValue } = await createGoogleDriveOAuthState(actor, {
+      projectId: url.searchParams.get("projectId"),
+      intent: url.searchParams.get("intent"),
+      returnTo: url.searchParams.get("returnTo"),
+    });
     const authorizationUrl = initiateGoogleDriveConnection(actor, state);
 
     const cookieStore = await cookies();

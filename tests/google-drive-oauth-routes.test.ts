@@ -54,7 +54,7 @@ describe("Google Drive OAuth browser routes", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.getCurrentActor.mockResolvedValue(actor);
-    mocks.createGoogleDriveOAuthState.mockReturnValue({
+    mocks.createGoogleDriveOAuthState.mockResolvedValue({
       state: "provider-state",
       cookieValue: "signed-actor-bound-cookie",
     });
@@ -62,7 +62,7 @@ describe("Google Drive OAuth browser routes", () => {
       "https://accounts.google.com/o/oauth2/v2/auth?state=provider-state",
     );
     mocks.cookieGet.mockReturnValue({ value: "signed-actor-bound-cookie" });
-    mocks.verifyGoogleDriveOAuthState.mockImplementation(() => undefined);
+    mocks.verifyGoogleDriveOAuthState.mockResolvedValue({ projectId: null, intent: null, returnTo: null });
     mocks.completeGoogleDriveConnection.mockResolvedValue(undefined);
   });
 
@@ -80,8 +80,60 @@ describe("Google Drive OAuth browser routes", () => {
       "src/app/integrations/google-drive/connect/google-drive-connect-panel.tsx",
       "utf8",
     );
-    expect(panelSource).toContain('href="/api/integrations/google-drive/connect"');
+    expect(panelSource).toContain('withProjectContext("/api/integrations/google-drive/connect", projectContext)');
     expect(panelSource).not.toContain("apiClient.get(\"/api/integrations/google-drive/connect");
+  });
+
+  it("forwards projectId/intent/returnTo off the query string into the signed OAuth state", async () => {
+    await connect(new Request(
+      "https://quantara.example/api/integrations/google-drive/connect?projectId=proj-1&intent=boq-source&returnTo=%2Fprojects%2Fproj-1%2Fboq",
+    ));
+
+    expect(mocks.createGoogleDriveOAuthState).toHaveBeenCalledWith(actor, {
+      projectId: "proj-1",
+      intent: "boq-source",
+      returnTo: "/projects/proj-1/boq",
+    });
+  });
+
+  it("restores first-OAuth project context onto the connect-page redirect after a successful callback", async () => {
+    mocks.verifyGoogleDriveOAuthState.mockResolvedValue({
+      projectId: "proj-1",
+      intent: "boq-source",
+      returnTo: "/projects/proj-1/boq",
+    });
+
+    const response = await callback(new Request(
+      "https://quantara.example/api/integrations/google-drive/callback?code=one-time-secret-code&state=provider-state",
+    ));
+    const location = response.headers.get("location") ?? "";
+
+    expect(location).toContain("projectId=proj-1");
+    expect(location).toContain("intent=boq-source");
+    expect(location).toContain(`returnTo=${encodeURIComponent("/projects/proj-1/boq")}`);
+    expect(location).toContain("connected=1");
+    expect(location.startsWith("https://quantara.example/integrations/google-drive/connect")).toBe(true);
+  });
+
+  it("restores first-OAuth project context onto the connect-page redirect after a failed callback", async () => {
+    mocks.verifyGoogleDriveOAuthState.mockResolvedValue({
+      projectId: "proj-1",
+      intent: "boq-source",
+      returnTo: "/projects/proj-1/boq",
+    });
+    mocks.completeGoogleDriveConnection.mockRejectedValue(
+      new AppError("GOOGLE_DRIVE_TOKEN_ERROR", "token exchange failed", 400),
+    );
+
+    const response = await callback(new Request(
+      "https://quantara.example/api/integrations/google-drive/callback?code=one-time-secret-code&state=provider-state",
+    ));
+    const location = response.headers.get("location") ?? "";
+
+    expect(location).toContain("projectId=proj-1");
+    expect(location).toContain("intent=boq-source");
+    expect(location).toContain(`returnTo=${encodeURIComponent("/projects/proj-1/boq")}`);
+    expect(location).toContain("connectError=GOOGLE_DRIVE_TOKEN_ERROR");
   });
 
   it("rejects missing or invalid state with a controlled code and consumes the cookie", async () => {

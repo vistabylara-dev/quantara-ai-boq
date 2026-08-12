@@ -9,6 +9,7 @@ import { FeatureHint, FEATURE_HINT_REGISTRY } from "@/components/guidance/featur
 import { GuideTip } from "@/components/guidance/guide-tip";
 import { getProjectSourceOrigin, getProjectSourceProcessingState } from "@/lib/guidance/project-workflow";
 import type { ProjectWorkflowSnapshot } from "@/lib/guidance/project-workflow-snapshot";
+import { PageRecoveryPanel } from "@/components/files/page-recovery-panel";
 
 type FileView = {
   id: string;
@@ -131,6 +132,16 @@ function resultSummaryMessage(job: ExtractionJobView): string | null {
     : null;
 }
 
+/** Pages none of the three deterministic table-recovery fallbacks could safely resolve — the pages that need PageRecoveryPanel. */
+function resultSummarySkippedPages(job: ExtractionJobView): number[] {
+  if (!job.resultSummary || typeof job.resultSummary !== "object" || Array.isArray(job.resultSummary)) {
+    return [];
+  }
+  const summary = job.resultSummary as Record<string, unknown>;
+  const pages = summary.skippedTablePages ?? summary.pagesWithoutRecoveredTables;
+  return Array.isArray(pages) ? pages.filter((p): p is number => typeof p === "number") : [];
+}
+
 /**
  * Never expose the queue's raw exception message to the customer UI.
  * errorCode is safe operational context; raw server detail remains in logs/DB.
@@ -162,6 +173,10 @@ export default function ProjectFilesPage(props: {
   const [currentJobStatuses, setCurrentJobStatuses] = useState<Record<string, string | null>>({});
   const [currentJobStatusesByEngine, setCurrentJobStatusesByEngine] = useState<Record<string, Record<string, string>>>({});
   const [activeJob, setActiveJob] = useState<ExtractionJobView | null>(null);
+  // Persists across loadDetail() calls (unlike activeJob, which is cleared
+  // on every selection) — the source of truth for which pages still need
+  // PageRecoveryPanel, whether or not a job just ran in this component instance.
+  const [latestExtractionJob, setLatestExtractionJob] = useState<ExtractionJobView | null>(null);
   const [workflowSnapshot, setWorkflowSnapshot] = useState<ProjectWorkflowSnapshot | null>(null);
   const [selectedFileId, setSelectedFileId] = useState<string | null>(null);
   const [pages, setPages] = useState<PageView[]>([]);
@@ -219,6 +234,7 @@ export default function ProjectFilesPage(props: {
     setTableResultsAvailable(null);
     setDetailWarning(null);
     setActiveJob(null);
+    setLatestExtractionJob(null);
 
     const [pagesResult, tablesResult, jobsResult] = await Promise.allSettled([
       apiClient.get<{ pages: PageView[]; classification: string; ocrStatus: string }>(
@@ -247,6 +263,10 @@ export default function ProjectFilesPage(props: {
         ...current,
         [fileId]: latestEngineStatuses(jobsResult.value),
       }));
+      // Jobs are returned newest-first — the first TABLE_EXTRACTION job is
+      // the persisted record of what still needs recovery, independent of
+      // whether a job just ran in this component instance.
+      setLatestExtractionJob(jobsResult.value.find((job) => job.engineType === "TABLE_EXTRACTION") ?? null);
     }
 
     if (
@@ -412,7 +432,7 @@ export default function ProjectFilesPage(props: {
           resultSummaryMessage(currentJob)
           ?? (
             action === "extract"
-              ? "Schedule table processing completed and requires professional review."
+              ? "Great — schedule table processing found useful information and is ready for your review."
               : `${ACTION_LABEL[action]} requires professional attention before it can be finalized.`
           ),
         );
@@ -715,6 +735,19 @@ export default function ProjectFilesPage(props: {
                 <p className="rounded-xl border border-amber-800/70 bg-amber-950/30 px-4 py-3 text-sm text-amber-200">
                   {detailWarning}
                 </p>
+              )}
+
+              {selectedFileId && latestExtractionJob && resultSummarySkippedPages(latestExtractionJob).length > 0 && (
+                <div className="space-y-3">
+                  {resultSummarySkippedPages(latestExtractionJob).map((pageNumber) => (
+                    <PageRecoveryPanel
+                      key={pageNumber}
+                      projectId={params.projectId}
+                      fileId={selectedFileId}
+                      pageNumber={pageNumber}
+                    />
+                  ))}
+                </div>
               )}
 
               {(pageResultsAvailable === null || tableResultsAvailable === null) && (

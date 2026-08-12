@@ -11,7 +11,18 @@ import {
 
 export const dynamic = "force-dynamic";
 
-/** Google redirects the user's browser here after consent. Full-page navigation, not a fetch() — responds with a redirect back into the app, success or failure either way. */
+/**
+ * Google redirects the user's browser here after consent. Full-page
+ * navigation, not a fetch() — responds with a redirect back into the app,
+ * success or failure either way.
+ *
+ * Restores the first-OAuth context (projectId/intent/returnTo) carried in
+ * the verified state, so a first-time connector lands back on the exact
+ * project/source-import journey they started from instead of a generic
+ * integrations page — matching the already-connected in-app path. The
+ * context comes from verifyGoogleDriveOAuthState, which re-validates
+ * project ownership; it is never trusted from an unsigned query param.
+ */
 export async function GET(request: Request) {
   const url = new URL(request.url);
   const connectPageUrl = new URL("/integrations/google-drive/connect", url.origin);
@@ -20,11 +31,17 @@ export async function GET(request: Request) {
   const stateCookie = cookieStore.get(STATE_COOKIE_NAME)?.value ?? null;
   cookieStore.delete(STATE_COOKIE_NAME);
 
+  let restoredContext: { projectId: string | null; intent: string | null; returnTo: string | null } = {
+    projectId: null,
+    intent: null,
+    returnTo: null,
+  };
+
   try {
     const actor = await getCurrentActor();
     setActorContext(actor);
 
-    verifyGoogleDriveOAuthState(
+    restoredContext = await verifyGoogleDriveOAuthState(
       actor,
       url.searchParams.get("state"),
       stateCookie,
@@ -48,6 +65,15 @@ export async function GET(request: Request) {
       );
     }
     await completeGoogleDriveConnection(actor, code);
+
+    // Land back on the connect panel itself (not straight past it to
+    // returnTo) — the panel is where the user actually browses/selects
+    // files to import, exactly like the already-connected path. returnTo is
+    // restored so the panel's "back to project without importing" escape
+    // hatch and post-import redirect both work, matching that same path.
+    if (restoredContext.projectId) connectPageUrl.searchParams.set("projectId", restoredContext.projectId);
+    if (restoredContext.intent) connectPageUrl.searchParams.set("intent", restoredContext.intent);
+    if (restoredContext.returnTo) connectPageUrl.searchParams.set("returnTo", restoredContext.returnTo);
     connectPageUrl.searchParams.set("connected", "1");
     return NextResponse.redirect(connectPageUrl);
   } catch (err) {
@@ -65,6 +91,12 @@ export async function GET(request: Request) {
     const code = err instanceof AppError && allowedCodes.has(err.code)
       ? err.code
       : "GOOGLE_DRIVE_TOKEN_ERROR";
+    // Restore project context on failure too, so the connect panel can still
+    // offer "back to project" instead of stranding the user on a blank
+    // generic page — the whole point of restoring first-OAuth context.
+    if (restoredContext.projectId) connectPageUrl.searchParams.set("projectId", restoredContext.projectId);
+    if (restoredContext.intent) connectPageUrl.searchParams.set("intent", restoredContext.intent);
+    if (restoredContext.returnTo) connectPageUrl.searchParams.set("returnTo", restoredContext.returnTo);
     connectPageUrl.searchParams.set("connectError", code);
     return NextResponse.redirect(connectPageUrl);
   }

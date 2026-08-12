@@ -1438,6 +1438,7 @@ model Company {
   projectFiles                ProjectFile[]
   projectFileUploadSessions   ProjectFileUploadSession[]
   extractionJobs              ExtractionJob[]
+  tablePageResolutions        TablePageResolution[]
   extractedTables             ExtractedTable[]
   extractedTableRows          ExtractedTableRow[]
   extractedTableCells         ExtractedTableCell[]
@@ -1510,6 +1511,7 @@ model User {
   externalConnectionsMade                ExternalConnection[]
   synchronizationRunsActed               SynchronizationRun[]             @relation("SynchronizationRunActor")
   integrationEventsActed                 IntegrationEvent[]               @relation("IntegrationEventActor")
+  tablePageResolutionsDecided            TablePageResolution[]
 
   @@index([companyId])
   @@index([role])
@@ -1638,6 +1640,7 @@ model Project {
   files                     ProjectFile[]
   fileUploadSessions        ProjectFileUploadSession[]
   extractionJobs            ExtractionJob[]
+  tablePageResolutions      TablePageResolution[]
   extractedEntities         ExtractedEntity[]
   detectedRooms             DetectedRoom[]
   quantityCalculations      QuantityCalculation[]
@@ -2459,6 +2462,7 @@ model ProjectFile {
   classificationConfirmedByUser   User?                     @relation("ProjectFileClassificationConfirmedByUser", fields: [classificationConfirmedByUserId], references: [id], onDelete: SetNull)
   extractionJobs                  ExtractionJob[]
   extractedTables                 ExtractedTable[]
+  tablePageResolutions            TablePageResolution[]
   drawingPages                    DrawingPage[]
   extractedEntities               ExtractedEntity[]
 
@@ -2554,6 +2558,7 @@ model ExtractionJob {
   project            Project              @relation(fields: [projectId], references: [id], onDelete: Cascade)
   projectFile        ProjectFile          @relation(fields: [projectFileId], references: [id], onDelete: Cascade)
   createdByUser      User                 @relation(fields: [createdByUserId], references: [id], onDelete: Restrict)
+  tablePageResolutions TablePageResolution[]
 
   @@index([companyId])
   @@index([projectId])
@@ -2590,6 +2595,47 @@ enum ExtractionJobStatus {
   COMPLETED
   FAILED
   CANCELLED
+}
+
+/// CANVA-HUMAN-JOURNEY-FINAL — the human's workflow decision about a page
+/// whose table could not be safely reconstructed by any of the three
+/// deterministic extraction fallbacks, kept separate from parser evidence
+/// (ExtractedTable/ExtractedEntity rows for that page, if any, are never
+/// erased when a decision is recorded here).
+enum TablePageResolutionDecision {
+  UNRESOLVED
+  MANUAL_DATA_ADDED
+  NO_BOQ_DATA_CONFIRMED
+  STRUCTURED_REPLACEMENT_PROVIDED
+}
+
+/// One row per (projectFileId, pageNumber) that ever needed professional
+/// review — created lazily the first time a decision is recorded, not
+/// pre-created for every page. Never a substitute for real extraction
+/// evidence; this only tracks what the human decided to do about a page
+/// the deterministic pipeline couldn't safely resolve on its own.
+model TablePageResolution {
+  id              String                      @id @default(uuid()) @db.Uuid
+  companyId       String                      @db.Uuid
+  projectId       String                      @db.Uuid
+  projectFileId   String                      @db.Uuid
+  pageNumber      Int
+  extractionJobId String?                     @db.Uuid
+  decision        TablePageResolutionDecision @default(UNRESOLVED)
+  decidedByUserId String?                     @db.Uuid
+  decidedAt       DateTime?
+  createdAt       DateTime                    @default(now())
+  updatedAt       DateTime                    @updatedAt
+  company         Company                     @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  project         Project                     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  projectFile     ProjectFile                 @relation(fields: [projectFileId], references: [id], onDelete: Cascade)
+  extractionJob   ExtractionJob?              @relation(fields: [extractionJobId], references: [id], onDelete: SetNull)
+  decidedByUser   User?                       @relation(fields: [decidedByUserId], references: [id], onDelete: SetNull)
+
+  @@unique([projectFileId, pageNumber])
+  @@index([companyId])
+  @@index([projectId])
+  @@index([extractionJobId])
 }
 
 /**

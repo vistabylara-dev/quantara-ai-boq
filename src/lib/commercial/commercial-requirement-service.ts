@@ -6,6 +6,15 @@ import { companyHasPackageAccessForItem } from "@/lib/entitlements/package-entit
 import type { CommercialAccessDecision, CommercialOffer, CommercialRequirement } from "./commercial-types";
 
 /**
+ * CANVA-HUMAN-JOURNEY-FINAL — the "I can see exactly what I will receive"
+ * preview watermark. Lives here (not in the preview-html route file) since
+ * a Next.js route file may only export its HTTP method handlers plus a
+ * small set of route-config values — any other named export fails the
+ * generated route type check.
+ */
+export const PREVIEW_LOCKED_WATERMARK_TEXT = "QUANTARA PREVIEW — DRAFT — UNLOCK TO DOWNLOAD";
+
+/**
  * CANVA-MODEL-1 — the single place "what does this BOQ need to unlock a
  * clean final export" is computed. Never trusts the browser: derives the
  * manifest entirely from real BOQItem provenance (sourceMasterItemId,
@@ -13,18 +22,73 @@ import type { CommercialAccessDecision, CommercialOffer, CommercialRequirement }
  * boq-item-source-service.ts) and the same entitlement functions already
  * used elsewhere (companyHasPackageAccessForItem, canGenerateDocument) —
  * never re-implements their logic.
+ *
+ * Offer prices come from the REAL CommerceProduct/CommercePrice catalog
+ * (already seeded on main via prisma/seed-data/commerce-products.ts), never
+ * invented from IndustryDataPackage.monthlyPrice — the commerce/Stripe
+ * checkout route (POST /api/commerce/checkout, owned by another layer and
+ * not yet merged to this branch) only accepts a trusted CommercePrice.code,
+ * so an offer whose priceCode doesn't correspond to a real row would 400 at
+ * checkout time. checkoutAvailable mirrors that route's own real eligibility
+ * facts (active, approved, non-indicative, positive, MONTH/YEAR price) —
+ * everything this layer can know without touching Stripe provider-mapping
+ * internals, which remain out of scope here.
  */
 
-function toOffer(pkg: { key: string; name: string; monthlyPrice: number; currency: string }): CommercialOffer {
+async function packageOffer(pkg: { id: string; key: string; name: string }): Promise<CommercialOffer> {
+  const product = await prisma.commerceProduct.findFirst({
+    where: { industryPackageId: pkg.id },
+    include: {
+      prices: {
+        where: { isActive: true, isFromPrice: false, billingInterval: { in: ["MONTH", "YEAR"] } },
+        orderBy: { billingInterval: "asc" }, // MONTH before YEAR — prefer the monthly price when both exist
+      },
+    },
+  });
+  const price = product?.prices[0];
+  if (!product || !price) {
+    return {
+      productCode: pkg.key,
+      priceCode: "",
+      displayName: pkg.name,
+      amountMinor: 0,
+      currency: "AED",
+      billingInterval: "MONTH",
+      checkoutAvailable: false,
+      unavailableReason: "Pricing not yet configured for this package.",
+    };
+  }
   return {
-    productCode: pkg.key,
-    priceCode: `${pkg.key}-monthly`,
-    displayName: pkg.name,
-    amountMinor: Math.round(pkg.monthlyPrice * 100),
-    currency: pkg.currency,
+    productCode: product.code,
+    priceCode: price.code,
+    displayName: product.name,
+    amountMinor: price.amountMinor,
+    currency: price.currency,
+    billingInterval: price.billingInterval as "MONTH" | "YEAR",
+    checkoutAvailable: price.amountMinor > 0 && price.reviewStatus === "APPROVED",
+    unavailableReason: price.amountMinor > 0 && price.reviewStatus === "APPROVED"
+      ? null
+      : "This package isn't available for direct checkout yet. Contact us to unlock it.",
+  };
+}
+
+/**
+ * Unlike packages, SoftwarePlan has no CommerceProduct foreign key today —
+ * there is no real, reliable way to derive a valid CommercePrice.code for a
+ * plan upgrade. Showing a real price with no real checkout path would be
+ * worse than showing none: the honest state is "not available for direct
+ * checkout yet," same as an unconfigured package.
+ */
+function planOffer(plan: { key: string; name: string }): CommercialOffer {
+  return {
+    productCode: plan.key,
+    priceCode: "",
+    displayName: plan.name,
+    amountMinor: 0,
+    currency: "AED",
     billingInterval: "MONTH",
-    checkoutAvailable: pkg.monthlyPrice > 0,
-    unavailableReason: pkg.monthlyPrice > 0 ? null : "Pricing not yet configured for this package.",
+    checkoutAvailable: false,
+    unavailableReason: "Plan upgrades aren't available for direct checkout yet. Contact us to upgrade.",
   };
 }
 
@@ -104,7 +168,7 @@ export async function resolveBoqCommercialRequirements(companyId: string, boqId:
           fulfilled: false,
           usageCount: entries.length,
           boqItemIds: entries.flatMap((e) => e.boqItemIds),
-          offers: [toOffer({ key: pkg.key, name: pkg.name, monthlyPrice: Number(pkg.monthlyPrice), currency: pkg.currency })],
+          offers: [await packageOffer(pkg)],
         });
       }
     }
@@ -119,7 +183,7 @@ export async function resolveBoqCommercialRequirements(companyId: string, boqId:
       displayName: proPlan?.name ?? "Professional Plan",
       reason: exportCheck.reason ?? "Your trial's final export limit has been reached.",
       fulfilled: false,
-      offers: proPlan ? [toOffer({ key: proPlan.key, name: proPlan.name, monthlyPrice: Number(proPlan.monthlyPrice), currency: proPlan.currency })] : [],
+      offers: proPlan ? [planOffer(proPlan)] : [],
     });
   }
 

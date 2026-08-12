@@ -14,6 +14,19 @@ function formatCurrency(value: number, currency: string): string {
   return `${currency} ${value.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
+/**
+ * A professional, repeating diagonal watermark tile (data-URI SVG
+ * background-image) — used both for the trial-export watermarked HTML
+ * download and the commercially-locked in-app preview, so an unpaid/draft
+ * export is unmistakably marked across the whole page, not just a single
+ * top banner easy to crop out of a screenshot.
+ */
+function watermarkBackgroundCss(text: string): string {
+  const safeText = text.replace(/[<>&"]/g, (char) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;", '"': "&quot;" }[char] ?? char));
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="360" height="240"><text x="0" y="130" transform="rotate(-32 180 120)" text-anchor="middle" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="18" font-weight="700" fill="#2563eb" fill-opacity="0.14">${safeText}</text></svg>`;
+  return `background-image: url("data:image/svg+xml,${encodeURIComponent(svg)}"); background-repeat: repeat;`;
+}
+
 export type GenerateHtmlInput = {
   data: CanonicalDocumentData;
   style: DocumentTemplateStyleConfig;
@@ -76,7 +89,7 @@ export function generateHtml(input: GenerateHtmlInput): string {
 <style>
   :root { color-scheme: light; }
   * { box-sizing: border-box; }
-  body { font-family: ${rtl ? "'Noto Naskh Arabic', 'Segoe UI', Tahoma, sans-serif" : "'Segoe UI', Helvetica, Arial, sans-serif"}; background: #ffffff; color: #0f172a; margin: 0; padding: 32px; }
+  body { font-family: ${rtl ? "'Noto Naskh Arabic', 'Segoe UI', Tahoma, sans-serif" : "'Segoe UI', Helvetica, Arial, sans-serif"}; background-color: #ffffff; color: #0f172a; margin: 0; padding: 32px; ${data.meta.watermarkText ? watermarkBackgroundCss(data.meta.watermarkText) : ""} }
   h1 { color: ${style.primaryColor}; font-size: 22px; margin: 0 0 4px; }
   .muted { color: #64748b; font-size: 12px; }
   .grid { display: flex; gap: 24px; margin: 20px 0; flex-wrap: wrap; }

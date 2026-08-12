@@ -73,8 +73,11 @@ describe("Release 1 voice command UI", () => {
     const panel = source("src/components/boq/quantity-calculation-panel.tsx");
     expect(panel).toContain("setDimensionValues(pendingVoiceProposal.proposedValues)");
     expect(panel).not.toContain("/voice/apply");
-    expect(panel).toContain('"Calculate"');
-    expect(panel).toContain('"Confirm calculation"');
+    // CANVA-HUMAN-JOURNEY-FINAL relabeled the buttons ("Yes — Use X unit")
+    // but the underlying two-stage save-then-confirm governance gate is
+    // unchanged — assert on the functions, not the exact button copy.
+    expect(panel).toContain("void saveCalculation()");
+    expect(panel).toContain("void confirmCalculation()");
     expect(source("src/components/voice/voice-proposal-card.tsx")).toContain("Affected calculation preview");
   });
 

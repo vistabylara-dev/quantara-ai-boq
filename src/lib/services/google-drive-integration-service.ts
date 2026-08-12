@@ -61,11 +61,49 @@ export function generateOAuthState(): string {
 
 export { STATE_COOKIE_NAME };
 
+/**
+ * The only intents the first-OAuth journey currently needs to distinguish.
+ * An unrecognized value from the query string is treated as absent rather
+ * than rejected outright — a stale/foreign intent string should never block
+ * the connection itself, only fail to restore context.
+ */
+const GOOGLE_DRIVE_OAUTH_INTENTS = ["boq-source"] as const;
+export type GoogleDriveOAuthIntent = (typeof GOOGLE_DRIVE_OAUTH_INTENTS)[number];
+
+export function parseGoogleDriveOAuthIntent(value: string | null): GoogleDriveOAuthIntent | null {
+  return value && (GOOGLE_DRIVE_OAUTH_INTENTS as readonly string[]).includes(value)
+    ? (value as GoogleDriveOAuthIntent)
+    : null;
+}
+
+/**
+ * A same-origin, relative path scoped to the given project — rules out open
+ * redirects (absolute/protocol-relative URLs) and rules out landing the user
+ * in a different project's workspace than the one that sent them here.
+ * Mirrors src/app/integrations/project-context.tsx's client-side check;
+ * duplicated (not imported) because that module is "use client" and this
+ * one runs in route handlers.
+ */
+function isValidReturnTo(returnTo: string, projectId: string): boolean {
+  if (!returnTo.startsWith("/") || returnTo.startsWith("//")) return false;
+  const projectPrefix = `/projects/${encodeURIComponent(projectId)}`;
+  return returnTo === projectPrefix || returnTo.startsWith(`${projectPrefix}/`);
+}
+
+export type GoogleDriveOAuthContext = {
+  projectId: string | null;
+  intent: GoogleDriveOAuthIntent | null;
+  returnTo: string | null;
+};
+
 type OAuthStateCookiePayload = {
   state: string;
   userId: string;
   companyId: string;
   issuedAt: number;
+  projectId: string | null;
+  intent: GoogleDriveOAuthIntent | null;
+  returnTo: string | null;
 };
 
 function stateSigningSecret(): string {
@@ -91,13 +129,40 @@ function constantTimeStringEqual(left: string, right: string): boolean {
   return leftBuffer.byteLength === rightBuffer.byteLength && timingSafeEqual(leftBuffer, rightBuffer);
 }
 
-export function createGoogleDriveOAuthState(actor: CurrentActor): { state: string; cookieValue: string } {
+/**
+ * Validates a candidate first-OAuth context against this company's real
+ * data before it's ever signed into the state cookie — a stale/foreign/
+ * malformed projectId, or a returnTo pointing outside that project, is
+ * dropped silently (never blocks the connection itself) rather than trusted.
+ */
+async function resolveOAuthContext(
+  actor: CurrentActor,
+  candidate: { projectId?: string | null; intent?: string | null; returnTo?: string | null },
+): Promise<GoogleDriveOAuthContext> {
+  const intent = parseGoogleDriveOAuthIntent(candidate.intent ?? null);
+  if (!candidate.projectId) return { projectId: null, intent: null, returnTo: null };
+
+  try {
+    const project = await getProjectRecord(actor.companyId, candidate.projectId);
+    const returnTo = candidate.returnTo && isValidReturnTo(candidate.returnTo, project.id) ? candidate.returnTo : null;
+    return { projectId: project.id, intent, returnTo };
+  } catch {
+    return { projectId: null, intent: null, returnTo: null };
+  }
+}
+
+export async function createGoogleDriveOAuthState(
+  actor: CurrentActor,
+  candidateContext: { projectId?: string | null; intent?: string | null; returnTo?: string | null } = {},
+): Promise<{ state: string; cookieValue: string }> {
   requireCapability(actor, "integrations:connect");
+  const context = await resolveOAuthContext(actor, candidateContext);
   const payload: OAuthStateCookiePayload = {
     state: generateOAuthState(),
     userId: actor.userId,
     companyId: actor.companyId,
     issuedAt: Date.now(),
+    ...context,
   };
   const encodedPayload = Buffer.from(JSON.stringify(payload), "utf8").toString("base64url");
   return {
@@ -114,11 +179,19 @@ function oauthStateMismatch(): AppError {
   );
 }
 
-export function verifyGoogleDriveOAuthState(
+/**
+ * Verifies the round-tripped OAuth state and returns the first-OAuth
+ * context it carried (if any) so the callback route can restore the exact
+ * project/intent/returnTo the user started from. Re-validates project
+ * ownership against the CURRENT actor (not just trusting what was signed
+ * minutes ago) — company membership can't have changed in a 10-minute
+ * window, but this keeps the ownership check in one place rather than two.
+ */
+export async function verifyGoogleDriveOAuthState(
   actor: CurrentActor,
   returnedState: string | null,
   cookieValue: string | null,
-): void {
+): Promise<GoogleDriveOAuthContext> {
   if (!returnedState || !cookieValue) throw oauthStateMismatch();
   const [encodedPayload, suppliedSignature, ...extraParts] = cookieValue.split(".");
   if (!encodedPayload || !suppliedSignature || extraParts.length > 0) throw oauthStateMismatch();
@@ -147,6 +220,12 @@ export function verifyGoogleDriveOAuthState(
   ) {
     throw oauthStateMismatch();
   }
+
+  return resolveOAuthContext(actor, {
+    projectId: payload.projectId ?? null,
+    intent: payload.intent ?? null,
+    returnTo: payload.returnTo ?? null,
+  });
 }
 
 export function initiateGoogleDriveConnection(actor: CurrentActor, state: string): string {

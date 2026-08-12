@@ -25,5 +25,6 @@ export type ParsedTable = {
     | "xlsx-merge-reconstruction"
     | "csv-blank-cell-inheritance"
     | "pdf-grid-detection"
-    | "pdf-text-schedule-fallback";
+    | "pdf-text-schedule-fallback"
+    | "pdf-positional-text-fallback";
 };

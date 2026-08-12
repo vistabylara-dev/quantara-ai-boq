@@ -5,7 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { CheckCircle2, ChevronLeft, ExternalLink, File, Folder, HardDrive, Loader2, Unplug } from "lucide-react";
 import { apiClient, getApiErrorMessage } from "@/lib/api/client";
-import { useProjectContext } from "../../project-context";
+import { useProjectContext, withProjectContext } from "../../project-context";
 
 type GoogleDriveRuntimeStatus = {
   configured: boolean;
@@ -265,7 +265,7 @@ export default function GoogleDriveConnectPanel({ runtimeStatus }: { runtimeStat
               : "Read-only access to browse your Drive folders and files. Quantara never writes, deletes, or modifies anything in your Drive."}
           </p>
           <a
-            href="/api/integrations/google-drive/connect"
+            href={withProjectContext("/api/integrations/google-drive/connect", projectContext)}
             className="mt-6 inline-flex rounded-2xl border border-[#0EA5E9] bg-[#0EA5E9] px-4 py-2 text-sm font-semibold text-white hover:opacity-90 dark:border-[#22D3EE] dark:bg-[#22D3EE] dark:text-[#050B18]"
           >
             {connectionNeedsReconnect ? "Reconnect with Google" : "Connect with Google"}

@@ -268,6 +268,7 @@ export function QuantityCalculationPanel({ projectId, calculationType, extracted
         <p className="text-sm text-slate-400">Loading known evidence…</p>
       ) : (
         <div className="space-y-3">
+          <p className="text-sm font-semibold text-white">Now let&apos;s calculate the quantity.</p>
           {dimensionValues.map((dim) => (
             <div key={dim.key} className="rounded-2xl border border-slate-800 bg-slate-900 p-4">
               <div className="flex items-center justify-between gap-3">
@@ -329,7 +330,7 @@ export function QuantityCalculationPanel({ projectId, calculationType, extracted
       ) : null}
 
       <div className="rounded-2xl border border-slate-800 bg-slate-900 p-4">
-        <p className="text-xs uppercase tracking-[0.24em] text-slate-500">Equation</p>
+        <p className="text-xs uppercase tracking-[0.24em] text-slate-500">Engineering calculation</p>
         {preview.missing.length > 0 ? (
           <p className="mt-2 text-sm text-amber-300">Missing: {preview.missing.map((m) => m.label).join(", ")}</p>
         ) : preview.result ? (
@@ -344,6 +345,9 @@ export function QuantityCalculationPanel({ projectId, calculationType, extracted
             <p className="text-lg font-semibold text-white">
               Result: {preview.result.resultValue} {preview.result.resultUnit}
             </p>
+            {!savedCalculation && (
+              <p className="mt-2 text-sm text-slate-300">Does this look correct?</p>
+            )}
           </div>
         ) : (
           <p className="mt-2 text-sm text-slate-500">Enter all required dimensions to see the calculation.</p>
@@ -360,7 +364,11 @@ export function QuantityCalculationPanel({ projectId, calculationType, extracted
             disabled={!preview.result || isSaving || voiceInteractionLocked}
             className="rounded-2xl border border-slate-700 bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {isSaving ? "Calculating…" : "Calculate"}
+            {isSaving
+              ? "Calculating…"
+              : preview.result
+                ? `Yes — Use ${preview.result.resultValue} ${preview.result.resultUnit}`
+                : "Calculate"}
           </button>
         ) : savedCalculation.status !== "CONFIRMED" ? (
           <button
@@ -369,7 +377,7 @@ export function QuantityCalculationPanel({ projectId, calculationType, extracted
             disabled={isConfirming || voiceInteractionLocked}
             className="rounded-2xl border border-slate-700 bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {isConfirming ? "Confirming…" : "Confirm calculation"}
+            {isConfirming ? "Confirming…" : `Yes — Use ${savedCalculation.resultValue} ${savedCalculation.resultUnit}`}
           </button>
         ) : (
           <span className="rounded-2xl border border-emerald-800 bg-emerald-950/50 px-4 py-2 text-sm font-semibold text-emerald-300">

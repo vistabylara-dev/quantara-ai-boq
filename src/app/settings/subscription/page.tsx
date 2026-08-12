@@ -1,8 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { Suspense, useCallback, useEffect, useState } from "react";
 import { apiClient, getApiErrorMessage } from "@/lib/api/client";
 import { formatDate } from "@/lib/formatting/dates";
+import { CheckoutReturnStatus } from "@/components/commercial/checkout-return-status";
 
 type Entitlements = {
   planType: string;
@@ -127,6 +128,9 @@ export default function SubscriptionSettingsPage() {
 
   return (
     <div className="space-y-8">
+      <Suspense fallback={null}>
+        <CheckoutReturnStatus />
+      </Suspense>
       <div className="rounded-[32px] border border-slate-800 bg-slate-950 p-8">
         <p className="text-sm uppercase tracking-[0.28em] text-slate-500">Settings</p>
         <h1 className="mt-2 text-3xl font-semibold text-white">Subscription</h1>

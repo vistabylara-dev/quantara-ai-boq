@@ -263,9 +263,9 @@ export default function ProjectDocumentsPage(props: PageProps) {
         <p className="mt-3 text-slate-400">Generate client-ready and internal BOQ documents from a fixed revision.</p>
         <Link
           href={`/projects/${params.projectId}/documents/preview?boqId=${selectedBoqId}&templateId=${selectedTemplateId}&audience=${selectedAudience}`}
-          className="mt-4 inline-flex rounded-2xl border border-slate-700 bg-slate-900 px-4 py-2 text-sm font-semibold text-slate-200 hover:bg-slate-800"
+          className="mt-4 inline-flex rounded-2xl border border-blue-700 bg-blue-600 px-5 py-3 text-sm font-semibold text-white hover:bg-blue-500"
         >
-          Open printable preview
+          Preview My Professional BOQ
         </Link>
       </div>
 

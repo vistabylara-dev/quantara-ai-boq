@@ -9,6 +9,7 @@ import { FeatureHint, FEATURE_HINT_REGISTRY } from "@/components/guidance/featur
 import { GuideTip } from "@/components/guidance/guide-tip";
 import { getProjectSourceOrigin, getProjectSourceProcessingState } from "@/lib/guidance/project-workflow";
 import type { ProjectWorkflowSnapshot } from "@/lib/guidance/project-workflow-snapshot";
+import { PageRecoveryPanel } from "@/components/files/page-recovery-panel";
 
 type FileView = {
   id: string;
@@ -129,6 +130,16 @@ function resultSummaryMessage(job: ExtractionJobView): string | null {
   return typeof message === "string" && message.trim()
     ? message.trim().slice(0, 500)
     : null;
+}
+
+/** Pages none of the three deterministic table-recovery fallbacks could safely resolve — the pages that need PageRecoveryPanel. */
+function resultSummarySkippedPages(job: ExtractionJobView): number[] {
+  if (!job.resultSummary || typeof job.resultSummary !== "object" || Array.isArray(job.resultSummary)) {
+    return [];
+  }
+  const summary = job.resultSummary as Record<string, unknown>;
+  const pages = summary.skippedTablePages ?? summary.pagesWithoutRecoveredTables;
+  return Array.isArray(pages) ? pages.filter((p): p is number => typeof p === "number") : [];
 }
 
 /**
@@ -412,7 +423,7 @@ export default function ProjectFilesPage(props: {
           resultSummaryMessage(currentJob)
           ?? (
             action === "extract"
-              ? "Schedule table processing completed and requires professional review."
+              ? "Great — schedule table processing found useful information and is ready for your review."
               : `${ACTION_LABEL[action]} requires professional attention before it can be finalized.`
           ),
         );
@@ -715,6 +726,19 @@ export default function ProjectFilesPage(props: {
                 <p className="rounded-xl border border-amber-800/70 bg-amber-950/30 px-4 py-3 text-sm text-amber-200">
                   {detailWarning}
                 </p>
+              )}
+
+              {activeJob && selectedFileId && resultSummarySkippedPages(activeJob).length > 0 && (
+                <div className="space-y-3">
+                  {resultSummarySkippedPages(activeJob).map((pageNumber) => (
+                    <PageRecoveryPanel
+                      key={pageNumber}
+                      projectId={params.projectId}
+                      fileId={selectedFileId}
+                      pageNumber={pageNumber}
+                    />
+                  ))}
+                </div>
               )}
 
               {(pageResultsAvailable === null || tableResultsAvailable === null) && (

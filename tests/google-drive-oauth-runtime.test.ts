@@ -78,21 +78,25 @@ describe("Google Drive native OAuth runtime", () => {
     expect(requestBody.get("grant_type")).toBe("authorization_code");
   });
 
-  it("binds the short-lived OAuth state cookie to the actor and fails closed", () => {
-    const state = createGoogleDriveOAuthState(actor);
-    expect(() => verifyGoogleDriveOAuthState(actor, state.state, state.cookieValue)).not.toThrow();
+  it("binds the short-lived OAuth state cookie to the actor and fails closed", async () => {
+    const state = await createGoogleDriveOAuthState(actor);
+    await expect(verifyGoogleDriveOAuthState(actor, state.state, state.cookieValue)).resolves.toEqual({
+      projectId: null,
+      intent: null,
+      returnTo: null,
+    });
 
-    expect(() => verifyGoogleDriveOAuthState(actor, "wrong-state", state.cookieValue)).toThrowError(
-      expect.objectContaining({ code: "GOOGLE_DRIVE_OAUTH_STATE_MISMATCH" }),
+    await expect(verifyGoogleDriveOAuthState(actor, "wrong-state", state.cookieValue)).rejects.toMatchObject(
+      { code: "GOOGLE_DRIVE_OAUTH_STATE_MISMATCH" },
     );
-    expect(() => verifyGoogleDriveOAuthState(actor, null, state.cookieValue)).toThrowError(
-      expect.objectContaining({ code: "GOOGLE_DRIVE_OAUTH_STATE_MISMATCH" }),
+    await expect(verifyGoogleDriveOAuthState(actor, null, state.cookieValue)).rejects.toMatchObject(
+      { code: "GOOGLE_DRIVE_OAUTH_STATE_MISMATCH" },
     );
-    expect(() => verifyGoogleDriveOAuthState(
+    await expect(verifyGoogleDriveOAuthState(
       { ...actor, companyId: "33333333-3333-4333-8333-333333333333" },
       state.state,
       state.cookieValue,
-    )).toThrowError(expect.objectContaining({ code: "GOOGLE_DRIVE_OAUTH_STATE_MISMATCH" }));
+    )).rejects.toMatchObject({ code: "GOOGLE_DRIVE_OAUTH_STATE_MISMATCH" });
   });
 
   it("rejects invalid production origins and preview runtime configuration", () => {

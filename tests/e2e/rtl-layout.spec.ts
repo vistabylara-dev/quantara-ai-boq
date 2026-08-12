@@ -57,8 +57,20 @@ test.describe("ARABIC-RTL-LOCALIZATION — RTL layout has no page-level horizont
     // Open the mobile navigation drawer — it must render from the START
     // edge (right, in RTL) and not push the page wider than the viewport.
     await page.getByRole("button", { name: "فتح قائمة التنقل" }).click();
-    await expect(page.getByRole("dialog", { name: "التنقل الرئيسي" })).toBeVisible({ timeout: 10_000 });
+    const drawer = page.getByRole("dialog", { name: "التنقل الرئيسي" });
+    await expect(drawer).toBeVisible({ timeout: 10_000 });
     await assertNoHorizontalOverflow(page);
+
+    // Visibility/overflow alone wouldn't catch a drawer that's visible but
+    // anchored to the wrong (LTR) edge — explicitly assert it reaches the
+    // viewport's right edge (the RTL start edge), not just that it fits.
+    const box = await drawer.boundingBox();
+    const viewportWidth = page.viewportSize()?.width;
+    expect(box).not.toBeNull();
+    expect(viewportWidth).not.toBeUndefined();
+    if (box && viewportWidth) {
+      expect(box.x + box.width).toBeGreaterThanOrEqual(viewportWidth - 2);
+    }
   });
 
   test("technical direction: item code, quantity, and price stay LTR inside Arabic UI", async ({ page, context }) => {

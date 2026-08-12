@@ -38,6 +38,30 @@ describe("i18n dictionary parity: English (canonical) vs Arabic", () => {
     expect(extraInAr).toEqual([]);
   });
 
+  it("never has an Arabic leaf whose type differs from its English counterpart (catches a bypassed `as any`)", () => {
+    // Key-set parity above only proves the KEY exists in both dictionaries —
+    // not that the Arabic VALUE is actually a translatable string. Someone
+    // bypassing the compile-time `Dictionary` type (e.g. `ar.foo = 5 as any`)
+    // would still pass the key-parity checks above but silently break the
+    // translator (createTranslator only returns `node` when it's a string —
+    // see translate.ts's readPath — so a non-string leaf falls back to the
+    // raw key).
+    function walkTypes(enNode: unknown, arNode: unknown, path: string, offenders: string[]) {
+      if (typeof enNode === "string") {
+        if (typeof arNode !== "string") offenders.push(`${path} (expected string, got ${typeof arNode})`);
+        return;
+      }
+      if (enNode && typeof enNode === "object") {
+        for (const [key, value] of Object.entries(enNode as Record<string, unknown>)) {
+          walkTypes(value, (arNode as Record<string, unknown> | undefined)?.[key], path ? `${path}.${key}` : key, offenders);
+        }
+      }
+    }
+    const typeOffenders: string[] = [];
+    walkTypes(en, ar, "", typeOffenders);
+    expect(typeOffenders).toEqual([]);
+  });
+
   it("never has an Arabic value that is byte-identical to its English counterpart for translatable prose", () => {
     // A handful of keys are legitimately identical by design (the brand
     // name "Quantara", and technical acronyms like "PDF") — everything
@@ -45,7 +69,6 @@ describe("i18n dictionary parity: English (canonical) vs Arabic", () => {
     const allowedIdentical = new Set([
       "common.appName",
       "documents.downloadPdf",
-      "languageSwitcher.switchToArabic", // English-language self-label, correct as-is
     ]);
     function walk(enNode: unknown, arNode: unknown, path: string, offenders: string[]) {
       if (typeof enNode === "string") {

@@ -366,7 +366,7 @@ export default function AddItemFromSourceModal({
             {t("boqCreate.searchCatalogueMyLibrary")}
           </button>
           <button type="button" onClick={() => setTab("manual")} className={`rounded-full px-4 py-2 text-sm ${tab === "manual" ? "bg-blue-600 text-white" : "border border-slate-800 bg-slate-900 text-slate-300"}`}>
-            Enter Item Manually
+            {t("boqCreate.enterManually")}
           </button>
         </div>
 
@@ -644,22 +644,25 @@ export default function AddItemFromSourceModal({
                   // CLEAN FINAL EXPORT is gated later, via the commercial
                   // requirements panel — the professional never hits a paywall
                   // just for wanting to use a premium spec while building.
-                  <button
+                  <div
                     key={`${item.source}-${item.id}`}
-                    type="button"
-                    onClick={() => setSelected(item)}
                     className={`w-full rounded-2xl border px-4 py-3 text-start text-sm ${selected?.id === item.id ? "border-amber-500 bg-amber-950/40" : "border-amber-900/60 bg-amber-950/20 hover:border-amber-700"}`}
                   >
-                    <div className="flex items-center justify-between">
-                      <span className="inline-flex items-center gap-1.5 text-amber-100">
-                        <span aria-hidden="true">👑</span>
-                        {item.name}
-                      </span>
-                      <span className="rounded-full border border-amber-700 bg-amber-900/40 px-2 py-0.5 text-[0.65rem] font-semibold uppercase tracking-wide text-amber-300">{t("boq.premium")}</span>
-                    </div>
-                    <p className="mt-1 text-xs text-amber-400">{item.packageNames?.[0] ?? t("boqCreate.industryLibrary")}</p>
-                    <p className="text-xs text-slate-500"><span dir="ltr" className="inline-block">{item.itemCode}</span> · {item.unit}</p>
-                    <div className="mt-2 flex flex-wrap gap-2" onClick={(e) => e.stopPropagation()}>
+                    {/* A single interactive control for selection — Link/button below are SIBLINGS,
+                        not nested inside it, so no control is ever nested inside another (invalid
+                        markup that breaks keyboard focus and click handling). */}
+                    <button type="button" onClick={() => setSelected(item)} className="w-full text-start">
+                      <div className="flex items-center justify-between">
+                        <span className="inline-flex items-center gap-1.5 text-amber-100">
+                          <span aria-hidden="true">👑</span>
+                          {item.name}
+                        </span>
+                        <span className="rounded-full border border-amber-700 bg-amber-900/40 px-2 py-0.5 text-[0.65rem] font-semibold uppercase tracking-wide text-amber-300">{t("boq.premium")}</span>
+                      </div>
+                      <p className="mt-1 text-xs text-amber-400">{item.packageNames?.[0] ?? t("boqCreate.industryLibrary")}</p>
+                      <p className="text-xs text-slate-500"><span dir="ltr" className="inline-block">{item.itemCode}</span> · {item.unit}</p>
+                    </button>
+                    <div className="mt-2 flex flex-wrap gap-2">
                       <Link href="/marketplace" className="rounded-xl border border-amber-700 bg-amber-900/40 px-3 py-1.5 text-xs font-semibold text-amber-200 hover:bg-amber-900/70">
                         {t("boqCreate.viewLibrary")}
                       </Link>
@@ -671,7 +674,7 @@ export default function AddItemFromSourceModal({
                         {t("boqCreate.enterManually")}
                       </button>
                     </div>
-                  </button>
+                  </div>
                 ) : (
                   <button
                     key={`${item.source}-${item.id}`}

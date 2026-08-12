@@ -181,7 +181,8 @@ export function PageRecoveryPanel({ projectId, fileId, pageNumber }: Props) {
             value={itemCode}
             onChange={(e) => setItemCode(e.target.value)}
             placeholder={t("source.recovery.itemCodePlaceholder")}
-            className="w-full rounded-xl border border-slate-800 bg-slate-900 px-3 py-2 text-sm text-white outline-none focus:border-blue-500"
+            dir="ltr"
+            className="w-full rounded-xl border border-slate-800 bg-slate-900 px-3 py-2 text-sm text-white outline-none focus:border-blue-500 text-start"
           />
           <input
             value={description}

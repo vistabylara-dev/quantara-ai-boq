@@ -49,7 +49,7 @@ const ar: Dictionary = {
   },
   languageSwitcher: {
     label: "اللغة",
-    switchToArabic: "Switch to Arabic",
+    switchToArabic: "التبديل إلى العربية",
     switchToEnglish: "التبديل إلى الإنجليزية",
   },
   navigation: {

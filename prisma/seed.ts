@@ -14,6 +14,7 @@ import { demoIndustries } from "../src/config/industries/index";
 import { seedMechanicalDiscipline, seedTaxonomyFoundations } from "./seed-data/master-data";
 import { seedMechanicalPackage, seedSoftwarePlans } from "./seed-data/commercial";
 import { seedCommerceProducts } from "./seed-data/commerce-products";
+import { seedCommerceLinkedSoftwarePlans } from "../src/lib/entitlements/commerce-plan-mapping";
 import { getDevelopmentCompanyId } from "../src/lib/tenancy/development-company";
 import { hashPassword } from "../src/lib/auth/password";
 import { calculateLandedCost, calculateSellingRate } from "../src/lib/calculations/boq-calculator";
@@ -1253,6 +1254,9 @@ async function main(): Promise<void> {
   console.log(
     `Seeded commerce catalogue: products +${commerceReport.productsInserted}/~${commerceReport.productsUpdated}/=${commerceReport.productsUnchanged}, prices +${commerceReport.pricesInserted}/archived ${commerceReport.pricesArchived}/=${commerceReport.pricesUnchanged}, templates +${commerceReport.templatesInserted}/~${commerceReport.templatesUpdated}, industry products created [${commerceReport.industryProductsCreated.join(", ") || "none"}], industry products skipped: ${commerceReport.industryProductsSkipped.length}.`,
   );
+
+  await seedCommerceLinkedSoftwarePlans(prisma);
+  console.log("Seeded commerce-linked SoftwarePlan rows (commerce_starter, commerce_professional, commerce_business) for Stripe subscription entitlement mapping.");
 
   console.log(
     `Seeded Quantara development tenant with ${INDUSTRY_KEYS.length} industries, ${projectSeeds.length} projects, ${supplierSeeds.length} suppliers, ${catalogueSeeds.length} catalogue rates, ${templateSeeds.length} document templates, 2 email templates, 9 master-data disciplines, ${mechanical.itemIds.length} Mechanical master items, and 5 software plans.`,

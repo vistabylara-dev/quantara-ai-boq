@@ -328,9 +328,11 @@ export async function setCommercePriceReviewStatus(priceId: string, input: SetPr
   });
 }
 
-/** Every product with its prices — the full catalogue slice the Stripe sync service reasons over. */
-export async function listAllCommerceProductsWithPrices(): Promise<CommerceProductRecord[]> {
-  return prisma.commerceProduct.findMany({
+/** Every product with its prices — the full catalogue slice the Stripe sync service reasons over. Accepts an optional transaction client so a caller holding a lock (e.g. live sync's STRIPE:LIVE serialization) reads through the same transaction. */
+export async function listAllCommerceProductsWithPrices(
+  client: { commerceProduct: typeof prisma.commerceProduct } = prisma,
+): Promise<CommerceProductRecord[]> {
+  return client.commerceProduct.findMany({
     include: productInclude,
     orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
   });

@@ -41,11 +41,51 @@ type PackageSubscription = {
 
 type SoftwarePlan = { id: string; key: string; name: string; description: string; planType: string; monthlyPrice: number; annualPrice: number; currency: string };
 
+type CheckoutUnavailableReason = "PRICE_NOT_APPROVED" | "PROVIDER_MAPPING_MISSING" | "PROVIDER_MAPPING_NOT_SYNCED" | "EXISTING_SUBSCRIPTION";
+
+type CheckoutOptionPrice = {
+  priceCode: string;
+  billingInterval: "MONTH" | "YEAR";
+  amountMinor: number;
+  currency: string;
+  available: boolean;
+  unavailableReason: CheckoutUnavailableReason | null;
+};
+
+type CheckoutOptionProduct = {
+  productCode: string;
+  name: string;
+  shortDescription: string;
+  prices: CheckoutOptionPrice[];
+};
+
+type CheckoutAvailability = { hasExistingSubscription: boolean; products: CheckoutOptionProduct[] };
+
+function formatMoney(amountMinor: number, currency: string): string {
+  return `${currency} ${(amountMinor / 100).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`;
+}
+
+/** Truthful, non-alarming label for a disabled checkout button — never implies the customer did something wrong. */
+function unavailableLabel(reason: CheckoutUnavailableReason | null): string {
+  switch (reason) {
+    case "EXISTING_SUBSCRIPTION":
+      return "Already subscribed";
+    case "PRICE_NOT_APPROVED":
+    case "PROVIDER_MAPPING_MISSING":
+    case "PROVIDER_MAPPING_NOT_SYNCED":
+      return "Setup pending";
+    default:
+      return "Unavailable";
+  }
+}
+
 export default function SubscriptionSettingsPage() {
   const [entitlements, setEntitlements] = useState<Entitlements | null>(null);
   const [trialUsage, setTrialUsage] = useState<TrialUsage>(null);
   const [packages, setPackages] = useState<PackageSubscription[]>([]);
   const [plans, setPlans] = useState<SoftwarePlan[]>([]);
+  const [checkoutAvailability, setCheckoutAvailability] = useState<CheckoutAvailability | null>(null);
+  const [isTestCompany, setIsTestCompany] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
@@ -56,14 +96,23 @@ export default function SubscriptionSettingsPage() {
     setIsLoading(true);
     setLoadError(null);
     try {
-      const [entitlementsData, plansData] = await Promise.all([
-        apiClient.get<{ entitlements: Entitlements; trialUsage: TrialUsage; packages: PackageSubscription[] }>("/api/entitlements", signal),
+      // Checkout availability is optional: entitlements, current plan, trial
+      // usage, and data packages must still render even if Stripe checkout
+      // options fail to load — only the Upgrade section depends on this.
+      const [entitlementsData, plansData, availabilityResult] = await Promise.all([
+        apiClient.get<{ entitlements: Entitlements; trialUsage: TrialUsage; packages: PackageSubscription[]; isTestCompany: boolean }>("/api/entitlements", signal),
         apiClient.get<SoftwarePlan[]>("/api/software-plans", signal),
+        apiClient.get<CheckoutAvailability>("/api/commerce/checkout-options", signal).then(
+          (value) => value,
+          () => null,
+        ),
       ]);
       setEntitlements(entitlementsData.entitlements);
       setTrialUsage(entitlementsData.trialUsage);
       setPackages(entitlementsData.packages);
+      setIsTestCompany(entitlementsData.isTestCompany);
       setPlans(plansData);
+      setCheckoutAvailability(availabilityResult);
     } catch (error) {
       if (error instanceof DOMException && error.name === "AbortError") return;
       setLoadError(getApiErrorMessage(error));
@@ -109,6 +158,16 @@ export default function SubscriptionSettingsPage() {
     await apiClient.post("/api/entitlements/expire-development-plan", {});
   }), [runAction]);
 
+  const checkout = useCallback((priceCode: string) => runAction(`checkout-${priceCode}`, async () => {
+    const result = await apiClient.post<{ checkoutUrl: string; checkoutSessionId: string }>("/api/commerce/checkout", { priceCode });
+    window.location.href = result.checkoutUrl;
+  }), [runAction]);
+
+  const manageBilling = useCallback(() => runAction("manage-billing", async () => {
+    const result = await apiClient.post<{ portalUrl: string }>("/api/commerce/billing-portal", {});
+    window.location.href = result.portalUrl;
+  }), [runAction]);
+
   if (isLoading) {
     return (
       <div className="rounded-[32px] border border-slate-800 bg-slate-950 p-8 text-slate-300">
@@ -134,9 +193,11 @@ export default function SubscriptionSettingsPage() {
       <div className="rounded-[32px] border border-slate-800 bg-slate-950 p-8">
         <p className="text-sm uppercase tracking-[0.28em] text-slate-500">Settings</p>
         <h1 className="mt-2 text-3xl font-semibold text-white">Subscription</h1>
-        <p className="mt-2 rounded-2xl border border-amber-900 bg-amber-950/30 px-4 py-2 text-xs text-amber-300">
-          Billing is not connected in this build. All activation below is a development control, not a real payment.
-        </p>
+        {isTestCompany && (
+          <p className="mt-2 rounded-2xl border border-amber-900 bg-amber-950/30 px-4 py-2 text-xs text-amber-300">
+            This is a sandbox/test company. The &ldquo;Software plans (development)&rdquo; controls below are a manual test control, not a real payment, and are only available here because this company is marked as a test company.
+          </p>
+        )}
 
         <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <div className="rounded-3xl border border-slate-800 bg-slate-900 p-5">
@@ -210,35 +271,91 @@ export default function SubscriptionSettingsPage() {
         </div>
       )}
 
-      <div className="rounded-[32px] border border-slate-800 bg-slate-950 p-8">
-        <h2 className="text-xl font-semibold text-white">Software plans</h2>
-        <p className="mt-1 text-sm text-slate-400">Development activation only — no payment is processed.</p>
-        <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {plans.map((plan) => (
-            <div key={plan.id} className="rounded-3xl border border-slate-800 bg-slate-900 p-5">
-              <p className="text-xs uppercase tracking-[0.24em] text-slate-500">{plan.planType}</p>
-              <h3 className="mt-2 text-lg font-semibold text-white">{plan.name}</h3>
-              <p className="mt-1 text-xs text-slate-500">{plan.description}</p>
-              <p className="mt-3 text-sm text-slate-300">{plan.monthlyPrice === 0 ? "Custom / contact sales" : `${plan.currency} ${plan.monthlyPrice}/mo`}</p>
-              {plan.planType !== "TRIAL" && plan.planType !== "FREE" && (
-                <button
-                  type="button"
-                  onClick={() => void activatePlan(plan.key)}
-                  disabled={busyKey === `plan-${plan.key}`}
-                  className="mt-4 w-full rounded-2xl border border-slate-700 bg-blue-600 px-4 py-2 text-xs font-semibold text-white hover:bg-blue-500 disabled:opacity-50"
-                >
-                  {busyKey === `plan-${plan.key}` ? "Activating…" : "Activate (development)"}
-                </button>
-              )}
+      {checkoutAvailability && checkoutAvailability.products.length > 0 && (
+        <div className="rounded-[32px] border border-slate-800 bg-slate-950 p-8">
+          <h2 className="text-xl font-semibold text-white">Upgrade</h2>
+          {checkoutAvailability.hasExistingSubscription ? (
+            <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
+              <p className="text-sm text-slate-400">This company already has a subscription. Manage payment method, invoices, or cancellation from the billing portal.</p>
+              <button
+                type="button"
+                onClick={() => void manageBilling()}
+                disabled={busyKey === "manage-billing"}
+                className="rounded-2xl border border-slate-700 bg-blue-600 px-4 py-2 text-xs font-semibold text-white hover:bg-blue-500 disabled:opacity-50"
+              >
+                {busyKey === "manage-billing" ? "Opening…" : "Manage billing"}
+              </button>
             </div>
-          ))}
+          ) : (
+            <p className="mt-1 text-sm text-slate-400">
+              {checkoutAvailability.products.some((product) => product.prices.some((price) => price.available))
+                ? "Real Stripe checkout — you will be redirected to a secure payment page."
+                : "Checkout is being configured. Plans will be available for purchase shortly."}
+            </p>
+          )}
+          <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {checkoutAvailability.products.map((product) => (
+              <div key={product.productCode} className="rounded-3xl border border-slate-800 bg-slate-900 p-5">
+                <h3 className="text-lg font-semibold text-white">{product.name}</h3>
+                <p className="mt-1 text-xs text-slate-500">{product.shortDescription}</p>
+                <div className="mt-4 space-y-2">
+                  {product.prices.map((price) => (
+                    <button
+                      key={price.priceCode}
+                      type="button"
+                      onClick={() => price.available && void checkout(price.priceCode)}
+                      disabled={!price.available || busyKey === `checkout-${price.priceCode}`}
+                      title={price.available ? undefined : unavailableLabel(price.unavailableReason)}
+                      className="flex w-full items-center justify-between rounded-2xl border border-slate-700 bg-blue-600 px-4 py-2 text-xs font-semibold text-white hover:bg-blue-500 disabled:cursor-not-allowed disabled:border-slate-800 disabled:bg-slate-800 disabled:text-slate-500"
+                    >
+                      <span>{price.billingInterval === "MONTH" ? "Monthly" : "Annual"}</span>
+                      <span>
+                        {!price.available
+                          ? unavailableLabel(price.unavailableReason)
+                          : busyKey === `checkout-${price.priceCode}`
+                            ? "Redirecting…"
+                            : formatMoney(price.amountMinor, price.currency)}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
-        {entitlements.status !== "NONE" && (
-          <button type="button" onClick={() => void expirePlan()} disabled={busyKey === "expire-plan"} className="mt-6 rounded-2xl border border-rose-900 bg-rose-950/30 px-4 py-2 text-xs font-semibold text-rose-300 hover:bg-rose-950/60 disabled:opacity-50">
-            {busyKey === "expire-plan" ? "Expiring…" : "Expire current plan (development)"}
-          </button>
-        )}
-      </div>
+      )}
+
+      {isTestCompany && (
+        <div className="rounded-[32px] border border-slate-800 bg-slate-950 p-8">
+          <h2 className="text-xl font-semibold text-white">Software plans (development)</h2>
+          <p className="mt-1 text-sm text-slate-400">Development activation only — no payment is processed. Only available on this sandbox/test company. Use &ldquo;Upgrade&rdquo; above for a real subscription.</p>
+          <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {plans.map((plan) => (
+              <div key={plan.id} className="rounded-3xl border border-slate-800 bg-slate-900 p-5">
+                <p className="text-xs uppercase tracking-[0.24em] text-slate-500">{plan.planType}</p>
+                <h3 className="mt-2 text-lg font-semibold text-white">{plan.name}</h3>
+                <p className="mt-1 text-xs text-slate-500">{plan.description}</p>
+                <p className="mt-3 text-sm text-slate-300">{plan.monthlyPrice === 0 ? "Custom / contact sales" : `${plan.currency} ${plan.monthlyPrice}/mo`}</p>
+                {plan.planType !== "TRIAL" && plan.planType !== "FREE" && (
+                  <button
+                    type="button"
+                    onClick={() => void activatePlan(plan.key)}
+                    disabled={busyKey === `plan-${plan.key}`}
+                    className="mt-4 w-full rounded-2xl border border-slate-700 bg-blue-600 px-4 py-2 text-xs font-semibold text-white hover:bg-blue-500 disabled:opacity-50"
+                  >
+                    {busyKey === `plan-${plan.key}` ? "Activating…" : "Activate (development)"}
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+          {entitlements.status !== "NONE" && (
+            <button type="button" onClick={() => void expirePlan()} disabled={busyKey === "expire-plan"} className="mt-6 rounded-2xl border border-rose-900 bg-rose-950/30 px-4 py-2 text-xs font-semibold text-rose-300 hover:bg-rose-950/60 disabled:opacity-50">
+              {busyKey === "expire-plan" ? "Expiring…" : "Expire current plan (development)"}
+            </button>
+          )}
+        </div>
+      )}
 
       <div className="rounded-[32px] border border-slate-800 bg-slate-950 p-8">
         <h2 className="text-xl font-semibold text-white">Industry data packages</h2>

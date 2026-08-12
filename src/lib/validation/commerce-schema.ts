@@ -78,8 +78,19 @@ export type StripeHistoryQuery = z.output<typeof stripeHistoryQuerySchema>;
 
 export const commerceCheckoutRequestSchema = z
   .object({
-    priceCode: z.string().trim().min(1, "A price code is required.").max(200),
+    checkoutMode: z.enum(["SUBSCRIPTION", "BOQ_UNLOCK"]).default("SUBSCRIPTION"),
+    priceCode: z.string().trim().max(200).optional(),
+    boqId: z.string().trim().optional(),
+    revisionNumber: z.number().int().optional(),
+    billingInterval: z.enum(["MONTH", "YEAR"]).default("YEAR"),
   })
-  .strict();
+  .refine(
+    (data) => {
+      if (data.checkoutMode === "SUBSCRIPTION") return !!data.priceCode;
+      if (data.checkoutMode === "BOQ_UNLOCK") return !!data.boqId && data.revisionNumber !== undefined;
+      return false;
+    },
+    { message: "Invalid payload for the chosen checkout mode." }
+  );
 
 export type CommerceCheckoutRequestInput = z.output<typeof commerceCheckoutRequestSchema>;

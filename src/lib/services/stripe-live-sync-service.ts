@@ -460,43 +460,46 @@ export async function synchronizeLiveCommerceCatalogue(
 
   const stripe = requireLiveModeStripeClient(overrideClient);
 
-  return prisma.$transaction(
-    async (tx) => synchronizeLiveCommerceCatalogueLocked(tx, actor, input, requestMetadata, stripe),
-    // Generous timeout: this transaction holds the global live-sync advisory
-    // lock while walking the entire catalogue, making one or more real
-    // Stripe HTTP calls per product/price.
-    { maxWait: 10_000, timeout: 60_000 },
-  );
-}
+  // SHORT DB CLAIM
+  const { plan, run } = await prisma.$transaction(
+    async (tx) => {
+      await acquireLiveSyncLock(tx);
 
-async function synchronizeLiveCommerceCatalogueLocked(
-  tx: Prisma.TransactionClient,
-  actor: PlatformActor,
-  input: LiveSynchronizeInput,
-  requestMetadata: PlatformRequestMetadata,
-  stripe: Stripe,
-) {
-  await acquireLiveSyncLock(tx);
+      const plan = await buildLiveSyncPlan(tx);
+      if (plan.catalogueFingerprint !== input.catalogueFingerprint) {
+        throw new ConflictError("STALE_SYNC_PLAN", "The catalogue changed since this plan was built. Run a new dry run and retry.");
+      }
 
-  const plan = await buildLiveSyncPlan(tx);
-  if (plan.catalogueFingerprint !== input.catalogueFingerprint) {
-    throw new ConflictError("STALE_SYNC_PLAN", "The catalogue changed since this plan was built. Run a new dry run and retry.");
-  }
+      const active = await tx.commerceSyncRun.findFirst({
+        where: { provider: PROVIDER, environment: ENVIRONMENT, operation: "SYNCHRONIZE", status: "RUNNING" },
+      });
+      if (active) {
+        if (Date.now() - active.startedAt.getTime() > 15 * 60 * 1000) {
+          await completeSyncRun(active.id, { status: "FAILED", lastErrorCode: "SYNC_STALLED" } as any, tx);
+        } else {
+          throw new ConflictError("SYNC_IN_PROGRESS", "A live synchronization is already in progress.");
+        }
+      }
 
-  const products = await listAllCommerceProductsWithPrices(tx);
-  const productById = new Map(products.map((p) => [p.id, p]));
+      const run = await createSyncRun(
+        {
+          provider: PROVIDER,
+          environment: ENVIRONMENT,
+          operation: "SYNCHRONIZE",
+          initiatedByUserId: actor.userId,
+          dryRun: false,
+          catalogueFingerprint: plan.catalogueFingerprint,
+        },
+        tx,
+      );
 
-  const run = await createSyncRun(
-    {
-      provider: PROVIDER,
-      environment: ENVIRONMENT,
-      operation: "SYNCHRONIZE",
-      initiatedByUserId: actor.userId,
-      dryRun: false,
-      catalogueFingerprint: plan.catalogueFingerprint,
+      return { plan, run };
     },
-    tx,
+    { maxWait: 10_000, timeout: 15_000 },
   );
+
+  const products = await listAllCommerceProductsWithPrices();
+  const productById = new Map(products.map((p) => [p.id, p]));
 
   let productsCreated = 0;
   let productsUpdated = 0;
@@ -506,6 +509,25 @@ async function synchronizeLiveCommerceCatalogueLocked(
   let pricesArchived = 0;
   let warningCount = 0;
   const errors: string[] = [];
+
+  const persistChanges = async <T>(action: (tx: Prisma.TransactionClient) => Promise<T>) => {
+    return prisma.$transaction(async (tx) => {
+      // Lease ownership recheck
+      const currentRun = await tx.commerceSyncRun.findUnique({ where: { id: run.id } });
+      if (currentRun?.status !== "RUNNING") {
+        throw new ConflictError("SYNC_ABORTED", "Sync run was aborted or timed out.");
+      }
+      
+      // Fingerprint recheck
+      const currentPlan = await buildLiveSyncPlan(tx);
+      if (currentPlan.catalogueFingerprint !== plan.catalogueFingerprint) {
+        await completeSyncRun(run.id, { status: "FAILED", lastErrorCode: "STALE_SYNC_PLAN" } as any, tx);
+        throw new ConflictError("SYNC_ABORTED", "Catalogue fingerprint changed during sync.");
+      }
+
+      return action(tx);
+    });
+  };
 
   for (const entry of plan.products) {
     const product = productById.get(entry.productId);
@@ -524,24 +546,32 @@ async function synchronizeLiveCommerceCatalogueLocked(
               { name: product.name, description: product.description || undefined, active: true, metadata: safeMetadata("product", product.code) },
               { idempotencyKey: idempotencyKey("PRODUCT", product.code) },
             );
-        await createMapping({ provider: PROVIDER, environment: ENVIRONMENT, commerceProductId: product.id, providerProductId: stripeProduct.id, providerObjectType: "PRODUCT" }, tx);
+        
+        await persistChanges(async (tx) => {
+          await createMapping({ provider: PROVIDER, environment: ENVIRONMENT, commerceProductId: product.id, providerProductId: stripeProduct.id, providerObjectType: "PRODUCT" }, tx);
+        });
         productsCreated += 1;
       } else if (entry.action === "UPDATE") {
-        const mapping = await findProductMapping(PROVIDER, ENVIRONMENT, product.id, tx);
+        const mapping = await prisma.commerceProviderMapping.findFirst({ where: { provider: PROVIDER, environment: ENVIRONMENT, commerceProductId: product.id } });
         if (mapping) {
           await stripe.products.update(mapping.providerProductId, { name: product.name, description: product.description || undefined, active: true, metadata: safeMetadata("product", product.code) });
-          await updateMappingState(mapping.id, { providerActive: true, synchronizationStatus: "SYNCED", lastSynchronizedAt: new Date() }, tx);
+          await persistChanges(async (tx) => {
+            await updateMappingState(mapping.id, { providerActive: true, synchronizationStatus: "SYNCED", lastSynchronizedAt: new Date() }, tx);
+          });
           productsUpdated += 1;
         }
       } else if (entry.action === "ARCHIVE") {
-        const mapping = await findProductMapping(PROVIDER, ENVIRONMENT, product.id, tx);
+        const mapping = await prisma.commerceProviderMapping.findFirst({ where: { provider: PROVIDER, environment: ENVIRONMENT, commerceProductId: product.id } });
         if (mapping) {
           await stripe.products.update(mapping.providerProductId, { active: false });
-          await updateMappingState(mapping.id, { providerActive: false, synchronizationStatus: "ARCHIVED", lastSynchronizedAt: new Date() }, tx);
+          await persistChanges(async (tx) => {
+            await updateMappingState(mapping.id, { providerActive: false, synchronizationStatus: "ARCHIVED", lastSynchronizedAt: new Date() }, tx);
+          });
           productsArchived += 1;
         }
       }
     } catch (error) {
+      if (error instanceof ConflictError && error.code === "SYNC_ABORTED") throw error;
       const safe = mapStripeError(error);
       errors.push(`${entry.code}: ${safe.code}`);
       warningCount += 1;
@@ -556,7 +586,7 @@ async function synchronizeLiveCommerceCatalogueLocked(
 
     try {
       if (entry.action === "CREATE") {
-        const productMapping = await findProductMapping(PROVIDER, ENVIRONMENT, product.id, tx);
+        const productMapping = await prisma.commerceProviderMapping.findFirst({ where: { provider: PROVIDER, environment: ENVIRONMENT, commerceProductId: product.id } });
         if (!productMapping) {
           errors.push(`${entry.code}: PRODUCT_MAPPING_MISSING`);
           warningCount += 1;
@@ -584,38 +614,43 @@ async function synchronizeLiveCommerceCatalogueLocked(
               },
               { idempotencyKey: idempotencyKey("PRICE", price.code) },
             );
-        await createMapping(
-          {
-            provider: PROVIDER,
-            environment: ENVIRONMENT,
-            commerceProductId: product.id,
-            commercePriceId: price.id,
-            providerProductId: productMapping.providerProductId,
-            providerPriceId: stripePrice.id,
-            providerObjectType: "PRICE",
-          },
-          tx,
-        );
+        
+        await persistChanges(async (tx) => {
+          await createMapping(
+            {
+              provider: PROVIDER,
+              environment: ENVIRONMENT,
+              commerceProductId: product.id,
+              commercePriceId: price.id,
+              providerProductId: productMapping.providerProductId,
+              providerPriceId: stripePrice.id,
+              providerObjectType: "PRICE",
+            },
+            tx,
+          );
+        });
         pricesCreated += 1;
       } else if (entry.action === "REACTIVATE") {
-        // STRIPE-COMMERCIAL-13 — the price was archived (Stripe Price
-        // active:false) but has become eligible again; re-enable the
-        // existing Stripe object rather than creating a new one.
-        const mapping = await findPriceMapping(PROVIDER, ENVIRONMENT, price.id, tx);
+        const mapping = await prisma.commerceProviderMapping.findFirst({ where: { provider: PROVIDER, environment: ENVIRONMENT, commercePriceId: price.id } });
         if (mapping?.providerPriceId) {
           await stripe.prices.update(mapping.providerPriceId, { active: true });
-          await updateMappingState(mapping.id, { providerActive: true, synchronizationStatus: "SYNCED", lastSynchronizedAt: new Date() }, tx);
+          await persistChanges(async (tx) => {
+            await updateMappingState(mapping.id, { providerActive: true, synchronizationStatus: "SYNCED", lastSynchronizedAt: new Date() }, tx);
+          });
           pricesReactivated += 1;
         }
       } else if (entry.action === "ARCHIVE") {
-        const mapping = await findPriceMapping(PROVIDER, ENVIRONMENT, price.id, tx);
+        const mapping = await prisma.commerceProviderMapping.findFirst({ where: { provider: PROVIDER, environment: ENVIRONMENT, commercePriceId: price.id } });
         if (mapping?.providerPriceId) {
           await stripe.prices.update(mapping.providerPriceId, { active: false });
-          await updateMappingState(mapping.id, { providerActive: false, synchronizationStatus: "ARCHIVED", lastSynchronizedAt: new Date() }, tx);
+          await persistChanges(async (tx) => {
+            await updateMappingState(mapping.id, { providerActive: false, synchronizationStatus: "ARCHIVED", lastSynchronizedAt: new Date() }, tx);
+          });
           pricesArchived += 1;
         }
       }
     } catch (error) {
+      if (error instanceof ConflictError && error.code === "SYNC_ABORTED") throw error;
       const safe = mapStripeError(error);
       errors.push(`${entry.code}: ${safe.code}`);
       warningCount += 1;
@@ -623,29 +658,28 @@ async function synchronizeLiveCommerceCatalogueLocked(
   }
 
   const status = errors.length === 0 ? "COMPLETED" : "COMPLETED_WITH_WARNINGS";
-  const completed = await completeSyncRun(
-    run.id,
-    {
-      status,
-      productsCreated,
-      productsUpdated,
-      productsUnchanged: plan.productsUnchanged,
-      productsArchived,
-      // CommerceSyncRun has no dedicated "reactivated" column (a REACTIVATE
-      // never mints a new Stripe object, so it isn't really a create) — folded
-      // into pricesCreated for the typed summary; the exact reactivated count
-      // is preserved separately in the audit log below.
-      pricesCreated: pricesCreated + pricesReactivated,
-      pricesUnchanged: plan.pricesUnchanged,
-      pricesArchived,
-      blockedCount: plan.blockedCount,
-      warningCount,
-      safeErrorCode: errors.length > 0 ? "PARTIAL_SYNC_FAILURES" : null,
-    },
-    tx,
-  );
+  
+  const completed = await persistChanges(async (tx) => {
+    return completeSyncRun(
+      run.id,
+      {
+        status,
+        productsCreated,
+        productsUpdated,
+        productsUnchanged: plan.productsUnchanged,
+        productsArchived,
+        pricesCreated: pricesCreated + pricesReactivated,
+        pricesUnchanged: plan.pricesUnchanged,
+        pricesArchived,
+        blockedCount: plan.blockedCount,
+        warningCount,
+        safeErrorCode: errors.length > 0 ? "PARTIAL_SYNC_FAILURES" : null,
+      },
+      tx,
+    );
+  });
 
-  await tx.platformAuditLog.create({
+  await prisma.platformAuditLog.create({
     data: {
       actorUserId: actor.userId,
       actorPlatformRole: actor.platformRole,

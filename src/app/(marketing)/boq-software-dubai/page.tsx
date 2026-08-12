@@ -44,7 +44,7 @@ export default function Page() {
       { name: "CAD / BIM", capabilityId: "model-file-import", description: "Model integration is not currently available." }
     ],
     supportedOutputs: [
-      { name: "Structured XLSX", capabilityId: "professional-outputs", description: "Export reviewed BOQ data for further professional use." },
+      { name: "Structured XLSX", capabilityId: "professional-outputs", description: "Export stored BOQ data for further professional review." },
       { name: "PDF Outputs", capabilityId: "professional-outputs", description: "Generate reviewable documents from stored data and available templates." }
     ],
     limitations: [

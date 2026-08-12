@@ -75,7 +75,16 @@ describe("public product truth", () => {
     expect(byId.get("source-attribution")?.status).toBe("LIMITED");
     expect(byId.get("google-drive-import")?.status).toBe("CONTROLLED_ACCESS");
     expect(byId.get("voice-proposals")?.status).toBe("CONTROLLED_ACCESS");
-    expect(byId.get("commercial-access")?.limitation).toContain("does not offer verified self-serve");
+    expect(byId.get("commercial-access")?.status).toBe("CONTROLLED_ACCESS");
+    expect(byId.get("commercial-access")?.name).toBe("Commercial access review");
+    expect(byId.get("commercial-access")?.limitation).toContain("not an activated billing");
+    expect(byId.get("self-service-billing")?.status).toBe("NOT_AVAILABLE");
+    expect(byId.get("self-service-billing")?.summary).toContain("does not currently offer public checkout");
+    expect(byId.get("professional-outputs")?.summary).toContain("stored BOQ and project data");
+    expect(byId.get("professional-outputs")?.limitation).toMatch(/draft or otherwise unreviewed/i);
+    expect(byId.get("document-templates")?.summary).toContain("stored BOQ records");
+    expect(byId.get("technical-report-generation")?.summary).toContain("stored project records");
+    expect(byId.get("technical-report-generation")?.limitation).toContain("unreviewed records");
     expect(byId.get("technical-report-generation")?.status).toBe("LIMITED");
     expect(byId.get("model-file-import")?.status).toBe("NOT_AVAILABLE");
     expect(OCR_IMPLEMENTATION_STATUS).toBe("NOT_IMPLEMENTED");
@@ -130,5 +139,14 @@ describe("public product truth", () => {
     expect(source).not.toMatch(/\b24\s*\/\s*7 support\b/i);
     expect(source).toContain("Controlled Early Access");
     expect(source).toContain("does not currently offer public self-service subscription plans or checkout");
+  });
+
+  it("does not expose internal editorial instructions or imply output review is enforced", () => {
+    const source = publicWebsiteSource();
+
+    expect(source).not.toContain("Do not name specific providers unless they have been verified");
+    expect(source).not.toMatch(/structured, contract-ready documents/i);
+    expect(source).not.toMatch(/generate(?:d)?[^.\n]{0,100}from reviewed (?:BOQ |project )?(?:data|records)/i);
+    expect(source).toMatch(/draft or (?:otherwise )?unreviewed records/i);
   });
 });

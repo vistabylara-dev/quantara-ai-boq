@@ -9,7 +9,7 @@ export default function Page() {
   const content: KnowledgePageContent = {
     breadcrumbLabel: "Quantity Takeoff vs BOQ Management",
     title: "Quantity Takeoff vs BOQ Management: Different Construction Workflows",
-    summary: "Quantity Takeoff and BOQ Management are two distinct, sequential phases of construction estimating. Takeoff involves measuring physical dimensions from drawings or models. BOQ Management involves organizing those measurements, along with descriptions and rates, into structured, contract-ready documents.",
+    summary: "Quantity Takeoff and BOQ Management are two distinct, sequential phases of construction estimating. Takeoff involves measuring physical dimensions from drawings or models. BOQ Management organizes those measurements, descriptions and rates into structured documents that still require professional review before contractual use.",
     reviewedDate: PUBLIC_CONTENT_REVIEW_DATE,
     sections: [
   {

@@ -69,7 +69,7 @@ export default function Page() {
   },
   {
     "question": "Can I export a priced proposal for a client?",
-    "answer": "Quantara supports reviewable PDF and structured XLSX outputs from reviewed BOQ data. A professional must check them before client issue."
+    "answer": "Quantara supports reviewable PDF and structured XLSX outputs from stored BOQ data. Draft or unreviewed records can be present, and a professional must check them before client issue."
   },
   {
     "question": "Does it support scanned tender documents?",

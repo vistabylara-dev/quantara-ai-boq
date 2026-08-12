@@ -21,7 +21,7 @@ export default function Page() {
     },
     quantaraSupport: {
       heading: "Project Revisions and Controlled Outputs",
-      paragraphs: ["Quantara organizes supported contractor and consultant files in an authorized project workspace and retains distinct BOQ revision records. Users must identify and compare the applicable issues themselves.","Supported outputs can be generated from reviewed records and available templates, with professional validation required before issue."]
+      paragraphs: ["Quantara organizes supported contractor and consultant files in an authorized project workspace and retains distinct BOQ revision records. Users must identify and compare the applicable issues themselves.","Supported outputs can be generated from stored records and available templates. Draft or unreviewed data can be present, so professional validation is required before issue."]
     },
     relevantFeatures: [
       { name: "Hierarchical Structuring", capabilityId: "boq-management", description: "Organize reviewed items by trade or section." },
@@ -44,7 +44,7 @@ export default function Page() {
       { name: "CAD / BIM", capabilityId: "model-file-import", description: "Model integration is not currently available." }
     ],
     supportedOutputs: [
-      { name: "Structured XLSX", capabilityId: "professional-outputs", description: "Export reviewed BOQ data for further professional use." },
+      { name: "Structured XLSX", capabilityId: "professional-outputs", description: "Export stored BOQ data for further professional review." },
       { name: "PDF Outputs", capabilityId: "professional-outputs", description: "Generate reviewable documents from stored data and available templates." }
     ],
     limitations: [

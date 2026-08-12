@@ -47,7 +47,7 @@ export const publicNavigation: NavigationSection[] = [
         items: [
           { label: "PDF BOQ Extraction", href: "/pdf-boq-extraction", description: "Extract and review supported information from text-based PDF BOQ documents." },
           { label: "Scanned PDF BOQ", href: "/scanned-pdf-boq", description: "Detect scanned and image-only PDF BOQs; OCR text extraction is not currently available." },
-          { label: "BOQ Document Generation", href: "/boq-document-generation", description: "Generate professional outputs from reviewed project data." }
+          { label: "BOQ Document Generation", href: "/boq-document-generation", description: "Generate reviewable outputs from stored project data." }
         ]
       },
       {

@@ -102,9 +102,6 @@ export default function PrivacyPage() {
           <p className="text-slate-700 dark:text-slate-300">
             Vista By Lara may use service providers for website hosting, databases, authentication, communications, analytics, security monitoring and technical operations.
           </p>
-          <p className="text-slate-700 dark:text-slate-300 mt-4">
-            Do not name specific providers unless they have been verified and approved for publication.
-          </p>
         </section>
 
         <section>

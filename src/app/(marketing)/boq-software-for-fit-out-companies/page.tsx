@@ -72,7 +72,7 @@ export default function Page() {
   },
   {
     "question": "Can I generate professional client proposals?",
-    "answer": "Quantara can generate a reviewable PDF output from reviewed BOQ data and an available template. A professional must check it before client issue."
+    "answer": "Quantara can generate a reviewable PDF output from stored BOQ data and an available template. Draft or unreviewed records can be present, and a professional must check it before client issue."
   },
   {
     "question": "How do I handle FF&E schedules?",

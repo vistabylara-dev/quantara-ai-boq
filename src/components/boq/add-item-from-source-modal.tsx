@@ -59,6 +59,10 @@ const SOURCE_TYPE_BY_RESULT_SOURCE: Record<string, string> = {
   RECENT: "COMPANY_LIBRARY",
   FAVORITE: "COMPANY_LIBRARY",
   MASTER_PACKAGE: "MASTER_ITEM",
+  // CANVA-MODEL-1 — a Premium search result search-ranks as LOCKED_PREVIEW
+  // (item-search-service.ts) but is still a real MasterItem the server will
+  // now accept adding to a draft BOQ (see boq-item-source-service.ts).
+  LOCKED_PREVIEW: "MASTER_ITEM",
   PREVIOUS_PROJECT: "PREVIOUS_BOQ",
   SUPPLIER_CATALOGUE: "RATE_CATALOGUE",
 };
@@ -281,7 +285,10 @@ export default function AddItemFromSourceModal({
   ]);
 
   const addFromSearch = useCallback(async () => {
-    if (!selected || selected.locked) return;
+    // CANVA-MODEL-1 — a Premium (selected.locked) result is intentionally
+    // still addable: the server enforces entitlement only at clean-export
+    // time now, never at draft-add time. See boq-item-source-service.ts.
+    if (!selected) return;
     setIsSaving(true);
     setError(null);
     try {
@@ -629,21 +636,30 @@ export default function AddItemFromSourceModal({
               {isSearching && <p className="text-xs text-slate-500">Searching…</p>}
               {results.map((item) =>
                 item.locked ? (
-                  <div key={`${item.source}-${item.id}`} className="w-full rounded-2xl border border-amber-900/60 bg-amber-950/20 px-4 py-3 text-left text-sm">
+                  // CANVA-MODEL-1 — a Premium result stays fully selectable and
+                  // addable to the working draft (the server no longer blocks
+                  // this at add-time; see boq-item-source-service.ts). Only the
+                  // CLEAN FINAL EXPORT is gated later, via the commercial
+                  // requirements panel — the professional never hits a paywall
+                  // just for wanting to use a premium spec while building.
+                  <button
+                    key={`${item.source}-${item.id}`}
+                    type="button"
+                    onClick={() => setSelected(item)}
+                    className={`w-full rounded-2xl border px-4 py-3 text-left text-sm ${selected?.id === item.id ? "border-amber-500 bg-amber-950/40" : "border-amber-900/60 bg-amber-950/20 hover:border-amber-700"}`}
+                  >
                     <div className="flex items-center justify-between">
-                      <span className="text-amber-100">{item.name}</span>
-                      <span className="text-[0.65rem] uppercase tracking-wide text-amber-500">locked</span>
+                      <span className="inline-flex items-center gap-1.5 text-amber-100">
+                        <span aria-hidden="true">👑</span>
+                        {item.name}
+                      </span>
+                      <span className="rounded-full border border-amber-700 bg-amber-900/40 px-2 py-0.5 text-[0.65rem] font-semibold uppercase tracking-wide text-amber-300">Premium</span>
                     </div>
-                    <p className="mt-1 text-xs text-amber-400">Package: {item.packageNames?.[0] ?? "Industry Library"}</p>
-                    <p className="mt-2 text-xs text-amber-200">
-                      Request access to the full {item.packageNames?.[0] ?? "Industry"} Library, or enter this item manually.
-                    </p>
-                    <div className="mt-3 flex flex-wrap gap-2">
+                    <p className="mt-1 text-xs text-amber-400">{item.packageNames?.[0] ?? "Industry Library"}</p>
+                    <p className="text-xs text-slate-500">{item.itemCode} · {item.unit}</p>
+                    <div className="mt-2 flex flex-wrap gap-2" onClick={(e) => e.stopPropagation()}>
                       <Link href="/marketplace" className="rounded-xl border border-amber-700 bg-amber-900/40 px-3 py-1.5 text-xs font-semibold text-amber-200 hover:bg-amber-900/70">
                         View Library
-                      </Link>
-                      <Link href="/marketplace" className="rounded-xl border border-amber-700 bg-amber-900/40 px-3 py-1.5 text-xs font-semibold text-amber-200 hover:bg-amber-900/70">
-                        Request Access
                       </Link>
                       <button
                         type="button"
@@ -653,7 +669,7 @@ export default function AddItemFromSourceModal({
                         Enter Manually
                       </button>
                     </div>
-                  </div>
+                  </button>
                 ) : (
                   <button
                     key={`${item.source}-${item.id}`}
@@ -678,13 +694,18 @@ export default function AddItemFromSourceModal({
             </label>
 
             {error && <p className="mt-3 text-xs text-rose-300">{error}</p>}
+            {selected?.locked && (
+              <p className="mt-3 text-xs text-amber-300">
+                👑 This is a Premium item. You can use it now — unlocking a clean final export for a BOQ that uses it happens later, when you&apos;re ready to download.
+              </p>
+            )}
             <button
               type="button"
               onClick={() => void addFromSearch()}
-              disabled={isSaving || !selected || selected.locked || !sectionId}
+              disabled={isSaving || !selected || !sectionId}
               className="mt-4 rounded-2xl border border-slate-700 bg-blue-600 px-5 py-3 text-sm font-semibold text-white hover:bg-blue-500 disabled:opacity-50"
             >
-              {isSaving ? "Adding…" : "Add to BOQ"}
+              {isSaving ? "Adding…" : selected?.locked ? "Use This Item" : "Add to BOQ"}
             </button>
           </div>
         )}

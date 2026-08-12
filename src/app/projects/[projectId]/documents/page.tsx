@@ -8,6 +8,8 @@ import { apiClient, getApiErrorMessage } from "@/lib/api/client";
 import { formatDate } from "@/lib/formatting/dates";
 import { computeDocumentReadiness } from "@/lib/workflow/document-readiness-state";
 import { GuideTip } from "@/components/guidance/guide-tip";
+import { CommercialUnlockPanel } from "@/components/commercial/commercial-unlock-panel";
+import type { CommercialAccessDecision } from "@/lib/commercial/commercial-types";
 
 type DocumentTemplateSummary = {
   id: string;
@@ -170,14 +172,41 @@ export default function ProjectDocumentsPage(props: PageProps) {
     }
   }, [lockConfirmBoqId, refreshBoqs, selectedBoqId]);
 
+  const [commercialDecision, setCommercialDecision] = useState<{ boqId: string; decision: CommercialAccessDecision } | null>(null);
+
   const generate = useCallback(async (overrides?: Partial<{ boqId: string; templateId: string; type: string; audience: string }>) => {
+    const boqId = overrides?.boqId ?? selectedBoqId;
+    const type = overrides?.type ?? selectedType;
     setGenerateError(null);
+    setCommercialDecision(null);
+
+    // CANVA-MODEL-1 — the clean final export is the only place commercial
+    // requirements are ever checked. Draft CSV/HTML always proceed; PDF/
+    // XLSX/DOCX (final-only) check the BOQ's real commercial manifest first
+    // and show the unlock screen instead of a generic error if unmet.
+    if (boqId && FINAL_ONLY_TYPES.has(type)) {
+      try {
+        const decision = await apiClient.get<CommercialAccessDecision>(`/api/boqs/${encodeURIComponent(boqId)}/commercial-requirements`);
+        if (decision.status !== "ALLOW") {
+          // Regenerate (overrides.boqId) can target a different BOQ than
+          // selectedBoqId — track the id the decision was actually resolved
+          // for, so the panel's checkout request stays aligned with the
+          // manifest fingerprint instead of silently using the wrong BOQ.
+          setCommercialDecision({ boqId, decision });
+          return;
+        }
+      } catch (error) {
+        setGenerateError(getApiErrorMessage(error));
+        return;
+      }
+    }
+
     setIsGenerating(true);
     try {
       await apiClient.post(`/api/projects/${encodeURIComponent(params.projectId)}/documents/generate`, {
-        boqId: overrides?.boqId ?? selectedBoqId,
+        boqId,
         templateId: overrides?.templateId ?? selectedTemplateId,
-        documentType: overrides?.type ?? selectedType,
+        documentType: type,
         audience: overrides?.audience ?? selectedAudience,
       });
       await refreshHistory();
@@ -485,6 +514,23 @@ export default function ProjectDocumentsPage(props: PageProps) {
               </div>
               );
             })()}
+
+            {commercialDecision && (
+              <div className="mt-6">
+                <CommercialUnlockPanel
+                  boqId={commercialDecision.boqId}
+                  decision={commercialDecision.decision}
+                  onWorkSaved={() => setGenerateError(null)}
+                />
+                <button
+                  type="button"
+                  onClick={() => setCommercialDecision(null)}
+                  className="mt-3 text-xs font-semibold text-slate-400 hover:text-slate-200"
+                >
+                  ← Back to my BOQ
+                </button>
+              </div>
+            )}
 
             <div className="mt-6 flex items-center gap-2">
               <button

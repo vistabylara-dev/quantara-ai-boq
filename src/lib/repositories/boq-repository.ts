@@ -25,7 +25,7 @@ const boqInclude = {
     include: {
       items: {
         orderBy: { sortOrder: "asc" },
-        include: { options: { orderBy: { createdAt: "asc" } } },
+        include: { options: { orderBy: { createdAt: "asc" } }, sourceMasterItem: { select: { isPremium: true } } },
       },
     },
   },
@@ -97,6 +97,7 @@ export function toBOQDTO(boq: BOQRecord): BOQ & { databaseId: string; taxRate: n
         status: item.status.toLowerCase(),
         notes: item.notes,
         pricingMetadata: (item.pricingMetadataJson as BOQItemPricingMetadata | null) ?? null,
+        isPremiumSource: item.sourceMasterItem?.isPremium ?? false,
         options: item.options.map((option) => ({
           id: option.id,
           label: option.label,

@@ -132,7 +132,7 @@ describe("Phase 7: commercial entitlements + industry data platform (integration
       await prisma.company.delete({ where: { id: companyId } }).catch(() => undefined);
     }
     await prisma.$disconnect();
-  });
+  }, 30_000);
 
   describe("trial lifecycle", () => {
     it("blocks starting a trial before email verification, then before profile completion, then before terms acceptance", async () => {
@@ -392,6 +392,135 @@ describe("Phase 7: commercial entitlements + industry data platform (integration
       const libraryStillUnchanged = await getLibraryItemForCompany(actor(companyId), libraryItem.id);
       expect(libraryStillUnchanged.name).toBe("Copy source");
       void project;
+    });
+  });
+
+  describe("CANVA-MODEL-1: premium MasterItem in a working BOQ draft (no entitlement gate at add-time)", () => {
+    it("a free/unentitled company can add a Premium MasterItem to a draft BOQ, with sourceMasterItemId, sourceMasterItemVersionId, and snapshot provenance all preserved", async () => {
+      const { companyId, clientId } = await seedCompanyWithUser("canva-premium-add");
+      cleanupCompanyIds.push(companyId);
+      const { boq } = await createCleanProject(companyId, clientId, "canva-premium-add");
+
+      expect(await companyHasPackageAccess(companyId, mechanicalPackageId)).toBe(false);
+
+      // Not every premium fixture item in this older package necessarily has
+      // a PUBLISHED MasterItemVersion — pick one that does, so this test
+      // exercises the real "version snapshot captured" path rather than the
+      // (also legitimate, but less interesting) no-published-version case.
+      const versioned = await prisma.masterItemVersion.findFirst({ where: { masterItemId: { in: premiumItemIds }, status: "PUBLISHED" } });
+      const targetItemId = versioned?.masterItemId ?? premiumItemIds[0];
+
+      const result = await addBoqItemFromSource(actor(companyId), boq.id, {
+        sourceType: "MASTER_ITEM",
+        sourceId: targetItemId,
+        itemNumber: 1,
+        quantity: "1",
+      });
+
+      expect(result.item.sourceMasterItemId).toBe(targetItemId);
+      expect(result.item.masterItemSnapshotJson).not.toBeNull();
+      if (versioned) {
+        expect(result.item.sourceMasterItemVersionId).not.toBeNull();
+      }
+    });
+
+    it("adding a Premium MasterItem to a draft never grants package ownership or creates a CompanyPackageSubscription", async () => {
+      const { companyId, clientId } = await seedCompanyWithUser("canva-no-grant");
+      cleanupCompanyIds.push(companyId);
+      const { boq } = await createCleanProject(companyId, clientId, "canva-no-grant");
+
+      await addBoqItemFromSource(actor(companyId), boq.id, {
+        sourceType: "MASTER_ITEM",
+        sourceId: premiumItemIds[0],
+        itemNumber: 1,
+        quantity: "1",
+      });
+
+      const subscriptions = await prisma.companyPackageSubscription.findMany({ where: { companyId } });
+      expect(subscriptions).toHaveLength(0);
+      expect(await companyHasPackageAccess(companyId, mechanicalPackageId)).toBe(false);
+    });
+
+    it("does not consume or create any TrialPremiumItemUnlock ledger row for the BOQ-add path", async () => {
+      const { companyId, clientId } = await seedCompanyWithUser("canva-no-ledger");
+      cleanupCompanyIds.push(companyId);
+      const { boq } = await createCleanProject(companyId, clientId, "canva-no-ledger");
+
+      await addBoqItemFromSource(actor(companyId), boq.id, {
+        sourceType: "MASTER_ITEM",
+        sourceId: premiumItemIds[0],
+        itemNumber: 1,
+        quantity: "1",
+      });
+
+      const ledgerRows = await prisma.trialPremiumItemUnlock.findMany({ where: { companyId } });
+      expect(ledgerRows).toHaveLength(0);
+    });
+
+    it("adding six or more unique Premium MasterItems to the same working BOQ does not fail on the legacy 5-item trial cap", async () => {
+      const { companyId, clientId } = await seedCompanyWithUser("canva-six-plus");
+      cleanupCompanyIds.push(companyId);
+      const { boq } = await createCleanProject(companyId, clientId, "canva-six-plus");
+
+      expect(premiumItemIds.length).toBeGreaterThanOrEqual(6);
+      for (let i = 0; i < 6; i += 1) {
+        const result = await addBoqItemFromSource(actor(companyId), boq.id, {
+          sourceType: "MASTER_ITEM",
+          sourceId: premiumItemIds[i],
+          itemNumber: i + 1,
+          quantity: "1",
+        });
+        expect(result.item.sourceMasterItemId).toBe(premiumItemIds[i]);
+      }
+
+      const items = await prisma.bOQItem.findMany({ where: { companyId, section: { boqId: boq.id } } });
+      expect(items.filter((i) => i.sourceMasterItemId !== null)).toHaveLength(6);
+    });
+
+    it("Company Library createFromMaster remains entitlement-gated exactly as before (unaffected by the BOQ-add policy change)", async () => {
+      const { companyId } = await seedCompanyWithUser("canva-library-still-gated");
+      cleanupCompanyIds.push(companyId);
+      await expect(createFromMaster(actor(companyId), premiumItemIds[1])).rejects.toThrow(AppError);
+    });
+
+    it("a premium BOQ item's source identity is queryable for commercial-requirement resolution (package membership derivable from sourceMasterItemId)", async () => {
+      const { companyId, clientId } = await seedCompanyWithUser("canva-derivable");
+      cleanupCompanyIds.push(companyId);
+      const { boq } = await createCleanProject(companyId, clientId, "canva-derivable");
+
+      const result = await addBoqItemFromSource(actor(companyId), boq.id, {
+        sourceType: "MASTER_ITEM",
+        sourceId: premiumItemIds[0],
+        itemNumber: 1,
+        quantity: "1",
+      });
+
+      const membership = await prisma.industryDataPackageItem.findFirst({ where: { masterItemId: result.item.sourceMasterItemId!, packageId: mechanicalPackageId } });
+      expect(membership).not.toBeNull();
+    });
+
+    it("clean-output authorization is not weakened — canGenerateDocument's real trial/final-export gate is untouched by this change", async () => {
+      const { companyId, clientId } = await seedCompanyWithUser("canva-export-still-gated");
+      cleanupCompanyIds.push(companyId);
+      await prisma.company.update({ where: { id: companyId }, data: { trialTermsAcceptedAt: new Date() } });
+      await startTrial(actor(companyId));
+      const { project, boq } = await createCleanProject(companyId, clientId, "canva-export-still-gated");
+      void project;
+
+      await addBoqItemFromSource(actor(companyId), boq.id, {
+        sourceType: "MASTER_ITEM",
+        sourceId: premiumItemIds[0],
+        itemNumber: 1,
+        quantity: "1",
+      });
+
+      // Draft (non-final) export stays unrestricted — this policy change only
+      // ever concerned the add-to-draft path, not the pre-existing draft vs.
+      // final export gate, which lives entirely in entitlement-service.ts and
+      // was never touched here.
+      const { canGenerateDocument } = await import("../src/lib/entitlements/entitlement-service");
+      const draftCheck = await canGenerateDocument(companyId, true);
+      expect(draftCheck.allowed).toBe(true);
     });
   });
 

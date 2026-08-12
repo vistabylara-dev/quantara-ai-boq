@@ -6,9 +6,6 @@ import { AppError, NotFoundError } from "@/lib/errors/app-error";
 import { createBOQItem, getBOQ, getBOQRecord } from "@/lib/repositories/boq-repository";
 import { getMasterItemRecord } from "@/lib/repositories/master-item-repository";
 import { getLibraryItemRecord, recordItemUsage } from "@/lib/repositories/company-library-repository";
-import { companyHasPackageAccessForItem } from "@/lib/entitlements/package-entitlement-service";
-import { recordPremiumItemUnlock } from "@/lib/entitlements/entitlement-service";
-import { assertMasterItemAccessEffective } from "@/lib/entitlements/effective-entitlement-service";
 
 type ResolvedDefaults = {
   itemCode: string;
@@ -47,15 +44,27 @@ export type AddBoqItemFromSourceInput = {
   overrides?: Partial<Pick<ResolvedDefaults, "itemCode" | "category" | "description" | "specification" | "unit" | "unitCost" | "marginMode" | "marginPercentage">>;
 };
 
+/**
+ * CANVA-MODEL-1 — owner-authorized product-policy change: revenue
+ * enforcement for premium MasterItems moves from "block at add-time" to
+ * "gate at clean-output time." A company with no package/trial access can
+ * still add a premium item to a working BOQ draft — this function no longer
+ * calls assertMasterItemAccessEffective() or recordPremiumItemUnlock() (the
+ * latter isn't just analytics: it enforces the legacy 5-item trial cap and
+ * would still block a 6th premium item mid-draft, which the new model
+ * forbids). Full provenance (sourceMasterItemId, sourceMasterItemVersionId,
+ * masterItemSnapshotJson) is still captured exactly as before — that
+ * provenance is the source of truth the commercial-requirements resolver
+ * uses to gate the clean final export later. This never grants package
+ * ownership, never creates a CompanyPackageSubscription, never mutates the
+ * MasterItem/IndustryDataPackage, and never marks the item "purchased" —
+ * it only allows the item to exist in the working draft. The
+ * company-library copy path (createFromMaster) is a distinct feature and
+ * keeps its own entitlement gate untouched.
+ */
 async function resolveMasterItemDefaults(actor: CurrentActor, masterItemId: string): Promise<ResolvedDefaults> {
-  await assertMasterItemAccessEffective(actor, masterItemId);
   const master = await getMasterItemRecord(masterItemId);
   const discipline = await prisma.masterDiscipline.findUnique({ where: { id: master.disciplineId } });
-
-  if (master.isPremium) {
-    const hasPackage = await companyHasPackageAccessForItem(actor.companyId, masterItemId);
-    if (!hasPackage) await recordPremiumItemUnlock(actor.companyId, masterItemId);
-  }
 
   // MASTER-BOQ-1A BOQ snapshot behavior: capture the current published
   // version + classification/region at the moment this item is added, so

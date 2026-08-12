@@ -79,9 +79,39 @@ async function driveHvacToComplete() {
 describe("CATALOGUE-PHASE7-RECOVERY: strict dataset completeness predicate (integration, real local Postgres, real HVAC dataset)", () => {
   beforeAll(async () => {
     assertIsolatedLocalTestDatabase();
-    await cleanupHvacPackage();
-    await cleanupHvacItems();
-    await prisma.masterCatalogueImportJob.deleteMany({ where: { datasetId: HVAC_DATASET_ID } });
+
+    // Same fail-closed pattern as catalogue-storage-capacity-recovery.test.ts:
+    // this suite drives the real HVAC dataset through a full recovery cycle
+    // (partial job -> corrupted fact -> exact/expected), which only makes
+    // sense starting from an empty HVAC state. Rather than assuming the
+    // isolated test database is empty and silently wiping whatever's there,
+    // refuse outright if pre-existing HVAC data survives from a prior run —
+    // that's a signal something upstream didn't clean up correctly, not
+    // something this file should paper over by deleting it anyway.
+    const existingJob = await prisma.masterCatalogueImportJob.findFirst({ where: { datasetId: HVAC_DATASET_ID } });
+    if (existingJob) {
+      throw new Error(
+        `Refusing to run: a MasterCatalogueImportJob (id=${existingJob.id}) already exists for ${HVAC_DATASET_ID} in ` +
+          "this database, before this test run created anything of its own. This test cannot prove it's safe to " +
+          "delete, so it is failing closed rather than guessing — investigate and clean up manually before rerunning.",
+      );
+    }
+    const existingItem = await prisma.masterItem.findFirst({ where: await hvacItemWhere() });
+    if (existingItem) {
+      throw new Error(
+        `Refusing to run: a MasterItem (id=${existingItem.id}, itemCode=${existingItem.itemCode}) already matches ` +
+          "this test's HVAC scope, before this test run created anything of its own. This test cannot prove it's " +
+          "safe to delete, so it is failing closed rather than guessing — investigate and clean up manually before rerunning.",
+      );
+    }
+    const existingPackage = await prisma.industryDataPackage.findUnique({ where: { key: "hvac-library" } });
+    if (existingPackage) {
+      throw new Error(
+        `Refusing to run: the "hvac-library" IndustryDataPackage (id=${existingPackage.id}) already exists, before ` +
+          "this test run created anything of its own. This test cannot prove it's safe to delete, so it is failing " +
+          "closed rather than guessing — investigate and clean up manually before rerunning.",
+      );
+    }
 
     const company = await prisma.company.create({ data: { legalName: `DC Co ${RUN_ID}`, tradeName: "DC Co", email: `dc-${RUN_ID}@example.com` } });
     companyId = company.id;
@@ -95,9 +125,9 @@ describe("CATALOGUE-PHASE7-RECOVERY: strict dataset completeness predicate (inte
     await cleanupHvacPackage();
     await cleanupHvacItems();
     await prisma.masterCatalogueImportJob.deleteMany({ where: { datasetId: HVAC_DATASET_ID } });
-    await prisma.masterCatalogueImportBatch.deleteMany({ where: { actorUserId: ownerUserId } });
-    await prisma.user.deleteMany({ where: { companyId } });
-    await prisma.company.deleteMany({ where: { id: companyId } });
+    if (ownerUserId) await prisma.masterCatalogueImportBatch.deleteMany({ where: { actorUserId: ownerUserId } });
+    if (companyId) await prisma.user.deleteMany({ where: { companyId } });
+    if (companyId) await prisma.company.deleteMany({ where: { id: companyId } });
     await prisma.$disconnect();
   });
 

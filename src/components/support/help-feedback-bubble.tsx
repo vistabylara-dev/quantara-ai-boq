@@ -193,7 +193,7 @@ export default function HelpFeedbackBubble({
             dir={direction}
             aria-modal="true"
             aria-labelledby="help-feedback-title"
-            className="fixed bottom-4 end-4 max-h-[calc(100dvh-2rem)] w-[min(24rem,calc(100vw-2rem))] overflow-x-hidden overflow-y-auto rounded-2xl border border-slate-200 bg-white p-5 text-start text-slate-900 shadow-2xl dark:border-[#20304D] dark:bg-[#091326] dark:text-white sm:bottom-20"
+            className="fixed bottom-4 end-4 max-h-[calc(100dvh-2rem)] w-[min(24rem,calc(100vw-2rem))] overflow-x-hidden overflow-y-auto rounded-2xl border border-slate-200 bg-white p-5 text-start text-slate-900 shadow-2xl dark:border-[#20304D] dark:bg-[#091326] dark:text-white sm:bottom-20 sm:max-h-[calc(100dvh-6rem)]"
           >
             <div className="flex items-start justify-between gap-4">
               <div>

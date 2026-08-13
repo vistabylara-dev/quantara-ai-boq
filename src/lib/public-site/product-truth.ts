@@ -1,5 +1,5 @@
 import en from "@/lib/i18n/dictionaries/en";
-import type { TranslateFn } from "@/lib/i18n/translate";
+import type { TranslateFn, TranslationKey } from "@/lib/i18n/translate";
 
 export type PublicCapabilityStatus =
   | "AVAILABLE"
@@ -201,6 +201,141 @@ const PUBLIC_CAPABILITY_DEFINITIONS = [
 
 export type PublicCapabilityId = (typeof PUBLIC_CAPABILITY_DEFINITIONS)[number]["id"];
 
+type CapabilityTranslationKeys = {
+  name: TranslationKey;
+  summary: TranslationKey;
+  limitation?: TranslationKey;
+};
+
+const PUBLIC_CAPABILITY_REGISTER_KEYS = {
+  "project-workspaces": {
+    name: "publicContent.capabilityRegister.capabilities.projectWorkspaces.name",
+    summary: "publicContent.capabilityRegister.capabilities.projectWorkspaces.summary",
+  },
+  "text-pdf-extraction": {
+    name: "publicContent.capabilityRegister.capabilities.textPdfExtraction.name",
+    summary: "publicContent.capabilityRegister.capabilities.textPdfExtraction.summary",
+    limitation: "publicContent.capabilityRegister.capabilities.textPdfExtraction.limitation",
+  },
+  "spreadsheet-import": {
+    name: "publicContent.capabilityRegister.capabilities.spreadsheetImport.name",
+    summary: "publicContent.capabilityRegister.capabilities.spreadsheetImport.summary",
+    limitation: "publicContent.capabilityRegister.capabilities.spreadsheetImport.limitation",
+  },
+  "scanned-pdf-detection": {
+    name: "publicContent.capabilityRegister.capabilities.scannedPdfDetection.name",
+    summary: "publicContent.capabilityRegister.capabilities.scannedPdfDetection.summary",
+    limitation: "publicContent.capabilityRegister.capabilities.scannedPdfDetection.limitation",
+  },
+  "google-drive-import": {
+    name: "publicContent.capabilityRegister.capabilities.googleDriveImport.name",
+    summary: "publicContent.capabilityRegister.capabilities.googleDriveImport.summary",
+    limitation: "publicContent.capabilityRegister.capabilities.googleDriveImport.limitation",
+  },
+  "reviewed-extraction": {
+    name: "publicContent.capabilityRegister.capabilities.reviewedExtraction.name",
+    summary: "publicContent.capabilityRegister.capabilities.reviewedExtraction.summary",
+  },
+  "boq-management": {
+    name: "publicContent.capabilityRegister.capabilities.boqManagement.name",
+    summary: "publicContent.capabilityRegister.capabilities.boqManagement.summary",
+  },
+  "visible-calculations": {
+    name: "publicContent.capabilityRegister.capabilities.visibleCalculations.name",
+    summary: "publicContent.capabilityRegister.capabilities.visibleCalculations.summary",
+    limitation: "publicContent.capabilityRegister.capabilities.visibleCalculations.limitation",
+  },
+  "voice-proposals": {
+    name: "publicContent.capabilityRegister.capabilities.voiceProposals.name",
+    summary: "publicContent.capabilityRegister.capabilities.voiceProposals.summary",
+    limitation: "publicContent.capabilityRegister.capabilities.voiceProposals.limitation",
+  },
+  validation: {
+    name: "publicContent.capabilityRegister.capabilities.validation.name",
+    summary: "publicContent.capabilityRegister.capabilities.validation.summary",
+  },
+  "professional-outputs": {
+    name: "publicContent.capabilityRegister.capabilities.professionalOutputs.name",
+    summary: "publicContent.capabilityRegister.capabilities.professionalOutputs.summary",
+    limitation: "publicContent.capabilityRegister.capabilities.professionalOutputs.limitation",
+  },
+  "document-templates": {
+    name: "publicContent.capabilityRegister.capabilities.documentTemplates.name",
+    summary: "publicContent.capabilityRegister.capabilities.documentTemplates.summary",
+    limitation: "publicContent.capabilityRegister.capabilities.documentTemplates.limitation",
+  },
+  "technical-report-generation": {
+    name: "publicContent.capabilityRegister.capabilities.technicalReportGeneration.name",
+    summary: "publicContent.capabilityRegister.capabilities.technicalReportGeneration.summary",
+    limitation: "publicContent.capabilityRegister.capabilities.technicalReportGeneration.limitation",
+  },
+  "source-attribution": {
+    name: "publicContent.capabilityRegister.capabilities.sourceAttribution.name",
+    summary: "publicContent.capabilityRegister.capabilities.sourceAttribution.summary",
+    limitation: "publicContent.capabilityRegister.capabilities.sourceAttribution.limitation",
+  },
+  "industry-packages": {
+    name: "publicContent.capabilityRegister.capabilities.industryPackages.name",
+    summary: "publicContent.capabilityRegister.capabilities.industryPackages.summary",
+    limitation: "publicContent.capabilityRegister.capabilities.industryPackages.limitation",
+  },
+  "commercial-access": {
+    name: "publicContent.capabilityRegister.capabilities.commercialAccess.name",
+    summary: "publicContent.capabilityRegister.capabilities.commercialAccess.summary",
+    limitation: "publicContent.capabilityRegister.capabilities.commercialAccess.limitation",
+  },
+  "automatic-drawing-takeoff": {
+    name: "publicContent.capabilityRegister.capabilities.automaticDrawingTakeoff.name",
+    summary: "publicContent.capabilityRegister.capabilities.automaticDrawingTakeoff.summary",
+  },
+  "model-file-import": {
+    name: "publicContent.capabilityRegister.capabilities.modelFileImport.name",
+    summary: "publicContent.capabilityRegister.capabilities.modelFileImport.summary",
+  },
+  "scanned-pdf-ocr": {
+    name: "publicContent.capabilityRegister.capabilities.scannedPdfOcr.name",
+    summary: "publicContent.capabilityRegister.capabilities.scannedPdfOcr.summary",
+  },
+  "typed-multi-change-proposals": {
+    name: "publicContent.capabilityRegister.capabilities.typedMultiChangeProposals.name",
+    summary: "publicContent.capabilityRegister.capabilities.typedMultiChangeProposals.summary",
+  },
+  "single-sign-on": {
+    name: "publicContent.capabilityRegister.capabilities.singleSignOn.name",
+    summary: "publicContent.capabilityRegister.capabilities.singleSignOn.summary",
+  },
+  "non-google-external-integrations": {
+    name: "publicContent.capabilityRegister.capabilities.nonGoogleExternalIntegrations.name",
+    summary: "publicContent.capabilityRegister.capabilities.nonGoogleExternalIntegrations.summary",
+  },
+  "enterprise-feature-bundle": {
+    name: "publicContent.capabilityRegister.capabilities.enterpriseFeatureBundle.name",
+    summary: "publicContent.capabilityRegister.capabilities.enterpriseFeatureBundle.summary",
+  },
+} as const satisfies Record<PublicCapabilityId, CapabilityTranslationKeys>;
+
+const PUBLIC_CAPABILITY_STATUS_KEYS = {
+  AVAILABLE: {
+    label: "publicContent.capabilityRegister.status.availableLabel",
+    description: "publicContent.capabilityRegister.status.availableDescription",
+  },
+  CONTROLLED_ACCESS: {
+    label: "publicContent.capabilityRegister.status.controlledLabel",
+    description: "publicContent.capabilityRegister.status.controlledDescription",
+  },
+  LIMITED: {
+    label: "publicContent.capabilityRegister.status.limitedLabel",
+    description: "publicContent.capabilityRegister.status.limitedDescription",
+  },
+  NOT_AVAILABLE: {
+    label: "publicContent.capabilityRegister.status.unavailableLabel",
+    description: "publicContent.capabilityRegister.status.unavailableDescription",
+  },
+} as const satisfies Record<
+  PublicCapabilityStatus,
+  { label: TranslationKey; description: TranslationKey }
+>;
+
 export const PUBLIC_PRODUCT_LIFECYCLE_BY_ID = {
   "project-workspaces": "LIVE",
   "text-pdf-extraction": "LIVE",
@@ -385,4 +520,58 @@ export function getPublicCapabilitiesForDisplay(
   return PUBLIC_CAPABILITIES.map((capability) =>
     localizePublicCapability(capability, translate),
   );
+}
+
+function localizePublicCapabilityRegisterEntry(
+  capability: PublicCapability,
+  translate: TranslateFn,
+): PublicCapability {
+  const keys: CapabilityTranslationKeys =
+    PUBLIC_CAPABILITY_REGISTER_KEYS[capability.id as PublicCapabilityId];
+  return {
+    ...capability,
+    name: translate(keys.name),
+    summary: translate(keys.summary),
+    ...(keys.limitation ? { limitation: translate(keys.limitation) } : {}),
+  };
+}
+
+export function getPublicCapabilityRegisterEntry(
+  id: PublicCapabilityId,
+  translate: TranslateFn,
+): PublicCapability {
+  return localizePublicCapabilityRegisterEntry(getPublicCapability(id), translate);
+}
+
+export function getPublicCapabilityRegisterEntries(
+  translate: TranslateFn,
+): readonly PublicCapability[] {
+  return PUBLIC_CAPABILITIES.map((capability) =>
+    localizePublicCapabilityRegisterEntry(capability, translate),
+  );
+}
+
+export function getPublicCapabilityStatusForDisplay(
+  status: PublicCapabilityStatus,
+  translate: TranslateFn,
+): { label: string; description: string } {
+  const keys = PUBLIC_CAPABILITY_STATUS_KEYS[status];
+  return {
+    label: translate(keys.label),
+    description: translate(keys.description),
+  };
+}
+
+export function getQuantaraProductTruthForDisplay(translate: TranslateFn): {
+  entityDefinition: string;
+  workflowTruth: string;
+  professionalReviewNotice: string;
+} {
+  return {
+    entityDefinition: translate("publicContent.capabilityRegister.entityDefinition"),
+    workflowTruth: translate("publicContent.capabilityRegister.workflowTruth"),
+    professionalReviewNotice: translate(
+      "publicContent.capabilityRegister.professionalReviewNotice",
+    ),
+  };
 }

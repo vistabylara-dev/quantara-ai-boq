@@ -75,7 +75,8 @@ async function addSessionCookie(context: BrowserContext) {
     {
       name: "quantara_session",
       value: "browser-test-session-presence-only",
-      url: "http://localhost:3000",
+      domain: "localhost",
+      path: "/",
       httpOnly: true,
       sameSite: "Lax",
     },
@@ -203,13 +204,34 @@ test.describe("global Help & Feedback", () => {
     expect(overflow).toBeLessThanOrEqual(2);
   });
 
+  test("desktop dialog remains entirely within the viewport", async ({ page, context }) => {
+    await context.clearCookies();
+    await mockApplicationApis(page);
+    await page.setViewportSize({ width: 1440, height: 1000 });
+
+    await page.goto("/");
+    await bubbleTrigger(page).click();
+    const dialog = page.getByRole("dialog", { name: "Help & Feedback" });
+    await expect(dialog).toBeVisible();
+
+    const box = await dialog.boundingBox();
+    expect(box).not.toBeNull();
+    if (box) {
+      expect(box.x).toBeGreaterThanOrEqual(0);
+      expect(box.x + box.width).toBeLessThanOrEqual(1440);
+      expect(box.y).toBeGreaterThanOrEqual(0);
+      expect(box.y + box.height).toBeLessThanOrEqual(1000);
+    }
+  });
+
   test("Arabic cookie renders the public bubble in RTL with its Arabic label", async ({ page, context }) => {
     await context.clearCookies();
     await context.addCookies([
       {
         name: "quantara_locale",
         value: "ar",
-        url: "http://localhost:3000",
+        domain: "localhost",
+        path: "/",
         sameSite: "Lax",
       },
     ]);

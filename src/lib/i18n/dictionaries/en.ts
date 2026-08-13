@@ -803,7 +803,7 @@ const en = {
       enterpriseBundleSummary: "An enterprise feature bundle is planned, but its roles, approval chains, regional hosting and related capabilities are not verified as currently available.",
     },
     home: {
-      commercialFaq: "The public website does not offer checkout or publish static prices. Eligible authenticated accounts may receive recurring subscription checkout when a direct-purchase price is active, approved and synchronized; enterprise, one-time and other non-direct terms require contact with sales.",
+      commercialFaq: "Quantara publishes Starter, Professional and Business subscription prices on the public Pricing page. Public checkout is not hosted on the marketing page; eligible authenticated accounts may continue to recurring subscription checkout when the selected direct-purchase price is active, approved and synchronized. Enterprise, one-time and other non-direct commercial terms require contact with sales.",
       directAnswers: "Direct answers about current capability, limitations, account access and commercial availability.",
       eyebrow: "Dubai · UAE · GCC construction workflows",
       pageTitle: "AI-Assisted BOQ Workflow Software for UAE Construction Teams",

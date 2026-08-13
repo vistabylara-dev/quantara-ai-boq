@@ -166,6 +166,7 @@ export async function recordConnectionError(externalConnectionId: string, code: 
     "TOKEN_EXPIRED_NO_REFRESH",
     "TOKEN_REFRESH_FAILED",
     "GOOGLE_DRIVE_REAUTH_REQUIRED",
+    "AUTODESK_REAUTH_REQUIRED",
   ].includes(code)
     ? "REAUTH_REQUIRED" as const
     : "ERROR" as const;

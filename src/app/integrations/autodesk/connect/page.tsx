@@ -1,10 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { ArrowLeft, CheckCircle2, ChevronLeft, File, Folder, HardDrive, Loader2, Unplug } from "lucide-react";
 import { apiClient, getApiErrorMessage } from "@/lib/api/client";
 import { useTranslations } from "@/lib/i18n/locale-provider";
+import { useProjectContext, withProjectContext } from "../../project-context";
 
 type AutodeskRuntimeStatus = {
   configured: boolean;
@@ -28,6 +29,22 @@ type AutodeskContentEntry = {
   isDwg: boolean;
 };
 
+type QuantaraProjectOption = {
+  id: string;
+  databaseId: string;
+  reference: string;
+  name: string;
+};
+
+type AutodeskCandidateResult = {
+  candidatesCreated: number;
+};
+
+type AnalysisSuccess = {
+  candidatesCreated: number;
+  project: QuantaraProjectOption;
+};
+
 type FolderTrail = { id: string | undefined; name: string };
 
 function ApiError({ message }: { message: string }) {
@@ -39,7 +56,17 @@ function ApiError({ message }: { message: string }) {
 }
 
 export default function AutodeskConnectPage() {
+  return (
+    <Suspense fallback={null}>
+      <AutodeskConnectPageContent />
+    </Suspense>
+  );
+}
+
+function AutodeskConnectPageContent() {
   const t = useTranslations();
+  const projectContext = useProjectContext();
+  const contextProjectId = projectContext?.projectId ?? null;
   const [runtimeStatus, setRuntimeStatus] = useState<AutodeskRuntimeStatus | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [connectError, setConnectError] = useState<string | null>(null);
@@ -47,11 +74,19 @@ export default function AutodeskConnectPage() {
   const [projects, setProjects] = useState<NamedEntry[]>([]);
   const [entries, setEntries] = useState<AutodeskContentEntry[]>([]);
   const [hubId, setHubId] = useState("");
-  const [projectId, setProjectId] = useState("");
+  const [autodeskProjectId, setAutodeskProjectId] = useState("");
   const [folderTrail, setFolderTrail] = useState<FolderTrail[]>([]);
   const [isBrowsing, setIsBrowsing] = useState(false);
   const [browseError, setBrowseError] = useState<string | null>(null);
   const [isDisconnecting, setIsDisconnecting] = useState(false);
+  const [selectedDwg, setSelectedDwg] = useState<AutodeskContentEntry | null>(null);
+  const [quantaraProjects, setQuantaraProjects] = useState<QuantaraProjectOption[] | null>(null);
+  const [quantaraProjectId, setQuantaraProjectId] = useState("");
+  const [isQuantaraProjectsLoading, setIsQuantaraProjectsLoading] = useState(false);
+  const [quantaraProjectsError, setQuantaraProjectsError] = useState<string | null>(null);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [analysisError, setAnalysisError] = useState<string | null>(null);
+  const [analysisSuccess, setAnalysisSuccess] = useState<AnalysisSuccess | null>(null);
 
   const currentFolder = folderTrail[folderTrail.length - 1];
   const isConnected = runtimeStatus?.connectionStatus === "CONNECTED";
@@ -146,42 +181,112 @@ export default function AutodeskConnectPage() {
   }, [hubId, isConnected, loadProjects]);
 
   useEffect(() => {
-    if (!isConnected || !hubId || !projectId) return;
+    if (!isConnected || !hubId || !autodeskProjectId) return;
     const controller = new AbortController();
-    void loadContents(hubId, projectId, currentFolder?.id, controller.signal);
+    void loadContents(hubId, autodeskProjectId, currentFolder?.id, controller.signal);
     return () => controller.abort();
-  }, [currentFolder?.id, hubId, isConnected, loadContents, projectId]);
+  }, [autodeskProjectId, currentFolder?.id, hubId, isConnected, loadContents]);
 
   const selectedHub = useMemo(() => hubs.find((hub) => hub.id === hubId) ?? null, [hubId, hubs]);
-  const selectedProject = useMemo(
-    () => projects.find((project) => project.id === projectId) ?? null,
-    [projectId, projects],
+  const selectedAutodeskProject = useMemo(
+    () => projects.find((project) => project.id === autodeskProjectId) ?? null,
+    [autodeskProjectId, projects],
   );
+  const selectedQuantaraProject = useMemo(
+    () => quantaraProjects?.find((project) => project.id === quantaraProjectId) ?? null,
+    [quantaraProjectId, quantaraProjects],
+  );
+
+  const clearDwgAnalysis = () => {
+    setSelectedDwg(null);
+    setAnalysisError(null);
+    setAnalysisSuccess(null);
+  };
 
   const resetFolders = () => {
     setFolderTrail([{ id: undefined, name: t("integrations.autodesk.files") }]);
     setEntries([]);
+    clearDwgAnalysis();
   };
 
   const chooseHub = (nextHubId: string) => {
     setHubId(nextHubId);
-    setProjectId("");
+    setAutodeskProjectId("");
     setProjects([]);
     resetFolders();
   };
 
-  const chooseProject = (nextProjectId: string) => {
-    setProjectId(nextProjectId);
+  const chooseAutodeskProject = (nextProjectId: string) => {
+    setAutodeskProjectId(nextProjectId);
     resetFolders();
   };
 
   const openFolder = (entry: AutodeskContentEntry) => {
     if (!entry.isFolder) return;
+    clearDwgAnalysis();
     setFolderTrail((trail) => [...trail, { id: entry.id, name: entry.name }]);
   };
 
   const goBack = () => {
+    clearDwgAnalysis();
     setFolderTrail((trail) => (trail.length > 1 ? trail.slice(0, -1) : trail));
+  };
+
+  const loadQuantaraProjects = useCallback(async () => {
+    setIsQuantaraProjectsLoading(true);
+    setQuantaraProjectsError(null);
+    try {
+      const result = await apiClient.get<QuantaraProjectOption[]>("/api/projects");
+      setQuantaraProjects(result);
+      setQuantaraProjectId((current) => {
+        if (result.some((project) => project.id === current)) return current;
+        if (contextProjectId && result.some((project) => project.id === contextProjectId)) return contextProjectId;
+        return result.length === 1 ? result[0].id : "";
+      });
+    } catch (error) {
+      setQuantaraProjectsError(getApiErrorMessage(error));
+    } finally {
+      setIsQuantaraProjectsLoading(false);
+    }
+  }, [contextProjectId]);
+
+  useEffect(() => {
+    if (
+      isConnected
+      && contextProjectId
+      && quantaraProjects === null
+      && !isQuantaraProjectsLoading
+      && !quantaraProjectsError
+    ) {
+      void loadQuantaraProjects();
+    }
+  }, [contextProjectId, isConnected, isQuantaraProjectsLoading, loadQuantaraProjects, quantaraProjects, quantaraProjectsError]);
+
+  const selectDwg = (entry: AutodeskContentEntry) => {
+    if (!entry.isDwg || isAnalyzing) return;
+    setSelectedDwg(entry);
+    setAnalysisError(null);
+    setAnalysisSuccess(null);
+    if (quantaraProjects === null && !isQuantaraProjectsLoading) void loadQuantaraProjects();
+  };
+
+  const analyzeDwg = async () => {
+    if (!selectedDwg || !selectedQuantaraProject || !autodeskProjectId || isAnalyzing) return;
+
+    setIsAnalyzing(true);
+    setAnalysisError(null);
+    setAnalysisSuccess(null);
+    try {
+      const result = await apiClient.post<AutodeskCandidateResult>(
+        `/api/projects/${encodeURIComponent(selectedQuantaraProject.id)}/integrations/autodesk/extract`,
+        { autodeskProjectId, itemId: selectedDwg.id },
+      );
+      setAnalysisSuccess({ candidatesCreated: result.candidatesCreated, project: selectedQuantaraProject });
+    } catch (error) {
+      setAnalysisError(getApiErrorMessage(error));
+    } finally {
+      setIsAnalyzing(false);
+    }
   };
 
   const disconnect = async () => {
@@ -195,8 +300,9 @@ export default function AutodeskConnectPage() {
       setProjects([]);
       setEntries([]);
       setHubId("");
-      setProjectId("");
+      setAutodeskProjectId("");
       setFolderTrail([]);
+      clearDwgAnalysis();
     } catch (error) {
       setBrowseError(getApiErrorMessage(error));
     } finally {
@@ -247,7 +353,7 @@ export default function AutodeskConnectPage() {
           <p className="mt-2 max-w-2xl text-sm text-[#536078] dark:text-[#8CA0BE]">
             {needsReconnect ? t("integrations.autodesk.reconnectBody") : t("integrations.autodesk.connectBody")}
           </p>
-          <a href="/api/integrations/autodesk/connect" className="mt-5 inline-flex min-h-10 items-center rounded-2xl border border-[#0EA5E9] bg-[#0EA5E9] px-4 py-2 text-sm font-semibold text-white hover:opacity-90 dark:border-[#22D3EE] dark:bg-[#22D3EE] dark:text-[#050B18]">
+          <a href={withProjectContext("/api/integrations/autodesk/connect", projectContext)} className="mt-5 inline-flex min-h-10 items-center rounded-2xl border border-[#0EA5E9] bg-[#0EA5E9] px-4 py-2 text-sm font-semibold text-white hover:opacity-90 dark:border-[#22D3EE] dark:bg-[#22D3EE] dark:text-[#050B18]">
             {connectAction}
           </a>
           <p className="mt-5 max-w-3xl rounded-2xl border border-[#D9E2EC] bg-[#EEF3F8] p-4 text-sm text-[#536078] dark:border-[#1E2A42] dark:bg-[#111D33] dark:text-[#8CA0BE]">
@@ -288,7 +394,7 @@ export default function AutodeskConnectPage() {
             </label>
             <label className="text-sm font-semibold text-[#0B1630] dark:text-white">
               {t("integrations.autodesk.project")}
-              <select value={projectId} onChange={(event) => chooseProject(event.target.value)} disabled={!hubId || isBrowsing} className="mt-2 w-full rounded-xl border border-[#D9E2EC] bg-white px-3 py-2 text-sm font-normal text-[#0B1630] disabled:opacity-50 dark:border-[#1E2A42] dark:bg-[#0B1426] dark:text-white">
+              <select value={autodeskProjectId} onChange={(event) => chooseAutodeskProject(event.target.value)} disabled={!hubId || isBrowsing} className="mt-2 w-full rounded-xl border border-[#D9E2EC] bg-white px-3 py-2 text-sm font-normal text-[#0B1630] disabled:opacity-50 dark:border-[#1E2A42] dark:bg-[#0B1426] dark:text-white">
                 <option value="">{t("integrations.autodesk.selectProject")}</option>
                 {projects.map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}
               </select>
@@ -299,12 +405,12 @@ export default function AutodeskConnectPage() {
           {!isBrowsing && isConnected && hubs.length === 0 && <p className="mt-5 text-sm text-[#536078] dark:text-[#8CA0BE]">{t("integrations.autodesk.emptyHubs")}</p>}
           {!isBrowsing && hubId && projects.length === 0 && <p className="mt-5 text-sm text-[#536078] dark:text-[#8CA0BE]">{t("integrations.autodesk.emptyProjects")}</p>}
 
-          {selectedHub && selectedProject && (
+          {selectedHub && selectedAutodeskProject && (
             <div className="mt-8 rounded-2xl border border-[#D9E2EC] p-4 dark:border-[#1E2A42]">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div className="min-w-0">
                   <p className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-[#7B879C] dark:text-[#7F8DA6]"><HardDrive className="h-3.5 w-3.5" aria-hidden="true" /> {selectedHub.name}</p>
-                  <p className="mt-1 text-sm font-semibold text-[#0B1630] dark:text-white">{selectedProject.name}</p>
+                  <p className="mt-1 text-sm font-semibold text-[#0B1630] dark:text-white">{selectedAutodeskProject.name}</p>
                   <p className="mt-1 truncate text-xs text-[#7B879C] dark:text-[#7F8DA6]">{folderTrail.map((folder) => folder.name).join(" / ")}</p>
                 </div>
                 {folderTrail.length > 1 && (
@@ -323,10 +429,84 @@ export default function AutodeskConnectPage() {
                       <span className="truncate text-sm font-medium text-[#0B1630] dark:text-white">{entry.name}</span>
                       {entry.isDwg && <span className="shrink-0 rounded-full border border-[#0EA5E9]/40 bg-[#0EA5E9]/10 px-2 py-0.5 text-xs font-semibold text-[#087DAE] dark:text-[#67E8F9]">{t("integrations.autodesk.dwgLabel")}</span>}
                     </div>
-                    {entry.isFolder && <button type="button" onClick={() => openFolder(entry)} className="shrink-0 rounded-xl border border-[#D9E2EC] px-3 py-2 text-xs font-semibold text-[#0B1630] dark:border-[#1E2A42] dark:text-white">{t("integrations.autodesk.openFolder")}</button>}
+                    {entry.isFolder ? (
+                      <button type="button" onClick={() => openFolder(entry)} className="shrink-0 rounded-xl border border-[#D9E2EC] px-3 py-2 text-xs font-semibold text-[#0B1630] dark:border-[#1E2A42] dark:text-white">{t("integrations.autodesk.openFolder")}</button>
+                    ) : entry.isDwg ? (
+                      <button type="button" onClick={() => selectDwg(entry)} disabled={isAnalyzing} className="shrink-0 rounded-xl border border-[#0EA5E9] px-3 py-2 text-xs font-semibold text-[#087DAE] hover:bg-[#0EA5E9]/10 disabled:opacity-50 dark:border-[#22D3EE] dark:text-[#67E8F9]">
+                        {selectedDwg?.id === entry.id ? t("integrations.autodesk.selected") : t("integrations.autodesk.selectDwg")}
+                      </button>
+                    ) : null}
                   </li>
                 ))}
               </ul>
+
+              {selectedDwg && (
+                <div className="mt-5 rounded-2xl border border-[#D9E2EC] bg-[#EEF3F8] p-5 dark:border-[#1E2A42] dark:bg-[#111D33]">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-[#7B879C] dark:text-[#7F8DA6]">{t("integrations.autodesk.selectedDwg")}</p>
+                  <p className="mt-1 truncate text-sm font-semibold text-[#0B1630] dark:text-white">{selectedDwg.name}</p>
+
+                  <div className="mt-4">
+                    <label htmlFor="autodesk-quantara-project" className="text-xs font-semibold uppercase tracking-wide text-[#7B879C] dark:text-[#7F8DA6]">
+                      {t("integrations.autodesk.selectQuantaraProject")}
+                    </label>
+
+                    {isQuantaraProjectsLoading ? (
+                      <div className="mt-2 flex items-center gap-2 rounded-xl border border-[#D9E2EC] bg-white px-3 py-2 text-sm text-[#7B879C] dark:border-[#1E2A42] dark:bg-[#0B1426] dark:text-[#7F8DA6]">
+                        <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> {t("integrations.autodesk.loadingProjects")}
+                      </div>
+                    ) : quantaraProjectsError ? (
+                      <div className="mt-2 rounded-xl border border-rose-700/40 bg-rose-950/10 p-3 text-sm text-[#D84A4A] dark:bg-rose-950/40 dark:text-rose-300">
+                        <p>{quantaraProjectsError}</p>
+                        <button type="button" onClick={() => void loadQuantaraProjects()} className="mt-2 text-xs font-semibold underline">
+                          {t("integrations.tryAgain")}
+                        </button>
+                      </div>
+                    ) : quantaraProjects?.length === 0 ? (
+                      <div className="mt-2 rounded-xl border border-dashed border-[#D9E2EC] bg-white p-4 text-sm text-[#536078] dark:border-[#1E2A42] dark:bg-[#0B1426] dark:text-[#B8C4D8]">
+                        <p>{t("integrations.autodesk.createProjectFirst")}</p>
+                        <Link href="/projects/new" className="mt-2 inline-flex font-semibold text-[#0284C7] hover:underline dark:text-[#22D3EE]">
+                          {t("integrations.autodesk.createProject")}
+                        </Link>
+                      </div>
+                    ) : quantaraProjects ? (
+                      <select
+                        id="autodesk-quantara-project"
+                        value={quantaraProjectId}
+                        onChange={(event) => {
+                          setQuantaraProjectId(event.target.value);
+                          setAnalysisError(null);
+                          setAnalysisSuccess(null);
+                        }}
+                        disabled={isAnalyzing}
+                        className="mt-2 w-full rounded-xl border border-[#D9E2EC] bg-white px-3 py-2 text-sm text-[#0B1630] disabled:opacity-50 dark:border-[#1E2A42] dark:bg-[#0B1426] dark:text-white"
+                      >
+                        <option value="">{t("integrations.autodesk.selectQuantaraProjectPrompt")}</option>
+                        {quantaraProjects.map((project) => (
+                          <option key={project.databaseId} value={project.id}>{project.name} — {project.reference}</option>
+                        ))}
+                      </select>
+                    ) : null}
+                  </div>
+
+                  {analysisError && <div className="mt-4"><ApiError message={analysisError} /></div>}
+
+                  {analysisSuccess ? (
+                    <div aria-live="polite" className="mt-4 rounded-xl border border-emerald-700/40 bg-emerald-950/10 p-4 text-sm text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300">
+                      <p className="flex items-center gap-2 font-semibold">
+                        <CheckCircle2 className="h-4 w-4" aria-hidden="true" /> {t("integrations.autodesk.reviewCandidatesCreated", { count: analysisSuccess.candidatesCreated })}
+                      </p>
+                      <Link href={`/projects/${encodeURIComponent(analysisSuccess.project.id)}/extractions`} className="mt-3 inline-flex min-h-10 items-center rounded-xl border border-emerald-600 bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-500">
+                        {t("integrations.autodesk.reviewExtraction")}
+                      </Link>
+                    </div>
+                  ) : quantaraProjects && quantaraProjects.length > 0 ? (
+                    <button type="button" onClick={() => void analyzeDwg()} disabled={!selectedQuantaraProject || isAnalyzing} className="mt-4 inline-flex min-h-10 items-center gap-2 rounded-2xl border border-[#0EA5E9] bg-[#0EA5E9] px-4 py-2 text-sm font-semibold text-white hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50 dark:border-[#22D3EE] dark:bg-[#22D3EE] dark:text-[#050B18]">
+                      {isAnalyzing && <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />}
+                      {isAnalyzing ? t("integrations.autodesk.readingDrawing") : t("integrations.autodesk.analyzeForBoq")}
+                    </button>
+                  ) : null}
+                </div>
+              )}
             </div>
           )}
         </section>

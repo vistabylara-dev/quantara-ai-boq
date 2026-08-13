@@ -50,6 +50,17 @@ function getProjectFileStorageAdapter(): DocumentStorageAdapter {
 }
 
 /**
+ * Autodesk DWG candidate sources are explicit metadata-only references: they
+ * satisfy the source FK without claiming that Quantara uploaded or stores the
+ * remote DWG bytes. Storage operations must never try to open that namespace.
+ */
+function isMetadataOnlyExternalSource(metadataJson: unknown): boolean {
+  if (!metadataJson || typeof metadataJson !== "object" || Array.isArray(metadataJson)) return false;
+  const metadata = metadataJson as Record<string, unknown>;
+  return metadata.sourceKind === "EXTERNAL_REFERENCE" && metadata.localCopy === false;
+}
+
+/**
  * Validates, stores, and records an uploaded source file. The original is
  * stored once under the "originals" category and is never overwritten —
  * every later Phase 8 sub-phase (preprocessing, page splitting, previews)
@@ -131,6 +142,13 @@ export type DownloadByteRange = { start: number; end: number };
  */
 export async function getProjectFileDownloadMeta(actor: CurrentActor, fileId: string) {
   const row = await getProjectFileRecord(actor.companyId, fileId);
+  if (isMetadataOnlyExternalSource(row.metadataJson)) {
+    throw new AppError(
+      "EXTERNAL_SOURCE_NO_LOCAL_COPY",
+      "This Autodesk source is connected externally and has no local file copy.",
+      409,
+    );
+  }
   return { fileName: row.originalName, mimeType: row.mimeType, totalSize: row.fileSize };
 }
 
@@ -148,6 +166,14 @@ export async function getProjectFileDownloadMeta(actor: CurrentActor, fileId: st
  */
 export async function getProjectFileForStreamingDownload(actor: CurrentActor, fileId: string, range?: DownloadByteRange) {
   const row = await getProjectFileRecord(actor.companyId, fileId);
+
+  if (isMetadataOnlyExternalSource(row.metadataJson)) {
+    throw new AppError(
+      "EXTERNAL_SOURCE_NO_LOCAL_COPY",
+      "This Autodesk source is connected externally and has no local file copy.",
+      409,
+    );
+  }
 
   if (range) {
     if (range.start < 0 || range.end < range.start || range.start >= row.fileSize) {
@@ -188,7 +214,9 @@ export async function deleteProjectFile(actor: CurrentActor, fileId: string) {
   requireCapability(actor, "files:manage");
   const row = await getProjectFileRecord(actor.companyId, fileId);
   await deleteProjectFileRow(actor.companyId, fileId);
-  await getProjectFileStorageAdapter().deleteObject(row.storageKey);
+  if (!isMetadataOnlyExternalSource(row.metadataJson)) {
+    await getProjectFileStorageAdapter().deleteObject(row.storageKey);
+  }
 
   await createAuditLog(actor.companyId, {
     entityType: "ProjectFile",

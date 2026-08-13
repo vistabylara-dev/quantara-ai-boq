@@ -10,6 +10,7 @@ const AUTHORIZATION_ENDPOINT = "https://developer.api.autodesk.com/authenticatio
 const TOKEN_ENDPOINT = "https://developer.api.autodesk.com/authentication/v2/token";
 const INTROSPECTION_ENDPOINT = "https://developer.api.autodesk.com/authentication/v2/introspect";
 const DATA_MANAGEMENT_ENDPOINT = "https://developer.api.autodesk.com";
+const MODEL_DERIVATIVE_ENDPOINT = "https://developer.api.autodesk.com/modelderivative/v2/designdata";
 
 export const AUTODESK_READ_SCOPE = "data:read";
 
@@ -254,6 +255,35 @@ export type AutodeskContentEntry = {
   isDwg: boolean;
 };
 
+/** A normalized immutable reference to the current Autodesk item version. */
+export type AutodeskItemTipVersion = {
+  itemId: string;
+  versionId: string;
+  name: string;
+  mimeType: string | null;
+  versionNumber: number;
+  derivativeUrn: string | null;
+};
+
+export type AutodeskDerivativeManifest = {
+  status: "success";
+  progress: "complete";
+};
+
+export type AutodeskModelMetadata = {
+  modelGuid: string;
+  name: string;
+  role: "2d" | "3d" | null;
+  isMasterView: boolean | null;
+};
+
+export type AutodeskModelProperty = {
+  objectId: number;
+  name: string;
+  externalId: string | null;
+  properties: Record<string, Record<string, unknown>>;
+};
+
 function isRecord(value: unknown): value is AutodeskApiRecord {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
@@ -261,6 +291,29 @@ function isRecord(value: unknown): value is AutodeskApiRecord {
 function getNameFromAttributes(value: unknown): string | null {
   if (!isRecord(value) || typeof value.name !== "string" || !value.name.trim()) return null;
   return value.name;
+}
+
+function derivativeNotReady(): AppError {
+  return new AppError(
+    "AUTODESK_DERIVATIVE_NOT_READY",
+    "Autodesk model metadata is not available for this DWG version yet.",
+    409,
+  );
+}
+
+function getRelationshipIdentifier(
+  resource: AutodeskApiRecord,
+  relationshipName: string,
+  expectedType: string,
+): string | null {
+  const relationships = isRecord(resource.relationships) ? resource.relationships : null;
+  const relationshipValue = relationships?.[relationshipName];
+  const relationship: AutodeskApiRecord | null = isRecord(relationshipValue) ? relationshipValue : null;
+  const dataValue = relationship?.data;
+  const data: AutodeskApiRecord | null = isRecord(dataValue) ? dataValue : null;
+  return data && data.type === expectedType && typeof data.id === "string" && data.id
+    ? data.id
+    : null;
 }
 
 function parseNamedEntry(value: unknown): AutodeskHub {
@@ -347,6 +400,192 @@ async function fetchAutodeskData(path: string, accessToken: string, operation: s
   const body = await response.json().catch(() => null) as unknown;
   if (!body) throw new AppError("AUTODESK_API_ERROR", "Autodesk returned invalid cloud data.", 502);
   return body;
+}
+
+async function fetchAutodeskDerivativeData(path: string, accessToken: string, operation: string): Promise<unknown> {
+  let response: Response;
+  try {
+    response = await fetch(`${MODEL_DERIVATIVE_ENDPOINT}${path}`, {
+      headers: { Authorization: `Bearer ${accessToken}`, Accept: "application/json" },
+    });
+  } catch {
+    throw new AppError("AUTODESK_API_ERROR", "Autodesk could not be reached. Please try again.", 502);
+  }
+
+  if (response.status === 202 || response.status === 404) {
+    await response.body?.cancel().catch(() => undefined);
+    throw derivativeNotReady();
+  }
+  if (!response.ok) return throwAutodeskApiError(response, operation);
+
+  const body = await response.json().catch(() => null) as unknown;
+  if (!body) throw new AppError("AUTODESK_API_ERROR", "Autodesk returned invalid model data.", 502);
+  return body;
+}
+
+function parseTipVersion(body: unknown, itemId: string): Omit<AutodeskItemTipVersion, "derivativeUrn"> {
+  if (!isRecord(body) || !isRecord(body.data)) {
+    throw new AppError("AUTODESK_API_ERROR", "Autodesk returned invalid DWG version data.", 502);
+  }
+  const version = body.data;
+  const attributes = isRecord(version.attributes) ? version.attributes : null;
+  const name = attributes ? getNameFromAttributes(attributes) : null;
+  const versionNumber = attributes?.versionNumber;
+  if (
+    version.type !== "versions"
+    || typeof version.id !== "string"
+    || !version.id
+    || !name
+    || typeof versionNumber !== "number"
+    || !Number.isInteger(versionNumber)
+  ) {
+    throw new AppError("AUTODESK_API_ERROR", "Autodesk returned invalid DWG version data.", 502);
+  }
+  return {
+    itemId,
+    versionId: version.id,
+    name,
+    mimeType: typeof attributes?.mimeType === "string" && attributes.mimeType ? attributes.mimeType : null,
+    versionNumber,
+  };
+}
+
+async function getDerivativeUrnFromVersionReferences(
+  accessToken: string,
+  projectId: string,
+  versionId: string,
+): Promise<string | null> {
+  try {
+    const body = await fetchAutodeskData(
+      `/data/v1/projects/${encodeURIComponent(projectId)}/versions/${encodeURIComponent(versionId)}/relationships/refs`,
+      accessToken,
+      "read DWG version references",
+    );
+    if (!isRecord(body) || !Array.isArray(body.included)) return null;
+
+    const versions = body.included.filter((candidate): candidate is AutodeskApiRecord => (
+      isRecord(candidate) && candidate.type === "versions"
+    ));
+    const matchingVersion = versions.filter((version) => version.id === versionId);
+    const candidates = new Set(
+      (matchingVersion.length > 0 ? matchingVersion : versions)
+        .map((version) => getRelationshipIdentifier(version, "derivatives", "derivatives"))
+        .filter((urn): urn is string => Boolean(urn)),
+    );
+    return candidates.size === 1 ? [...candidates][0] : null;
+  } catch (error) {
+    if (error instanceof AppError && error.code === "AUTODESK_RESOURCE_NOT_FOUND") return null;
+    throw error;
+  }
+}
+
+/** Resolves only the APS-declared immutable tip/version relationship; it never infers a derivative from a filename. */
+export async function getAutodeskItemTipVersion(
+  accessToken: string,
+  projectId: string,
+  itemId: string,
+): Promise<AutodeskItemTipVersion> {
+  const body = await fetchAutodeskData(
+    `/data/v1/projects/${encodeURIComponent(projectId)}/items/${encodeURIComponent(itemId)}/tip`,
+    accessToken,
+    "read the DWG version",
+  );
+  const tip = parseTipVersion(body, itemId);
+  const directDerivative = isRecord(body) && isRecord(body.data)
+    ? getRelationshipIdentifier(body.data, "derivatives", "derivatives")
+    : null;
+  const derivativeUrn = directDerivative ?? await getDerivativeUrnFromVersionReferences(accessToken, projectId, tip.versionId);
+  return { ...tip, derivativeUrn };
+}
+
+/** Checks that APS has completed the server-generated Model Derivative for the selected DWG version. */
+export async function getAutodeskDerivativeManifest(
+  accessToken: string,
+  derivativeUrn: string,
+): Promise<AutodeskDerivativeManifest> {
+  const body = await fetchAutodeskDerivativeData(
+    `/${encodeURIComponent(derivativeUrn)}/manifest`,
+    accessToken,
+    "read DWG model metadata",
+  );
+  if (!isRecord(body) || body.status !== "success" || body.progress !== "complete") {
+    throw derivativeNotReady();
+  }
+  return { status: "success", progress: "complete" };
+}
+
+/** Returns only validated model views, with no raw APS response passed to callers. */
+export async function getAutodeskModelMetadata(
+  accessToken: string,
+  derivativeUrn: string,
+): Promise<AutodeskModelMetadata[]> {
+  const body = await fetchAutodeskDerivativeData(
+    `/${encodeURIComponent(derivativeUrn)}/metadata`,
+    accessToken,
+    "read DWG model views",
+  );
+  const data = isRecord(body) && isRecord(body.data) ? body.data : null;
+  if (!data || data.type !== "metadata" || !Array.isArray(data.metadata)) {
+    throw new AppError("AUTODESK_API_ERROR", "Autodesk returned invalid model metadata.", 502);
+  }
+
+  const models: AutodeskModelMetadata[] = [];
+  for (const entry of data.metadata) {
+    if (!isRecord(entry) || typeof entry.guid !== "string" || !entry.guid || typeof entry.name !== "string" || !entry.name) {
+      throw new AppError("AUTODESK_API_ERROR", "Autodesk returned invalid model metadata.", 502);
+    }
+    models.push({
+      modelGuid: entry.guid,
+      name: entry.name,
+      role: entry.role === "2d" || entry.role === "3d" ? entry.role : null,
+      isMasterView: typeof entry.isMasterView === "boolean" ? entry.isMasterView : null,
+    });
+  }
+  return models;
+}
+
+/** Returns validated object properties only. Values are preserved as APS supplied them; no units or quantities are inferred here. */
+export async function getAutodeskModelProperties(
+  accessToken: string,
+  derivativeUrn: string,
+  modelGuid: string,
+): Promise<AutodeskModelProperty[]> {
+  const body = await fetchAutodeskDerivativeData(
+    `/${encodeURIComponent(derivativeUrn)}/metadata/${encodeURIComponent(modelGuid)}/properties`,
+    accessToken,
+    "read DWG object properties",
+  );
+  const data = isRecord(body) && isRecord(body.data) ? body.data : null;
+  if (!data || data.type !== "properties" || !Array.isArray(data.collection)) {
+    throw new AppError("AUTODESK_API_ERROR", "Autodesk returned invalid model properties.", 502);
+  }
+
+  return data.collection.map((entry) => {
+    if (
+      !isRecord(entry)
+      || typeof entry.objectid !== "number"
+      || !Number.isInteger(entry.objectid)
+      || typeof entry.name !== "string"
+      || !entry.name
+      || !isRecord(entry.properties)
+    ) {
+      throw new AppError("AUTODESK_API_ERROR", "Autodesk returned invalid model properties.", 502);
+    }
+
+    const groups: Record<string, Record<string, unknown>> = {};
+    for (const [groupName, groupProperties] of Object.entries(entry.properties)) {
+      if (!isRecord(groupProperties)) {
+        throw new AppError("AUTODESK_API_ERROR", "Autodesk returned invalid model properties.", 502);
+      }
+      groups[groupName] = groupProperties;
+    }
+    return {
+      objectId: entry.objectid,
+      name: entry.name,
+      externalId: typeof entry.externalId === "string" && entry.externalId ? entry.externalId : null,
+      properties: groups,
+    };
+  });
 }
 
 function parseNamedList(body: unknown): AutodeskHub[] {

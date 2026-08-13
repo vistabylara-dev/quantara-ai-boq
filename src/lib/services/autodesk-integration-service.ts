@@ -318,6 +318,19 @@ async function runAutodeskApiCall<T>(connectionId: string, operation: () => Prom
   }
 }
 
+/**
+ * Runs a server-only, read-only APS operation with the tenant's current
+ * encrypted connection. The browser never receives the access token.
+ */
+export async function withAutodeskReadAccess<T>(
+  actor: CurrentActor,
+  operation: (accessToken: string) => Promise<T>,
+): Promise<T> {
+  requireCapability(actor, "integrations:connect");
+  const { connectionId, accessToken } = await getValidAutodeskAccessToken(actor);
+  return runAutodeskApiCall(connectionId, () => operation(accessToken));
+}
+
 export async function browseAutodeskHubs(actor: CurrentActor): Promise<AutodeskHub[]> {
   requireCapability(actor, "integrations:connect");
   const { connectionId, accessToken } = await getValidAutodeskAccessToken(actor);

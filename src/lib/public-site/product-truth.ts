@@ -149,6 +149,12 @@ const PUBLIC_CAPABILITY_DEFINITIONS = [
     limitation: "Package availability and access vary; the public website does not represent every package as included.",
   },
   {
+    id: "bilingual-rtl-interface",
+    name: "English and Arabic interface with RTL",
+    status: "AVAILABLE",
+    summary: "Use Quantara in English or Arabic, with a right-to-left interface in Arabic.",
+  },
+  {
     id: "commercial-access",
     name: "Commercial plans and billing",
     status: "CONTROLLED_ACCESS",
@@ -279,6 +285,10 @@ const PUBLIC_CAPABILITY_REGISTER_KEYS = {
     summary: "publicContent.capabilityRegister.capabilities.industryPackages.summary",
     limitation: "publicContent.capabilityRegister.capabilities.industryPackages.limitation",
   },
+  "bilingual-rtl-interface": {
+    name: "publicContent.capabilityRegister.capabilities.bilingualRtlInterface.name",
+    summary: "publicContent.capabilityRegister.capabilities.bilingualRtlInterface.summary",
+  },
   "commercial-access": {
     name: "publicContent.capabilityRegister.capabilities.commercialAccess.name",
     summary: "publicContent.capabilityRegister.capabilities.commercialAccess.summary",
@@ -352,6 +362,7 @@ export const PUBLIC_PRODUCT_LIFECYCLE_BY_ID = {
   "technical-report-generation": "BETA_LIMITED",
   "source-attribution": "LIVE",
   "industry-packages": "BETA_LIMITED",
+  "bilingual-rtl-interface": "LIVE",
   "commercial-access": "BETA_LIMITED",
   "automatic-drawing-takeoff": "NOT_AVAILABLE",
   "model-file-import": "NOT_AVAILABLE",
@@ -422,6 +433,10 @@ export const PUBLIC_PRODUCT_EVIDENCE_BY_ID = {
   "industry-packages": [
     "src/lib/entitlements/package-entitlement-service.ts",
     "tests/catalogue-package-integrity.test.ts",
+  ],
+  "bilingual-rtl-interface": [
+    "src/lib/i18n/server-locale.ts",
+    "tests/i18n-dictionary-parity.test.ts",
   ],
   "commercial-access": [
     "src/lib/services/commerce-checkout-service.ts",

@@ -86,12 +86,17 @@ function buildWorkflowStages(t: TranslateFn) {
 }
 
 const featuredCapabilityIds = [
+  "project-workspaces",
   "text-pdf-extraction",
   "spreadsheet-import",
   "google-drive-import",
+  "reviewed-extraction",
+  "boq-management",
   "visible-calculations",
-  "voice-proposals",
+  "industry-packages",
   "professional-outputs",
+  "technical-report-generation",
+  "bilingual-rtl-interface",
 ] as const satisfies readonly PublicCapabilityId[];
 
 const statusStyle: Record<PublicCapabilityStatus, string> = {
@@ -123,6 +128,7 @@ export default async function HomePage() {
   ];
   const boundaries = [
     t("publicContent.home.boundaryAutomaticMeasurement"),
+    t("publicContent.home.boundaryModelQuantityExtraction"),
     t("publicContent.home.boundaryOcr"),
     t("publicContent.home.boundaryAccuracy"),
     t("publicContent.home.boundaryReplacement"),
@@ -161,7 +167,7 @@ export default async function HomePage() {
           </p>
           <div className="mb-12 flex flex-col items-center justify-center gap-4 sm:flex-row">
             <Link href="/register" className="inline-flex h-12 w-full items-center justify-center rounded-lg bg-blue-600 px-7 font-semibold text-white shadow-sm hover:bg-blue-500 sm:w-auto">
-              {t("publicContent.cta.startAccountSetup")} <ArrowRight className="ms-2 h-4 w-4" aria-hidden="true" />
+              {t("publicContent.home.createAccount")} <ArrowRight className="ms-2 h-4 w-4" aria-hidden="true" />
             </Link>
             <Link href="/features" className="inline-flex h-12 w-full items-center justify-center rounded-lg border border-slate-300 bg-white px-7 font-semibold text-slate-900 hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-950 dark:text-white dark:hover:bg-slate-900 sm:w-auto">
               {t("publicContent.home.checkFeatures")}
@@ -341,7 +347,7 @@ export default async function HomePage() {
               {t("publicContent.home.finalCtaAction")} <ArrowRight className="ms-2 h-4 w-4" aria-hidden="true" />
             </Link>
             <Link href="/register" className="inline-flex h-12 items-center justify-center rounded-lg border border-blue-300 px-6 font-semibold hover:bg-blue-600">
-              {t("publicContent.cta.startAccountSetup")}
+              {t("publicContent.home.createAccount")}
             </Link>
           </div>
         </div>

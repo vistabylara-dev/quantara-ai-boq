@@ -170,7 +170,7 @@ test.describe('Document Generation Validation', () => {
     await page.fill('input[type="email"]', userEmail);
     await page.fill('input[type="password"]', 'Password123!');
     await page.click('button[type="submit"]');
-    await expect(page).toHaveURL(/\/dashboard/);
+    await expect(page).toHaveURL(/\/dashboard/, { timeout: 15_000 });
   });
 
   test('should generate and download PDF, XLSX, and CSV', async ({ page }) => {

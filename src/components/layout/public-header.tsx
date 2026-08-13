@@ -204,32 +204,35 @@ export default function PublicHeader() {
           })}
         </div>
 
-        {/* Desktop CTAs */}
-        <div className="hidden lg:flex items-center gap-4">
+        {/* Header actions */}
+        <div className="flex items-center gap-2">
           <LanguageSwitcher />
-          <Link href="/login" className="text-sm font-medium text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 rounded-md px-2 py-1">
-            {t("publicSite.header.signIn")}
-          </Link>
-          <Link href="/register" className="inline-flex items-center justify-center rounded-md text-sm font-medium bg-blue-600 text-white hover:bg-blue-700 h-9 px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:focus:ring-offset-slate-950 transition-colors">
-            {t("publicContent.cta.startAccountSetup")}
-          </Link>
-        </div>
 
-        {/* Mobile Menu Trigger */}
-        <button
-          ref={mobileMenuTriggerRef}
-          type="button"
-          aria-expanded={mobileMenuOpen}
-          aria-controls="mobile-navigation"
-          aria-label={mobileMenuOpen ? t("publicSite.header.closeMenu") : t("publicSite.header.openMenu")}
-          className="lg:hidden p-2 -mr-2 text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 rounded-md"
-          onClick={() => {
-            if (mobileMenuOpen) closeMobileMenu();
-            else setMobileMenuOpen(true);
-          }}
-        >
-          {mobileMenuOpen ? <X className="h-6 w-6" aria-hidden="true" /> : <Menu className="h-6 w-6" aria-hidden="true" />}
-        </button>
+          <div className="hidden lg:flex items-center gap-4">
+            <Link href="/login" className="text-sm font-medium text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 rounded-md px-2 py-1">
+              {t("publicSite.header.signIn")}
+            </Link>
+            <Link href="/register" className="inline-flex items-center justify-center rounded-md text-sm font-medium bg-blue-600 text-white hover:bg-blue-700 h-9 px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:focus:ring-offset-slate-950 transition-colors">
+              {t("publicContent.cta.startAccountSetup")}
+            </Link>
+          </div>
+
+          {/* Mobile Menu Trigger */}
+          <button
+            ref={mobileMenuTriggerRef}
+            type="button"
+            aria-expanded={mobileMenuOpen}
+            aria-controls="mobile-navigation"
+            aria-label={mobileMenuOpen ? t("publicSite.header.closeMenu") : t("publicSite.header.openMenu")}
+            className="lg:hidden p-2 -mr-2 text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 rounded-md"
+            onClick={() => {
+              if (mobileMenuOpen) closeMobileMenu();
+              else setMobileMenuOpen(true);
+            }}
+          >
+            {mobileMenuOpen ? <X className="h-6 w-6" aria-hidden="true" /> : <Menu className="h-6 w-6" aria-hidden="true" />}
+          </button>
+        </div>
       </div>
 
       {/* Mobile Navigation Overlay */}
@@ -293,9 +296,6 @@ export default function PublicHeader() {
             })}
             
             <div className="pt-8 space-y-4">
-              <div className="flex justify-center">
-                <LanguageSwitcher />
-              </div>
               <Link href="/login" className="block w-full text-center py-3 text-base font-medium text-slate-900 dark:text-white border border-slate-200 dark:border-slate-800 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500">
                 {t("publicSite.header.signIn")}
               </Link>

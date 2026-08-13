@@ -6,6 +6,9 @@ import {
   createPublicPageMetadata,
   getPublicSearchPage,
 } from "@/lib/public-site/search-registry";
+import { getDictionary } from "@/lib/i18n/dictionaries";
+import { getServerLocale } from "@/lib/i18n/server-locale";
+import { createTranslator, translateStructuredContent } from "@/lib/i18n/translate";
 
 export const metadata = createPublicPageMetadata("/comparisons");
 
@@ -46,24 +49,39 @@ const CATEGORIES = [
   }
 ];
 
-export default function ComparisonsHubPage() {
+const PAGE_CONTENT = {
+  home: "Home",
+  breadcrumb: "Comparisons",
+  title: "BOQ and Construction Workflow Comparisons",
+  intro: "Neutral, factual comparisons to help construction professionals choose the right workflows, tools, and processes for BOQ extraction, estimating, and project control.",
+  categories: CATEGORIES,
+  additionalResources: "Additional Resources",
+  allResources: "All Resources",
+  exploreFeatures: "Explore Features",
+  aboutQuantara: "About Quantara",
+};
+
+export default async function ComparisonsHubPage() {
+  const locale = await getServerLocale();
+  const t = createTranslator(getDictionary(locale));
+  const content = translateStructuredContent(t, "publicRoutes.comparisonsHub", PAGE_CONTENT);
   return (
     <div className="min-h-screen bg-white text-slate-900">
       <div className="container mx-auto px-4 py-16 md:py-24 max-w-7xl">
       <PublicJsonLd data={pageSchema} />
-      <PublicBreadcrumb items={[{ name: "Home", item: "/" }, { name: "Comparisons" }]} tone="light" />
+      <PublicBreadcrumb items={[{ name: content.home, item: "/" }, { name: content.breadcrumb }]} tone="light" />
 
         <header className="mb-12 text-center">
           <h1 className="text-4xl md:text-5xl font-extrabold text-slate-900 tracking-tight mb-6">
-            BOQ and Construction Workflow Comparisons
+            {content.title}
           </h1>
           <p className="text-xl text-slate-600 max-w-3xl mx-auto">
-            Neutral, factual comparisons to help construction professionals choose the right workflows, tools, and processes for BOQ extraction, estimating, and project control.
+            {content.intro}
           </p>
         </header>
 
         <div className="space-y-16">
-          {CATEGORIES.map((cat, idx) => (
+          {content.categories.map((cat, idx) => (
             <section key={idx}>
               <h2 className="text-2xl font-bold text-slate-900 mb-6 border-b pb-2">{cat.title}</h2>
               <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -79,11 +97,11 @@ export default function ComparisonsHubPage() {
         </div>
 
         <section className="mt-20 border-t pt-10">
-          <h2 className="text-2xl font-bold text-slate-900 mb-6">Additional Resources</h2>
+          <h2 className="text-2xl font-bold text-slate-900 mb-6">{content.additionalResources}</h2>
           <div className="flex flex-wrap gap-4">
-            <Link href="/resources" className="px-5 py-2 bg-slate-100 hover:bg-slate-200 rounded-lg text-sm font-medium transition-colors">All Resources</Link>
-            <Link href="/features" className="px-5 py-2 bg-slate-100 hover:bg-slate-200 rounded-lg text-sm font-medium transition-colors">Explore Features</Link>
-            <Link href="/about" className="px-5 py-2 bg-slate-100 hover:bg-slate-200 rounded-lg text-sm font-medium transition-colors">About Quantara</Link>
+            <Link href="/resources" className="px-5 py-2 bg-slate-100 hover:bg-slate-200 rounded-lg text-sm font-medium transition-colors">{content.allResources}</Link>
+            <Link href="/features" className="px-5 py-2 bg-slate-100 hover:bg-slate-200 rounded-lg text-sm font-medium transition-colors">{content.exploreFeatures}</Link>
+            <Link href="/about" className="px-5 py-2 bg-slate-100 hover:bg-slate-200 rounded-lg text-sm font-medium transition-colors">{content.aboutQuantara}</Link>
           </div>
         </section>
       

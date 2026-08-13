@@ -7,6 +7,8 @@ import {
   PUBLIC_CAPABILITY_STATUS_LABELS,
   getPublicCapability,
   getPublicCapabilityForDisplay,
+  getPublicCapabilityStatusForDisplay,
+  getQuantaraProductTruthForDisplay,
   type PublicCapabilityId,
   type PublicCapabilityStatus,
 } from "@/lib/public-site/product-truth";
@@ -16,7 +18,7 @@ import {
 } from "@/lib/public-site/search-registry";
 import { getDictionary } from "@/lib/i18n/dictionaries";
 import { getServerLocale } from "@/lib/i18n/server-locale";
-import { createTranslator } from "@/lib/i18n/translate";
+import { createTranslator, translateStructuredContent, type TranslationKey } from "@/lib/i18n/translate";
 import { buildPublicPageGraph } from "@/lib/public-site/schema";
 
 type SeoCapabilityItem = {
@@ -82,11 +84,11 @@ const statusBadgeColors: Record<PublicCapabilityStatus, string> = {
   NOT_AVAILABLE: "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300",
 };
 
-function getPublicStatus(capabilityId: PublicCapabilityId) {
+function getPublicStatus(capabilityId: PublicCapabilityId, translate: ReturnType<typeof createTranslator>) {
   const canonicalStatus = getPublicCapability(capabilityId).status;
   return {
     canonicalStatus,
-    label: PUBLIC_CAPABILITY_STATUS_LABELS[canonicalStatus],
+    label: getPublicCapabilityStatusForDisplay(canonicalStatus, translate).label,
   };
 }
 
@@ -100,12 +102,33 @@ function getCapabilityBoundary(
   return getPublicCapabilityForDisplay(capabilityId, translate).limitation;
 }
 
-export default async function SeoLandingPage({ content, currentPath }: { content: SeoLandingPageContent; currentPath: string }) {
+const SEO_ROUTE_KEYS: Record<string, TranslationKey> = {
+  "/ai-boq-software": "publicRoutes.aiBoqSoftware",
+  "/boq-document-generation": "publicRoutes.boqDocumentGeneration",
+  "/boq-management": "publicRoutes.boqManagement",
+  "/boq-software": "publicRoutes.boqSoftware",
+  "/boq-software-abu-dhabi": "publicRoutes.boqSoftwareAbuDhabi",
+  "/boq-software-dubai": "publicRoutes.boqSoftwareDubai",
+  "/boq-software-oman": "publicRoutes.boqSoftwareOman",
+  "/boq-software-qatar": "publicRoutes.boqSoftwareQatar",
+  "/boq-software-saudi-arabia": "publicRoutes.boqSoftwareSaudiArabia",
+  "/construction-estimating-software": "publicRoutes.constructionEstimatingSoftware",
+  "/pdf-boq-extraction": "publicRoutes.pdfBoqExtraction",
+  "/quantity-surveying-software": "publicRoutes.quantitySurveyingSoftware",
+  "/scanned-pdf-boq": "publicRoutes.scannedPdfBoq",
+};
+
+export default async function SeoLandingPage({ content: sourceContent, currentPath }: { content: SeoLandingPageContent; currentPath: string }) {
   const locale = await getServerLocale();
   const t = createTranslator(getDictionary(locale));
+  const routeKey = SEO_ROUTE_KEYS[currentPath];
+  const content = routeKey
+    ? translateStructuredContent(t, routeKey, sourceContent)
+    : sourceContent;
+  const { professionalReviewNotice } = getQuantaraProductTruthForDisplay(t);
   const searchPage = getPublicSearchPage(currentPath as PublicSearchPath);
   const breadcrumbItems = [
-    { name: "Home", item: "/" },
+    { name: t("publicLanding.home"), item: "/" },
     { name: content.breadcrumbLabel, item: currentPath },
   ];
   const schemaFaqs = content.faqs.flatMap((faq) => {
@@ -191,10 +214,10 @@ export default async function SeoLandingPage({ content, currentPath }: { content
 
             {/* Relevant Features */}
             <section>
-              <h2 className="text-2xl font-bold mb-6">Relevant Features</h2>
+              <h2 className="text-2xl font-bold mb-6">{t("publicLanding.relevantFeatures")}</h2>
               <div className="grid gap-6">
                 {content.relevantFeatures.map((feature) => {
-                  const status = getPublicStatus(feature.capabilityId);
+                  const status = getPublicStatus(feature.capabilityId, t);
                   return (
                     <div key={feature.name} className="p-6 bg-white dark:bg-slate-900/50 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
                       <div>
@@ -216,7 +239,7 @@ export default async function SeoLandingPage({ content, currentPath }: { content
               <h2 className="text-2xl font-bold mb-4 text-slate-900 dark:text-white">{content.workflowExample.heading}</h2>
               <p className="text-lg text-slate-600 dark:text-slate-400 mb-8">{content.workflowExample.introduction}</p>
               
-              <div className="space-y-6 relative before:absolute before:inset-0 before:ml-5 before:-translate-x-px md:before:mx-auto md:before:translate-x-0 before:h-full before:w-0.5 before:bg-gradient-to-b before:from-transparent before:via-blue-200 dark:before:via-blue-800 before:to-transparent">
+              <div className="space-y-6 relative before:absolute before:inset-0 before:ms-5 before:-translate-x-px md:before:mx-auto md:before:translate-x-0 before:h-full before:w-0.5 before:bg-gradient-to-b before:from-transparent before:via-blue-200 dark:before:via-blue-800 before:to-transparent">
                 {content.workflowExample.steps.map((step, idx) => (
                   <div key={idx} className="relative flex items-center justify-between md:justify-normal md:odd:flex-row-reverse group is-active">
                     <div className="flex items-center justify-center w-10 h-10 rounded-full border-4 border-white dark:border-[#030508] bg-blue-100 dark:bg-blue-900 text-blue-600 dark:text-blue-400 shrink-0 md:order-1 md:group-odd:-translate-x-1/2 md:group-even:translate-x-1/2 shadow-sm z-10">
@@ -234,10 +257,10 @@ export default async function SeoLandingPage({ content, currentPath }: { content
             {/* Inputs & Outputs Grid */}
             <div className="grid md:grid-cols-2 gap-8">
               <section>
-                <h2 className="text-2xl font-bold mb-6">Supported Inputs</h2>
+                <h2 className="text-2xl font-bold mb-6">{t("publicLanding.supportedInputs")}</h2>
                 <div className="space-y-4">
                   {content.supportedInputs.map((input) => {
-                    const status = getPublicStatus(input.capabilityId);
+                    const status = getPublicStatus(input.capabilityId, t);
                     const boundary = getCapabilityBoundary(input.capabilityId, t) ?? input.limitation;
                     return (
                       <div key={input.name} className="p-4 bg-white dark:bg-slate-900/50 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
@@ -249,7 +272,7 @@ export default async function SeoLandingPage({ content, currentPath }: { content
                         </div>
                         <p className="text-sm text-slate-600 dark:text-slate-400">{input.description}</p>
                         {boundary && (
-                          <p className="text-xs text-amber-600 dark:text-amber-400 mt-2 font-medium">Note: {boundary}</p>
+                          <p className="text-xs text-amber-600 dark:text-amber-400 mt-2 font-medium">{t("publicLanding.note")} {boundary}</p>
                         )}
                       </div>
                     );
@@ -258,10 +281,10 @@ export default async function SeoLandingPage({ content, currentPath }: { content
               </section>
 
               <section>
-                <h2 className="text-2xl font-bold mb-6">Supported Outputs</h2>
+                <h2 className="text-2xl font-bold mb-6">{t("publicLanding.supportedOutputs")}</h2>
                 <div className="space-y-4">
                   {content.supportedOutputs.map((output) => {
-                    const status = getPublicStatus(output.capabilityId);
+                    const status = getPublicStatus(output.capabilityId, t);
                     const boundary = getCapabilityBoundary(output.capabilityId, t) ?? output.limitation;
                     return (
                       <div key={output.name} className="p-4 bg-white dark:bg-slate-900/50 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
@@ -273,7 +296,7 @@ export default async function SeoLandingPage({ content, currentPath }: { content
                         </div>
                         <p className="text-sm text-slate-600 dark:text-slate-400">{output.description}</p>
                         {boundary && (
-                          <p className="text-xs text-amber-600 dark:text-amber-400 mt-2 font-medium">Note: {boundary}</p>
+                          <p className="text-xs text-amber-600 dark:text-amber-400 mt-2 font-medium">{t("publicLanding.note")} {boundary}</p>
                         )}
                       </div>
                     );
@@ -284,7 +307,7 @@ export default async function SeoLandingPage({ content, currentPath }: { content
 
             {/* Limitations */}
             <section className="bg-slate-50 dark:bg-slate-900 p-8 rounded-2xl border border-slate-200 dark:border-slate-800">
-              <h2 className="text-2xl font-bold mb-4">Current Limitations</h2>
+              <h2 className="text-2xl font-bold mb-4">{t("publicLanding.currentLimitations")}</h2>
               <ul className="space-y-3">
                 {content.limitations.map((limit, idx) => (
                   <li key={idx} className="flex items-start gap-3 text-slate-700 dark:text-slate-300">
@@ -296,21 +319,21 @@ export default async function SeoLandingPage({ content, currentPath }: { content
             </section>
 
             {/* Professional Disclaimer */}
-            <section className="bg-amber-50 dark:bg-amber-900/20 border-l-4 border-amber-500 p-6 rounded-r-xl">
-              <h3 className="font-bold text-amber-800 dark:text-amber-300 mb-2">Professional Disclaimer</h3>
+            <section className="rounded-e-xl border-s-4 border-amber-500 bg-amber-50 p-6 dark:bg-amber-900/20">
+              <h3 className="font-bold text-amber-800 dark:text-amber-300 mb-2">{t("publicLanding.professionalDisclaimer")}</h3>
               <p className="text-amber-700 dark:text-amber-400/90 text-sm leading-relaxed">
-                Quantara assists with document extraction, BOQ organization, project records, templates and supported document-generation workflows. All extracted information, quantities, units, specifications, rates, assumptions, exclusions and generated documents must be reviewed by a qualified estimator, quantity surveyor, engineer or responsible project professional before tender, procurement, contractual or construction use.
+                {professionalReviewNotice}
               </p>
             </section>
 
             {/* FAQ */}
             <section>
-              <h2 className="text-3xl font-bold mb-8 text-center">Frequently Asked Questions</h2>
+              <h2 className="text-3xl font-bold mb-8 text-center">{t("publicLanding.frequentlyAskedQuestions")}</h2>
               <div className="max-w-3xl mx-auto space-y-4">
                 {content.faqs.map((faq) => (
                   <details key={faq.question} className="group overflow-hidden rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-950">
-                    <summary className="flex w-full cursor-pointer list-none items-center justify-between px-6 py-4 text-left focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-inset [&::-webkit-details-marker]:hidden">
-                      <span className="font-semibold text-slate-900 dark:text-slate-100 pr-4">{faq.question}</span>
+                    <summary className="flex w-full cursor-pointer list-none items-center justify-between px-6 py-4 text-start focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-inset [&::-webkit-details-marker]:hidden">
+                      <span className="pe-4 font-semibold text-slate-900 dark:text-slate-100">{faq.question}</span>
                       <ChevronDown className="h-5 w-5 shrink-0 text-slate-500 transition-transform duration-200 group-open:rotate-180" aria-hidden="true" />
                     </summary>
                     <div className="px-6 pb-4">
@@ -325,7 +348,7 @@ export default async function SeoLandingPage({ content, currentPath }: { content
 
             {/* Related Pages */}
             <section className="border-t border-slate-200 dark:border-slate-800 pt-16">
-              <h2 className="text-2xl font-bold mb-6">Related Resources</h2>
+              <h2 className="text-2xl font-bold mb-6">{t("publicLanding.relatedResources")}</h2>
               <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {content.relatedPages.map((page, idx) => (
                   <Link key={idx} href={page.href} className="group p-6 rounded-2xl bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800 hover:border-blue-500 dark:hover:border-blue-500 transition-colors block">
@@ -342,13 +365,13 @@ export default async function SeoLandingPage({ content, currentPath }: { content
       {/* CTA Section */}
       <section className="py-24 px-4 bg-blue-600 mt-auto">
         <div className="container mx-auto max-w-4xl text-center">
-          <h2 className="text-3xl md:text-4xl font-bold text-white mb-8">Ready to review a structured BOQ workflow?</h2>
+          <h2 className="text-3xl md:text-4xl font-bold text-white mb-8">{t("publicLanding.readyReview")}</h2>
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
             <Link href="/register" className="inline-flex items-center justify-center rounded-lg text-base font-bold bg-white text-blue-700 hover:bg-slate-50 h-14 px-8 py-4 shadow-lg w-full sm:w-auto">
               {t("publicContent.cta.startAccountSetup")}
             </Link>
             <Link href="/features" className="inline-flex items-center justify-center rounded-lg text-base font-medium border border-blue-400 bg-transparent text-white hover:bg-blue-700 h-14 px-8 py-4 w-full sm:w-auto">
-              Explore Features
+              {t("publicLanding.exploreFeatures")}
             </Link>
           </div>
         </div>

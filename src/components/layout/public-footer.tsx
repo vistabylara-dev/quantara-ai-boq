@@ -3,27 +3,29 @@
 import React from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { getPublicNavigation, legalNavigation } from "@/config/public-navigation";
+import { getLegalNavigation, getPublicNavigation } from "@/config/public-navigation";
 import { siteConfig } from "@/config/site";
-import { QUANTARA_ENTITY_DEFINITION } from "@/lib/public-site/product-truth";
+import { getQuantaraProductTruthForDisplay } from "@/lib/public-site/product-truth";
 import { useTranslations } from "@/lib/i18n/locale-provider";
 
 export default function PublicFooter() {
   const t = useTranslations();
   const navigation = getPublicNavigation(t);
-  const getSectionItems = (sectionLabel: string) => {
-    const section = navigation.find(s => s.label === sectionLabel);
+  const legalNavigation = getLegalNavigation(t);
+  const productTruth = getQuantaraProductTruthForDisplay(t);
+  const getSectionItems = (sectionId: (typeof navigation)[number]["id"]) => {
+    const section = navigation.find(s => s.id === sectionId);
     if (!section) return [];
     // Flatten all items from all groups in the section for the footer
     return section.groups.flatMap(g => g.items);
   };
 
-  const platformItems = getSectionItems("Platform");
-  const solutionsItems = getSectionItems("Solutions");
-  const resourcesItems = getSectionItems("Resources");
-  const comparisonsItems = getSectionItems("Comparisons");
-  const regionalItems = getSectionItems("Regional");
-  const companyItems = getSectionItems("Company");
+  const platformItems = getSectionItems("platform");
+  const solutionsItems = getSectionItems("solutions");
+  const resourcesItems = getSectionItems("resources");
+  const comparisonsItems = getSectionItems("comparisons");
+  const regionalItems = getSectionItems("regional");
+  const companyItems = getSectionItems("company");
 
   return (
     <footer className="py-12 border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950">
@@ -32,7 +34,7 @@ export default function PublicFooter() {
           
           {/* Brand Column */}
           <div className="col-span-2 md:col-span-4 lg:col-span-2">
-            <Link href="/" className="font-bold text-xl tracking-tight text-slate-900 dark:text-white flex items-center gap-2 mb-6" aria-label="Quantara Home">
+            <Link href="/" className="font-bold text-xl tracking-tight text-slate-900 dark:text-white flex items-center gap-2 mb-6" aria-label={t("publicSite.header.quantaraHome")}>
               <Image
                 src="/logo.png"
                 alt=""
@@ -46,13 +48,13 @@ export default function PublicFooter() {
               {t("publicSite.footer.description1")}
             </p>
             <p className="text-sm text-slate-500 dark:text-slate-400 mb-6 max-w-sm">
-              {QUANTARA_ENTITY_DEFINITION} {t("publicContent.shared.accountAccessBoundary")}
+              {productTruth.entityDefinition} {t("publicContent.shared.accountAccessBoundary")}
             </p>
 
             <div className="mt-8 space-y-2 text-sm text-slate-500 dark:text-slate-400">
-              <p>{t("publicSite.footer.emailLabel")} <a href={`mailto:${siteConfig.contact.email}`} className="hover:text-slate-900 dark:hover:text-white">{siteConfig.contact.email}</a></p>
-              <p>{t("publicSite.footer.telephoneLabel")} <a href={`tel:${siteConfig.contact.telephone.replace(/\s+/g, '')}`} className="hover:text-slate-900 dark:hover:text-white">{siteConfig.contact.telephone}</a></p>
-              <p>{t("publicSite.footer.whatsappLabel")} <a href={siteConfig.contact.whatsappLink} className="hover:text-slate-900 dark:hover:text-white">{siteConfig.contact.whatsapp}</a></p>
+              <p>{t("publicSite.footer.emailLabel")} <a dir="ltr" href={`mailto:${siteConfig.contact.email}`} className="hover:text-slate-900 dark:hover:text-white">{siteConfig.contact.email}</a></p>
+              <p>{t("publicSite.footer.telephoneLabel")} <a dir="ltr" href={`tel:${siteConfig.contact.telephone.replace(/\s+/g, '')}`} className="hover:text-slate-900 dark:hover:text-white">{siteConfig.contact.telephone}</a></p>
+              <p>{t("publicSite.footer.whatsappLabel")} <a dir="ltr" href={siteConfig.contact.whatsappLink} className="hover:text-slate-900 dark:hover:text-white">{siteConfig.contact.whatsapp}</a></p>
             </div>
           </div>
 

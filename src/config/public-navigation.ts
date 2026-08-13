@@ -4,10 +4,9 @@ import {
   type PublicCapabilityStatus,
 } from "@/lib/public-site/product-truth";
 import en from "@/lib/i18n/dictionaries/en";
-import type { TranslateFn, TranslationKey } from "@/lib/i18n/translate";
+import { translateStructuredContent, type TranslateFn, type TranslationKey } from "@/lib/i18n/translate";
 
-export type NavigationItemStatus =
-  (typeof PUBLIC_CAPABILITY_STATUS_LABELS)[PublicCapabilityStatus];
+export type NavigationItemStatus = string;
 
 export interface NavigationItem {
   label: string;
@@ -24,6 +23,7 @@ export interface NavigationGroup {
 }
 
 export interface NavigationSection {
+  id: "platform" | "solutions" | "resources" | "comparisons" | "regional" | "company";
   label: string;
   groups: NavigationGroup[];
 }
@@ -34,6 +34,7 @@ const googleDriveImport = getPublicCapability("google-drive-import");
 
 export const publicNavigation: NavigationSection[] = [
   {
+    id: "platform",
     label: "Platform",
     groups: [
       {
@@ -77,6 +78,7 @@ export const publicNavigation: NavigationSection[] = [
     ]
   },
   {
+    id: "solutions",
     label: "Solutions",
     groups: [
       {
@@ -96,6 +98,7 @@ export const publicNavigation: NavigationSection[] = [
     ]
   },
   {
+    id: "resources",
     label: "Resources",
     groups: [
       {
@@ -141,6 +144,7 @@ export const publicNavigation: NavigationSection[] = [
     ]
   },
   {
+    id: "comparisons",
     label: "Comparisons",
     groups: [
       {
@@ -160,6 +164,7 @@ export const publicNavigation: NavigationSection[] = [
     ]
   },
   {
+    id: "regional",
     label: "Regional",
     groups: [
       {
@@ -179,6 +184,7 @@ export const publicNavigation: NavigationSection[] = [
     ]
   },
   {
+    id: "company",
     label: "Company",
     groups: [
       {
@@ -228,11 +234,45 @@ function localizeNavigationItem(
 export function getPublicNavigation(
   translate: TranslateFn,
 ): NavigationSection[] {
-  return publicNavigation.map((section) => ({
+  const localized = translateStructuredContent(translate, "publicRoutes.publicNavigation", {
+    sections: publicNavigation.map((section) => section.label),
+    groups: publicNavigation.map((section) => section.groups.map((group) => group.label)),
+    labels: {} as Record<string, string>,
+    descriptions: {} as Record<string, string>,
+    statuses: {} as Record<string, string>,
+    legal: {} as Record<string, string>,
+  });
+
+  return publicNavigation.map((section, sectionIndex) => ({
     ...section,
-    groups: section.groups.map((group) => ({
+    label: localized.sections[sectionIndex] ?? section.label,
+    groups: section.groups.map((group, groupIndex) => ({
       ...group,
-      items: group.items.map((item) => localizeNavigationItem(item, translate)),
+      label: localized.groups[sectionIndex]?.[groupIndex] ?? group.label,
+      items: group.items.map((sourceItem) => {
+        const item = localizeNavigationItem(sourceItem, translate);
+        return {
+          ...item,
+          label: localized.labels[item.href] ?? item.label,
+          description: localized.descriptions[item.href] ?? item.description,
+          status: item.status ? localized.statuses[item.status] ?? item.status : undefined,
+        };
+      }),
     })),
+  }));
+}
+
+export function getLegalNavigation(translate: TranslateFn): NavigationItem[] {
+  const localized = translateStructuredContent(translate, "publicRoutes.publicNavigation", {
+    sections: [] as string[],
+    groups: [] as string[][],
+    labels: {} as Record<string, string>,
+    descriptions: {} as Record<string, string>,
+    statuses: {} as Record<string, string>,
+    legal: {} as Record<string, string>,
+  });
+  return legalNavigation.map((item) => ({
+    ...item,
+    label: localized.legal[item.href] ?? item.label,
   }));
 }

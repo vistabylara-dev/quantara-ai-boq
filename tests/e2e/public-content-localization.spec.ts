@@ -1,6 +1,20 @@
 import { expect, test, type BrowserContext, type Page } from "@playwright/test";
 
 import ar from "../../src/lib/i18n/dictionaries/ar";
+import en from "../../src/lib/i18n/dictionaries/en";
+import { PUBLIC_WEBSITE_PATHS } from "../../src/lib/public-site/public-route-paths";
+
+const COMPLETED_CORRECTIVE_PATHS = new Set(["/", "/features", "/contact-sales"]);
+const PUBLIC_ARABIC_PATHS = [...PUBLIC_WEBSITE_PATHS, "/register"].filter(
+  (path) => !COMPLETED_CORRECTIVE_PATHS.has(path),
+);
+
+function leafPaths(value: unknown, prefix = ""): string[] {
+  if (!value || typeof value !== "object") return [prefix];
+  return Object.entries(value).flatMap(([key, child]) =>
+    leafPaths(child, prefix ? `${prefix}.${key}` : key),
+  );
+}
 
 async function useArabic(context: BrowserContext) {
   await context.clearCookies();
@@ -28,7 +42,8 @@ test.describe("approved Arabic public-page correction", () => {
     await useArabic(context);
   });
 
-  test("Homepage renders localized body content in RTL", async ({ page }) => {
+  test("Homepage renders localized body content in RTL", async ({ page, browserName }) => {
+    test.skip(browserName !== "chromium", "The completed corrective-page contract is covered once on Chromium.");
     await page.goto("/");
     await expectArabicRtlPage(page);
     await expect(page.getByRole("heading", { level: 1 })).toHaveText(
@@ -40,7 +55,8 @@ test.describe("approved Arabic public-page correction", () => {
     await expect(page.getByText("From Project Sources to Professional Outputs")).toHaveCount(0);
   });
 
-  test("Features renders localized capability and status content in RTL", async ({ page }) => {
+  test("Features renders localized capability and status content in RTL", async ({ page, browserName }) => {
+    test.skip(browserName !== "chromium", "The completed corrective-page contract is covered once on Chromium.");
     await page.goto("/features");
     await expectArabicRtlPage(page);
     await expect(page.getByRole("heading", { level: 1 })).toHaveText(
@@ -53,7 +69,8 @@ test.describe("approved Arabic public-page correction", () => {
     await expect(page.getByText("Boundary:")).toHaveCount(0);
   });
 
-  test("Contact Sales renders localized form content while retaining canonical values", async ({ page }) => {
+  test("Contact Sales renders localized form content while retaining canonical values", async ({ page, browserName }) => {
+    test.skip(browserName !== "chromium", "The completed corrective-page contract is covered once on Chromium.");
     await page.route("**/api/contact", (route) =>
       route.fulfill({
         status: 500,
@@ -87,5 +104,26 @@ test.describe("approved Arabic public-page correction", () => {
     await page.getByRole("button", { name: ar.publicContent.contactSales.submit }).click();
     await expect(page.locator("form [role=alert]")).toHaveText(ar.publicContent.contactSales.error);
     await expect(page.getByText("English server failure")).toHaveCount(0);
+  });
+
+  test("English and Arabic dictionaries retain exact key parity", () => {
+    expect(leafPaths(ar).sort()).toEqual(leafPaths(en).sort());
+    for (const [route, payload] of Object.entries(ar.publicRoutes)) {
+      const parsed = JSON.parse(payload) as Record<string, unknown>;
+      expect(Object.keys(parsed), `${route} must provide Arabic content`).not.toHaveLength(0);
+    }
+  });
+
+  test("the complete public route inventory renders Arabic content in RTL", async ({ page }) => {
+    test.setTimeout(600_000);
+    for (const path of PUBLIC_ARABIC_PATHS) {
+      const response = await page.goto(path, { waitUntil: "domcontentloaded" });
+      expect(response?.ok(), `${path} should load successfully`).toBe(true);
+      await expectArabicRtlPage(page);
+
+      const heading = page.locator("h1").first();
+      await expect(heading).toBeVisible();
+      expect(await heading.innerText(), `${path} needs an Arabic H1`).toMatch(/[\u0600-\u06ff]/);
+    }
   });
 });

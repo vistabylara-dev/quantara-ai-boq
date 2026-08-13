@@ -5,7 +5,7 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 import { CheckCircle2 } from "lucide-react";
 import { apiClient, getApiErrorMessage } from "@/lib/api/client";
 import { getPublicAccessOptions } from "@/config/pricing";
-import { useTranslations } from "@/lib/i18n/locale-provider";
+import { useLocale, useTranslations } from "@/lib/i18n/locale-provider";
 
 function AccessOptionsFieldset({
   selectedOption,
@@ -61,12 +61,12 @@ function AccessOptionsFieldset({
                     </span>
                   </label>
                 </div>
-                <p className="max-w-48 text-right text-sm font-semibold text-slate-700 dark:text-slate-300">
+                <p className="max-w-48 text-end text-sm font-semibold text-slate-700 dark:text-slate-300">
                   {option.commercialTerms}
                 </p>
               </div>
-              <p id={descriptionId} className="text-sm text-slate-600 dark:text-slate-400 mb-4 pl-8">{option.description}</p>
-              <ul id={featuresId} className="space-y-2 text-sm text-slate-600 dark:text-slate-400 pl-8 grid sm:grid-cols-2 gap-x-4">
+              <p id={descriptionId} className="text-sm text-slate-600 dark:text-slate-400 mb-4 ps-8">{option.description}</p>
+              <ul id={featuresId} className="space-y-2 text-sm text-slate-600 dark:text-slate-400 ps-8 grid sm:grid-cols-2 gap-x-4">
                 {option.features.map((feature) => (
                   <li key={feature} className="flex gap-x-2">
                     <CheckCircle2 className="h-5 w-4 flex-none text-blue-600" aria-hidden="true" />
@@ -84,6 +84,7 @@ function AccessOptionsFieldset({
 
 export default function RegisterPage() {
   const t = useTranslations();
+  const { locale } = useLocale();
   const publicAccessOptions = getPublicAccessOptions(t);
   const [companyName, setCompanyName] = useState("");
   const [fullName, setFullName] = useState("");
@@ -118,7 +119,7 @@ export default function RegisterPage() {
       });
       setRegistered(true);
     } catch (submitError) {
-      setError(getApiErrorMessage(submitError));
+      setError(locale === "ar" ? t("errors.generic") : getApiErrorMessage(submitError));
     } finally {
       setIsSubmitting(false);
     }
@@ -128,7 +129,7 @@ export default function RegisterPage() {
     return (
       <div className="mx-auto max-w-md py-12">
         <div className="rounded-[32px] border border-slate-800 bg-slate-950 p-8">
-          <h1 ref={successHeadingRef} tabIndex={-1} className="text-2xl font-semibold text-white outline-none">Check your email</h1>
+          <h1 ref={successHeadingRef} tabIndex={-1} className="text-2xl font-semibold text-white outline-none">{t("publicContent.accountSetup.checkEmail")}</h1>
           <p className="mt-3 text-sm text-slate-400">
             {t("publicContent.accountSetup.success")}
           </p>
@@ -136,7 +137,7 @@ export default function RegisterPage() {
             href="/login"
             className="mt-6 inline-flex rounded-2xl border border-slate-700 bg-slate-900 px-4 py-2 text-sm font-semibold text-slate-200 hover:bg-slate-800"
           >
-            Back to sign in
+            {t("publicContent.accountSetup.backToSignIn")}
           </Link>
         </div>
       </div>
@@ -158,7 +159,7 @@ export default function RegisterPage() {
             
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label className="text-sm text-slate-300" htmlFor="fullName">Full name</label>
+                <label className="text-sm text-slate-300" htmlFor="fullName">{t("publicContent.accountSetup.fullName")}</label>
                 <input
                   id="fullName"
                   required
@@ -168,7 +169,7 @@ export default function RegisterPage() {
                 />
               </div>
               <div>
-                <label className="text-sm text-slate-300" htmlFor="email">Business Email</label>
+                <label className="text-sm text-slate-300" htmlFor="email">{t("publicContent.accountSetup.businessEmail")}</label>
                 <input
                   id="email"
                   type="email"
@@ -182,7 +183,7 @@ export default function RegisterPage() {
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label className="text-sm text-slate-300" htmlFor="companyName">Company</label>
+                <label className="text-sm text-slate-300" htmlFor="companyName">{t("publicContent.accountSetup.company")}</label>
                 <input
                   id="companyName"
                   required
@@ -192,29 +193,29 @@ export default function RegisterPage() {
                 />
               </div>
               <div>
-                <label className="text-sm text-slate-300" htmlFor="role">Role</label>
+                <label className="text-sm text-slate-300" htmlFor="role">{t("publicContent.accountSetup.role")}</label>
                 <select
                   id="role"
                   value={role}
                   onChange={(event) => setRole(event.target.value)}
                   className="mt-1 w-full rounded-2xl border border-slate-800 bg-slate-900 px-4 py-3 text-sm text-white outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 appearance-none"
                 >
-                  <option value="Quantity Surveyor">Quantity Surveyor</option>
-                  <option value="Estimator">Estimator</option>
-                  <option value="Engineer">Engineer</option>
-                  <option value="Project Manager">Project Manager</option>
-                  <option value="Contractor">Contractor</option>
-                  <option value="Procurement Professional">Procurement Professional</option>
-                  <option value="Company Owner">Company Owner</option>
-                  <option value="Consultant">Consultant</option>
-                  <option value="Other">Other</option>
+                  <option value="Quantity Surveyor">{t("publicContent.accountSetup.roles.quantitySurveyor")}</option>
+                  <option value="Estimator">{t("publicContent.accountSetup.roles.estimator")}</option>
+                  <option value="Engineer">{t("publicContent.accountSetup.roles.engineer")}</option>
+                  <option value="Project Manager">{t("publicContent.accountSetup.roles.projectManager")}</option>
+                  <option value="Contractor">{t("publicContent.accountSetup.roles.contractor")}</option>
+                  <option value="Procurement Professional">{t("publicContent.accountSetup.roles.procurement")}</option>
+                  <option value="Company Owner">{t("publicContent.accountSetup.roles.owner")}</option>
+                  <option value="Consultant">{t("publicContent.accountSetup.roles.consultant")}</option>
+                  <option value="Other">{t("publicContent.accountSetup.roles.other")}</option>
                 </select>
               </div>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label className="text-sm text-slate-300" htmlFor="country">Country</label>
+                <label className="text-sm text-slate-300" htmlFor="country">{t("publicContent.accountSetup.country")}</label>
                 <input
                   id="country"
                   required
@@ -224,24 +225,23 @@ export default function RegisterPage() {
                 />
               </div>
               <div>
-                <label className="text-sm text-slate-300" htmlFor="approximateVolume">Monthly Project Volume</label>
+                <label className="text-sm text-slate-300" htmlFor="approximateVolume">{t("publicContent.accountSetup.monthlyVolume")}</label>
                 <select
                   id="approximateVolume"
                   value={approximateVolume}
                   onChange={(event) => setApproximateVolume(event.target.value)}
                   className="mt-1 w-full rounded-2xl border border-slate-800 bg-slate-900 px-4 py-3 text-sm text-white outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 appearance-none"
                 >
-                  <option value="">Select volume...</option>
-                  <option value="1-5">1-5 projects</option>
-                  <option value="6-20">6-20 projects</option>
-                  <option value="21-50">21-50 projects</option>
-                  <option value="50+">50+ projects</option>
+                  <option value="">{t("publicContent.accountSetup.selectVolume")}</option>
+                  {(["1-5", "6-20", "21-50", "50+"] as const).map((count) => (
+                    <option key={count} value={count}>{t("publicContent.accountSetup.projects", { count })}</option>
+                  ))}
                 </select>
               </div>
             </div>
 
             <div>
-              <label className="text-sm text-slate-300" htmlFor="password">Password</label>
+              <label className="text-sm text-slate-300" htmlFor="password">{t("publicContent.accountSetup.password")}</label>
               <input
                 id="password"
                 type="password"
@@ -250,7 +250,7 @@ export default function RegisterPage() {
                 onChange={(event) => setPassword(event.target.value)}
                 className="mt-1 w-full rounded-2xl border border-slate-800 bg-slate-900 px-4 py-3 text-sm text-white outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
               />
-              <p className="mt-1 text-xs text-slate-500">At least 8 characters, with a letter and a number.</p>
+              <p className="mt-1 text-xs text-slate-500">{t("publicContent.accountSetup.passwordHelp")}</p>
             </div>
 
             <div className="flex items-start gap-3 mt-4">
@@ -263,7 +263,7 @@ export default function RegisterPage() {
                 className="mt-1 h-4 w-4 rounded border-slate-800 bg-slate-900 text-blue-600 focus:ring-blue-500/20 focus:ring-offset-slate-950" 
               />
               <label htmlFor="consent" className="text-sm text-slate-400">
-                I consent to the collection of my information in accordance with the <Link href="/privacy" className="text-blue-400 underline hover:text-blue-300">Privacy Policy</Link>.
+                {t("publicContent.accountSetup.consentPrefix")} <Link href="/privacy" className="text-blue-400 underline hover:text-blue-300">{t("publicContent.accountSetup.privacyPolicy")}</Link>.
               </label>
             </div>
 
@@ -278,7 +278,7 @@ export default function RegisterPage() {
                 {isSubmitting ? (
                   <span className="flex items-center gap-2">
                     <span className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
-                    Submitting Request...
+                    {t("publicContent.accountSetup.submitting")}
                   </span>
                 ) : (
                   t("publicContent.accountSetup.submitPrefix", {
@@ -290,14 +290,14 @@ export default function RegisterPage() {
             
             <div className="pt-4 border-t border-slate-800">
               <p className="text-xs text-slate-400 text-center leading-relaxed">
-                We use this information to review your request and contact you. Do not submit confidential project documents through this form.
+                {t("publicContent.accountSetup.dataNotice")}
               </p>
             </div>
           </form>
 
           <div className="mt-6 text-sm text-slate-400 text-center">
-            Already have an account?{" "}
-            <Link href="/login" className="text-blue-400 underline hover:text-blue-300">Sign in</Link>
+            {t("publicContent.accountSetup.existingAccount")}{" "}
+            <Link href="/login" className="text-blue-400 underline hover:text-blue-300">{t("publicContent.accountSetup.signIn")}</Link>
           </div>
         </div>
 

@@ -8,6 +8,9 @@ import PublicBreadcrumb from "@/components/ui/public-breadcrumb";
 import PublicJsonLd from "@/components/seo/public-json-ld";
 import { Calculator, ArrowRight, BookOpen } from "lucide-react";
 import { buildPublicPageGraph } from "@/lib/public-site/schema";
+import { getDictionary } from "@/lib/i18n/dictionaries";
+import { getServerLocale } from "@/lib/i18n/server-locale";
+import { createTranslator, translateStructuredContent } from "@/lib/i18n/translate";
 
 export const metadata = createPublicPageMetadata("/boq-calculation-formulas");
 
@@ -48,7 +51,173 @@ const pageSchema = buildPublicPageGraph({
   kind: "tech-article",
 });
 
-export default function BOQCalculationFormulasPage() {
+type ArabicFormulaContent = {
+  breadcrumbs: string[];
+  badge: string;
+  title: string;
+  introduction: string;
+  measurementRulesTitle: string;
+  measurementRules: string;
+  referencePrefix: string;
+  referenceLabel: string;
+  referenceSuffix: string;
+  masterTitle: string;
+  itemAmountTitle: string;
+  itemAmountFormula: string;
+  itemAmountVariables: string[];
+  totalCostTitle: string;
+  totalCostFormula: string;
+  totalCostDescription: string;
+  unitRateTitle: string;
+  unitRateFormula: string;
+  unitRateVariables: string[];
+  unitRateNote: string;
+  quantityTitle: string;
+  measurementSections: Array<{ title: string; formulas: string[]; details?: string[]; example?: string; note?: string }>;
+  costTitle: string;
+  costCards: Array<{ title: string; formula: string; details: string[] }>;
+  workedTitle: string;
+  tableHeaders: string[];
+  tableRows: string[][];
+  totalLabel: string;
+  totalValue: string;
+  ratesNote: string;
+  workflowTitle: string;
+  workflowSteps: string[];
+  calculatorTitle: string;
+  calculatorBody: string;
+  calculatorAction: string;
+  calculatorCaption: string;
+  faqTitle: string;
+  faqs: Array<{ question: string; answer: string }>;
+};
+
+function ArabicFormulaPage({ content }: { content: ArabicFormulaContent }) {
+  return (
+    <>
+      <PublicJsonLd data={pageSchema} />
+      <div className="flex min-h-screen flex-col bg-white text-slate-900 dark:bg-slate-950 dark:text-slate-100">
+        <PublicBreadcrumb items={[
+          { name: content.breadcrumbs[0], item: "/" },
+          { name: content.breadcrumbs[1], item: "/resources" },
+          { name: content.breadcrumbs[2], item: "/boq-calculation-formulas" },
+        ]} />
+        <main className="mx-auto w-full max-w-4xl flex-1 px-4 py-12 sm:px-6 md:py-20 lg:px-8 lg:py-24">
+          <header className="mb-12">
+            <div className="mb-6 inline-flex items-center rounded-full border border-blue-200 bg-blue-50 px-3 py-1 text-sm font-medium text-blue-800 dark:border-blue-900 dark:bg-blue-900/30 dark:text-blue-300">
+              <BookOpen className="me-2 h-4 w-4" />
+              {content.badge}
+            </div>
+            <h1 className="mb-6 text-4xl font-bold tracking-tight text-slate-900 dark:text-white md:text-5xl">{content.title}</h1>
+            <p className="my-8 border-s-4 border-blue-500 ps-6 text-xl leading-relaxed text-slate-600 dark:text-slate-300">{content.introduction}</p>
+            <div className="mt-8 rounded-xl border border-slate-200 bg-slate-50 p-6 text-sm dark:border-slate-800 dark:bg-slate-900/50">
+              <p className="text-slate-500 dark:text-slate-400"><strong>{content.measurementRulesTitle}</strong> {content.measurementRules}</p>
+              <p className="mt-3 text-slate-500 dark:text-slate-400">
+                {content.referencePrefix}{" "}
+                <a href="https://www.rics.org/content/dam/ricsglobal/documents/standards/nrm_2_detailed_measurement_for_building_works_1st_edition_rics.pdf" target="_blank" rel="noopener noreferrer" className="font-medium text-blue-700 underline dark:text-blue-300">{content.referenceLabel}</a>{" "}
+                {content.referenceSuffix}
+              </p>
+            </div>
+          </header>
+
+          <article className="space-y-14">
+            <section>
+              <h2 className="mb-6 border-b border-slate-200 pb-2 text-3xl font-bold dark:border-slate-800">{content.masterTitle}</h2>
+              <div className="grid gap-6 md:grid-cols-2">
+                <div className="rounded-xl border border-slate-200 bg-slate-50 p-6 dark:border-slate-800 dark:bg-slate-900">
+                  <h3 className="mb-4 text-xl font-bold">{content.itemAmountTitle}</h3>
+                  <div dir="ltr" className="mb-4 rounded-lg border border-slate-200 bg-white p-4 text-center font-mono text-lg font-semibold dark:border-slate-800 dark:bg-slate-950">{content.itemAmountFormula}</div>
+                  <ul className="space-y-2 text-sm">{content.itemAmountVariables.map((item) => <li key={item}>{item}</li>)}</ul>
+                </div>
+                <div className="rounded-xl border border-slate-200 bg-slate-50 p-6 dark:border-slate-800 dark:bg-slate-900">
+                  <h3 className="mb-4 text-xl font-bold">{content.totalCostTitle}</h3>
+                  <div dir="ltr" className="mb-4 rounded-lg border border-slate-200 bg-white p-4 text-center font-mono text-lg font-semibold dark:border-slate-800 dark:bg-slate-950">{content.totalCostFormula}</div>
+                  <p className="text-sm">{content.totalCostDescription}</p>
+                </div>
+              </div>
+              <div className="mt-6 rounded-xl border border-slate-200 bg-slate-50 p-6 dark:border-slate-800 dark:bg-slate-900">
+                <h3 className="mb-4 text-xl font-bold">{content.unitRateTitle}</h3>
+                <div dir="ltr" className="mb-4 rounded-lg border border-slate-200 bg-white p-4 text-center font-mono text-lg font-semibold dark:border-slate-800 dark:bg-slate-950">{content.unitRateFormula}</div>
+                <ul className="grid gap-3 text-sm sm:grid-cols-2">{content.unitRateVariables.map((item) => <li key={item}>{item}</li>)}</ul>
+                <p className="mt-4 border-t border-slate-200 pt-4 text-sm text-slate-500 dark:border-slate-800 dark:text-slate-400">{content.unitRateNote}</p>
+              </div>
+            </section>
+
+            <section>
+              <h2 className="mb-8 border-b border-slate-200 pb-2 text-3xl font-bold dark:border-slate-800">{content.quantityTitle}</h2>
+              <div className="space-y-8">
+                {content.measurementSections.map((section) => (
+                  <div key={section.title} className="rounded-xl border border-slate-200 bg-slate-50 p-6 dark:border-slate-800 dark:bg-slate-900">
+                    <h3 className="mb-4 text-2xl font-bold">{section.title}</h3>
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      {section.formulas.map((formula) => <div key={formula} dir="ltr" className="rounded-lg border border-slate-200 bg-white p-3 text-center font-mono dark:border-slate-800 dark:bg-slate-950">{formula}</div>)}
+                    </div>
+                    {section.details && <ul className="mt-4 list-disc space-y-1 ps-5 text-sm">{section.details.map((item) => <li key={item}>{item}</li>)}</ul>}
+                    {section.example && <p className="mt-4 text-sm font-medium">{section.example}</p>}
+                    {section.note && <p className="mt-4 rounded-lg bg-blue-50 p-3 text-sm text-slate-700 dark:bg-blue-900/20 dark:text-slate-300">{section.note}</p>}
+                  </div>
+                ))}
+              </div>
+            </section>
+
+            <section>
+              <h2 className="mb-8 border-b border-slate-200 pb-2 text-3xl font-bold dark:border-slate-800">{content.costTitle}</h2>
+              <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">{content.costCards.map((card) => (
+                <div key={card.title} className="rounded-xl border border-slate-200 bg-slate-50 p-5 dark:border-slate-800 dark:bg-slate-900">
+                  <h3 className="mb-3 font-bold">{card.title}</h3>
+                  <div dir="ltr" className="rounded border border-slate-200 bg-white p-2 text-center font-mono dark:border-slate-800 dark:bg-slate-950">{card.formula}</div>
+                  {card.details.length > 0 && <ul className="mt-3 space-y-1 text-xs text-slate-600 dark:text-slate-400">{card.details.map((item) => <li key={item}>{item}</li>)}</ul>}
+                </div>
+              ))}</div>
+            </section>
+
+            <section>
+              <h2 className="mb-8 border-b border-slate-200 pb-2 text-3xl font-bold dark:border-slate-800">{content.workedTitle}</h2>
+              <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-800">
+                <table className="w-full border-collapse text-sm">
+                  <thead className="bg-slate-50 dark:bg-slate-900"><tr>{content.tableHeaders.map((item) => <th key={item} scope="col" className="px-4 py-3 text-start font-semibold">{item}</th>)}</tr></thead>
+                  <tbody>{content.tableRows.map((row) => <tr key={row.join("|")} className="border-t border-slate-200 dark:border-slate-800">{row.map((cell, index) => index === 0 ? <th key={cell} scope="row" className="px-4 py-3 text-start font-medium">{cell}</th> : <td key={`${cell}-${index}`} className="px-4 py-3">{cell}</td>)}</tr>)}</tbody>
+                  <tfoot className="bg-slate-100 font-bold dark:bg-slate-900"><tr><th colSpan={4} className="px-4 py-3 text-end">{content.totalLabel}</th><td className="px-4 py-3">{content.totalValue}</td></tr></tfoot>
+                </table>
+              </div>
+              <p className="mt-3 text-center text-sm italic text-slate-500 dark:text-slate-400">{content.ratesNote}</p>
+            </section>
+
+            <section>
+              <h2 className="mb-6 border-b border-slate-200 pb-2 text-3xl font-bold dark:border-slate-800">{content.workflowTitle}</h2>
+              <ol className="list-decimal space-y-3 rounded-xl border border-slate-200 bg-slate-50 p-8 ps-12 text-slate-700 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300">{content.workflowSteps.map((step) => <li key={step}>{step}</li>)}</ol>
+            </section>
+
+            <section className="rounded-2xl border border-blue-100 bg-gradient-to-br from-blue-50 to-indigo-50 p-8 text-center shadow-sm dark:border-blue-900/50 dark:from-blue-950/40 dark:to-indigo-950/40 md:p-12">
+              <Calculator className="mx-auto mb-6 h-10 w-10 text-blue-600 dark:text-blue-400" />
+              <h2 className="mb-4 text-3xl font-bold text-slate-900 dark:text-white">{content.calculatorTitle}</h2>
+              <p className="mx-auto mb-8 max-w-2xl text-lg text-slate-600 dark:text-slate-300">{content.calculatorBody}</p>
+              <a href="https://www.vistabylara.com/ai-tools/boq-calculator-uae" target="_blank" rel="noopener noreferrer" className="inline-flex items-center rounded-lg bg-blue-600 px-8 py-4 font-semibold text-white hover:bg-blue-700">{content.calculatorAction}<ArrowRight className="ms-2 h-5 w-5" /></a>
+              <p className="mt-3 text-sm text-slate-500 dark:text-slate-400">{content.calculatorCaption}</p>
+            </section>
+
+            <section>
+              <h2 className="mb-8 border-b border-slate-200 pb-2 text-3xl font-bold dark:border-slate-800">{content.faqTitle}</h2>
+              <div className="space-y-8">{content.faqs.map((faq) => <div key={faq.question}><h3 className="mb-3 text-xl font-bold">{faq.question}</h3><p className="text-slate-700 dark:text-slate-300">{faq.answer}</p></div>)}</div>
+            </section>
+          </article>
+        </main>
+      </div>
+    </>
+  );
+}
+
+export default async function BOQCalculationFormulasPage() {
+  const locale = await getServerLocale();
+  if (locale === "ar") {
+    const t = createTranslator(getDictionary(locale));
+    const content = translateStructuredContent<ArabicFormulaContent>(
+      t,
+      "publicRoutes.boqCalculationFormulas",
+      {} as ArabicFormulaContent,
+    );
+    return <ArabicFormulaPage content={content} />;
+  }
 
   return (
     <>

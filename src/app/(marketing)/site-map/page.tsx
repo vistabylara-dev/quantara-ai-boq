@@ -1,7 +1,7 @@
 import Link from "next/link";
 import PublicJsonLd from "@/components/seo/public-json-ld";
 import PublicBreadcrumb from "@/components/ui/public-breadcrumb";
-import { getPublicNavigation, legalNavigation } from "@/config/public-navigation";
+import { getLegalNavigation, getPublicNavigation } from "@/config/public-navigation";
 import { getDictionary } from "@/lib/i18n/dictionaries";
 import { getServerLocale } from "@/lib/i18n/server-locale";
 import { createTranslator } from "@/lib/i18n/translate";
@@ -13,15 +13,15 @@ import { buildPublicPageGraph } from "@/lib/public-site/schema";
 
 export const metadata = createPublicPageMetadata("/site-map");
 
-const breadcrumbItems = [
-  { name: "Home", item: "/" },
-  { name: "Site Map", item: "/site-map" },
-];
-
 export default async function SiteMapPage() {
   const locale = await getServerLocale();
   const t = createTranslator(getDictionary(locale));
   const navigation = getPublicNavigation(t);
+  const legalNavigation = getLegalNavigation(t);
+  const breadcrumbItems = [
+    { name: t("publicLanding.home"), item: "/" },
+    { name: t("publicContent.navigation.siteMap"), item: "/site-map" },
+  ];
   const page = getPublicSearchPage("/site-map");
   const jsonLd = buildPublicPageGraph({
     path: page.path,
@@ -38,9 +38,9 @@ export default async function SiteMapPage() {
       <PublicJsonLd data={jsonLd} />
       <div className="mx-auto w-full max-w-5xl px-4 py-12 md:px-6 md:py-20">
         <PublicBreadcrumb items={breadcrumbItems} />
-        <h1 className="text-4xl md:text-5xl font-bold tracking-tight mb-6">Quantara Sitemap</h1>
+        <h1 className="text-4xl md:text-5xl font-bold tracking-tight mb-6">{t("publicContent.navigation.siteMapTitle")}</h1>
         <p className="text-lg text-slate-600 dark:text-slate-300 mb-12 max-w-2xl">
-          A complete overview of Quantara&apos;s public platform pages, industry solutions, resources, and legal policies.
+          {t("publicContent.navigation.siteMapIntro")}
         </p>
 
         <div className="space-y-12">
@@ -58,7 +58,7 @@ export default async function SiteMapPage() {
                             {item.label}
                           </Link>
                           {item.status && (
-                            <span className="ml-2 text-xs font-medium text-slate-500 dark:text-slate-400">
+                            <span className="ms-2 text-xs font-medium text-slate-500 dark:text-slate-400">
                               ({item.status})
                             </span>
                           )}
@@ -72,7 +72,7 @@ export default async function SiteMapPage() {
           ))}
 
           <section className="border-t border-slate-200 dark:border-slate-800 pt-8">
-            <h2 className="text-2xl font-bold mb-6 text-slate-900 dark:text-white">Legal & Policies</h2>
+            <h2 className="text-2xl font-bold mb-6 text-slate-900 dark:text-white">{t("publicContent.navigation.legalPolicies")}</h2>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
               <div>
                 <ul className="space-y-3">

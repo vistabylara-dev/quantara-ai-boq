@@ -13,7 +13,7 @@ import {
 } from "@/lib/public-site/search-registry";
 import { getDictionary } from "@/lib/i18n/dictionaries";
 import { getServerLocale } from "@/lib/i18n/server-locale";
-import { createTranslator } from "@/lib/i18n/translate";
+import { createTranslator, translateStructuredContent, type TranslationKey } from "@/lib/i18n/translate";
 
 export interface KnowledgeFaq {
   question: string;
@@ -59,15 +59,34 @@ export interface KnowledgePageContent {
   schema?: Record<string, unknown>;
 }
 
-export default async function KnowledgePage({ content }: { content: KnowledgePageContent }) {
+const KNOWLEDGE_ROUTE_KEYS: Record<string, TranslationKey> = {
+  "/boq-review-checklist": "publicRoutes.boqReviewChecklist",
+  "/boq-revision-control": "publicRoutes.boqRevisionControl",
+  "/boq-vs-bill-of-materials": "publicRoutes.boqVsBillOfMaterials",
+  "/boq-vs-construction-estimate": "publicRoutes.boqVsConstructionEstimate",
+  "/common-boq-errors": "publicRoutes.commonBoqErrors",
+  "/how-to-convert-pdf-boq-to-excel": "publicRoutes.howToConvertPdfBoqToExcel",
+  "/how-to-prepare-a-boq": "publicRoutes.howToPrepareABoq",
+  "/how-to-review-ai-extracted-boq": "publicRoutes.howToReviewAiExtractedBoq",
+  "/ocr-for-boq-documents": "publicRoutes.ocrForBoqDocuments",
+  "/quantity-takeoff-vs-boq-management": "publicRoutes.quantityTakeoffVsBoqManagement",
+  "/text-pdf-vs-scanned-pdf": "publicRoutes.textPdfVsScannedPdf",
+  "/what-is-a-boq": "publicRoutes.whatIsABoq",
+};
+
+export default async function KnowledgePage({ content: sourceContent }: { content: KnowledgePageContent }) {
   const locale = await getServerLocale();
   const t = createTranslator(getDictionary(locale));
-  const path = content.path ?? inferPublicPathFromSchema(content.schema);
+  const path = sourceContent.path ?? inferPublicPathFromSchema(sourceContent.schema);
+  const routeKey = path ? KNOWLEDGE_ROUTE_KEYS[path] : undefined;
+  const content = routeKey
+    ? translateStructuredContent(t, routeKey, sourceContent)
+    : sourceContent;
   const searchPage = path ? getPublicSearchPage(path as PublicSearchPath) : null;
   const answerFirst = content.directAnswer ?? content.summary;
   const breadcrumbItems = [
-    { name: "Home", item: "/" },
-    { name: "Resources", item: "/resources" },
+    { name: t("publicLanding.home"), item: "/" },
+    { name: t("publicLanding.resources"), item: "/resources" },
     { name: content.breadcrumbLabel, item: path ?? undefined },
   ];
   const jsonLd = searchPage
@@ -98,14 +117,14 @@ export default async function KnowledgePage({ content }: { content: KnowledgePag
               {content.title}
             </h1>
             
-            <div className="text-lg text-slate-800 leading-relaxed border-l-4 border-blue-600 pl-5 py-2 bg-slate-50 mb-8 rounded-r-lg">
+            <div className="mb-8 rounded-e-lg border-s-4 border-blue-600 bg-slate-50 py-2 ps-5 text-lg leading-relaxed text-slate-800">
               {answerFirst}
             </div>
 
             {content.keyTakeaways && content.keyTakeaways.length > 0 && (
               <div className="bg-blue-50/50 border border-blue-100 rounded-xl p-6 mb-8">
                 <h2 className="text-sm font-bold text-blue-900 uppercase tracking-wider mb-4 flex items-center gap-2">
-                  <CheckCircle2 className="w-4 h-4" /> Key Takeaways
+                  <CheckCircle2 className="w-4 h-4" /> {t("publicLanding.keyTakeaways")}
                 </h2>
                 <ul className="space-y-3">
                   {content.keyTakeaways.map((takeaway, i) => (
@@ -139,13 +158,13 @@ export default async function KnowledgePage({ content }: { content: KnowledgePag
                   ))}
                   
                   {section.bullets && section.bullets.length > 0 && (
-                    <ul className="list-disc pl-6 mb-6 text-slate-600 space-y-2">
+                    <ul className="mb-6 list-disc space-y-2 ps-6 text-slate-600">
                       {section.bullets.map((b, i) => <li key={i}>{b}</li>)}
                     </ul>
                   )}
                   
                   {section.numberedItems && section.numberedItems.length > 0 && (
-                    <ol className="list-decimal pl-6 mb-6 text-slate-600 space-y-2">
+                    <ol className="mb-6 list-decimal space-y-2 ps-6 text-slate-600">
                       {section.numberedItems.map((n, i) => <li key={i}>{n}</li>)}
                     </ol>
                   )}
@@ -170,7 +189,7 @@ export default async function KnowledgePage({ content }: { content: KnowledgePag
 
                   {section.table && (
                     <div className="overflow-x-auto mb-6">
-                      <table className="w-full text-left border-collapse">
+                      <table className="w-full border-collapse text-start">
                         <caption className="sr-only">{section.heading} reference table</caption>
                         <thead>
                           <tr className="bg-slate-50 border-y border-slate-200">
@@ -184,7 +203,7 @@ export default async function KnowledgePage({ content }: { content: KnowledgePag
                             <tr key={i} className="border-b border-slate-200 hover:bg-slate-50/50">
                               {row.map((cell, j) => (
                                 j === 0 ? (
-                                  <th key={j} scope="row" className="px-4 py-3 text-left font-medium text-slate-700 border-x border-slate-200">{cell}</th>
+                                  <th key={j} scope="row" className="border-x border-slate-200 px-4 py-3 text-start font-medium text-slate-700">{cell}</th>
                                 ) : (
                                   <td key={j} className="px-4 py-3 text-slate-600 border-x border-slate-200">{cell}</td>
                                 )
@@ -197,7 +216,7 @@ export default async function KnowledgePage({ content }: { content: KnowledgePag
                   )}
 
                   {section.note && (
-                    <div className="bg-blue-50 border-l-4 border-blue-600 p-4 mb-6 rounded-r-md">
+                    <div className="mb-6 rounded-e-md border-s-4 border-blue-600 bg-blue-50 p-4">
                       <p className="text-blue-900 font-medium m-0">{section.note}</p>
                     </div>
                   )}
@@ -210,16 +229,16 @@ export default async function KnowledgePage({ content }: { content: KnowledgePag
 
           {/* Professional Disclaimer */}
           <section className="bg-slate-50 border border-slate-200 rounded-xl p-6 mb-12">
-            <h2 className="text-xl font-bold text-slate-900 mb-3">Professional Disclaimer</h2>
+            <h2 className="text-xl font-bold text-slate-900 mb-3">{t("publicLanding.professionalDisclaimer")}</h2>
             <p className="text-slate-600 text-sm leading-relaxed">
-              This information is provided for general educational purposes and does not replace project-specific advice or professional judgment. Quantities, units, specifications, rates, assumptions, exclusions and project documents must be reviewed by an appropriately qualified construction professional before tender, procurement, contractual or construction use.
+              {t("publicLanding.generalProfessionalDisclaimer")}
             </p>
           </section>
 
           {/* FAQ */}
           {content.faqs.length > 0 && (
             <section className="mb-16">
-              <h2 className="text-3xl font-bold text-slate-900 mb-8">Frequently Asked Questions</h2>
+              <h2 className="text-3xl font-bold text-slate-900 mb-8">{t("publicLanding.frequentlyAskedQuestions")}</h2>
               <div className="space-y-4">
                 {content.faqs.map((faq, index) => (
                   <details key={index} className="group bg-white border border-slate-200 rounded-lg [&_summary::-webkit-details-marker]:hidden">
@@ -243,7 +262,7 @@ export default async function KnowledgePage({ content }: { content: KnowledgePag
           {/* Related Reading */}
           {content.relatedReading.length > 0 && (
             <section className="mb-16">
-              <h2 className="text-2xl font-bold text-slate-900 mb-6">Related Reading</h2>
+              <h2 className="text-2xl font-bold text-slate-900 mb-6">{t("publicLanding.relatedReading")}</h2>
               <div className="grid md:grid-cols-2 gap-4">
                 {content.relatedReading.map((link, index) => (
                   <Link key={index} href={link.href} className="group block p-6 bg-slate-50 border border-slate-200 rounded-xl hover:border-blue-300 hover:bg-blue-50/50 transition-all">
@@ -262,16 +281,16 @@ export default async function KnowledgePage({ content }: { content: KnowledgePag
 
           {/* CTA */}
           <section className="bg-blue-900 rounded-2xl p-8 md:p-12 text-center text-white">
-            <h2 className="text-3xl font-bold mb-4">Explore Related BOQ Workflows</h2>
+            <h2 className="text-3xl font-bold mb-4">{t("publicLanding.exploreRelated")}</h2>
             <p className="text-blue-100 mb-8 max-w-2xl mx-auto text-lg">
-              Quantara helps construction teams turn supported project documents into structured BOQ records, controlled templates, revisions and professional outputs.
+              {t("publicLanding.relatedWorkflowBody")}
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
               <Link href="/register" className="bg-white text-blue-900 px-8 py-3 rounded-md font-semibold hover:bg-blue-50 transition-colors">
             {t("publicContent.cta.startAccountSetup")}
               </Link>
               <Link href="/features" className="border border-blue-400 bg-transparent text-white px-8 py-3 rounded-md font-semibold hover:bg-blue-800 transition-colors">
-                Explore Features
+                {t("publicLanding.exploreFeatures")}
               </Link>
             </div>
           </section>

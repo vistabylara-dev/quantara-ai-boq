@@ -3,6 +3,9 @@ import Link from "next/link";
 import { ArrowRight } from "lucide-react";
 import { PublicPageJsonLd } from "@/components/seo/public-json-ld";
 import PublicBreadcrumb from "@/components/ui/public-breadcrumb";
+import { getDictionary } from "@/lib/i18n/dictionaries";
+import { getServerLocale } from "@/lib/i18n/server-locale";
+import { createTranslator, translateStructuredContent } from "@/lib/i18n/translate";
 
 export const metadata = createPublicPageMetadata("/industries");
 
@@ -59,7 +62,18 @@ const industryLinks = [
   }
 ];
 
-export default function IndustriesIndexPage() {
+const PAGE_CONTENT = {
+  home: "Home",
+  breadcrumb: "Industries",
+  title: "BOQ Software by Industry",
+  intro: "Quantara supports contractors, estimators, and consultants across multiple sectors by providing structured BOQ and document workflows.",
+  links: industryLinks,
+};
+
+export default async function IndustriesIndexPage() {
+  const locale = await getServerLocale();
+  const t = createTranslator(getDictionary(locale));
+  const content = translateStructuredContent(t, "publicRoutes.industriesHub", PAGE_CONTENT);
   return (
     <>
       <PublicPageJsonLd
@@ -68,22 +82,22 @@ export default function IndustriesIndexPage() {
       />
       <div className="min-h-screen bg-white text-slate-900">
       <div className="container mx-auto px-4 py-16 md:py-24 max-w-7xl">
-        <PublicBreadcrumb items={[{ name: "Home", item: "/" }, { name: "Industries" }]} tone="light" />
+        <PublicBreadcrumb items={[{ name: content.home, item: "/" }, { name: content.breadcrumb }]} tone="light" />
 
         <header className="mb-16 text-center max-w-3xl mx-auto">
-          <h1 className="text-4xl md:text-5xl font-bold text-slate-900 tracking-tight mb-6">BOQ Software by Industry</h1>
+          <h1 className="text-4xl md:text-5xl font-bold text-slate-900 tracking-tight mb-6">{content.title}</h1>
           <p className="text-lg text-slate-600 leading-relaxed">
-            Quantara supports contractors, estimators, and consultants across multiple sectors by providing structured BOQ and document workflows.
+            {content.intro}
           </p>
         </header>
 
         <div className="grid md:grid-cols-2 gap-6">
-          {industryLinks.map((link, idx) => (
+          {content.links.map((link, idx) => (
             <Link key={idx} href={link.href} className="group flex flex-col justify-between p-8 bg-slate-50 border border-slate-200 rounded-2xl hover:border-blue-300 hover:bg-blue-50/50 transition-all">
               <div>
                 <h2 className="text-2xl font-bold text-slate-900 group-hover:text-blue-700 mb-3 flex items-center justify-between">
                   {link.name}
-                  <ArrowRight className="w-5 h-5 opacity-0 group-hover:opacity-100 transform -translate-x-4 group-hover:translate-x-0 transition-all" />
+                  <ArrowRight className="w-5 h-5 opacity-0 group-hover:opacity-100 transform -translate-x-4 group-hover:translate-x-0 transition-all rtl:rotate-180" />
                 </h2>
                 <p className="text-slate-600 mb-6">{link.desc}</p>
               </div>

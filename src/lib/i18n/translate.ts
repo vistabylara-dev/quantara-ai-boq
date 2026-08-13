@@ -49,3 +49,48 @@ export function createTranslator(dictionary: Dictionary): TranslateFn {
     return interpolate(value, vars);
   };
 }
+
+/**
+ * Reads a structured page payload from the canonical PR #36 dictionary.
+ * Public landing pages use this for route-specific content while retaining
+ * the same locale cookie, server locale, dictionary parity and translator.
+ */
+export function translateStructuredContent<T>(
+  translate: TranslateFn,
+  key: TranslationKey,
+  fallback: T,
+): T {
+  const value = translate(key);
+  if (value === key || value === "{}") return fallback;
+  try {
+    const localized = JSON.parse(value) as unknown;
+    const merge = (base: unknown, override: unknown): unknown => {
+      if (override === undefined) return base;
+      if (Array.isArray(override)) {
+        if (!Array.isArray(base)) return override;
+        return override.map((item, index) => merge(base[index], item));
+      }
+      if (
+        base &&
+        override &&
+        typeof base === "object" &&
+        typeof override === "object" &&
+        !Array.isArray(base)
+      ) {
+        return Object.fromEntries(
+          [...new Set([...Object.keys(base), ...Object.keys(override)])].map((property) => [
+            property,
+            merge(
+              (base as Record<string, unknown>)[property],
+              (override as Record<string, unknown>)[property],
+            ),
+          ]),
+        );
+      }
+      return override;
+    };
+    return merge(fallback, localized) as T;
+  } catch {
+    return fallback;
+  }
+}

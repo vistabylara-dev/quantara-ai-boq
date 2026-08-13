@@ -36,13 +36,13 @@ export default async function PricingPage() {
       <div className="bg-slate-50 dark:bg-slate-950 py-24 sm:py-32">
         <div className="mx-auto max-w-7xl px-6 lg:px-8">
           
-          <nav className="mb-12 text-sm" aria-label="Breadcrumb">
-            <ol className="flex items-center justify-center space-x-2 text-slate-500 dark:text-slate-400">
+          <nav className="mb-12 text-sm" aria-label={t("publicContent.navigation.breadcrumb")}>
+            <ol className="flex items-center justify-center gap-2 text-slate-500 dark:text-slate-400">
               <li>
-                <Link href="/" className="transition-colors hover:text-slate-900 dark:hover:text-white">Home</Link>
+                <Link href="/" className="transition-colors hover:text-slate-900 dark:hover:text-white">{t("publicLanding.home")}</Link>
               </li>
               <li aria-hidden="true">/</li>
-              <li className="font-medium text-slate-900 dark:text-white" aria-current="page">Pricing</li>
+              <li className="font-medium text-slate-900 dark:text-white" aria-current="page">{t("publicContent.pricing.breadcrumb")}</li>
             </ol>
           </nav>
           

@@ -283,7 +283,7 @@ describe("public search registry", () => {
     expect(marketingLayout).toContain("PublicFooter");
     expect(marketingLayout).not.toContain("AppShell");
     expect(existsSync(join(marketingRoot, "industries", "[industryId]", "page.tsx"))).toBe(false);
-    expect(existsSync(join(repoRoot, "src", "app", "industries", "[industryId]", "page.tsx"))).toBe(true);
+    expect(existsSync(join(repoRoot, "src", "app", "industry-engines", "[industryId]", "page.tsx"))).toBe(true);
   });
 
   it("documents every indexable route in both required website reports", () => {

@@ -36,7 +36,8 @@ export default defineConfig({
     reuseExistingServer: !process.env.CI,
     timeout: 120000,
     env: {
-      DATABASE_URL: process.env.DATABASE_URL || 'postgresql://quantara:quantara_local_password@localhost:5432/quantara_e2e_boq?schema=public'
+      DATABASE_URL: process.env.DATABASE_URL || 'postgresql://quantara:quantara_local_password@localhost:5432/quantara_e2e_boq?schema=public',
+      NODE_OPTIONS: '--max-old-space-size=8192'
     }
   },
 });

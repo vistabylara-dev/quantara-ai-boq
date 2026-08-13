@@ -341,7 +341,7 @@ export default function ProjectBOQPage(props: PageProps) {
     // Remove it after interpretation while preserving unrelated query state.
     const url = new URL(window.location.href);
     url.searchParams.delete("action");
-    router.replace(url.pathname + url.search);
+    window.history.replaceState(null, "", url.pathname + url.search);
   }, [
     activeBoq,
     createInitialBOQ,

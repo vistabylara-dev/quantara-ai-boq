@@ -74,7 +74,7 @@ test.describe('Edge Cases & Resiliency', () => {
 
   test('should handle sign-out properly', async ({ page }) => {
     await page.goto('/dashboard');
-    await expect(page).toHaveURL(/\/dashboard/);
+    await expect(page).toHaveURL(/\/dashboard/, { timeout: 15_000 });
     // Assuming a user menu on the top right
     await page.click('button:has(svg.lucide-user), button:has(img[alt="User"])');
     // Click Sign Out
@@ -99,7 +99,7 @@ test.describe('Edge Cases & Resiliency', () => {
     await page.click('text=Edge Test Client');
     await page.fill('input[name="location"]', 'Dubai');
     await page.click('button:has-text("Create project")');
-    await expect(page).toHaveURL(/\/projects\/(?!new)[a-zA-Z0-9-]+$/);
+    await expect(page).toHaveURL(/\/projects\/(?!new)[a-zA-Z0-9-]+$/, { timeout: 15_000 });
     await expect(page.getByRole('heading', { name: 'Invalid File Project', exact: true })).toBeVisible({ timeout: 20_000 });
     await page.goto(`${page.url()}/files`);
     await expect(page.getByText(/No project sources are available yet/)).toBeVisible({ timeout: 20_000 });

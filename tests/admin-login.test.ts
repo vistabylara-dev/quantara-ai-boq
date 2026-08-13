@@ -194,7 +194,7 @@ describe("platform-admin login (integration, real local Postgres)", () => {
     cookieStore.clear();
     await expect(
       loginPlatformActor({ email: emails.inactive, password: PASSWORD }),
-    ).rejects.toMatchObject({ code: "ACCOUNT_INACTIVE", status: 403 });
+    ).rejects.toMatchObject({ code: "ACCOUNT_PENDING_APPROVAL", status: 403 });
   });
 
   it("POST /api/auth/admin-login succeeds for a platform owner and fails generically otherwise", async () => {

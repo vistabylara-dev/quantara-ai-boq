@@ -189,7 +189,15 @@ describe("Phase 8 sub-phase 2: background processing (job queue) (integration, r
       await waitFor(async () => (await prisma.extractionJob.findUniqueOrThrow({ where: { id: job.id } })).status === ExtractionJobStatus.COMPLETED);
 
       // Simulate a process death mid-job: force the completed job back to RUNNING directly in the DB.
-      await prisma.extractionJob.update({ where: { id: job.id }, data: { status: ExtractionJobStatus.RUNNING, completedAt: null, resultSummaryJson: undefined } });
+      await prisma.extractionJob.update({
+        where: { id: job.id },
+        data: {
+          status: ExtractionJobStatus.RUNNING,
+          completedAt: null,
+          resultSummaryJson: undefined,
+          updatedAt: new Date(Date.now() - 6 * 60 * 1000),
+        },
+      });
 
       await queue.recoverStaleJobs();
       await waitFor(async () => (await prisma.extractionJob.findUniqueOrThrow({ where: { id: job.id } })).status === ExtractionJobStatus.COMPLETED);

@@ -1,13 +1,25 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 
 const ACCESS_GRANT_TTL_MS = 30 * 60 * 1000;
+const DEVELOPMENT_ACCESS_SECRET = "dev-only-proposal-access-secret-not-for-production";
+const MINIMUM_PRODUCTION_SECRET_BYTES = 32;
 
 function secret(): string {
-  // A dev-only fallback keeps local/demo use frictionless (matching this
-  // project's other optional-with-safe-fallback env vars); production
-  // deployments should set a real secret so grants aren't forgeable by
-  // anyone who can read the repository.
-  return process.env.PROPOSAL_ACCESS_SECRET ?? "dev-only-proposal-access-secret-not-for-production";
+  const configured = process.env.PROPOSAL_ACCESS_SECRET?.trim();
+
+  if (process.env.NODE_ENV !== "production") {
+    return configured || DEVELOPMENT_ACCESS_SECRET;
+  }
+
+  if (!configured || configured === DEVELOPMENT_ACCESS_SECRET) {
+    throw new Error("PROPOSAL_ACCESS_SECRET must be configured with a private production value.");
+  }
+
+  if (Buffer.byteLength(configured, "utf8") < MINIMUM_PRODUCTION_SECRET_BYTES) {
+    throw new Error(`PROPOSAL_ACCESS_SECRET must be at least ${MINIMUM_PRODUCTION_SECRET_BYTES} bytes in production.`);
+  }
+
+  return configured;
 }
 
 function sign(payload: string): string {

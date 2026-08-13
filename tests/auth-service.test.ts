@@ -66,6 +66,15 @@ describe("auth service (integration, real local Postgres)", () => {
 
   it("blocks login before verification, then allows it after", async () => {
     await expect(loginWithPassword({ email: primaryEmail, password: PASSWORD })).rejects.toMatchObject({
+      code: "ACCOUNT_PENDING_APPROVAL",
+    });
+
+    await prisma.user.update({
+      where: { email: primaryEmail },
+      data: { isActive: true },
+    });
+
+    await expect(loginWithPassword({ email: primaryEmail, password: PASSWORD })).rejects.toMatchObject({
       code: "EMAIL_NOT_VERIFIED",
     });
 
@@ -141,7 +150,10 @@ describe("auth service (integration, real local Postgres)", () => {
     expect(primaryUser.companyId).not.toBe(secondaryUser.companyId);
 
     cookieStore.clear();
-    await prisma.user.update({ where: { email: secondaryEmail }, data: { emailVerifiedAt: new Date() } });
+    await prisma.user.update({
+      where: { email: secondaryEmail },
+      data: { emailVerifiedAt: new Date(), isActive: true },
+    });
     await loginWithPassword({ email: secondaryEmail, password: PASSWORD });
     const secondaryActor = await getCurrentActor();
     expect(secondaryActor.companyId).toBe(secondaryUser.companyId);

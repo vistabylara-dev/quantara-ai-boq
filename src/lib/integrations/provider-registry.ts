@@ -8,9 +8,10 @@ import type { ProviderRegistryEntry } from "./connector-types";
  * `IntegrationProvider` DB rows are seeded from this file for 1B+ to
  * reference by a stable id, but the UI reads this array directly.
  *
- * Status honesty rule: Google Drive is the sole Controlled Early Access
- * connector because its OAuth, browser, and selected-file project import are
- * implemented. Every other OAuth-cloud provider remains COMING_SOON, while
+ * Status honesty rule: Google Drive and the narrow Autodesk/AutoCAD metadata
+ * workflow are Controlled Early Access connectors because their authorized,
+ * review-led paths are implemented. Other OAuth-cloud providers remain
+ * COMING_SOON, while
  * plugin/file-import-ceiling providers use the status that truthfully
  * describes how they will connect (REQUIRES_PLUGIN / FILE_IMPORT_ONLY).
  */

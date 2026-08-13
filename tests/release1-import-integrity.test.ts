@@ -13,6 +13,7 @@ import { createClient } from "../src/lib/repositories/client-repository";
 import { createProjectWithDefaultBoq } from "../src/lib/services/project-service";
 import { importExtractedEntityToBoq } from "../src/lib/services/extraction-to-boq-service";
 import { grantUnlimitedPlanForTests } from "./helpers/grant-unlimited-plan";
+import { requireIsolatedLocalTestDatabase } from "./helpers/require-isolated-test-database";
 
 const auditFailure = vi.hoisted(() => ({ failImportAudit: false }));
 
@@ -31,15 +32,6 @@ vi.mock("@/lib/repositories/audit-repository", async (importOriginal) => {
 
 const RUN_ID = `${Date.now()}-${process.pid}`;
 
-function requireIsolatedLocalTestDatabase(): void {
-  const rawUrl = process.env.DATABASE_URL;
-  if (!rawUrl) throw new Error("DATABASE_URL is required for this integration test.");
-  const parsed = new URL(rawUrl);
-  const databaseName = parsed.pathname.replace(/^\//, "");
-  if (!["localhost", "127.0.0.1"].includes(parsed.hostname) || databaseName !== "quantara_e2e_boq") {
-    throw new Error("Refusing import-integrity integration test outside localhost/quantara_e2e_boq.");
-  }
-}
 
 describe("Release 1 entity-to-BOQ import integrity", () => {
   let companyId = "";

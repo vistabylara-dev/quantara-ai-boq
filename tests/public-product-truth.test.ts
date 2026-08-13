@@ -235,15 +235,20 @@ describe("public product truth", () => {
 
     expect(source).not.toMatch(/\bprice_[A-Za-z0-9]/);
     expect(source).not.toContain("/api/commerce/checkout");
-    expect(source).not.toMatch(/\bsearchParams\b/);
-    expect(source).not.toMatch(/\bURLSearchParams\b/);
 
     const pricingPlansSource = readFileSync(
       join(repoRoot, "src", "app", "(marketing)", "pricing", "pricing-plans.tsx"),
       "utf8",
     );
-    expect(pricingPlansSource).toMatch(/href="\/register"/);
-    expect(pricingPlansSource).not.toMatch(/\/register\?/);
+    const pricingIntentSource = readFileSync(
+      join(repoRoot, "src", "lib", "commercial", "pricing-intent.ts"),
+      "utf8",
+    );
+    expect(pricingPlansSource).toContain("normalizePublicPriceCode(cycle.priceCode)");
+    expect(pricingPlansSource).toContain("buildRegisterPricingHref(trustedPriceCode)");
     expect(pricingPlansSource).not.toMatch(/href="\/api\/commerce\/checkout"/);
+    expect(pricingIntentSource).toContain("TRUSTED_PUBLIC_PRICE_CODES");
+    expect(pricingIntentSource).toContain("isTrustedPublicPriceCode(record.priceCode)");
+    expect(pricingIntentSource).not.toMatch(/\bprice_[A-Za-z0-9]/);
   });
 });

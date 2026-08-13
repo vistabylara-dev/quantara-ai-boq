@@ -148,13 +148,19 @@ describe("authentication emails (integration, real local Postgres)", () => {
       });
       registeredCompanyId = result.companyId;
 
-      expect(sendEmailMock).toHaveBeenCalledTimes(1);
-      const call = sendEmailMock.mock.calls[0]![0];
+      expect(sendEmailMock).toHaveBeenCalledTimes(2);
+      const call = sendEmailMock.mock.calls.map(([email]) => email)
+        .find((email) => email.subject === "Verify your Quantara account")!;
       expect(call.to).toBe(REGISTER_EMAIL.toLowerCase());
       expect(call.subject).toBe("Verify your Quantara account");
       expect(call.html).toContain(appBaseUrl());
       expect(call.text).toContain(appBaseUrl());
       expect(call.html).toContain("/verify-email?token=");
+
+      const approvalCall = sendEmailMock.mock.calls.map(([email]) => email)
+        .find((email) => email.subject === "New Early Access Request: Auth Email Test Co")!;
+      expect(approvalCall.to).toBe(process.env.DEV_OWNER_EMAIL || "admin@quantara.ai");
+      expect(approvalCall.html).toContain(`/admin/users/${result.userId}`);
     });
 
     it("sends a password-reset email for a known account, with a link using APP_BASE_URL", async () => {

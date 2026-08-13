@@ -49,8 +49,7 @@ const PDFJS_WORKER_GLOB = ["./node_modules/pdfjs-dist/legacy/build/pdf.worker.mj
 
 const nextConfig = {
   reactStrictMode: true,
-  typescript: { ignoreBuildErrors: true },
-  eslint: { ignoreDuringBuilds: true },
+
   // Without this, Next.js walks up from the project directory looking for a
   // workspace root and can misdetect an unrelated lockfile elsewhere on the
   // machine (e.g. C:\Users\<name>\pnpm-lock.yaml) as the root, which breaks

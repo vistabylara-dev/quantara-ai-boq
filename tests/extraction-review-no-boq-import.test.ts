@@ -5,18 +5,10 @@ import { prisma } from "../src/lib/db/prisma";
 import { createClient } from "../src/lib/repositories/client-repository";
 import { confirmExtractedEntity, rejectExtractedEntity } from "../src/lib/services/extracted-entity-service";
 import { createProjectWithDefaultBoq } from "../src/lib/services/project-service";
+import { requireIsolatedLocalTestDatabase } from "./helpers/require-isolated-test-database";
 
 const RUN_ID = `${Date.now()}-${process.pid}`;
 
-function requireIsolatedLocalTestDatabase(): void {
-  const rawUrl = process.env.DATABASE_URL;
-  if (!rawUrl) throw new Error("DATABASE_URL is required for this integration test.");
-  const parsed = new URL(rawUrl);
-  const databaseName = parsed.pathname.replace(/^\//, "");
-  if (!["localhost", "127.0.0.1"].includes(parsed.hostname) || databaseName !== "quantara_e2e_boq") {
-    throw new Error("Refusing extraction-review integration test outside localhost/quantara_e2e_boq.");
-  }
-}
 
 describe("extraction review actions never import into the BOQ", () => {
   let actor: CurrentActor;

@@ -57,7 +57,7 @@ describe("next.config.mjs phase gating", () => {
     });
   });
 
-  it("keeps read-only file and page-image services decoupled from the global extraction registry", async () => {
+  it("loads the complete handler composition only inside processing command boundaries", async () => {
     const { readFile } = await import("node:fs/promises");
 
     const drawingService = await readFile(
@@ -77,10 +77,11 @@ describe("next.config.mjs phase gating", () => {
       "utf8",
     );
 
-    expect(drawingService).not.toContain('import "@/lib/jobs/register-handlers"');
-    expect(projectFileService).not.toContain('import "@/lib/jobs/register-handlers"');
-    expect(drawingService).toContain('await import("@/lib/files/preprocessing-handler")');
-    expect(projectFileService).toContain('await import("@/lib/files/classification-handler")');
+    expect(drawingService).not.toMatch(/^import "@\/lib\/jobs\/register-handlers"/m);
+    expect(projectFileService).not.toMatch(/^import "@\/lib\/jobs\/register-handlers"/m);
+    expect(drawingService).toContain('await import("@/lib/jobs/register-handlers")');
+    expect(projectFileService).toContain('await import("@/lib/jobs/register-handlers")');
+    expect(preprocessing).not.toContain('import "@/lib/jobs/register-handlers"');
 
     expect(preprocessing).toContain("allowOverwrite: true");
     expect(blobAdapter).toContain("allowOverwrite: input.allowOverwrite ?? false");
@@ -116,13 +117,13 @@ describe("next.config.mjs phase gating", () => {
       'from "@/lib/files/table-extraction/constants"',
     );
     expect(serviceSource).toContain(
-      'await import("@/lib/files/table-extraction-handler")',
+      'await import("@/lib/jobs/register-handlers")',
     );
     expect(serviceSource).not.toContain(
       'import { TABLE_EXTRACTABLE_EXTENSIONS } from "@/lib/files/table-extraction-handler"',
     );
     expect(serviceSource).not.toContain(
-      'import "@/lib/jobs/register-handlers"',
+      'import "@/lib/jobs/register-handlers";',
     );
   });
 });

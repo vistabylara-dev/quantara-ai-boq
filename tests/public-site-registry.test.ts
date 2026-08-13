@@ -195,7 +195,9 @@ describe("public search registry", () => {
     expect(llms).toMatch(/^# Quantara/m);
     expect(llms).toContain("https://quantara.vistabylara.com/features");
     expect(llms).toContain("https://quantara.vistabylara.com/site-map");
-    expect(llms).toContain("does not claim automatic drawing measurement");
+    expect(llms).toContain(
+      "does not make a blanket claim of fully unattended computer-vision takeoff",
+    );
   });
 
   it("lets public metadata and AI-discovery files bypass authentication middleware", () => {

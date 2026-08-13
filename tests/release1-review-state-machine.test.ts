@@ -15,6 +15,7 @@ import {
   rejectExtractedEntity,
 } from "../src/lib/services/extracted-entity-service";
 import { createProjectWithDefaultBoq } from "../src/lib/services/project-service";
+import { requireIsolatedLocalTestDatabase } from "./helpers/require-isolated-test-database";
 
 const RUN_ID = `${Date.now()}-${process.pid}`;
 const REVIEWABLE_STATUSES = [
@@ -31,15 +32,6 @@ const REVIEW_DECISIONS = ["confirm", "correct", "reject"] as const;
 
 type ReviewDecision = (typeof REVIEW_DECISIONS)[number];
 
-function requireIsolatedLocalTestDatabase(): void {
-  const rawUrl = process.env.DATABASE_URL;
-  if (!rawUrl) throw new Error("DATABASE_URL is required for this integration test.");
-  const parsed = new URL(rawUrl);
-  const databaseName = parsed.pathname.replace(/^\//, "");
-  if (!["localhost", "127.0.0.1"].includes(parsed.hostname) || databaseName !== "quantara_e2e_boq") {
-    throw new Error("Refusing review-state-machine integration test outside localhost/quantara_e2e_boq.");
-  }
-}
 
 describe("Release 1 extracted-entity professional review state machine", () => {
   let actor: CurrentActor;

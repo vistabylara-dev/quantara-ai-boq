@@ -14,16 +14,21 @@ function stepStatus(
 }
 
 describe("Recovery F final workflow audit", () => {
-  it("keeps read-only table listing decoupled from the heavy table handler", () => {
+  it("keeps table constants lightweight while loading handlers through the composition root", () => {
     const service = readFileSync(
       path.resolve(__dirname, "../src/lib/services/table-extraction-service.ts"),
+      "utf8",
+    );
+    const handlers = readFileSync(
+      path.resolve(__dirname, "../src/lib/jobs/register-handlers.ts"),
       "utf8",
     );
     expect(service).toContain("@/lib/files/table-extraction/constants");
     expect(service).not.toContain(
       'import { TABLE_EXTRACTABLE_EXTENSIONS } from "@/lib/files/table-extraction-handler"',
     );
-    expect(service).toContain('await import("@/lib/files/table-extraction-handler")');
+    expect(service).toContain('await import("@/lib/jobs/register-handlers")');
+    expect(handlers).toContain('import "@/lib/files/table-extraction-handler"');
   });
 
   it("keeps local env defaults local while documenting Vercel Blob override", () => {
@@ -34,11 +39,11 @@ describe("Recovery F final workflow audit", () => {
 
   it("records PDF grid detection truthfully", () => {
     const parser = readFileSync(
-      path.resolve(__dirname, "../src/lib/files/table-extraction/pdf-table-parser.ts"),
+      path.resolve(__dirname, "../src/lib/files/table-extraction/pdf-table-grid-normalization.ts"),
       "utf8",
     );
     expect(parser).toContain('method: "pdf-grid-detection"');
-    expect(parser).not.toContain('method: "pdf-whitespace-heuristic"');
+    expect(parser).not.toContain('method: "pdf-positional-text-fallback"');
   });
 
   it("sends PDF table candidates requiring review to Extraction Review", () => {

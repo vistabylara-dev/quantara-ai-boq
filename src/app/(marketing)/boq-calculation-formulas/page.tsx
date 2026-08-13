@@ -96,7 +96,7 @@ function ArabicFormulaPage({ content }: { content: ArabicFormulaContent }) {
   return (
     <>
       <PublicJsonLd data={pageSchema} />
-      <div className="flex min-h-screen flex-col bg-white text-slate-900 dark:bg-slate-950 dark:text-slate-100">
+      <div className="flex min-h-screen flex-col bg-[#030508] text-slate-100">
         <PublicBreadcrumb items={[
           { name: content.breadcrumbs[0], item: "/" },
           { name: content.breadcrumbs[1], item: "/resources" },
@@ -222,7 +222,7 @@ export default async function BOQCalculationFormulasPage() {
   return (
     <>
       <PublicJsonLd data={pageSchema} />
-      <div className="flex flex-col min-h-screen bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100">
+      <div className="flex flex-col min-h-screen bg-[#030508] text-slate-100">
         <PublicBreadcrumb items={[
           { name: "Home", item: "/" },
           { name: "Resources", item: "/resources" },

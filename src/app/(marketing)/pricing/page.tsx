@@ -33,7 +33,7 @@ export default async function PricingPage() {
   return (
     <>
       <PublicJsonLd data={pageSchema} />
-      <div className="bg-slate-50 dark:bg-slate-950 py-24 sm:py-32">
+      <div className="bg-[#030508] py-24 sm:py-32">
         <div className="mx-auto max-w-7xl px-6 lg:px-8">
           
           <nav className="mb-12 text-sm" aria-label={t("publicContent.navigation.breadcrumb")}>
@@ -60,7 +60,7 @@ export default async function PricingPage() {
               <div
                 key={option.name}
                 className={`rounded-3xl p-8 ring-1 ${
-                  option.featured ? 'ring-blue-600 bg-white dark:bg-slate-900 shadow-xl' : 'ring-slate-200 dark:ring-slate-800 bg-white dark:bg-slate-900'
+                  option.featured ? 'ring-blue-600 bg-slate-900 shadow-xl' : 'ring-slate-800 bg-slate-900'
                 }`}
               >
                 <h3 className={`text-lg font-semibold leading-8 ${option.featured ? 'text-blue-600 dark:text-blue-400' : 'text-slate-900 dark:text-white'}`}>

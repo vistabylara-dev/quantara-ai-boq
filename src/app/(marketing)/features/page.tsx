@@ -22,23 +22,23 @@ const statusPresentation: Record<
 > = {
   AVAILABLE: {
     icon: CheckCircle2,
-    badge: "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200",
-    card: "border-emerald-200 dark:border-emerald-900/70",
+    badge: "bg-emerald-950 text-emerald-200",
+    card: "border-emerald-900/70",
   },
   CONTROLLED_ACCESS: {
     icon: LockKeyhole,
-    badge: "bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-200",
-    card: "border-blue-200 dark:border-blue-900/70",
+    badge: "bg-blue-950 text-blue-200",
+    card: "border-blue-900/70",
   },
   LIMITED: {
     icon: Info,
-    badge: "bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-100",
-    card: "border-amber-200 dark:border-amber-900/70",
+    badge: "bg-amber-950 text-amber-100",
+    card: "border-amber-900/70",
   },
   NOT_AVAILABLE: {
     icon: XCircle,
-    badge: "bg-slate-200 text-slate-800 dark:bg-slate-800 dark:text-slate-200",
-    card: "border-slate-300 dark:border-slate-700",
+    badge: "bg-slate-800 text-slate-200",
+    card: "border-slate-700",
   },
 };
 
@@ -59,7 +59,7 @@ export default async function FeaturesPage() {
         path="/features"
         breadcrumbs={[{ name: "Home", path: "/" }, { name: "Features", path: "/features" }]}
       />
-      <div className="min-h-screen bg-white text-slate-950 dark:bg-slate-950 dark:text-white">
+      <div className="min-h-screen bg-[#030508] text-white">
       <PublicBreadcrumb
         items={[
           { name: t("legal.shared.home"), item: "/" },
@@ -69,35 +69,35 @@ export default async function FeaturesPage() {
 
       <section className="px-4 pb-14 pt-16">
         <div className="container mx-auto max-w-4xl text-center">
-          <p className="mb-4 text-sm font-semibold uppercase tracking-[0.22em] text-blue-700 dark:text-blue-300">
+          <p className="mb-4 text-sm font-semibold uppercase tracking-[0.22em] text-blue-300">
             {t("publicContent.features.eyebrow")}
           </p>
           <h1 className="mb-6 text-4xl font-extrabold tracking-tight sm:text-5xl">
             {t("publicContent.features.pageTitle")}
           </h1>
-          <p className="mx-auto mb-5 max-w-3xl text-lg leading-relaxed text-slate-700 dark:text-slate-300">
+          <p className="mx-auto mb-5 max-w-3xl text-lg leading-relaxed text-slate-300">
             {t("publicContent.features.intro", {
               entityDefinition: productTruth.entityDefinition,
             })}
           </p>
-          <p className="mx-auto max-w-3xl text-base leading-relaxed text-slate-600 dark:text-slate-400">
+          <p className="mx-auto max-w-3xl text-base leading-relaxed text-slate-400">
             {productTruth.workflowTruth}
           </p>
         </div>
       </section>
 
-      <section className="border-y border-slate-200 bg-slate-50 px-4 py-8 dark:border-slate-800 dark:bg-slate-900/50">
+      <section className="border-y border-slate-800 bg-slate-900/50 px-4 py-8">
         <div className="container mx-auto grid max-w-6xl gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {(Object.keys(statusPresentation) as PublicCapabilityStatus[]).map((status) => {
             const presentation = statusPresentation[status];
             const Icon = presentation.icon;
             return (
-              <div key={status} className="rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-950">
+              <div key={status} className="rounded-xl border border-slate-800 bg-slate-950 p-4">
                 <div className="mb-2 flex items-center gap-2 font-semibold">
                   <Icon className="h-4 w-4" aria-hidden="true" />
                   {capabilityStatus[status].label}
                 </div>
-                <p className="text-sm leading-relaxed text-slate-600 dark:text-slate-400">
+                <p className="text-sm leading-relaxed text-slate-400">
                   {capabilityStatus[status].description}
                 </p>
               </div>
@@ -112,7 +112,7 @@ export default async function FeaturesPage() {
             <h2 id="feature-register-heading" className="mb-3 text-3xl font-bold">
               {t("publicContent.features.registerTitle")}
             </h2>
-            <p className="leading-relaxed text-slate-600 dark:text-slate-400">
+            <p className="leading-relaxed text-slate-400">
               {t("publicContent.features.truthNote")}
             </p>
           </div>
@@ -125,7 +125,7 @@ export default async function FeaturesPage() {
                 <article
                   key={capability.id}
                   id={capability.id}
-                  className={`rounded-2xl border bg-white p-6 shadow-sm dark:bg-slate-950 ${presentation.card}`}
+                  className={`rounded-2xl border bg-slate-950 p-6 shadow-sm ${presentation.card}`}
                 >
                   <div className="mb-4 flex items-start justify-between gap-4">
                     <h3 className="text-lg font-bold">{capability.name}</h3>
@@ -134,11 +134,11 @@ export default async function FeaturesPage() {
                       {capabilityStatus[capability.status].label}
                     </span>
                   </div>
-                  <p className="text-sm leading-relaxed text-slate-700 dark:text-slate-300">
+                  <p className="text-sm leading-relaxed text-slate-300">
                     {capability.summary}
                   </p>
                   {capability.limitation ? (
-                    <p className="mt-4 border-s-2 border-slate-300 ps-3 text-sm leading-relaxed text-slate-600 dark:border-slate-700 dark:text-slate-400">
+                    <p className="mt-4 border-s-2 border-slate-700 ps-3 text-sm leading-relaxed text-slate-400">
                       <strong>{t("publicContent.features.boundaryLabel")}</strong> {capability.limitation}
                     </p>
                   ) : null}
@@ -149,12 +149,12 @@ export default async function FeaturesPage() {
         </div>
       </section>
 
-      <section className="border-y border-amber-200 bg-amber-50 px-4 py-10 dark:border-amber-900/60 dark:bg-amber-950/20">
+      <section className="border-y border-amber-900/60 bg-amber-950/20 px-4 py-10">
         <div className="container mx-auto max-w-4xl">
-          <h2 className="mb-3 text-2xl font-bold text-amber-950 dark:text-amber-100">
+          <h2 className="mb-3 text-2xl font-bold text-amber-100">
             {t("publicContent.features.reviewTitle")}
           </h2>
-          <p className="leading-relaxed text-amber-900/90 dark:text-amber-100/80">
+          <p className="leading-relaxed text-amber-100/80">
             {productTruth.professionalReviewNotice}
           </p>
         </div>

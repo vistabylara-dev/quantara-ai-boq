@@ -66,16 +66,16 @@ export default async function ComparisonsHubPage() {
   const t = createTranslator(getDictionary(locale));
   const content = translateStructuredContent(t, "publicRoutes.comparisonsHub", PAGE_CONTENT);
   return (
-    <div className="min-h-screen bg-white text-slate-900">
+    <div className="min-h-screen bg-[#030508] text-slate-100">
       <div className="container mx-auto px-4 py-16 md:py-24 max-w-7xl">
       <PublicJsonLd data={pageSchema} />
-      <PublicBreadcrumb items={[{ name: content.home, item: "/" }, { name: content.breadcrumb }]} tone="light" />
+      <PublicBreadcrumb items={[{ name: content.home, item: "/" }, { name: content.breadcrumb }]} tone="dark" />
 
         <header className="mb-12 text-center">
-          <h1 className="text-4xl md:text-5xl font-extrabold text-slate-900 tracking-tight mb-6">
+          <h1 className="text-4xl md:text-5xl font-extrabold text-white tracking-tight mb-6">
             {content.title}
           </h1>
-          <p className="text-xl text-slate-600 max-w-3xl mx-auto">
+          <p className="text-xl text-slate-400 max-w-3xl mx-auto">
             {content.intro}
           </p>
         </header>
@@ -83,12 +83,12 @@ export default async function ComparisonsHubPage() {
         <div className="space-y-16">
           {content.categories.map((cat, idx) => (
             <section key={idx}>
-              <h2 className="text-2xl font-bold text-slate-900 mb-6 border-b pb-2">{cat.title}</h2>
+              <h2 className="text-2xl font-bold text-white mb-6 border-b border-slate-800 pb-2">{cat.title}</h2>
               <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {cat.links.map((link, lidx) => (
-                  <Link key={lidx} href={link.url} className="group block p-6 border border-slate-200 rounded-xl hover:border-blue-600 hover:shadow-md transition-all bg-white">
-                    <h3 className="text-lg font-semibold text-slate-900 mb-3 group-hover:text-blue-600 transition-colors">{link.label}</h3>
-                    <p className="text-sm text-slate-600 leading-relaxed">{link.desc}</p>
+                  <Link key={lidx} href={link.url} className="group block p-6 border border-slate-800 rounded-xl hover:border-blue-500 hover:shadow-md transition-all bg-slate-900/50">
+                    <h3 className="text-lg font-semibold text-white mb-3 group-hover:text-blue-400 transition-colors">{link.label}</h3>
+                    <p className="text-sm text-slate-400 leading-relaxed">{link.desc}</p>
                   </Link>
                 ))}
               </div>
@@ -96,12 +96,12 @@ export default async function ComparisonsHubPage() {
           ))}
         </div>
 
-        <section className="mt-20 border-t pt-10">
-          <h2 className="text-2xl font-bold text-slate-900 mb-6">{content.additionalResources}</h2>
+        <section className="mt-20 border-t border-slate-800 pt-10">
+          <h2 className="text-2xl font-bold text-white mb-6">{content.additionalResources}</h2>
           <div className="flex flex-wrap gap-4">
-            <Link href="/resources" className="px-5 py-2 bg-slate-100 hover:bg-slate-200 rounded-lg text-sm font-medium transition-colors">{content.allResources}</Link>
-            <Link href="/features" className="px-5 py-2 bg-slate-100 hover:bg-slate-200 rounded-lg text-sm font-medium transition-colors">{content.exploreFeatures}</Link>
-            <Link href="/about" className="px-5 py-2 bg-slate-100 hover:bg-slate-200 rounded-lg text-sm font-medium transition-colors">{content.aboutQuantara}</Link>
+            <Link href="/resources" className="px-5 py-2 bg-slate-900 hover:bg-slate-800 rounded-lg text-sm font-medium transition-colors">{content.allResources}</Link>
+            <Link href="/features" className="px-5 py-2 bg-slate-900 hover:bg-slate-800 rounded-lg text-sm font-medium transition-colors">{content.exploreFeatures}</Link>
+            <Link href="/about" className="px-5 py-2 bg-slate-900 hover:bg-slate-800 rounded-lg text-sm font-medium transition-colors">{content.aboutQuantara}</Link>
           </div>
         </section>
       

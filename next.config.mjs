@@ -137,6 +137,18 @@ export default async function config(phase) {
   if (phase === PHASE_DEVELOPMENT_SERVER) {
     const { initOpenNextCloudflareForDev } = await import("@opennextjs/cloudflare");
     await initOpenNextCloudflareForDev();
+
+    return {
+      ...nextConfig,
+      webpack(webpackConfig) {
+        webpackConfig.watchOptions = {
+          ...webpackConfig.watchOptions,
+          ignored: ["**/.wrangler/**", "**/.storage/**"],
+        };
+
+        return webpackConfig;
+      },
+    };
   }
 
   return nextConfig;

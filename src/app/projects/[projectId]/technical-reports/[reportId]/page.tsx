@@ -1,9 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useState, use } from "react";
-import { apiClient, getApiErrorMessage } from "@/lib/api/client";
+import { useCallback, useEffect, useRef, useState, use } from "react";
+import { apiClient } from "@/lib/api/client";
 import { useLocale } from "@/lib/i18n/locale-provider";
+import { getLocalizedApiErrorMessage } from "@/lib/i18n/api-error-message";
 
 type ReportDetailView = {
   id: string;
@@ -32,6 +33,8 @@ type PageProps = { params: Promise<{ projectId: string; reportId: string }> };
 export default function TechnicalReportDetailPage(props: PageProps) {
   const params = use(props.params);
   const { direction, locale, t } = useLocale();
+  const localizationRef = useRef({ locale, t });
+  localizationRef.current = { locale, t };
   const [report, setReport] = useState<ReportDetailView | null>(null);
   const [values, setValues] = useState<Record<string, string>>({});
 
@@ -62,7 +65,8 @@ export default function TechnicalReportDetailPage(props: PageProps) {
       setValues(data.fieldValues);
     } catch (error) {
       if (error instanceof DOMException && error.name === "AbortError") return;
-      setLoadError(getApiErrorMessage(error));
+      const current = localizationRef.current;
+      setLoadError(getLocalizedApiErrorMessage(error, current.t, current.locale));
     } finally {
       if (!signal?.aborted) setIsLoading(false);
     }
@@ -97,11 +101,11 @@ export default function TechnicalReportDetailPage(props: PageProps) {
       setShareRawToken(data.rawToken);
       setReport((current) => (current ? { ...current, hasActiveShareLink: true } : current));
     } catch (error) {
-      setEmailError(getApiErrorMessage(error));
+      setEmailError(getLocalizedApiErrorMessage(error, t, locale));
     } finally {
       setIsCreatingShareLink(false);
     }
-  }, [params.reportId]);
+  }, [locale, params.reportId, t]);
 
   const revokeShareLink = useCallback(async () => {
     setEmailError(null);
@@ -112,11 +116,11 @@ export default function TechnicalReportDetailPage(props: PageProps) {
       setShareRawToken(null);
       setReport((current) => (current ? { ...current, hasActiveShareLink: false } : current));
     } catch (error) {
-      setEmailError(getApiErrorMessage(error));
+      setEmailError(getLocalizedApiErrorMessage(error, t, locale));
     } finally {
       setIsCreatingShareLink(false);
     }
-  }, [params.reportId]);
+  }, [locale, params.reportId, t]);
 
   const sendReportEmail = useCallback(async () => {
     setEmailError(null);
@@ -139,11 +143,11 @@ export default function TechnicalReportDetailPage(props: PageProps) {
       });
       setEmailNotice(data.status === "FAILED" ? t("technicalReports.emailDeliveryFailed") : t("technicalReports.reportEmailSent"));
     } catch (error) {
-      setEmailError(getApiErrorMessage(error));
+      setEmailError(getLocalizedApiErrorMessage(error, t, locale));
     } finally {
       setIsSendingEmail(false);
     }
-  }, [params.reportId, selectedTemplateId, recipientEmail, recipientName, attachShareLink, shareRawToken, t]);
+  }, [attachShareLink, locale, params.reportId, recipientEmail, recipientName, selectedTemplateId, shareRawToken, t]);
 
   const saveValues = useCallback(async () => {
     setActionError(null);
@@ -153,11 +157,11 @@ export default function TechnicalReportDetailPage(props: PageProps) {
       setReport(data);
       setValues(data.fieldValues);
     } catch (error) {
-      setActionError(getApiErrorMessage(error));
+      setActionError(getLocalizedApiErrorMessage(error, t, locale));
     } finally {
       setIsSaving(false);
     }
-  }, [params.reportId, values]);
+  }, [locale, params.reportId, t, values]);
 
   const generate = useCallback(async () => {
     setActionError(null);
@@ -169,11 +173,11 @@ export default function TechnicalReportDetailPage(props: PageProps) {
       const data = await apiClient.post<ReportDetailView>(`/api/technical-reports/${encodeURIComponent(params.reportId)}/generate`, { documentType: "DOCX" });
       setReport(data);
     } catch (error) {
-      setActionError(getApiErrorMessage(error));
+      setActionError(getLocalizedApiErrorMessage(error, t, locale));
     } finally {
       setIsGenerating(false);
     }
-  }, [params.reportId, values]);
+  }, [locale, params.reportId, t, values]);
 
   if (isLoading) {
     return (

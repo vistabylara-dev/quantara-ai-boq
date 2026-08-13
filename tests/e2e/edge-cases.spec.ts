@@ -5,6 +5,8 @@ import { UserRole } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 import { randomUUID } from 'crypto';
 import fs from 'fs';
+import os from 'os';
+import { SESSION_COOKIE_NAME } from '../../src/lib/auth/session-cookie-name';
 
 test.describe('Edge Cases & Resiliency', () => {
   let companyId: string;
@@ -63,14 +65,16 @@ test.describe('Edge Cases & Resiliency', () => {
   });
 
   test.beforeEach(async ({ page }) => {
-    await page.goto('/login');
-    await page.fill('input[type="email"]', userEmail);
-    await page.fill('input[type="password"]', 'Password123!');
-    await page.click('button[type="submit"]');
-    await expect(page).toHaveURL(/\/dashboard/);
+    const response = await page.request.post('/api/auth/login', {
+      data: { email: userEmail, password: 'Password123!' },
+    });
+    expect(response.status()).toBe(200);
+    expect((await page.context().cookies()).some((cookie) => cookie.name === SESSION_COOKIE_NAME)).toBe(true);
   });
 
   test('should handle sign-out properly', async ({ page }) => {
+    await page.goto('/dashboard');
+    await expect(page).toHaveURL(/\/dashboard/);
     // Assuming a user menu on the top right
     await page.click('button:has(svg.lucide-user), button:has(img[alt="User"])');
     // Click Sign Out
@@ -85,6 +89,7 @@ test.describe('Edge Cases & Resiliency', () => {
   });
 
   test('should reject invalid file types', async ({ page }) => {
+    test.setTimeout(60_000);
     // Create a dummy project
     await page.goto('/projects');
     await page.click('text=New project');
@@ -95,43 +100,35 @@ test.describe('Edge Cases & Resiliency', () => {
     await page.fill('input[name="location"]', 'Dubai');
     await page.click('button:has-text("Create project")');
     await expect(page).toHaveURL(/\/projects\/(?!new)[a-zA-Z0-9-]+$/);
+    await expect(page.getByRole('heading', { name: 'Invalid File Project', exact: true })).toBeVisible({ timeout: 20_000 });
     await page.goto(`${page.url()}/files`);
+    await expect(page.getByText(/No project sources are available yet/)).toBeVisible({ timeout: 20_000 });
 
     // Create a dummy exe file
-    const invalidFilePath = path.join(__dirname, 'fixtures', 'invalid.exe');
+    const invalidFilePath = path.join(os.tmpdir(), `quantara-invalid-${randomUUID()}.exe`);
     fs.writeFileSync(invalidFilePath, 'dummy');
 
-    const uploadResPromise = page.waitForResponse((res) => /\/api\/projects\/[^/]+\/files$/.test(new URL(res.url()).pathname) && res.request().method() === 'POST');
-    const fileInput = page.locator('input[type="file"]');
-    await fileInput.setInputFiles([invalidFilePath]);
-    // setInputFiles() sets input.files correctly but React's onChange
-    // listener on this hidden input doesn't reliably fire from that alone
-    // in this app — explicitly dispatching input/change gets handleUpload
-    // to actually run, matching what a real native file-picker selection
-    // does in a browser.
-    // Only "change" is dispatched — React's file-input onChange listens
-    // for that specific event, and also dispatching "input" caused a
-    // second, duplicate upload request.
-    await fileInput.evaluate((el: HTMLInputElement) => {
-      el.dispatchEvent(new Event('change', { bubbles: true }));
-    });
-    const uploadRes = await uploadResPromise;
+    try {
+      const fileInput = page.locator('input[type="file"]');
+      const [uploadRes] = await Promise.all([
+        page.waitForResponse((response) => /\/api\/projects\/[^/]+\/files$/.test(new URL(response.url()).pathname) && response.request().method() === 'POST'),
+        fileInput.setInputFiles([invalidFilePath]),
+      ]);
 
-    // Server-side rejects the unsupported type; UI must surface it clearly.
-    expect(uploadRes.status()).toBeGreaterThanOrEqual(400);
-    await expect(page.locator('text=Invalid file type').or(page.locator('text=not supported'))).toBeVisible({ timeout: 5000 });
-    
-    // Windows can briefly hold the file handle open after the multipart
-    // upload request resolves, so an immediate unlink can throw EBUSY —
-    // retry a few times rather than fail the test over teardown, since the
-    // actual assertions above have already completed.
-    for (let attempt = 0; attempt < 5; attempt++) {
-      try {
-        fs.unlinkSync(invalidFilePath);
-        break;
-      } catch (error) {
-        if (attempt === 4) throw error;
-        await new Promise((resolve) => setTimeout(resolve, 200));
+      // Server-side rejects the unsupported type; UI must surface it clearly.
+      expect(uploadRes.status()).toBeGreaterThanOrEqual(400);
+      await expect(page.locator('text=Invalid file type').or(page.locator('text=not supported'))).toBeVisible({ timeout: 5000 });
+    } finally {
+      // Windows can briefly hold the file handle open after the multipart
+      // upload request resolves, so retry cleanup without masking assertions.
+      for (let attempt = 0; attempt < 5; attempt++) {
+        try {
+          fs.unlinkSync(invalidFilePath);
+          break;
+        } catch (error) {
+          if (attempt === 4) throw error;
+          await new Promise((resolve) => setTimeout(resolve, 200));
+        }
       }
     }
   });
@@ -182,16 +179,14 @@ test.describe('Edge Cases & Resiliency', () => {
     const dupClient = await prisma.client.create({ data: { companyId: dupCompanyId, name: 'Edge Dup Client' } });
 
     try {
-      // beforeEach already logged in as the shared fixture user; /login
-      // redirects an already-authenticated session straight to /dashboard,
-      // so the email field never appears unless that session is cleared
-      // first.
+      // Replace the shared fixture session with the dedicated duplicate-race
+      // fixture user before exercising the concurrent API requests.
       await page.context().clearCookies();
-      await page.goto('/login');
-      await page.fill('input[type="email"]', dupEmail);
-      await page.fill('input[type="password"]', 'Password123!');
-      await page.click('button[type="submit"]');
-      await expect(page).toHaveURL(/\/dashboard/);
+      const response = await page.request.post('/api/auth/login', {
+        data: { email: dupEmail, password: 'Password123!' },
+      });
+      expect(response.status()).toBe(200);
+      expect((await page.context().cookies()).some((cookie) => cookie.name === SESSION_COOKIE_NAME)).toBe(true);
 
       const reference = `DUP-${Date.now()}`;
       const body = {

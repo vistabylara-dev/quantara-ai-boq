@@ -699,8 +699,8 @@ export default function ProjectBOQPage(props: PageProps) {
         </div>
       )}
 
-      <div className="grid gap-6 xl:grid-cols-[1fr_360px]">
-        <div className="space-y-6">
+      <div className="grid min-w-0 gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
+        <div className="min-w-0 space-y-6">
           {showCreationSelector || (!activeRevision && revisions.length === 0) ? (
             <div
               id="boq-start-workflow"
@@ -713,7 +713,7 @@ export default function ProjectBOQPage(props: PageProps) {
               />
             </div>
           ) : activeRevision ? (
-            <div id="boq-editor-section" tabIndex={-1} className="rounded-[32px] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-blue-500">
+            <div id="boq-editor-section" tabIndex={-1} className="min-w-0 rounded-[32px] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-blue-500">
             <BoqEditor
               boq={activeRevision}
               projectId={params.projectId}
@@ -746,7 +746,7 @@ export default function ProjectBOQPage(props: PageProps) {
           )}
         </div>
 
-        <aside className="space-y-6">
+        <aside className="min-w-0 space-y-6">
           <section className="rounded-[32px] border border-slate-800 bg-slate-950 p-6">
             <p className="text-sm uppercase tracking-[0.28em] text-slate-500">{t("boqEditor.revisionHistory")}</p>
             <div className="mt-6 space-y-3">

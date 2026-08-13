@@ -3,6 +3,8 @@ import { prisma } from "../../src/lib/db/prisma";
 import { UserRole } from "@prisma/client";
 import bcrypt from "bcryptjs";
 import { randomUUID } from "crypto";
+import { SESSION_COOKIE_NAME } from "../../src/lib/auth/session-cookie-name";
+import { LOCALE_COOKIE_NAME } from "../../src/lib/i18n/config";
 
 /**
  * Focused authenticated Arabic coverage for the delta translated in this
@@ -13,17 +15,24 @@ import { randomUUID } from "crypto";
 
 const PASSWORD = "Password123!";
 
-async function loginAndSwitchToArabic(page: Page, email: string) {
-  await page.goto("/login");
-  await page.locator("#email").waitFor({ state: "visible", timeout: 60_000 });
-  await page.locator("#email").fill(email);
-  await page.locator("#password").fill(PASSWORD);
-  await page.getByRole("button", { name: /initialize/i }).click();
-  await page.waitForURL(/\/dashboard/, { timeout: 40_000 });
-  await page.getByRole("button", { name: "Switch to Arabic" }).click();
-  // See saas-arabic-coverage.spec.ts for why the dashboard heading (not
-  // <html lang>/<html dir>) is the reliable "the switch has landed" signal.
-  await expect(page.getByRole("heading", { name: "مساحة العمل" })).toBeVisible({ timeout: 20_000 });
+async function authenticateInArabic(page: Page, email: string) {
+  // This suite verifies authenticated Arabic application surfaces, not the
+  // login form. Authenticate through the real endpoint using the request
+  // context that shares this browser context's cookie jar. This avoids a
+  // WebKit-only race where a cold dev page can be clicked before React has
+  // attached the form's submit handler.
+  const loginResponse = await page.request.post("/api/auth/login", {
+    data: { email, password: PASSWORD },
+  });
+  expect(loginResponse.status(), "login API response").toBe(200);
+  const sessionCookie = (await page.context().cookies()).find((cookie) => cookie.name === SESSION_COOKIE_NAME);
+  expect(sessionCookie, "login response must install the session cookie").toBeDefined();
+  // Locale-switch interaction is covered by the companion suite. Set the
+  // exact cookie used by LocaleProvider here so these tests stay focused on
+  // the three authenticated feature routes and avoid racing router.refresh.
+  await page.context().addCookies([
+    { name: LOCALE_COOKIE_NAME, value: "ar", url: "http://localhost:3000", sameSite: "Lax" },
+  ]);
 }
 
 test.describe("SAAS-ARABIC-AUTHENTICATED-FINAL", () => {
@@ -120,7 +129,7 @@ test.describe("SAAS-ARABIC-AUTHENTICATED-FINAL", () => {
 
   test("BOQ editor/grid renders Arabic UI text", async ({ page, context }) => {
     await context.clearCookies();
-    await loginAndSwitchToArabic(page, userEmail);
+    await authenticateInArabic(page, userEmail);
     await page.goto(`/projects/${projectSlug}/boq`);
 
     // First-ever hit to this dynamic route in a fresh dev build can take
@@ -145,7 +154,7 @@ test.describe("SAAS-ARABIC-AUTHENTICATED-FINAL", () => {
 
   test("Proposals list and creation wizard render Arabic UI text", async ({ page, context }) => {
     await context.clearCookies();
-    await loginAndSwitchToArabic(page, userEmail);
+    await authenticateInArabic(page, userEmail);
     await page.goto(`/projects/${projectSlug}/proposals`);
 
     await expect(page.getByText("عروض العميل")).toBeVisible({ timeout: 20_000 });
@@ -163,7 +172,7 @@ test.describe("SAAS-ARABIC-AUTHENTICATED-FINAL", () => {
 
   test("Technical reports list renders Arabic UI text", async ({ page, context }) => {
     await context.clearCookies();
-    await loginAndSwitchToArabic(page, userEmail);
+    await authenticateInArabic(page, userEmail);
     await page.goto(`/projects/${projectSlug}/technical-reports`);
 
     await expect(page.getByText("التقارير الفنية", { exact: true })).toBeVisible({ timeout: 20_000 });

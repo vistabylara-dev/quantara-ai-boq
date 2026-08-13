@@ -15,6 +15,7 @@ import {
   isPersistedItemId,
 } from "../src/components/boq/boq-editor";
 import { FEATURE_HINT_REGISTRY } from "../src/components/guidance/feature-hint";
+import en from "../src/lib/i18n/dictionaries/en";
 
 const source = (relativePath: string) => readFileSync(path.resolve(__dirname, "..", relativePath), "utf8");
 
@@ -104,7 +105,8 @@ describe("Release 1 voice command UI", () => {
     const editor = source("src/components/boq/boq-editor.tsx");
     expect(editor).toContain("isPersistedItemId(item.id)");
     expect(editor).toContain("hasUnsavedChanges");
-    expect(editor).toContain("Save the draft before using voice");
+    expect(editor).toContain('t("boqEditor.voiceSaveDraftVerify")');
+    expect(en.boqEditor.voiceSaveDraftVerify).toContain("Save the draft before using voice");
     expect(editor).toContain("/voice/apply");
     expect(editor).toContain("{ confirmed: true, proposal: pendingVoiceProposal.proposal }");
     expect(editor).toContain("onVoiceApplied(updated)");
@@ -119,13 +121,16 @@ describe("Release 1 voice command UI", () => {
 
   it("keeps voice discoverable before it is safe to use", () => {
     const editor = source("src/components/boq/boq-editor.tsx");
-    expect(editor).toContain("Voice can add a reviewed draft item to a BOQ section.");
-    expect(editor).toContain("Save this BOQ item before using voice.");
+    expect(editor).toContain('t("boqEditor.voiceAddHint")');
+    expect(en.boqEditor.voiceAddHint).toContain("Voice can add a reviewed draft item to a BOQ section.");
+    expect(editor).toContain('t("boqEditor.voiceSaveItemFirst")');
+    expect(en.boqEditor.voiceSaveItemFirst).toBe("Save this BOQ item before using voice.");
     expect(editor).toContain("!isPersistedItemId(item.id)");
     expect(editor).not.toContain("\n                              compact\n");
 
     const addItemModal = source("src/components/boq/add-item-from-source-modal.tsx");
-    expect(addItemModal).toContain(
+    expect(addItemModal).toContain('t("boqEditor.voiceInsideMeasurementPanel")');
+    expect(en.boqEditor.voiceInsideMeasurementPanel).toBe(
       "Voice input appears inside the measurement panel after you select a supported calculation type.",
     );
   });

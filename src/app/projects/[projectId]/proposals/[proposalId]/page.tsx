@@ -1,12 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState, use } from "react";
-import type { ClientProposalEventType, EmailDispatchStatus, ProposalActorType } from "@prisma/client";
-import { apiClient, getApiErrorMessage } from "@/lib/api/client";
+import { useCallback, useEffect, useMemo, useRef, useState, use } from "react";
+import type { ClientProposalEventType, ClientProposalStatus, EmailDispatchStatus, ProposalActorType } from "@prisma/client";
+import { apiClient } from "@/lib/api/client";
 import { formatDate } from "@/lib/formatting/dates";
 import { useLocale } from "@/lib/i18n/locale-provider";
 import type { TranslateFn, TranslationKey } from "@/lib/i18n/translate";
+import { getLocalizedApiErrorMessage } from "@/lib/i18n/api-error-message";
 
 type ProposalDocument = { id: string; type: string; audience: string; fileName: string | null; fileSize: number | null };
 type ProposalSettings = {
@@ -30,7 +31,7 @@ type Proposal = {
   clientName: string;
   recipientEmail: string;
   recipientName: string;
-  status: string;
+  status: ClientProposalStatus;
   expiresAt: string;
   revokedAt: string | null;
   firstOpenedAt: string | null;
@@ -151,6 +152,8 @@ type PageProps = { params: Promise<{ projectId: string; proposalId: string }> };
 export default function ProposalDetailPage(props: PageProps) {
   const params = use(props.params);
   const { direction, locale, t } = useLocale();
+  const localizationRef = useRef({ locale, t });
+  localizationRef.current = { locale, t };
   const [proposal, setProposal] = useState<Proposal | null>(null);
   const [events, setEvents] = useState<ProposalEvent[]>([]);
   const [dispatches, setDispatches] = useState<EmailDispatch[]>([]);
@@ -184,7 +187,8 @@ export default function ProposalDetailPage(props: PageProps) {
       setTestRecipient((current) => current || proposalData.recipientEmail);
     } catch (error) {
       if (error instanceof DOMException && error.name === "AbortError") return;
-      setLoadError(getApiErrorMessage(error));
+      const current = localizationRef.current;
+      setLoadError(getLocalizedApiErrorMessage(error, current.t, current.locale));
     } finally {
       if (!signal?.aborted) setIsLoading(false);
     }
@@ -215,12 +219,12 @@ export default function ProposalDetailPage(props: PageProps) {
       try {
         await fn();
       } catch (error) {
-        setActionError(getApiErrorMessage(error));
+        setActionError(getLocalizedApiErrorMessage(error, t, locale));
       } finally {
         setBusyAction(null);
       }
     },
-    [],
+    [locale, t],
   );
 
   const markReady = useCallback(() => runAction("ready", async () => {
@@ -305,7 +309,7 @@ export default function ProposalDetailPage(props: PageProps) {
     );
   }
 
-  const STATUS_LABELS: Record<string, string> = {
+  const STATUS_LABELS: Record<ClientProposalStatus, string> = {
     DRAFT: t("proposals.statusDraft"),
     READY: t("proposals.statusReady"),
     SENT: t("proposals.statusSent"),
@@ -335,7 +339,7 @@ export default function ProposalDetailPage(props: PageProps) {
             <h2 className="mt-2 text-3xl font-semibold text-white">{proposal.recipientName}</h2>
             <p className="mt-1 text-slate-400">{proposal.recipientEmail} · {proposal.clientName}</p>
           </div>
-          <div className={`text-lg font-semibold ${STATUS_COLORS[proposal.status] ?? "text-slate-300"}`}>{STATUS_LABELS[proposal.status] ?? proposal.status}</div>
+          <div className={`text-lg font-semibold ${STATUS_COLORS[proposal.status] ?? "text-slate-300"}`}>{STATUS_LABELS[proposal.status]}</div>
         </div>
 
         <div className="mt-6 grid grid-cols-2 gap-4 text-sm text-slate-400 md:grid-cols-4">

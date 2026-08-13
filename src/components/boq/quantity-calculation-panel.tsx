@@ -2,14 +2,15 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { QuantityCalculationType } from "@prisma/client";
-import { apiClient, getApiErrorMessage } from "@/lib/api/client";
+import { apiClient } from "@/lib/api/client";
 import { getRequiredDimensions } from "@/lib/calculations/required-dimensions-registry";
 import type { FormulaResult } from "@/lib/calculations/quantity-formulas";
 import type { VoiceCommandProposal } from "@/lib/voice/voice-types";
 import { VoiceCommandButton } from "@/components/voice/voice-command-button";
 import { applyConfirmedDimensionVoiceProposal, VoiceProposalCard } from "@/components/voice/voice-proposal-card";
-import { useTranslations } from "@/lib/i18n/locale-provider";
+import { useLocale } from "@/lib/i18n/locale-provider";
 import { translateCalculationType, translateDimensionLabel } from "@/lib/i18n/engineering-labels";
+import { getLocalizedApiErrorMessage } from "@/lib/i18n/api-error-message";
 
 /**
  * Guided BOQ measurement workflow (Release 1), spec sections 2-6 — the
@@ -57,7 +58,9 @@ export type QuantityCalculationPanelProps = {
 };
 
 export function QuantityCalculationPanel({ projectId, calculationType, extractedEntityId, onConfirmed, onCancel }: QuantityCalculationPanelProps) {
-  const t = useTranslations();
+  const { locale, t } = useLocale();
+  const localizationRef = useRef({ locale, t });
+  localizationRef.current = { locale, t };
   const definition = useMemo(() => getRequiredDimensions(calculationType), [calculationType]);
   const [dimensionValues, setDimensionValues] = useState<DimensionValueState[]>([]);
   const [isLoadingPrefill, setIsLoadingPrefill] = useState(true);
@@ -91,7 +94,8 @@ export function QuantityCalculationPanel({ projectId, calculationType, extracted
       })
       .catch((err) => {
         if (err instanceof DOMException && err.name === "AbortError") return;
-        setError(getApiErrorMessage(err));
+        const current = localizationRef.current;
+        setError(getLocalizedApiErrorMessage(err, current.t, current.locale));
       })
       .finally(() => setIsLoadingPrefill(false));
     return () => controller.abort();
@@ -109,7 +113,8 @@ export function QuantityCalculationPanel({ projectId, calculationType, extracted
       .then((data) => setPreview({ result: data.result, missing: data.missingRequiredDimensions }))
       .catch((err) => {
         if (err instanceof DOMException && err.name === "AbortError") return;
-        setError(getApiErrorMessage(err));
+        const current = localizationRef.current;
+        setError(getLocalizedApiErrorMessage(err, current.t, current.locale));
       });
     return () => controller.abort();
   }, [calculationType, definition, dimensionValues]);
@@ -145,15 +150,15 @@ export function QuantityCalculationPanel({ projectId, calculationType, extracted
 
   const handleDimensionVoiceProposal = useCallback(async (proposal: VoiceCommandProposal) => {
     if (proposal.commandType !== "SET_DIMENSION" || !proposal.dimensionKey) {
-      throw new Error("This voice instruction did not resolve to a supported dimension change.");
+      throw new Error(t("measurement.voiceUnsupportedDimensionAction"));
     }
     if (typeof proposal.newValue !== "number" || !Number.isFinite(proposal.newValue) || proposal.newValue < 0) {
-      throw new Error("The proposed dimension must be a valid non-negative number.");
+      throw new Error(t("measurement.voiceInvalidDimensionValue"));
     }
 
     const target = dimensionValues.find((dimension) => dimension.key === proposal.dimensionKey);
     if (!target) {
-      throw new Error("The proposed dimension is not valid for this calculation type.");
+      throw new Error(t("measurement.voiceDimensionNotApplicable"));
     }
 
     const proposedValues = applyConfirmedDimensionVoiceProposal(
@@ -187,9 +192,9 @@ export function QuantityCalculationPanel({ projectId, calculationType, extracted
         newResult: proposedPreview.result,
       });
     } catch (caught) {
-      throw new Error(getApiErrorMessage(caught));
+      throw new Error(getLocalizedApiErrorMessage(caught, t, locale));
     }
-  }, [calculationType, dimensionValues]);
+  }, [calculationType, dimensionValues, locale, t]);
 
   const confirmDimensionVoiceProposal = useCallback(() => {
     if (!pendingVoiceProposal) return;
@@ -224,11 +229,11 @@ export function QuantityCalculationPanel({ projectId, calculationType, extracted
       });
       setSavedCalculation(created);
     } catch (err) {
-      setError(getApiErrorMessage(err));
+      setError(getLocalizedApiErrorMessage(err, t, locale));
     } finally {
       setIsSaving(false);
     }
-  }, [calculationType, dimensionValues, extractedEntityId, projectId]);
+  }, [calculationType, dimensionValues, extractedEntityId, locale, projectId, t]);
 
   const confirmCalculation = useCallback(async () => {
     if (!savedCalculation) return;
@@ -239,11 +244,11 @@ export function QuantityCalculationPanel({ projectId, calculationType, extracted
       setSavedCalculation(confirmed);
       onConfirmed?.(confirmed);
     } catch (err) {
-      setError(getApiErrorMessage(err));
+      setError(getLocalizedApiErrorMessage(err, t, locale));
     } finally {
       setIsConfirming(false);
     }
-  }, [onConfirmed, savedCalculation]);
+  }, [locale, onConfirmed, savedCalculation, t]);
 
   if (!definition) {
     return (

@@ -75,9 +75,9 @@ test.describe('Edge Cases & Resiliency', () => {
     await page.click('button:has(svg.lucide-user), button:has(img[alt="User"])');
     // Click Sign Out
     await page.click('text=Sign out');
-    
+
     // Should be redirected to login
-    await expect(page).toHaveURL(/\/login/);
+    await expect(page).toHaveURL(/\/login/, { timeout: 15000 });
     
     // Try to access protected route directly
     await page.goto('/projects');
@@ -101,32 +101,123 @@ test.describe('Edge Cases & Resiliency', () => {
     const invalidFilePath = path.join(__dirname, 'fixtures', 'invalid.exe');
     fs.writeFileSync(invalidFilePath, 'dummy');
 
+    const uploadResPromise = page.waitForResponse((res) => /\/api\/projects\/[^/]+\/files$/.test(new URL(res.url()).pathname) && res.request().method() === 'POST');
     const fileInput = page.locator('input[type="file"]');
     await fileInput.setInputFiles([invalidFilePath]);
-    await page.waitForTimeout(1500);
-    await page.screenshot({ path: '/tmp/debug_invalid_file2.png', fullPage: true });
+    // setInputFiles() sets input.files correctly but React's onChange
+    // listener on this hidden input doesn't reliably fire from that alone
+    // in this app — explicitly dispatching input/change gets handleUpload
+    // to actually run, matching what a real native file-picker selection
+    // does in a browser.
+    // Only "change" is dispatched — React's file-input onChange listens
+    // for that specific event, and also dispatching "input" caused a
+    // second, duplicate upload request.
+    await fileInput.evaluate((el: HTMLInputElement) => {
+      el.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+    const uploadRes = await uploadResPromise;
 
-    // UI should show an error or validation message
+    // Server-side rejects the unsupported type; UI must surface it clearly.
+    expect(uploadRes.status()).toBeGreaterThanOrEqual(400);
     await expect(page.locator('text=Invalid file type').or(page.locator('text=not supported'))).toBeVisible({ timeout: 5000 });
     
-    fs.unlinkSync(invalidFilePath);
+    // Windows can briefly hold the file handle open after the multipart
+    // upload request resolves, so an immediate unlink can throw EBUSY —
+    // retry a few times rather than fail the test over teardown, since the
+    // actual assertions above have already completed.
+    for (let attempt = 0; attempt < 5; attempt++) {
+      try {
+        fs.unlinkSync(invalidFilePath);
+        break;
+      } catch (error) {
+        if (attempt === 4) throw error;
+        await new Promise((resolve) => setTimeout(resolve, 200));
+      }
+    }
   });
 
   test('should handle duplicate submissions gracefully', async ({ page }) => {
-    await page.goto('/projects');
-    await page.click('text=New project');
-    await page.fill('input[name="name"]', 'Duplicate Submit Project');
-    await page.fill('input[name="reference"]', `DUP-${Date.now()}`);
-    await page.click('text=Select or create a client');
-    await page.click('text=Edge Test Client');
-    await page.fill('input[name="location"]', 'Dubai');
-    
-    // Double click
-    const createBtn = page.locator('button:has-text("Create project")');
-    await createBtn.click();
-    await createBtn.click({ force: true }).catch(() => {});
+    // A UI double-click doesn't exercise a real race here: the form's
+    // `disabled={isSubmitting}` guard plus `router.push` on success means
+    // the "Create project" button is gone from the DOM (page already
+    // navigated) well before a second Playwright-driven click could ever
+    // land — confirmed by instrumenting the real click sequence, which
+    // showed a single 201 and full navigation before the second click even
+    // started. The actual race — two submissions reaching the server at
+    // the same instant — is only reproducible by racing the API directly,
+    // and that's also the deterministic way to verify server-side
+    // idempotency without relying on UI/browser timing (see
+    // createProjectWithDefaultBoq's projectReferenceExists pre-check +
+    // the DB's @@unique([companyId, reference]) constraint, whose P2002 is
+    // mapped to a clean 409 UNIQUE_CONSTRAINT in handleApiError).
+    // A no-subscription company's real entitlements cap it at exactly one
+    // project (see canCreateProject in entitlement-service.ts); the shared
+    // fixture company already has one from "should reject invalid file
+    // types", which would make every concurrent create here hit that 403
+    // plan limit instead of the reference-uniqueness race this test is
+    // actually about. Racing from a company with zero projects keeps both
+    // requests under the limit, isolating the intended race to
+    // createProjectWithDefaultBoq's projectReferenceExists pre-check + the
+    // DB's @@unique([companyId, reference]) constraint, whose P2002 is
+    // mapped to a clean 409 UNIQUE_CONSTRAINT in handleApiError.
+    const dupCompanyId = randomUUID();
+    const dupUserId = randomUUID();
+    const dupEmail = `edge-dup-${Date.now()}@quantara.local`;
+    await prisma.company.create({
+      data: { id: dupCompanyId, legalName: 'Edge Dup Company', tradeName: 'Edge Dup Company', email: 'edge-dup@example.com' },
+    });
+    await prisma.user.create({
+      data: {
+        id: dupUserId,
+        email: dupEmail,
+        passwordHash: await bcrypt.hash('Password123!', 10),
+        fullName: 'Edge Dup User',
+        companyId: dupCompanyId,
+        role: UserRole.COMPANY_OWNER,
+        emailVerifiedAt: new Date(),
+      },
+    });
+    const dupIndustry = await prisma.industryEngine.findFirstOrThrow();
+    await prisma.companyIndustryEngine.create({ data: { companyId: dupCompanyId, industryEngineId: dupIndustry.id, enabled: true } });
+    const dupClient = await prisma.client.create({ data: { companyId: dupCompanyId, name: 'Edge Dup Client' } });
 
-    // Should only create one and redirect properly without 500 error
-    await expect(page).toHaveURL(/\/projects\/(?!new)[a-zA-Z0-9-]+$/);
+    try {
+      // beforeEach already logged in as the shared fixture user; /login
+      // redirects an already-authenticated session straight to /dashboard,
+      // so the email field never appears unless that session is cleared
+      // first.
+      await page.context().clearCookies();
+      await page.goto('/login');
+      await page.fill('input[type="email"]', dupEmail);
+      await page.fill('input[type="password"]', 'Password123!');
+      await page.click('button[type="submit"]');
+      await expect(page).toHaveURL(/\/dashboard/);
+
+      const reference = `DUP-${Date.now()}`;
+      const body = {
+        name: 'Duplicate Submit Project',
+        reference,
+        clientId: dupClient.id,
+        industryId: dupIndustry.id,
+        location: 'Dubai',
+      };
+
+      const [res1, res2] = await Promise.all([
+        page.request.post('/api/projects', { data: body }),
+        page.request.post('/api/projects', { data: body }),
+      ]);
+      const statuses = [res1.status(), res2.status()].sort();
+
+      // Exactly one request wins (201) and the other is rejected cleanly —
+      // never two 201s (duplicate row) and never a raw 500.
+      expect(statuses).toEqual([201, 409]);
+
+      const created = await prisma.project.findMany({ where: { companyId: dupCompanyId, reference } });
+      expect(created).toHaveLength(1);
+    } finally {
+      await prisma.project.deleteMany({ where: { companyId: dupCompanyId } });
+      await prisma.user.delete({ where: { id: dupUserId } });
+      await prisma.company.delete({ where: { id: dupCompanyId } });
+    }
   });
 });

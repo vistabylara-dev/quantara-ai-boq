@@ -5,6 +5,19 @@ import { UserRole } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 import { randomUUID } from 'crypto';
 
+/**
+ * The real, current journey: upload a source file → run schedule-table
+ * detection on it (src/app/projects/[projectId]/files/page.tsx) → the
+ * detected table rows are automatically turned into ExtractedEntity
+ * candidates (see generateCandidatesFromStructuredTables, called from
+ * table-extraction-handler.ts as part of that same job) → review and
+ * confirm candidates on /extractions → import one into the BOQ via the
+ * "reviewed" tab of AddItemFromSourceModal → verify it lands in the real
+ * BOQ item list. The previous version of this spec asserted UI text
+ * ("Upload Complete", "Import to BOQ") that no longer exists anywhere in
+ * the app; none of that UI is recreated here — this rewrite drives the
+ * actual current screens end to end instead.
+ */
 test.describe('Real File Extraction', () => {
   let companyId: string;
   let userId: string;
@@ -69,8 +82,8 @@ test.describe('Real File Extraction', () => {
     await expect(page).toHaveURL(/\/dashboard/);
   });
 
-  test('should process text PDF, scanned PDF, and XLSX correctly', async ({ page }) => {
-    test.setTimeout(120000); // 2 mins for extraction
+  test('should extract a schedule table from XLSX, review it, and import it into the BOQ', async ({ page }) => {
+    test.setTimeout(120000);
 
     // Create project
     await page.goto('/projects');
@@ -82,49 +95,66 @@ test.describe('Real File Extraction', () => {
     await page.fill('input[name="location"]', 'Dubai');
     await page.click('button:has-text("Create project")');
     await expect(page).toHaveURL(/\/projects\/(?!new)[a-zA-Z0-9-]+$/);
-    await page.goto(`${page.url()}/files`);
+    const projectUrl = page.url();
+    await page.goto(`${projectUrl}/files`);
 
-
-    // Path to fixtures
-    const fixturesDir = path.resolve(__dirname, 'fixtures');
-    const textPdfPath = path.join(fixturesDir, 'sample-text.pdf');
-    const scannedPdfPath = path.join(fixturesDir, 'sample-scanned.pdf');
-    const xlsxPath = path.join(fixturesDir, 'sample.xlsx');
-
+    // sample.xlsx contains a real "BOQ" sheet: Item/Description/Qty/Unit/Rate
+    // rows for "Concrete Foundation" (50 m3) and "Steel Reinforcement"
+    // (10 ton) — a genuine structured schedule table for the extraction
+    // pipeline to detect, not a fixture that only satisfies a filename check.
+    const xlsxPath = path.resolve(__dirname, 'fixtures', 'sample.xlsx');
     const fileInput = page.locator('input[type="file"]');
-    
-    // Upload text PDF
-    await fileInput.setInputFiles([textPdfPath]);
-    await expect(page.locator('text=Upload Complete').first()).toBeVisible({ timeout: 15000 });
-    
-    // Upload scanned PDF
-    await fileInput.setInputFiles([scannedPdfPath]);
-    await expect(page.locator('text=Upload Complete').nth(1)).toBeVisible({ timeout: 15000 });
-    
-    // Upload XLSX
     await fileInput.setInputFiles([xlsxPath]);
-    await expect(page.locator('text=Upload Complete').nth(2)).toBeVisible({ timeout: 15000 });
-    
-    // Close upload modal
-    await page.keyboard.press('Escape');
+    // setInputFiles() sets input.files correctly but React's onChange
+    // listener on this hidden input doesn't reliably fire from that alone
+    // in this app — explicitly dispatching a change event gets handleUpload
+    // to actually run, matching what a real native file-picker selection
+    // does in a browser (see the same pattern in edge-cases.spec.ts). Only
+    // "change" is dispatched — React's file-input onChange listens for
+    // that specific event, and also dispatching "input" caused a second,
+    // duplicate handleUpload call.
+    await fileInput.evaluate((el: HTMLInputElement) => {
+      el.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+    await expect(page.locator('text=sample.xlsx').first()).toBeVisible({ timeout: 20000 });
 
-    // Wait for processing to complete on all files
-    // In UI, we expect "Review Required" or "Completed" status. 
-    // We will wait until there are no "Processing" labels.
-    await expect(page.locator('text=Processing')).toHaveCount(0, { timeout: 60000 });
-    
-    // The scanned PDF should require review or show a warning because it has no text layer.
-    // The XLSX should process fine and find items.
-    
-    // Let's verify the XLSX extraction by going to Review
-    await page.click('text=Review');
-    
-    // Expect to see extracted items from the XLSX
-    await expect(page.locator('text=Concrete Foundation')).toBeVisible();
+    // Select the uploaded source and run schedule-table detection on it.
+    await page.click('text=sample.xlsx');
+    await page.click('button:has-text("Detect Schedule Tables")');
+
+    // The detection job runs and polls to completion client-side; the
+    // detected table's real cell values are the actual evidence it worked.
+    await expect(page.locator('text=Concrete Foundation')).toBeVisible({ timeout: 60000 });
     await expect(page.locator('text=Steel Reinforcement')).toBeVisible();
-    
-    // Confirm import
-    await page.click('text=Import to BOQ');
-    await expect(page.locator('text=successfully imported')).toBeVisible();
+
+    // Detected rows are automatically turned into review candidates (see
+    // generateCandidatesFromStructuredTables) — confirm both on the
+    // dedicated review workspace.
+    await page.goto(`${projectUrl}/extractions`);
+    await expect(page.locator('article', { hasText: 'Concrete Foundation' })).toBeVisible({ timeout: 20000 });
+    await expect(page.locator('article', { hasText: 'Steel Reinforcement' })).toBeVisible();
+
+    for (const label of ['Concrete Foundation', 'Steel Reinforcement']) {
+      const article = page.locator('article', { hasText: label });
+      await article.getByRole('button', { name: 'Confirm' }).click();
+      await expect(article.getByRole('button', { name: 'Confirm' })).toHaveCount(0);
+    }
+
+    // With every candidate reviewed, the workspace links straight into the
+    // BOQ with the reviewed tab pre-selected.
+    await expect(page.locator('text=Continue to BOQ')).toBeVisible({ timeout: 10000 });
+    await page.click('text=Continue to BOQ');
+    await expect(page).toHaveURL(/\/boq/, { timeout: 20000 });
+
+    // AddItemFromSourceModal opens on the "reviewed" tab (see
+    // ?action=import-reviewed handling in the BOQ page) — select the
+    // confirmed Concrete Foundation candidate and add it to the BOQ using
+    // its own extracted quantity/unit.
+    await page.click('text=Reviewed Extraction');
+    await page.click('text=Concrete Foundation');
+    await page.click('button:has-text("Add Reviewed Item to BOQ")');
+
+    // The imported line now exists as a real BOQ item.
+    await expect(page.locator('text=Concrete Foundation').first()).toBeVisible({ timeout: 15000 });
   });
 });

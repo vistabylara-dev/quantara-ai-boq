@@ -202,7 +202,6 @@ describe("public product truth", () => {
   it("does not publish unverified self-serve prices or conversion claims", () => {
     const source = publicWebsiteSource();
 
-    expect(source).not.toMatch(/\b(?:AED\s*)?(?:149|399|899)\b/i);
     expect(source).not.toMatch(/AED\s*15,?000/i);
     expect(source).not.toMatch(/\bBuy Now\b/i);
     expect(source).not.toMatch(/\bSubscribe\b/i);
@@ -214,5 +213,37 @@ describe("public product truth", () => {
     expect(source).not.toMatch(/Request Early Access/i);
     expect(source).toContain('t("publicContent.pricing.hero")');
     expect(source).toContain('t("publicContent.home.commercialFaq")');
+  });
+
+  it("publishes exact owner-approved public subscription prices with static price codes only", () => {
+    const source = publicWebsiteSource();
+
+    expect(source).toContain("starter_monthly_aed_149");
+    expect(source).toContain("starter_annual_aed_1490");
+    expect(source).toContain("professional_monthly_aed_399");
+    expect(source).toContain("professional_annual_aed_3990");
+    expect(source).toContain("business_monthly_aed_899");
+    expect(source).toContain("business_annual_aed_8990");
+
+    expect(source).toContain('t("publicContent.pricing.saasStarterName")');
+    expect(source).toContain('t("publicContent.pricing.saasProfessionalName")');
+    expect(source).toContain('t("publicContent.pricing.saasBusinessName")');
+    expect(source).toContain('t("publicContent.pricing.saasRecommended")');
+    expect(source).toContain('t("publicContent.pricing.saasStarterCta")');
+    expect(source).toContain('t("publicContent.pricing.saasProfessionalCta")');
+    expect(source).toContain('t("publicContent.pricing.saasBusinessCta")');
+
+    expect(source).not.toMatch(/\bprice_[A-Za-z0-9]/);
+    expect(source).not.toContain("/api/commerce/checkout");
+    expect(source).not.toMatch(/\bsearchParams\b/);
+    expect(source).not.toMatch(/\bURLSearchParams\b/);
+
+    const pricingPlansSource = readFileSync(
+      join(repoRoot, "src", "app", "(marketing)", "pricing", "pricing-plans.tsx"),
+      "utf8",
+    );
+    expect(pricingPlansSource).toMatch(/href="\/register"/);
+    expect(pricingPlansSource).not.toMatch(/\/register\?/);
+    expect(pricingPlansSource).not.toMatch(/href="\/api\/commerce\/checkout"/);
   });
 });

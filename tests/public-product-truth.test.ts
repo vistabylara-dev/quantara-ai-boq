@@ -135,7 +135,7 @@ describe("public product truth", () => {
 
     expect(source).not.toMatch(/\bstatus\s*:\s*["'](?:Available|Controlled access|Limited|Not available)["']/);
     expect(seoTemplate).toContain("getPublicCapability(capabilityId).status");
-    expect(seoTemplate).toContain("getPublicStatus(feature.capabilityId)");
+    expect(seoTemplate).toContain("getPublicStatus(feature.capabilityId, t)");
     expect(navigation).toContain("PUBLIC_CAPABILITY_STATUS_LABELS[googleDriveImport.status]");
   });
 

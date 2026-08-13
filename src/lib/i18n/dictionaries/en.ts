@@ -523,6 +523,7 @@ const en = {
   errors: {
     generic: "Something went wrong. Please try again, or contact support if this continues.",
     network: "We couldn't reach Quantara. Check your connection and try again.",
+    emailAlreadyRegistered: "An account with this email already exists.",
   },
   support: {
     label: "Help & Feedback",

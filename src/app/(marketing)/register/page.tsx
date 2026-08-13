@@ -6,6 +6,7 @@ import { CheckCircle2 } from "lucide-react";
 import { apiClient, getApiErrorMessage } from "@/lib/api/client";
 import { getPublicAccessOptions } from "@/config/pricing";
 import { useLocale, useTranslations } from "@/lib/i18n/locale-provider";
+import { LanguageSwitcher } from "@/components/layout/language-switcher";
 
 function AccessOptionsFieldset({
   selectedOption,
@@ -118,8 +119,12 @@ export default function RegisterPage() {
         role, country, primaryIndustry, intendedUse: intendedUse || selectedPackage, approximateVolume, consent
       });
       setRegistered(true);
-    } catch (submitError) {
-      setError(locale === "ar" ? t("errors.generic") : getApiErrorMessage(submitError));
+    } catch (submitError: any) {
+      if (submitError?.code === "EMAIL_ALREADY_REGISTERED") {
+        setError(t("errors.emailAlreadyRegistered"));
+      } else {
+        setError(locale === "ar" ? t("errors.generic") : getApiErrorMessage(submitError));
+      }
     } finally {
       setIsSubmitting(false);
     }
@@ -145,8 +150,11 @@ export default function RegisterPage() {
   }
 
   return (
-    <div className="mx-auto max-w-7xl py-12 px-4">
-      <div className="grid lg:grid-cols-2 gap-12 items-start">
+    <div className="mx-auto max-w-7xl py-12 px-4 relative">
+      <div className="absolute top-4 end-4 z-10">
+        <LanguageSwitcher />
+      </div>
+      <div className="grid lg:grid-cols-2 gap-12 items-start mt-8">
         {/* Form Section */}
         <div className="rounded-[32px] border border-slate-800 bg-slate-950 p-8 lg:sticky lg:top-24 shadow-2xl">
           <p className="text-sm uppercase tracking-[0.28em] text-slate-500">Quantara</p>
@@ -174,6 +182,7 @@ export default function RegisterPage() {
                   id="email"
                   type="email"
                   required
+                  dir="ltr"
                   value={email}
                   onChange={(event) => setEmail(event.target.value)}
                   className="mt-1 w-full rounded-2xl border border-slate-800 bg-slate-900 px-4 py-3 text-sm text-white outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
@@ -246,6 +255,7 @@ export default function RegisterPage() {
                 id="password"
                 type="password"
                 required
+                dir="ltr"
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}
                 className="mt-1 w-full rounded-2xl border border-slate-800 bg-slate-900 px-4 py-3 text-sm text-white outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"

@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { computeBoqWorkflowState } from "../src/lib/workflow/boq-workflow-state";
+import en from "../src/lib/i18n/dictionaries/en";
 
 const base = {
   fileCount: 1,
@@ -137,11 +138,17 @@ describe("BOQ page workflow controls", () => {
 
   it("never catches validation-preview failure as zero warnings", () => {
     expect(page).not.toContain(".catch(() => setValidationWarningCount(0))");
-    expect(page).toContain("No zero-warning status is being assumed");
+    expect(page).toContain('t("boqEditor.validationPreviewUnavailable"');
+    expect(en.boqEditor.validationPreviewUnavailable).toContain(
+      "No zero-warning status is being assumed",
+    );
   });
 
   it("does not claim incomplete workflow facts are zero", () => {
     expect(page).toContain("workflowFactsWarning");
-    expect(page).toContain("no unavailable count is being treated as zero");
+    expect(page).toContain('t("boqEditor.workflowFactsWarning"');
+    expect(en.boqEditor.workflowFactsWarning).toContain(
+      "no unavailable count is being treated as zero",
+    );
   });
 });

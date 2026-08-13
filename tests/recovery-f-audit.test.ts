@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import { computeBoqWorkflowState } from "../src/lib/workflow/boq-workflow-state";
 import { buildProjectWorkflowSnapshot } from "../src/lib/guidance/project-workflow-snapshot";
 import { deriveProjectWorkflow } from "../src/lib/guidance/project-workflow";
+import en from "../src/lib/i18n/dictionaries/en";
 
 function stepStatus(
   result: ReturnType<typeof computeBoqWorkflowState>,
@@ -139,7 +140,10 @@ describe("Recovery F final workflow audit", () => {
       path.resolve(__dirname, "../src/app/projects/[projectId]/boq/page.tsx"),
       "utf8",
     );
-    expect(page).toContain("Your unsaved edits will not be discarded");
+    expect(page).toContain('t("boqEditor.saveBeforeAddingOrImporting")');
+    expect(en.boqEditor.saveBeforeAddingOrImporting).toContain(
+      "Your unsaved edits will not be discarded",
+    );
     expect(page).toContain("actionInProgress || hasUnsavedChanges");
   });
 
@@ -157,7 +161,10 @@ describe("Recovery F final workflow audit", () => {
       "utf8",
     );
 
-    expect(modal).toContain("BOQ specification — review before import");
+    expect(modal).toContain('t("boqEditor.boqSpecificationLabel")');
+    expect(en.boqEditor.boqSpecificationLabel).toBe(
+      "BOQ specification — review before import",
+    );
     expect(modal).toContain("specification: extractionDraft.specification");
     expect(route).toContain("specification: z.string().max(2000)");
     expect(service).toContain("specification: input.specification ?? entity.sourceText ??");

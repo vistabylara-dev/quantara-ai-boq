@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState, use } from "react";
+import type { ClientProposalStatus } from "@prisma/client";
 import type { BOQ } from "@/types/boq";
 import type { Project } from "@/types/project";
 import { apiClient, ApiClientError } from "@/lib/api/client";
@@ -39,7 +40,7 @@ type ProposalSummary = {
   revisionNumber: number | null;
   recipientEmail: string;
   recipientName: string;
-  status: string;
+  status: ClientProposalStatus;
   expiresAt: string;
   createdAt: string;
 };
@@ -96,7 +97,7 @@ export default function ProjectProposalsPage(props: PageProps) {
     { key: "ACCESS", label: t("proposals.stepAccess") },
     { key: "REVIEW", label: t("proposals.stepReview") },
   ];
-  const STATUS_LABELS: Record<string, string> = {
+  const STATUS_LABELS: Record<ClientProposalStatus, string> = {
     DRAFT: t("proposals.statusDraft"),
     READY: t("proposals.statusReady"),
     SENT: t("proposals.statusSent"),
@@ -420,7 +421,7 @@ export default function ProjectProposalsPage(props: PageProps) {
                     <p className="text-white">{proposal.recipientName}</p>
                     <p className="text-xs text-slate-500">{proposal.recipientEmail}</p>
                   </td>
-                  <td className={`px-4 py-3 font-semibold ${STATUS_COLORS[proposal.status] ?? "text-slate-300"}`}>{STATUS_LABELS[proposal.status] ?? proposal.status}</td>
+                  <td className={`px-4 py-3 font-semibold ${STATUS_COLORS[proposal.status] ?? "text-slate-300"}`}>{STATUS_LABELS[proposal.status]}</td>
                   <td className="px-4 py-3">{formatDate(proposal.expiresAt)}</td>
                   <td className="px-4 py-3">{formatDate(proposal.createdAt)}</td>
                   <td className="px-4 py-3">

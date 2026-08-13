@@ -8,10 +8,11 @@ import type {
   ExtractionMethod,
   QuantityCalculationType,
 } from "@prisma/client";
-import { apiClient, getApiErrorMessage } from "@/lib/api/client";
+import { apiClient } from "@/lib/api/client";
 import { listSupportedCalculationTypes } from "@/lib/calculations/required-dimensions-registry";
 import { QuantityCalculationPanel } from "@/components/boq/quantity-calculation-panel";
-import { useTranslations } from "@/lib/i18n/locale-provider";
+import { useLocale } from "@/lib/i18n/locale-provider";
+import { getLocalizedApiErrorMessage } from "@/lib/i18n/api-error-message";
 import {
   translateCalculationType,
   translateExtractedEntityStatus,
@@ -90,7 +91,7 @@ export default function AddItemFromSourceModal({
   onClose,
   onAdded,
 }: Props) {
-  const t = useTranslations();
+  const { locale, t } = useLocale();
   const [tab, setTab] = useState<AddItemTab>(initialTab);
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<SearchResultItem[]>([]);
@@ -139,11 +140,11 @@ export default function AddItemFromSourceModal({
       setResults(data.items);
     } catch (err) {
       if (err instanceof DOMException && err.name === "AbortError") return;
-      setError(getApiErrorMessage(err));
+      setError(getLocalizedApiErrorMessage(err, t, locale));
     } finally {
       setIsSearching(false);
     }
-  }, [query]);
+  }, [locale, query, t]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -176,7 +177,7 @@ export default function AddItemFromSourceModal({
       })
       .catch((err) => {
         if (err instanceof DOMException && err.name === "AbortError") return;
-        setError(getApiErrorMessage(err));
+        setError(getLocalizedApiErrorMessage(err, t, locale));
       })
       .finally(() => {
         if (!controller.signal.aborted) {
@@ -186,7 +187,7 @@ export default function AddItemFromSourceModal({
       });
 
     return () => controller.abort();
-  }, [projectId, tab]);
+  }, [locale, projectId, t, tab]);
 
   const selectReviewedEntity = useCallback((entity: ExtractedEntityView) => {
     setSelectedEntity(entity);
@@ -280,7 +281,7 @@ export default function AddItemFromSourceModal({
 
       onAdded();
     } catch (err) {
-      setError(getApiErrorMessage(err));
+      setError(getLocalizedApiErrorMessage(err, t, locale));
     } finally {
       setIsSaving(false);
     }
@@ -288,6 +289,7 @@ export default function AddItemFromSourceModal({
     boqId,
     confirmedExtractionCalculation,
     extractionDraft,
+    locale,
     nextItemNumber,
     onAdded,
     projectId,
@@ -314,11 +316,11 @@ export default function AddItemFromSourceModal({
       });
       onAdded();
     } catch (err) {
-      setError(getApiErrorMessage(err));
+      setError(getLocalizedApiErrorMessage(err, t, locale));
     } finally {
       setIsSaving(false);
     }
-  }, [boqId, nextItemNumber, onAdded, quantity, sectionId, selected]);
+  }, [boqId, locale, nextItemNumber, onAdded, quantity, sectionId, selected, t]);
 
   const addManual = useCallback(async () => {
     setIsSaving(true);
@@ -333,11 +335,11 @@ export default function AddItemFromSourceModal({
       });
       onAdded();
     } catch (err) {
-      setError(getApiErrorMessage(err));
+      setError(getLocalizedApiErrorMessage(err, t, locale));
     } finally {
       setIsSaving(false);
     }
-  }, [boqId, manualDraft, nextItemNumber, onAdded, quantity, sectionId]);
+  }, [boqId, locale, manualDraft, nextItemNumber, onAdded, quantity, sectionId, t]);
 
   const directReviewedQuantityReady = Boolean(
     selectedEntity

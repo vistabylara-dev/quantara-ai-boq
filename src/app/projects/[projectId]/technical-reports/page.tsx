@@ -1,12 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useState, use } from "react";
+import { useCallback, useEffect, useRef, useState, use } from "react";
 import type { Project } from "@/types/project";
-import { apiClient, getApiErrorMessage } from "@/lib/api/client";
+import { apiClient } from "@/lib/api/client";
 import { formatDate } from "@/lib/formatting/dates";
 import { useLocale } from "@/lib/i18n/locale-provider";
 import type { TranslationKey } from "@/lib/i18n/translate";
+import { getLocalizedApiErrorMessage } from "@/lib/i18n/api-error-message";
 
 type ReportTemplateSummary = {
   id: string;
@@ -48,6 +49,8 @@ type PageProps = { params: Promise<{ projectId: string }> };
 export default function ProjectTechnicalReportsPage(props: PageProps) {
   const params = use(props.params);
   const { locale, t } = useLocale();
+  const localizationRef = useRef({ locale, t });
+  localizationRef.current = { locale, t };
   const [project, setProject] = useState<Project | null>(null);
   const [templates, setTemplates] = useState<ReportTemplateSummary[]>([]);
   const [reports, setReports] = useState<GeneratedTechnicalReportView[]>([]);
@@ -77,7 +80,8 @@ export default function ProjectTechnicalReportsPage(props: PageProps) {
       setSelectedTemplateId((current) => current || templateData[0]?.id || "");
     } catch (error) {
       if (error instanceof DOMException && error.name === "AbortError") return;
-      setLoadError(getApiErrorMessage(error));
+      const current = localizationRef.current;
+      setLoadError(getLocalizedApiErrorMessage(error, current.t, current.locale));
     } finally {
       if (!signal?.aborted) setIsLoading(false);
     }
@@ -101,11 +105,11 @@ export default function ProjectTechnicalReportsPage(props: PageProps) {
       setReportName("");
       window.location.href = `/projects/${params.projectId}/technical-reports/${created.id}`;
     } catch (error) {
-      setActionError(getApiErrorMessage(error));
+      setActionError(getLocalizedApiErrorMessage(error, t, locale));
     } finally {
       setIsCreating(false);
     }
-  }, [params.projectId, project?.name, reportName, selectedTemplateId, t, templates]);
+  }, [locale, params.projectId, project?.name, reportName, selectedTemplateId, t, templates]);
 
   const deleteReport = useCallback(async (reportId: string) => {
     setDeletingId(reportId);
@@ -114,11 +118,11 @@ export default function ProjectTechnicalReportsPage(props: PageProps) {
       await apiClient.delete(`/api/technical-reports/${encodeURIComponent(reportId)}`);
       await load();
     } catch (error) {
-      setActionError(getApiErrorMessage(error));
+      setActionError(getLocalizedApiErrorMessage(error, t, locale));
     } finally {
       setDeletingId(null);
     }
-  }, [load]);
+  }, [load, locale, t]);
 
   if (isLoading) {
     return (

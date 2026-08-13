@@ -713,6 +713,11 @@ const en = {
     appliedBy: "Applied {date} by {name}",
     appliedByWithSupplier: "Applied {date} by {name} · {supplier}",
     applyRate: "Apply rate",
+    saveForFutureProjects: "Save for future projects",
+    savingToLibrary: "Saving…",
+    savedToLibrarySuccess: "Saved \"{name}\" to your Company Library ({code}).",
+    savedToLibraryReused: "\"{name}\" is already saved in your Company Library ({code}).",
+    savedToLibraryRenamed: "Saved as a new variant ({code}) because {originalCode} already exists with different details.",
     noSectionItems: "No items have been added to this section.",
     sectionCollapsed: "Section is collapsed.",
     calculatedTotals: "Calculated totals",
@@ -1115,6 +1120,12 @@ const en = {
     errorRecipientRequired: "Recipient name and email are required.",
     emailDeliveryFailed: "The email could not be delivered — check the email provider configuration.",
     reportEmailSent: "Report email sent.",
+  },
+  companyLibrary: {
+    tabCompanyItems: "Company Items",
+    tabMyItems: "My Items",
+    tabPreviousProjects: "Previous Projects",
+    tabFavorites: "Favorites",
   },
 } as const;
 

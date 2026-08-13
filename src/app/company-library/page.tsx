@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { apiClient, getApiErrorMessage } from "@/lib/api/client";
+import { useTranslations } from "@/lib/i18n/locale-provider";
 
 type LibraryItem = {
   id: string;
@@ -18,11 +19,14 @@ type LibraryItem = {
   isActive: boolean;
 };
 
+type LibraryView = "all" | "mine" | "previousProjects" | "favorites";
+
 export default function CompanyLibraryPage() {
+  const t = useTranslations();
+  const [view, setView] = useState<LibraryView>("all");
   const [items, setItems] = useState<LibraryItem[]>([]);
   const [total, setTotal] = useState(0);
   const [search, setSearch] = useState("");
-  const [favoritesOnly, setFavoritesOnly] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
 
@@ -37,7 +41,9 @@ export default function CompanyLibraryPage() {
     try {
       const params = new URLSearchParams({ pageSize: "50" });
       if (search.trim()) params.set("search", search.trim());
-      if (favoritesOnly) params.set("favoritesOnly", "true");
+      if (view === "mine") params.set("mine", "true");
+      if (view === "previousProjects") params.set("sourceType", "PREVIOUS_PROJECT");
+      if (view === "favorites") params.set("favoritesOnly", "true");
       const data = await apiClient.get<{ items: LibraryItem[]; total: number }>(`/api/company-library?${params.toString()}`, signal);
       setItems(data.items);
       setTotal(data.total);
@@ -47,13 +53,20 @@ export default function CompanyLibraryPage() {
     } finally {
       if (!signal?.aborted) setIsLoading(false);
     }
-  }, [search, favoritesOnly]);
+  }, [search, view]);
 
   useEffect(() => {
     const controller = new AbortController();
     void load(controller.signal);
     return () => controller.abort();
   }, [load]);
+
+  const VIEW_TABS: { key: LibraryView; label: string }[] = [
+    { key: "all", label: t("companyLibrary.tabCompanyItems") },
+    { key: "mine", label: t("companyLibrary.tabMyItems") },
+    { key: "previousProjects", label: t("companyLibrary.tabPreviousProjects") },
+    { key: "favorites", label: t("companyLibrary.tabFavorites") },
+  ];
 
   const toggleFavorite = useCallback(async (item: LibraryItem) => {
     await apiClient.post(`/api/company-library/${item.id}/favorite`, { isFavorite: !item.isFavorite }).catch(() => undefined);
@@ -89,11 +102,21 @@ export default function CompanyLibraryPage() {
           </button>
         </div>
 
-        <div className="mt-6 flex flex-wrap items-center gap-3">
+        <div className="mt-6 flex flex-wrap items-center gap-2">
+          {VIEW_TABS.map((tab) => (
+            <button
+              key={tab.key}
+              type="button"
+              onClick={() => setView(tab.key)}
+              className={`rounded-full px-4 py-2 text-sm ${view === tab.key ? "bg-blue-600 text-white" : "border border-slate-800 bg-slate-900 text-slate-300 hover:bg-slate-800"}`}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+
+        <div className="mt-4 flex flex-wrap items-center gap-3">
           <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search…" className="w-64 rounded-2xl border border-slate-800 bg-slate-900 px-4 py-2.5 text-sm text-white outline-none focus:border-blue-500" />
-          <button type="button" onClick={() => setFavoritesOnly((v) => !v)} className={`rounded-full px-4 py-2 text-sm ${favoritesOnly ? "bg-blue-600 text-white" : "border border-slate-800 bg-slate-900 text-slate-300 hover:bg-slate-800"}`}>
-            Favorites only
-          </button>
           <p className="text-xs text-slate-500">{total} item{total === 1 ? "" : "s"}</p>
         </div>
       </div>

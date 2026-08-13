@@ -133,6 +133,8 @@ export default function BoqEditor({
   const [rateDrawerItemId, setRateDrawerItemId] = useState<string | null>(null);
   const [isApplyingRate, setIsApplyingRate] = useState(false);
   const [rateError, setRateError] = useState<string | null>(null);
+  const [savingToLibraryItemId, setSavingToLibraryItemId] = useState<string | null>(null);
+  const [libraryNotice, setLibraryNotice] = useState<{ tone: "success" | "warning" | "error"; message: string } | null>(null);
   const [voiceBusyItemId, setVoiceBusyItemId] = useState<string | null>(null);
   const [pendingVoiceProposal, setPendingVoiceProposal] = useState<PendingBOQVoiceProposal | null>(null);
   const [isApplyingVoice, setIsApplyingVoice] = useState(false);
@@ -310,6 +312,31 @@ export default function BoqEditor({
       }
     } finally {
       setIsApplyingRate(false);
+    }
+  };
+
+  const saveItemToLibrary = async (item: BOQItem) => {
+    if (savingToLibraryItemId || voiceInteractionActive) return;
+    setSavingToLibraryItemId(item.id);
+    setLibraryNotice(null);
+    try {
+      const result = await apiClient.post<{
+        companyItemCode: string;
+        name: string;
+        reused: boolean;
+        renamedFrom?: string;
+      }>("/api/company-library/from-boq", { boqItemId: item.id });
+      if (result.reused) {
+        setLibraryNotice({ tone: "success", message: t("boqEditor.savedToLibraryReused", { name: result.name, code: result.companyItemCode }) });
+      } else if (result.renamedFrom) {
+        setLibraryNotice({ tone: "warning", message: t("boqEditor.savedToLibraryRenamed", { code: result.companyItemCode, originalCode: result.renamedFrom }) });
+      } else {
+        setLibraryNotice({ tone: "success", message: t("boqEditor.savedToLibrarySuccess", { name: result.name, code: result.companyItemCode }) });
+      }
+    } catch (error) {
+      setLibraryNotice({ tone: "error", message: getLocalizedApiErrorMessage(error, t, locale) });
+    } finally {
+      setSavingToLibraryItemId(null);
     }
   };
 
@@ -720,6 +747,16 @@ export default function BoqEditor({
                               {t("boqEditor.applyRate")}
                             </button>
                           )}
+                          {isPersistedItemId(item.id) && (
+                            <button
+                              type="button"
+                              onClick={() => void saveItemToLibrary(item)}
+                              disabled={editorControlsDisabled || savingToLibraryItemId !== null}
+                              className="rounded-2xl border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-200 hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+                            >
+                              {savingToLibraryItemId === item.id ? t("boqEditor.savingToLibrary") : t("boqEditor.saveForFutureProjects")}
+                            </button>
+                          )}
                           <VoiceCommandButton
                               ref={(element) => {
                                 const key = `item:${item.id}`;
@@ -844,6 +881,36 @@ export default function BoqEditor({
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <p>{rateError}</p>
             <button type="button" onClick={() => setRateError(null)} className="rounded-2xl border border-rose-800 px-3 py-2 font-semibold hover:bg-rose-900/40">
+              {t("boqEditor.dismiss")}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {libraryNotice && (
+        <div
+          role="status"
+          className={
+            libraryNotice.tone === "error"
+              ? "rounded-[28px] border border-rose-900 bg-rose-950/40 p-5 text-sm text-rose-200"
+              : libraryNotice.tone === "warning"
+                ? "rounded-[28px] border border-amber-900/60 bg-amber-950/20 p-5 text-sm text-amber-200"
+                : "rounded-[28px] border border-emerald-900/60 bg-emerald-950/20 p-5 text-sm text-emerald-200"
+          }
+        >
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <p>{libraryNotice.message}</p>
+            <button
+              type="button"
+              onClick={() => setLibraryNotice(null)}
+              className={
+                libraryNotice.tone === "error"
+                  ? "rounded-2xl border border-rose-800 px-3 py-2 font-semibold hover:bg-rose-900/40"
+                  : libraryNotice.tone === "warning"
+                    ? "rounded-2xl border border-amber-800 px-3 py-2 font-semibold hover:bg-amber-900/40"
+                    : "rounded-2xl border border-emerald-800 px-3 py-2 font-semibold hover:bg-emerald-900/40"
+              }
+            >
               {t("boqEditor.dismiss")}
             </button>
           </div>

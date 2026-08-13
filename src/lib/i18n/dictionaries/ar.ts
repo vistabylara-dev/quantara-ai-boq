@@ -712,6 +712,11 @@ const ar: Dictionary = {
     appliedBy: "طُبِّق في {date} بواسطة {name}",
     appliedByWithSupplier: "طُبِّق في {date} بواسطة {name} · {supplier}",
     applyRate: "تطبيق السعر",
+    saveForFutureProjects: "حفظ للمشاريع المستقبلية",
+    savingToLibrary: "جارٍ الحفظ…",
+    savedToLibrarySuccess: "تم حفظ \"{name}\" في مكتبة شركتك ({code}).",
+    savedToLibraryReused: "\"{name}\" محفوظ بالفعل في مكتبة شركتك ({code}).",
+    savedToLibraryRenamed: "تم الحفظ كنسخة جديدة ({code}) لأن {originalCode} موجود بالفعل بتفاصيل مختلفة.",
     noSectionItems: "لم تتم إضافة أي بنود إلى هذا القسم.",
     sectionCollapsed: "القسم مطوي.",
     calculatedTotals: "الإجماليات المحسوبة",
@@ -1114,6 +1119,12 @@ const ar: Dictionary = {
     errorRecipientRequired: "اسم المستلم والبريد الإلكتروني مطلوبان.",
     emailDeliveryFailed: "تعذّر تسليم البريد الإلكتروني — تحقق من إعدادات مزوّد البريد.",
     reportEmailSent: "تم إرسال بريد التقرير.",
+  },
+  companyLibrary: {
+    tabCompanyItems: "بنود الشركة",
+    tabMyItems: "بنودي",
+    tabPreviousProjects: "المشاريع السابقة",
+    tabFavorites: "المفضلة",
   },
 };
 

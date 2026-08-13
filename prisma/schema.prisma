@@ -1270,6 +1270,7 @@ model CompanyLibraryItem {
   @@index([isActive])
   @@index([name])
   @@index([lastUsedAt])
+  @@index([createdByUserId])
 }
 
 model CompanyLibraryItemVersion {

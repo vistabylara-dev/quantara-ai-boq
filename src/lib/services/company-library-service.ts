@@ -1,4 +1,4 @@
-import { CompanyLibrarySourceType } from "@prisma/client";
+import { CompanyLibrarySourceType, type CompanyLibraryItem } from "@prisma/client";
 import type { CurrentActor } from "@/lib/auth/current-actor";
 import type { PlatformActor } from "@/lib/auth/platform-authorization";
 import { requireCapability } from "@/lib/auth/rbac";
@@ -12,6 +12,8 @@ import { recordPlatformActionAudit } from "@/lib/repositories/platform-action-au
 import {
   createLibraryItem,
   createVariant,
+  findLibraryItemByCode,
+  generateDistinctItemCode,
   getLibraryItem,
   listItemUsageHistory,
   listLibraryItemVersions,
@@ -23,6 +25,7 @@ import {
   toLibraryItemDTO,
   updateLibraryItem,
   type CreateLibraryItemInput,
+  type LibraryItemDTO,
   type LibraryItemListFilters,
   type UpdateLibraryItemInput,
 } from "@/lib/repositories/company-library-repository";
@@ -172,24 +175,75 @@ export async function createFromCatalogue(actor: CurrentActor, rateCatalogueItem
   );
 }
 
-export async function createFromBoqItem(actor: CurrentActor, boqItemId: string, overrides?: { companyItemCode?: string; name?: string }) {
+export type SaveBoqItemForFutureProjectsResult = LibraryItemDTO & {
+  /** True when an existing, content-identical item was returned instead of inserting a new row — protects against accidental double-submit of the same save action. */
+  reused: boolean;
+  /** Set only when the requested code already existed with different details: the item was still saved, under this generated code, so an engineer's intentional variant is never blocked or silently overwritten. */
+  renamedFrom?: string;
+};
+
+/**
+ * "Save for future projects" (engineer reusable-item workflow) — copies an
+ * editable BOQ item into the company library as a new, independent row.
+ * Never mutates the source BOQItem, never touches Master Catalogue data,
+ * and grants no entitlements (PREVIOUS_PROJECT source type is always free).
+ *
+ * Duplicate-safety: (companyId, companyItemCode) is unique at the DB level.
+ * Rather than surfacing that as a raw 409 to the user, this pre-checks the
+ * intended code and picks one of three outcomes:
+ *   - no existing item with that code -> create normally;
+ *   - an existing item with the same code AND equivalent content -> reuse it
+ *     (idempotent; covers accidental double-click resubmission);
+ *   - an existing item with the same code but different content -> the
+ *     engineer is intentionally keeping a variant, so save under a new,
+ *     automatically distinct code instead of blocking or overwriting.
+ */
+export async function createFromBoqItem(
+  actor: CurrentActor,
+  boqItemId: string,
+  overrides?: { companyItemCode?: string; name?: string },
+): Promise<SaveBoqItemForFutureProjectsResult> {
   requireCapability(actor, "library:manage");
   const boqItem = await prisma.bOQItem.findFirst({ where: { id: boqItemId, companyId: actor.companyId } });
   if (!boqItem) throw new NotFoundError("BOQ item not found.");
 
-  return createLibraryItem(
-    actor.companyId,
-    {
-      companyItemCode: overrides?.companyItemCode ?? boqItem.itemCode,
-      name: overrides?.name ?? boqItem.description,
-      description: boqItem.specification,
-      unit: boqItem.unit,
-      defaultCost: boqItem.unitCost.toNumber(),
-      defaultMarginMode: boqItem.marginMode,
-      defaultMargin: boqItem.marginPercentage.toNumber(),
-      defaultSellingRate: boqItem.sellingRate.toNumber(),
-      sourceType: CompanyLibrarySourceType.PREVIOUS_PROJECT,
-    },
-    actor.userId,
+  const requestedCode = overrides?.companyItemCode ?? boqItem.itemCode;
+  const input: CreateLibraryItemInput = {
+    companyItemCode: requestedCode,
+    name: overrides?.name ?? boqItem.description,
+    description: boqItem.specification,
+    unit: boqItem.unit,
+    defaultCost: boqItem.unitCost.toNumber(),
+    defaultMarginMode: boqItem.marginMode,
+    defaultMargin: boqItem.marginPercentage.toNumber(),
+    defaultSellingRate: boqItem.sellingRate.toNumber(),
+    sourceType: CompanyLibrarySourceType.PREVIOUS_PROJECT,
+  };
+
+  const existing = await findLibraryItemByCode(actor.companyId, requestedCode);
+  if (!existing) {
+    const created = await createLibraryItem(actor.companyId, input, actor.userId);
+    return { ...created, reused: false };
+  }
+
+  if (isEquivalentSavedContent(existing, input)) {
+    return { ...toLibraryItemDTO(existing), reused: true };
+  }
+
+  const distinctCode = await generateDistinctItemCode(actor.companyId, requestedCode);
+  const created = await createLibraryItem(actor.companyId, { ...input, companyItemCode: distinctCode }, actor.userId);
+  return { ...created, reused: false, renamedFrom: requestedCode };
+}
+
+function isEquivalentSavedContent(
+  existing: CompanyLibraryItem,
+  input: Pick<CreateLibraryItemInput, "name" | "description" | "unit" | "defaultCost" | "defaultSellingRate">,
+): boolean {
+  return (
+    existing.name === input.name
+    && existing.description === (input.description ?? "")
+    && existing.unit === input.unit
+    && existing.defaultCost.equals(input.defaultCost ?? 0)
+    && existing.defaultSellingRate.equals(input.defaultSellingRate ?? 0)
   );
 }

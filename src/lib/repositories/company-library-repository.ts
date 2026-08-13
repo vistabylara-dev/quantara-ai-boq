@@ -48,6 +48,29 @@ export async function getLibraryItem(companyId: string, itemId: string) {
   return toLibraryItemDTO(await getLibraryItemRecord(companyId, itemId));
 }
 
+/** Used for duplicate-safety on the "Save for future projects" flow — the (companyId, companyItemCode) pair is already a DB-level unique constraint, so this look-up mirrors what an insert would collide with. */
+export async function findLibraryItemByCode(companyId: string, companyItemCode: string): Promise<CompanyLibraryItem | null> {
+  return prisma.companyLibraryItem.findUnique({ where: { companyId_companyItemCode: { companyId, companyItemCode } } });
+}
+
+/**
+ * Generates a companyItemCode distinct from any existing one for this
+ * company, by appending -2, -3, ... to the requested code. Used so
+ * "Save for future projects" never silently overwrites a differently
+ * described item that happens to share a code — see createFromBoqItem in
+ * company-library-service.ts, which decides when this is actually needed
+ * (only when the existing item's content genuinely differs).
+ */
+export async function generateDistinctItemCode(companyId: string, requestedCode: string, maxAttempts = 50): Promise<string> {
+  for (let suffix = 2; suffix <= maxAttempts; suffix += 1) {
+    const candidate = `${requestedCode}-${suffix}`;
+    const existing = await prisma.companyLibraryItem.findUnique({ where: { companyId_companyItemCode: { companyId, companyItemCode: candidate } } });
+    if (!existing) return candidate;
+  }
+  // Exceedingly unlikely to be reached in practice; still guaranteed unique.
+  return `${requestedCode}-${Date.now()}`;
+}
+
 export type LibraryItemListFilters = {
   disciplineId?: string;
   categoryId?: string;
@@ -55,6 +78,8 @@ export type LibraryItemListFilters = {
   favoritesOnly?: boolean;
   activeOnly?: boolean;
   sourceType?: CompanyLibraryItem["sourceType"];
+  /** "My Items" view — items created by a specific user within the current company. Never used to reach across tenants; always combined with the companyId scope below. */
+  createdByUserId?: string;
   page?: number;
   pageSize?: number;
 };
@@ -70,6 +95,7 @@ export async function listLibraryItems(companyId: string, filters: LibraryItemLi
     ...(filters.favoritesOnly ? { isFavorite: true } : {}),
     ...(filters.activeOnly !== false ? { isActive: true } : {}),
     ...(filters.sourceType ? { sourceType: filters.sourceType } : {}),
+    ...(filters.createdByUserId ? { createdByUserId: filters.createdByUserId } : {}),
     ...(filters.search
       ? {
           OR: [

@@ -9,6 +9,7 @@ import type { VoiceCommandProposal } from "@/lib/voice/voice-types";
 import { VoiceCommandButton } from "@/components/voice/voice-command-button";
 import { applyConfirmedDimensionVoiceProposal, VoiceProposalCard } from "@/components/voice/voice-proposal-card";
 import { useTranslations } from "@/lib/i18n/locale-provider";
+import { translateCalculationType, translateDimensionLabel } from "@/lib/i18n/engineering-labels";
 
 /**
  * Guided BOQ measurement workflow (Release 1), spec sections 2-6 — the
@@ -69,6 +70,7 @@ export function QuantityCalculationPanel({ projectId, calculationType, extracted
   const [pendingVoiceProposal, setPendingVoiceProposal] = useState<PendingDimensionVoiceProposal | null>(null);
   const [voiceProposalError, setVoiceProposalError] = useState<string | null>(null);
   const voiceButtonRef = useRef<HTMLButtonElement>(null);
+  const calculationLabel = translateCalculationType(calculationType, t);
 
   useEffect(() => {
     if (!definition) {
@@ -246,7 +248,7 @@ export function QuantityCalculationPanel({ projectId, calculationType, extracted
   if (!definition) {
     return (
       <div className="rounded-3xl border border-amber-900 bg-amber-950/30 p-5 text-sm text-amber-200">
-        {t("measurement.noFormulaAvailable", { type: calculationType })}
+        {t("measurement.noFormulaAvailable", { type: calculationLabel })}
       </div>
     );
   }
@@ -255,7 +257,7 @@ export function QuantityCalculationPanel({ projectId, calculationType, extracted
     <div className="space-y-5 rounded-3xl border border-slate-800 bg-slate-950 p-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <p className="text-sm uppercase tracking-[0.24em] text-slate-500">{definition.label}</p>
+          <p className="text-sm uppercase tracking-[0.24em] text-slate-500">{calculationLabel}</p>
           <p className="mt-1 text-xs text-slate-500">{t("measurement.resultUnit", { unit: definition.resultUnit })}</p>
         </div>
         <VoiceCommandButton
@@ -266,7 +268,7 @@ export function QuantityCalculationPanel({ projectId, calculationType, extracted
           onBusyChange={setIsVoiceBusy}
           disabled={isLoadingPrefill || pendingVoiceProposal !== null}
           disabledReason={pendingVoiceProposal ? t("measurement.voiceReviewOrCancel") : t("measurement.voiceWaitForEvidence")}
-          ariaLabel={t("measurement.voiceRecordInstruction", { label: definition.label })}
+          ariaLabel={t("measurement.voiceRecordInstruction", { label: calculationLabel })}
         />
       </div>
 
@@ -279,7 +281,7 @@ export function QuantityCalculationPanel({ projectId, calculationType, extracted
             <div key={dim.key} className="rounded-2xl border border-slate-800 bg-slate-900 p-4">
               <div className="flex items-center justify-between gap-3">
                 <label htmlFor={`dim-${dim.key}`} className="text-sm font-semibold text-white">
-                  {dim.label} {dim.unit ? <span className="text-slate-500">({dim.unit})</span> : null}
+                  {translateDimensionLabel(dim.key, t, dim.label)} {dim.unit ? <span className="text-slate-500">({dim.unit})</span> : null}
                   {!dim.required && <span className="ms-2 text-[0.65rem] uppercase tracking-wide text-slate-500">{t("measurement.optional")}</span>}
                 </label>
                 {dim.reviewStatus === "MISSING" && dim.required ? (
@@ -317,7 +319,10 @@ export function QuantityCalculationPanel({ projectId, calculationType, extracted
       {pendingVoiceProposal ? (
         <VoiceProposalCard
           proposal={pendingVoiceProposal.proposal}
-          fieldLabel={dimensionValues.find((dimension) => dimension.key === pendingVoiceProposal.dimensionKey)?.label}
+          fieldLabel={(() => {
+            const dimension = dimensionValues.find((candidate) => candidate.key === pendingVoiceProposal.dimensionKey);
+            return dimension ? translateDimensionLabel(dimension.key, t, dimension.label) : undefined;
+          })()}
           confirmationScope="LOCAL_DIMENSION"
           affectedCalculation={{
             oldValue: pendingVoiceProposal.oldResult?.resultValue ?? null,
@@ -339,7 +344,7 @@ export function QuantityCalculationPanel({ projectId, calculationType, extracted
       <div className="rounded-2xl border border-slate-800 bg-slate-900 p-4">
         <p className="text-xs uppercase tracking-[0.24em] text-slate-500">{t("measurement.engineeringCalculation")}</p>
         {preview.missing.length > 0 ? (
-          <p className="mt-2 text-sm text-amber-300">{t("measurement.missing", { fields: preview.missing.map((m) => m.label).join(", ") })}</p>
+          <p className="mt-2 text-sm text-amber-300">{t("measurement.missing", { fields: preview.missing.map((dimension) => translateDimensionLabel(dimension.key, t, dimension.label)).join(", ") })}</p>
         ) : preview.result ? (
           <div className="mt-2 space-y-2">
             <p dir="ltr" className="font-mono text-sm text-slate-200 text-start">{preview.result.formula}</p>

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState, use } from "react";
 import { apiClient, getApiErrorMessage } from "@/lib/api/client";
+import { useLocale } from "@/lib/i18n/locale-provider";
 
 type ReportDetailView = {
   id: string;
@@ -30,6 +31,7 @@ type PageProps = { params: Promise<{ projectId: string; reportId: string }> };
 
 export default function TechnicalReportDetailPage(props: PageProps) {
   const params = use(props.params);
+  const { direction, locale, t } = useLocale();
   const [report, setReport] = useState<ReportDetailView | null>(null);
   const [values, setValues] = useState<Record<string, string>>({});
 
@@ -120,11 +122,11 @@ export default function TechnicalReportDetailPage(props: PageProps) {
     setEmailError(null);
     setEmailNotice(null);
     if (!selectedTemplateId) {
-      setEmailError("Choose an email template first.");
+      setEmailError(t("technicalReports.errorChooseTemplate"));
       return;
     }
     if (!recipientEmail.trim() || !recipientName.trim()) {
-      setEmailError("Recipient name and email are required.");
+      setEmailError(t("technicalReports.errorRecipientRequired"));
       return;
     }
     setIsSendingEmail(true);
@@ -135,13 +137,13 @@ export default function TechnicalReportDetailPage(props: PageProps) {
         emailTemplateId: selectedTemplateId,
         ...(attachShareLink && shareRawToken ? { rawShareToken: shareRawToken } : {}),
       });
-      setEmailNotice(data.status === "FAILED" ? "The email could not be delivered — check the email provider configuration." : "Report email sent.");
+      setEmailNotice(data.status === "FAILED" ? t("technicalReports.emailDeliveryFailed") : t("technicalReports.reportEmailSent"));
     } catch (error) {
       setEmailError(getApiErrorMessage(error));
     } finally {
       setIsSendingEmail(false);
     }
-  }, [params.reportId, selectedTemplateId, recipientEmail, recipientName, attachShareLink, shareRawToken]);
+  }, [params.reportId, selectedTemplateId, recipientEmail, recipientName, attachShareLink, shareRawToken, t]);
 
   const saveValues = useCallback(async () => {
     setActionError(null);
@@ -176,7 +178,7 @@ export default function TechnicalReportDetailPage(props: PageProps) {
   if (isLoading) {
     return (
       <div className="rounded-[32px] border border-slate-800 bg-slate-950 p-8 text-slate-300">
-        <p className="text-lg font-semibold text-white">Loading report</p>
+        <p className="text-lg font-semibold text-white">{t("technicalReports.detailLoading")}</p>
       </div>
     );
   }
@@ -184,8 +186,8 @@ export default function TechnicalReportDetailPage(props: PageProps) {
   if (loadError || !report) {
     return (
       <div className="rounded-[32px] border border-slate-800 bg-slate-950 p-8 text-slate-300">
-        <p className="text-lg font-semibold text-white">Report unavailable</p>
-        <p className="mt-2 text-sm text-rose-300">{loadError ?? "This report could not be loaded."}</p>
+        <p className="text-lg font-semibold text-white">{t("technicalReports.detailUnavailable")}</p>
+        <p className="mt-2 text-sm text-rose-300">{loadError ?? t("technicalReports.detailCouldNotLoad")}</p>
       </div>
     );
   }
@@ -193,17 +195,17 @@ export default function TechnicalReportDetailPage(props: PageProps) {
   return (
     <div className="space-y-6">
       <div className="rounded-[32px] border border-slate-800 bg-slate-950 p-8">
-        <Link href={`/projects/${params.projectId}/technical-reports`} className="text-sm text-slate-400 hover:underline">
-          ← Back to technical reports
+        <Link href={`/projects/${params.projectId}/technical-reports`} className="inline-flex items-center gap-1 text-sm text-slate-400 hover:underline">
+          <span aria-hidden="true">{direction === "rtl" ? "→" : "←"}</span>
+          <span>{t("technicalReports.backToReports")}</span>
         </Link>
-        <p className="mt-3 text-sm uppercase tracking-[0.28em] text-slate-500">{report.templateName} · {report.templateCode}</p>
+        <p className="mt-3 text-sm uppercase tracking-[0.28em] text-slate-500">{t("technicalReports.templateInfo", { templateName: report.templateName, templateCode: report.templateCode })}</p>
         <h2 className="mt-2 text-3xl font-semibold text-white">{report.name}</h2>
         <p className="mt-3 text-slate-400">
-          Fill in the fields below — they map directly onto the bracketed placeholders in the template. Anything left blank
-          stays visible as a placeholder in the generated document rather than being guessed at.
+          {t("technicalReports.fieldsIntro")}
         </p>
         <p className="mt-2 text-sm text-slate-500">
-          Sections included: {report.sections.sections.map((s) => `${s.sectionCode} ${s.title}`).join(" · ")}
+          {t("technicalReports.sectionsIncluded", { list: report.sections.sections.map((s) => `${s.sectionCode} ${s.title}`).join(" · ") })}
         </p>
       </div>
 
@@ -212,7 +214,7 @@ export default function TechnicalReportDetailPage(props: PageProps) {
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <p>{actionError}</p>
             <button type="button" onClick={() => setActionError(null)} className="rounded-2xl border border-rose-800 px-3 py-2 font-semibold hover:bg-rose-900/40">
-              Dismiss
+              {t("boqEditor.dismiss")}
             </button>
           </div>
         </div>
@@ -220,15 +222,17 @@ export default function TechnicalReportDetailPage(props: PageProps) {
 
       {report.errorMessage && (
         <div className="rounded-[28px] border border-rose-900 bg-rose-950/40 p-5 text-sm text-rose-200">
-          Last generation attempt failed: {report.errorMessage}
+          {t("technicalReports.generationFailed", {
+            message: locale === "ar" ? t("technicalReports.generationErrorDetail") : report.errorMessage,
+          })}
         </div>
       )}
 
       <div className="grid gap-6 xl:grid-cols-[1fr_320px]">
         <section className="rounded-[32px] border border-slate-800 bg-slate-950 p-8">
-          <h3 className="text-xl font-semibold text-white">Fields ({report.placeholders.length})</h3>
+          <h3 className="text-xl font-semibold text-white">{t("technicalReports.fieldsHeading", { count: report.placeholders.length })}</h3>
           {report.placeholders.length === 0 ? (
-            <p className="mt-4 text-sm text-slate-400">This template has no bracketed placeholders to fill in — it&apos;s ready to generate as-is.</p>
+            <p className="mt-4 text-sm text-slate-400">{t("technicalReports.noPlaceholders")}</p>
           ) : (
             <div className="mt-6 space-y-4">
               {report.placeholders.map((placeholder) => (
@@ -249,15 +253,15 @@ export default function TechnicalReportDetailPage(props: PageProps) {
             disabled={isSaving}
             className="mt-6 rounded-2xl border border-slate-700 bg-slate-900 px-4 py-2 text-sm font-semibold text-slate-200 hover:bg-slate-800 disabled:opacity-50"
           >
-            {isSaving ? "Saving…" : "Save fields"}
+            {isSaving ? t("technicalReports.savingFields") : t("technicalReports.saveFields")}
           </button>
         </section>
 
         <aside className="space-y-6">
           <section className="rounded-[32px] border border-slate-800 bg-slate-950 p-6">
-            <p className="text-sm uppercase tracking-[0.28em] text-slate-500">Generate</p>
+            <p className="text-sm uppercase tracking-[0.28em] text-slate-500">{t("technicalReports.generateHeading")}</p>
             <p className="mt-3 text-sm text-slate-400">
-              Produces a Word document from the template with your field values merged in. Currently DOCX only.
+              {t("technicalReports.generateDescription")}
             </p>
             <button
               type="button"
@@ -265,23 +269,23 @@ export default function TechnicalReportDetailPage(props: PageProps) {
               disabled={isGenerating}
               className="mt-5 w-full rounded-2xl border border-slate-700 bg-blue-600 px-4 py-3 text-sm font-semibold text-white hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              {isGenerating ? "Generating…" : "Generate DOCX"}
+              {isGenerating ? t("technicalReports.generatingDocx") : t("technicalReports.generateDocx")}
             </button>
             {report.status === "COMPLETED" && (
               <a
                 href={`/api/technical-reports/${encodeURIComponent(report.id)}/download`}
                 className="mt-3 block rounded-2xl border border-slate-700 bg-slate-900 px-4 py-3 text-center text-sm font-semibold text-slate-200 hover:bg-slate-800"
               >
-                Download {report.fileName}
+                {t("technicalReports.downloadFile", { fileName: report.fileName ?? "" })}
               </a>
             )}
           </section>
 
           {report.status === "COMPLETED" && (
             <section className="rounded-[32px] border border-slate-800 bg-slate-950 p-6">
-              <p className="text-sm uppercase tracking-[0.28em] text-slate-500">Secure client link</p>
+              <p className="text-sm uppercase tracking-[0.28em] text-slate-500">{t("technicalReports.secureClientLink")}</p>
               <p className="mt-3 text-sm text-slate-400">
-                {report.hasActiveShareLink ? "An active link exists for this report." : "No active link yet."} Creating a new link invalidates any previous one.
+                {report.hasActiveShareLink ? t("technicalReports.activeLinkExists") : t("technicalReports.noActiveLinkYet")}{t("technicalReports.newLinkInvalidatesPrevious")}
               </p>
               {shareUrl && (
                 <div className="mt-3 rounded-2xl border border-slate-800 bg-slate-900 p-3">
@@ -291,7 +295,7 @@ export default function TechnicalReportDetailPage(props: PageProps) {
                     onClick={() => void navigator.clipboard.writeText(shareUrl)}
                     className="mt-2 rounded-xl border border-slate-700 bg-slate-950 px-3 py-1.5 text-xs font-semibold text-slate-200 hover:bg-slate-800"
                   >
-                    Copy link
+                    {t("technicalReports.copyLink")}
                   </button>
                 </div>
               )}
@@ -302,7 +306,7 @@ export default function TechnicalReportDetailPage(props: PageProps) {
                   disabled={isCreatingShareLink}
                   className="rounded-2xl border border-slate-700 bg-slate-900 px-4 py-2 text-xs font-semibold text-slate-200 hover:bg-slate-800 disabled:opacity-50"
                 >
-                  {isCreatingShareLink ? "Working…" : report.hasActiveShareLink ? "Rotate link" : "Create link"}
+                  {isCreatingShareLink ? t("technicalReports.workingOnLink") : report.hasActiveShareLink ? t("technicalReports.rotateLink") : t("technicalReports.createLink")}
                 </button>
                 {report.hasActiveShareLink && (
                   <button
@@ -311,7 +315,7 @@ export default function TechnicalReportDetailPage(props: PageProps) {
                     disabled={isCreatingShareLink}
                     className="rounded-2xl border border-rose-900 bg-rose-950/30 px-4 py-2 text-xs font-semibold text-rose-300 hover:bg-rose-900/40 disabled:opacity-50"
                   >
-                    Revoke
+                    {t("technicalReports.revokeLink")}
                   </button>
                 )}
               </div>
@@ -320,32 +324,32 @@ export default function TechnicalReportDetailPage(props: PageProps) {
 
           {report.status === "COMPLETED" && (
             <section className="rounded-[32px] border border-slate-800 bg-slate-950 p-6">
-              <p className="text-sm uppercase tracking-[0.28em] text-slate-500">Send by email</p>
+              <p className="text-sm uppercase tracking-[0.28em] text-slate-500">{t("technicalReports.sendByEmail")}</p>
 
               {emailError && <p className="mt-3 text-sm text-rose-300">{emailError}</p>}
               {emailNotice && <p className="mt-3 text-sm text-emerald-300">{emailNotice}</p>}
 
               <label className="mt-4 block text-sm text-slate-300">
-                <span className="text-slate-400">Email template</span>
+                <span className="text-slate-400">{t("proposals.emailTemplate")}</span>
                 <select
                   value={selectedTemplateId}
                   onChange={(e) => setSelectedTemplateId(e.target.value)}
                   className="mt-2 w-full rounded-2xl border border-slate-800 bg-slate-900 px-4 py-3 text-white outline-none focus:border-blue-500"
                 >
-                  <option value="">Select a template…</option>
-                  {emailTemplates.filter((t) => t.isActive).map((t) => (
-                    <option key={t.id} value={t.id}>{t.name}</option>
+                  <option value="">{t("technicalReports.selectTemplatePlaceholder")}</option>
+                  {emailTemplates.filter((template) => template.isActive).map((template) => (
+                    <option key={template.id} value={template.id}>{template.name}</option>
                   ))}
                 </select>
               </label>
               {emailTemplates.length === 0 && (
                 <p className="mt-2 text-xs text-slate-500">
-                  No email templates yet — add the built-in technical report templates from Settings → Email templates.
+                  {t("technicalReports.noEmailTemplatesYet")}
                 </p>
               )}
 
               <label className="mt-4 block text-sm text-slate-300">
-                <span className="text-slate-400">Recipient name</span>
+                <span className="text-slate-400">{t("technicalReports.recipientName")}</span>
                 <input
                   value={recipientName}
                   onChange={(e) => setRecipientName(e.target.value)}
@@ -353,7 +357,7 @@ export default function TechnicalReportDetailPage(props: PageProps) {
                 />
               </label>
               <label className="mt-4 block text-sm text-slate-300">
-                <span className="text-slate-400">Recipient email</span>
+                <span className="text-slate-400">{t("technicalReports.recipientEmail")}</span>
                 <input
                   type="email"
                   value={recipientEmail}
@@ -364,7 +368,7 @@ export default function TechnicalReportDetailPage(props: PageProps) {
 
               <label className="mt-4 flex items-center gap-2 text-sm text-slate-300">
                 <input type="checkbox" checked={attachShareLink} onChange={(e) => setAttachShareLink(e.target.checked)} className="h-4 w-4 rounded border-slate-700 bg-slate-900" />
-                Include the secure link (create one above first if the template uses it)
+                {t("technicalReports.includeSecureLink")}
               </label>
 
               <button
@@ -373,7 +377,7 @@ export default function TechnicalReportDetailPage(props: PageProps) {
                 disabled={isSendingEmail}
                 className="mt-5 w-full rounded-2xl border border-slate-700 bg-blue-600 px-4 py-3 text-sm font-semibold text-white hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-50"
               >
-                {isSendingEmail ? "Sending…" : "Send report email"}
+                {isSendingEmail ? t("technicalReports.sendingEmail") : t("technicalReports.sendReportEmail")}
               </button>
             </section>
           )}

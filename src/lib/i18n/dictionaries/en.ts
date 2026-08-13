@@ -525,6 +525,7 @@ const en = {
       connectBody: "Authorize read-only access to browse your Autodesk hubs, projects, folders, and files.",
       reconnectBody: "Your Autodesk authorization needs to be renewed before you can browse cloud files.",
       connectAction: "Connect Autodesk",
+      browseAction: "Browse Autodesk",
       reconnectAction: "Reconnect Autodesk",
       disconnect: "Disconnect",
       disconnecting: "Disconnecting…",

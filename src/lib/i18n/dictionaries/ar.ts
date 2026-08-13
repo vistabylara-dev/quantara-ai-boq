@@ -579,6 +579,7 @@ const ar: Dictionary = {
       connectBody: "فوّض وصولاً للقراءة فقط لتصفّح محاور Autodesk والمشاريع والمجلدات والملفات.",
       reconnectBody: "يجب تجديد تفويض Autodesk قبل أن تتمكن من تصفح الملفات السحابية.",
       connectAction: "اتصال Autodesk",
+      browseAction: "تصفّح Autodesk",
       reconnectAction: "إعادة اتصال Autodesk",
       disconnect: "قطع الاتصال",
       disconnecting: "جارٍ قطع الاتصال…",

@@ -170,6 +170,7 @@ export default function IntegrationsMarketplace() {
   }, [data, filtered]);
 
   const selectedProvider = data?.providers.find((p) => p.id === selectedProviderId) ?? null;
+  const autodeskConnection = data?.providers.find((p) => p.id === "autodesk")?.connection ?? null;
 
   if (isLoading) {
     return (
@@ -280,7 +281,12 @@ export default function IntegrationsMarketplace() {
       )}
 
       {selectedProvider && (
-        <ProviderDetailDrawer provider={selectedProvider} projectContext={projectContext} onClose={() => setSelectedProviderId(null)} />
+        <ProviderDetailDrawer
+          provider={selectedProvider}
+          projectContext={projectContext}
+          autodeskConnection={autodeskConnection}
+          onClose={() => setSelectedProviderId(null)}
+        />
       )}
     </div>
   );
@@ -337,15 +343,19 @@ function ProviderCard({ provider, onSelect }: { provider: Provider; onSelect: (i
 function ProviderDetailDrawer({
   provider,
   projectContext,
+  autodeskConnection,
   onClose,
 }: {
   provider: Provider;
   projectContext: ReturnType<typeof useProjectContext>;
+  autodeskConnection: Provider["connection"];
   onClose: () => void;
 }) {
   const t = useTranslations();
   const Icon = ICONS[provider.icon] ?? Plug;
   const isPlugin = provider.connectionType === "PLUGIN_DESKTOP";
+  const isAutodeskFamily = provider.providerFamily === "autodesk";
+  const hasAutodeskConnection = Boolean(autodeskConnection && autodeskConnection.status !== "DISCONNECTED");
 
   return (
     <div className="fixed inset-0 z-30 flex items-center justify-center bg-black/60 px-4" onClick={onClose}>
@@ -412,6 +422,16 @@ function ProviderDetailDrawer({
         )}
 
         <div className="mt-6 flex flex-wrap gap-2">
+          {isAutodeskFamily && (
+            <a
+              href={hasAutodeskConnection ? "/integrations/autodesk/connect" : "/api/integrations/autodesk/connect"}
+              className="rounded-2xl border border-[#0EA5E9] bg-[#0EA5E9] px-4 py-2 text-sm font-semibold text-white hover:opacity-90 dark:border-[#22D3EE] dark:bg-[#22D3EE] dark:text-[#050B18]"
+            >
+              {hasAutodeskConnection
+                ? t("integrations.autodesk.browseAction")
+                : t("integrations.actionConnect", { family: "Autodesk" })}
+            </a>
+          )}
           <Link
             href={withProjectContext(`/integrations/${provider.id}`, projectContext)}
             className="rounded-2xl border border-[#0EA5E9] bg-[#0EA5E9]/10 px-4 py-2 text-sm font-semibold text-[#0284C7] hover:bg-[#0EA5E9]/20 dark:border-[#22D3EE] dark:bg-[#22D3EE]/10 dark:text-[#22D3EE]"

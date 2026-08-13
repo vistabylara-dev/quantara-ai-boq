@@ -45,10 +45,10 @@ function publicWebsiteSource(): string {
 describe("public product truth", () => {
   it("publishes one stable entity definition and acceptance statement", () => {
     expect(QUANTARA_ENTITY_DEFINITION).toBe(
-      "Quantara is AI-assisted BOQ workflow software for construction professionals.",
+      "Quantara is AI-assisted BOQ measurement and quantity calculation software for construction professionals.",
     );
     expect(QUANTARA_WORKFLOW_TRUTH).toBe(
-      "Quantara helps construction professionals move from supported project sources through reviewed extraction, dimensions, visible calculations, BOQ organization, review and validation to professional outputs. Quantara assists the professional; it does not replace professional judgement.",
+      "Quantara brings project sources, reviewable extraction, guided measurement, deterministic quantity calculations and professional BOQ workflows together in one controlled platform. Review source-linked or professionally entered dimensions, see the engineering equation and calculated quantity, and confirm the result into your BOQ workflow.",
     );
     expect(PROFESSIONAL_REVIEW_NOTICE).toContain("require review");
   });
@@ -74,10 +74,15 @@ describe("public product truth", () => {
     expect(byId.get("non-google-external-integrations")?.status).toBe("NOT_AVAILABLE");
     expect(byId.get("enterprise-feature-bundle")?.status).toBe("NOT_AVAILABLE");
     expect(byId.get("typed-multi-change-proposals")?.status).toBe("NOT_AVAILABLE");
-    expect(byId.get("visible-calculations")?.status).toBe("LIMITED");
+    expect(byId.get("visible-calculations")?.status).toBe("AVAILABLE");
     expect(byId.get("source-attribution")?.status).toBe("LIMITED");
     expect(byId.get("google-drive-import")?.status).toBe("CONTROLLED_ACCESS");
-    expect(byId.get("voice-proposals")?.status).toBe("CONTROLLED_ACCESS");
+    expect(byId.get("voice-proposals")?.status).toBe("AVAILABLE");
+    expect(byId.get("voice-proposals")?.name).toBe("Voice-assisted measurement and BOQ editing");
+    expect(byId.get("voice-proposals")?.summary).toContain("enter or correct measurements");
+    expect(byId.get("autodesk-dwg-analysis")?.status).toBe("CONTROLLED_ACCESS");
+    expect(byId.get("autodesk-dwg-analysis")?.name).toBe("Autodesk / AutoCAD DWG analysis");
+    expect(byId.get("autodesk-dwg-analysis")?.summary).toContain("traceable Quantara review candidates");
     expect(byId.get("commercial-access")?.summary).toContain("Authenticated recurring subscription checkout");
     expect(byId.get("commercial-access")?.limitation).toContain("public website does not offer checkout");
     expect(byId.get("commercial-access")?.limitation).toContain("One-time checkout");
@@ -85,6 +90,7 @@ describe("public product truth", () => {
     expect(byId.get("technical-report-generation")?.status).toBe("LIMITED");
     expect(byId.get("technical-report-generation")?.limitation).toContain("limited to DOCX");
     expect(byId.get("model-file-import")?.status).toBe("NOT_AVAILABLE");
+    expect(byId.get("model-file-import")?.summary).toContain("does not limit supported Autodesk");
     expect(OCR_IMPLEMENTATION_STATUS).toBe("NOT_IMPLEMENTED");
   });
 
@@ -97,6 +103,8 @@ describe("public product truth", () => {
     expect(lifecycleById.get("project-workspaces")).toBe("LIVE");
     expect(lifecycleById.get("scanned-pdf-detection")).toBe("LIVE");
     expect(lifecycleById.get("visible-calculations")).toBe("LIVE");
+    expect(lifecycleById.get("voice-proposals")).toBe("LIVE");
+    expect(lifecycleById.get("autodesk-dwg-analysis")).toBe("BETA_LIMITED");
     expect(lifecycleById.get("commercial-access")).toBe("BETA_LIMITED");
     expect(lifecycleById.get("technical-report-generation")).toBe("BETA_LIMITED");
     expect(lifecycleById.get("non-google-external-integrations")).toBe("PLANNED");
@@ -123,6 +131,37 @@ describe("public product truth", () => {
         expect(existsSync(join(repoRoot, evidencePath)), `${capability.id}: ${evidencePath}`).toBe(true);
       }
     }
+
+    const autodeskDwgAnalysis = PUBLIC_PRODUCT_TRUTH_MATRIX.find(
+      (capability) => capability.id === "autodesk-dwg-analysis",
+    );
+    expect(autodeskDwgAnalysis?.evidencePaths).toEqual([
+      "src/lib/services/autodesk-candidate-service.ts",
+      "tests/autodesk-integration.test.ts",
+    ]);
+  });
+
+  it("publishes guided measurement while retaining the narrow unattended-geometry boundary", () => {
+    const targetSources = [
+      "src/lib/public-site/product-truth.ts",
+      "src/app/(marketing)/page.tsx",
+      "src/app/(marketing)/ai-boq-software/page.tsx",
+      "src/lib/i18n/dictionaries/en.ts",
+      "src/lib/i18n/dictionaries/ar.ts",
+      "public/llms.txt",
+    ]
+      .map((path) => readFileSync(join(repoRoot, path), "utf8"))
+      .join("\n");
+
+    expect(targetSources).not.toContain("Quantara does not measure");
+    expect(targetSources).not.toContain("Quantara cannot measure");
+    expect(targetSources).not.toContain("Quantara does not calculate quantities");
+    expect(targetSources).not.toContain("Quantara is not quantity takeoff software");
+    expect(targetSources).toContain(
+      "Quantara does not make a blanket claim of fully unattended computer-vision takeoff",
+    );
+    expect(targetSources).toContain("This limitation does not apply to Quantara's available guided BOQ measurement");
+    expect(targetSources).toContain("professional confirmation");
   });
 
   it("derives public availability badges from Product Truth instead of page-local status strings", () => {
@@ -135,7 +174,7 @@ describe("public product truth", () => {
 
     expect(source).not.toMatch(/\bstatus\s*:\s*["'](?:Available|Controlled access|Limited|Not available)["']/);
     expect(seoTemplate).toContain("getPublicCapability(capabilityId).status");
-    expect(seoTemplate).toContain("getPublicStatus(feature.capabilityId)");
+    expect(seoTemplate).toContain("getPublicStatus(feature.capabilityId, t)");
     expect(navigation).toContain("PUBLIC_CAPABILITY_STATUS_LABELS[googleDriveImport.status]");
   });
 

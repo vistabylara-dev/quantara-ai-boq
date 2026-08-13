@@ -94,6 +94,8 @@ const featuredCapabilityIds = [
   "boq-management",
   "visible-calculations",
   "industry-packages",
+  "voice-proposals",
+  "autodesk-dwg-analysis",
   "professional-outputs",
   "technical-report-generation",
   "bilingual-rtl-interface",
@@ -159,6 +161,9 @@ export default async function HomePage() {
           </h1>
           <p className="mx-auto mb-5 max-w-4xl text-xl leading-relaxed text-slate-700 dark:text-slate-300">
             {productTruth.workflowTruth}
+          </p>
+          <p className="mx-auto mb-5 text-sm font-semibold uppercase tracking-[0.16em] text-blue-700 dark:text-blue-300">
+            {t("publicContent.home.heroCapabilitySignal")}
           </p>
           <p className="mx-auto mb-10 max-w-3xl text-base leading-relaxed text-slate-600 dark:text-slate-400">
             {t("publicContent.home.audience", {

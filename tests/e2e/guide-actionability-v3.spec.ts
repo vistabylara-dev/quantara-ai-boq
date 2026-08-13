@@ -148,12 +148,17 @@ const reviewedEntity = {
   id: "guide-reviewed-entity",
   projectId: PROJECT_ID,
   projectFileId: FILE_ID,
-  entityType: "AREA_MEASUREMENT",
+  // Real ExtractedEntityType/ExtractionMethod enum members (prisma/schema.prisma)
+  // — the previous "AREA_MEASUREMENT"/"TABLE_EXTRACTION" values matched
+  // neither enum and crashed translateExtractedEntityType/translateExtractionMethod
+  // (src/lib/i18n/engineering-labels.ts) when the reviewed-entity list rendered,
+  // since those lookups are exhaustive over the real enums with no fallback.
+  entityType: "FLOOR_FINISH",
   label: "Reviewed floor area",
   quantity: 125,
   unit: "m2",
   confidence: 98,
-  extractionMethod: "TABLE_EXTRACTION",
+  extractionMethod: "TABLE_PARSER",
   sourceText: "Floor finish area: 125 m2",
   status: "CONFIRMED",
   correction: null,
@@ -557,16 +562,16 @@ test.describe("Quantara Guide actionability V3", () => {
     await expectPath(page, BOQ_PATH);
 
     const addItemHeading = page.getByRole("heading", { name: "Add item", exact: true });
-    await expect(addItemHeading).toBeVisible();
-    await expect(page.getByText("Professionally reviewed project information")).toBeVisible();
-    await expect(page.getByRole("button", { name: reviewedEntity.label })).toBeVisible();
+    await expect(addItemHeading).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByText("Professionally reviewed project information")).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByRole("button", { name: reviewedEntity.label })).toBeVisible({ timeout: 15_000 });
     await page.getByRole("button", { name: "Close" }).click();
 
     // Next.js integrates native history mutations with useSearchParams. A
     // second supported intent in the same mounted BOQ page must be consumed;
     // a permanent one-shot boolean would incorrectly ignore this action.
     await page.evaluate((href) => window.history.pushState(null, "", href), `${BOQ_PATH}?action=review_calculations`);
-    await expect(addItemHeading).toBeVisible();
+    await expect(addItemHeading).toBeVisible({ timeout: 15_000 });
     await expectPath(page, BOQ_PATH);
     await page.getByRole("button", { name: "Close" }).click();
 

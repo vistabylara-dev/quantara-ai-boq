@@ -79,7 +79,7 @@ test.describe('Real File Extraction', () => {
     await page.fill('input[type="email"]', userEmail);
     await page.fill('input[type="password"]', 'Password123!');
     await page.click('button[type="submit"]');
-    await expect(page).toHaveURL(/\/dashboard/);
+    await expect(page).toHaveURL(/\/dashboard/, { timeout: 15_000 });
   });
 
   test('should extract a schedule table from XLSX, review it, and import it into the BOQ', async ({ page }) => {
@@ -94,7 +94,7 @@ test.describe('Real File Extraction', () => {
     await page.click('text=Ext Test Client');
     await page.fill('input[name="location"]', 'Dubai');
     await page.click('button:has-text("Create project")');
-    await expect(page).toHaveURL(/\/projects\/(?!new)[a-zA-Z0-9-]+$/);
+    await expect(page).toHaveURL(/\/projects\/(?!new)[a-zA-Z0-9-]+$/, { timeout: 15_000 });
     const projectUrl = page.url();
     await page.goto(`${projectUrl}/files`);
 

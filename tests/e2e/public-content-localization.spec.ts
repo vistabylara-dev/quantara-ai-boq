@@ -115,7 +115,12 @@ test.describe("approved Arabic public-page correction", () => {
   });
 
   test("the complete public route inventory renders Arabic content in RTL", async ({ page }) => {
-    test.setTimeout(600_000);
+    // Crawls ~60 distinct routes in one dev-mode session; observed to run
+    // right up against the prior 600s budget (and occasionally trip the
+    // dev server's own memory-threshold auto-restart mid-crawl on a
+    // resource-constrained machine) — 900s gives a first-compile-heavy run
+    // room to finish rather than timing out at the boundary.
+    test.setTimeout(900_000);
     for (const path of PUBLIC_ARABIC_PATHS) {
       const response = await page.goto(path, { waitUntil: "domcontentloaded" });
       expect(response?.ok(), `${path} should load successfully`).toBe(true);

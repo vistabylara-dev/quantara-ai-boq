@@ -38,10 +38,10 @@ export const PUBLIC_CAPABILITY_STATUS_DESCRIPTIONS: Record<PublicCapabilityStatu
 };
 
 export const QUANTARA_ENTITY_DEFINITION =
-  "Quantara is AI-assisted BOQ workflow software for construction professionals.";
+  "Quantara is AI-assisted BOQ measurement and quantity calculation software for construction professionals.";
 
 export const QUANTARA_WORKFLOW_TRUTH =
-  "Quantara helps construction professionals move from supported project sources through reviewed extraction, dimensions, visible calculations, BOQ organization, review and validation to professional outputs. Quantara assists the professional; it does not replace professional judgement.";
+  "Quantara brings project sources, reviewable extraction, guided measurement, deterministic quantity calculations and professional BOQ workflows together in one controlled platform. Review source-linked or professionally entered dimensions, see the engineering equation and calculated quantity, and confirm the result into your BOQ workflow.";
 
 export const PROFESSIONAL_REVIEW_NOTICE =
   "Project information, extracted data, measurements, calculations, rates and outputs require review by the responsible construction professional before tender, procurement, contractual or construction use.";
@@ -95,17 +95,24 @@ const PUBLIC_CAPABILITY_DEFINITIONS = [
   },
   {
     id: "visible-calculations",
-    name: "Dimensions and visible quantity calculations",
-    status: "LIMITED",
-    summary: "For supported deterministic measurement types, review required dimensions, the visible equation and the proposed result before confirmation.",
-    limitation: "Quantara does not automatically measure drawings, and not every BOQ item has a supported calculation type.",
+    name: "Guided BOQ measurement and quantity calculations",
+    status: "AVAILABLE",
+    summary: "For supported calculation types, Quantara uses reviewed source-linked or professionally entered dimensions to calculate BOQ quantities with deterministic engineering formulas, displaying the equation and proposed result for professional confirmation before governed BOQ use.",
+    limitation: "Supported calculation types require the applicable dimensions and professional confirmation; universal unattended drawing-geometry takeoff is a separate capability boundary.",
   },
   {
     id: "voice-proposals",
-    name: "Voice-assisted change proposals",
+    name: "Voice-assisted measurement and BOQ editing",
+    status: "AVAILABLE",
+    summary: "Use voice in supported BOQ contexts to enter or correct measurements and propose supported item changes for professional review and confirmation.",
+    limitation: "Voice changes remain review and confirmation controlled; no voice change is applied to governed BOQ data without the user's confirmation.",
+  },
+  {
+    id: "autodesk-dwg-analysis",
+    name: "Autodesk / AutoCAD DWG analysis",
     status: "CONTROLLED_ACCESS",
-    summary: "Use voice in supported BOQ contexts to propose a measurement or item-field change for review.",
-    limitation: "A transcript is interpreted as a proposal; the user must confirm before governed project data changes.",
+    summary: "Connect a supported Autodesk account, select supported DWG files, and create traceable Quantara review candidates from Autodesk model metadata and properties.",
+    limitation: "DWG-derived information remains subject to professional review. Quantara does not automatically treat arbitrary drawing properties as confirmed final BOQ quantities.",
   },
   {
     id: "validation",
@@ -157,15 +164,15 @@ const PUBLIC_CAPABILITY_DEFINITIONS = [
   },
   {
     id: "automatic-drawing-takeoff",
-    name: "Automatic drawing measurement and takeoff",
+    name: "Unattended arbitrary drawing-geometry takeoff",
     status: "NOT_AVAILABLE",
-    summary: "Quantara does not currently derive final dimensions or quantities automatically from drawing geometry.",
+    summary: "Quantara does not make a blanket claim of fully unattended computer-vision takeoff that derives final quantities from arbitrary drawing geometry without professional review. This limitation does not apply to Quantara's available guided BOQ measurement, deterministic quantity calculation, or supported drawing/DWG data-extraction workflows.",
   },
   {
     id: "model-file-import",
-    name: "CAD, BIM and IFC model import",
+    name: "Generic CAD/BIM/IFC model quantity extraction",
     status: "NOT_AVAILABLE",
-    summary: "Quantara does not currently import CAD, BIM or IFC models for quantity extraction or BOQ creation.",
+    summary: "Generic CAD/BIM/IFC model quantity extraction is not claimed. This does not limit supported Autodesk / AutoCAD DWG analysis, which creates traceable review candidates from model metadata and properties.",
   },
   {
     id: "scanned-pdf-ocr",
@@ -249,6 +256,11 @@ const PUBLIC_CAPABILITY_REGISTER_KEYS = {
     name: "publicContent.capabilityRegister.capabilities.voiceProposals.name",
     summary: "publicContent.capabilityRegister.capabilities.voiceProposals.summary",
     limitation: "publicContent.capabilityRegister.capabilities.voiceProposals.limitation",
+  },
+  "autodesk-dwg-analysis": {
+    name: "publicContent.capabilityRegister.capabilities.autodeskDwgAnalysis.name",
+    summary: "publicContent.capabilityRegister.capabilities.autodeskDwgAnalysis.summary",
+    limitation: "publicContent.capabilityRegister.capabilities.autodeskDwgAnalysis.limitation",
   },
   validation: {
     name: "publicContent.capabilityRegister.capabilities.validation.name",
@@ -345,7 +357,8 @@ export const PUBLIC_PRODUCT_LIFECYCLE_BY_ID = {
   "reviewed-extraction": "LIVE",
   "boq-management": "LIVE",
   "visible-calculations": "LIVE",
-  "voice-proposals": "BETA_LIMITED",
+  "voice-proposals": "LIVE",
+  "autodesk-dwg-analysis": "BETA_LIMITED",
   validation: "LIVE",
   "professional-outputs": "LIVE",
   "document-templates": "LIVE",
@@ -398,6 +411,10 @@ export const PUBLIC_PRODUCT_EVIDENCE_BY_ID = {
   "voice-proposals": [
     "src/lib/voice/voice-command-interpreter.ts",
     "tests/voice-command-runtime.test.ts",
+  ],
+  "autodesk-dwg-analysis": [
+    "src/lib/services/autodesk-candidate-service.ts",
+    "tests/autodesk-integration.test.ts",
   ],
   validation: [
     "src/lib/services/boq-validation-service.ts",

@@ -1,8 +1,10 @@
 # Quantara
 
-> Quantara is AI-assisted BOQ workflow software for construction professionals. It supports review-led project-source, calculation, BOQ, validation and document workflows while leaving professional judgement and approval with the responsible user.
+> Quantara is AI-assisted BOQ measurement and quantity calculation software for construction professionals. It supports review-led project-source, measurement, calculation, BOQ, validation and document workflows while leaving professional judgement and approval with the responsible user.
 
-Quantara is operated by Vista By Lara and is offered through Controlled Early Access. Public capability statements must be read with their stated availability and limitations. Quantara does not claim automatic drawing measurement, OCR extraction from scanned PDFs, guaranteed accuracy, local authority approval, local market rates, or replacement of quantity surveyors and estimators.
+Quantara is operated by Vista By Lara and is offered through Controlled Early Access. Public capability statements must be read with their stated availability and limitations. Quantara supports guided BOQ measurement and deterministic quantity calculation for supported calculation types. Reviewed source-linked or professionally entered dimensions feed visible engineering formulas and calculated quantities that require professional confirmation.
+
+Voice-assisted measurement input and supported BOQ change proposals are available in supported authenticated BOQ contexts. Supported Autodesk DWG analysis can create traceable review candidates from Autodesk model metadata and properties. Quantara does not make a blanket claim of fully unattended computer-vision takeoff from arbitrary drawing geometry, nor does it guarantee professional accuracy without review.
 
 Current supported source workflows store extractable text from text-based PDFs, create review candidates only from supported detected table rows, and import structured XLSX or CSV files. Plain PDF paragraph text is not converted into BOQ candidates. Image-only pages can be detected but require manual transcription. Google Drive import requires an authorized controlled-access connection. BOQ documents can use supported PDF, XLSX, CSV, DOCX and HTML flows; technical-report generation is limited to DOCX in supported configured environments, and durable production storage must be confirmed during Controlled Early Access.
 

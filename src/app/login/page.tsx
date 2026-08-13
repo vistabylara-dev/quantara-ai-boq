@@ -5,6 +5,13 @@ import { Suspense, useState, type FormEvent } from "react";
 import { apiClient, getApiErrorMessage } from "@/lib/api/client";
 import { useTranslations } from "@/lib/i18n/locale-provider";
 import { LanguageSwitcher } from "@/components/layout/language-switcher";
+import {
+  buildSubscriptionPricingHref,
+  normalizePublicPriceCode,
+  normalizeSafeInternalPath,
+  readPendingPricingIntent,
+  storePendingPricingIntent,
+} from "@/lib/commercial/pricing-intent";
 
 
 function LoginForm() {
@@ -22,8 +29,16 @@ function LoginForm() {
     setError(null);
     try {
       await apiClient.post("/api/auth/login", { email, password });
-      const next = searchParams.get("next") ?? "/dashboard";
-      router.push(next);
+
+      const queryPriceCode = normalizePublicPriceCode(searchParams.get("priceCode"));
+      if (queryPriceCode) storePendingPricingIntent(queryPriceCode);
+      const pendingPriceCode = queryPriceCode ?? readPendingPricingIntent();
+
+      if (pendingPriceCode) {
+        router.push(buildSubscriptionPricingHref(pendingPriceCode));
+      } else {
+        router.push(normalizeSafeInternalPath(searchParams.get("next")));
+      }
       router.refresh();
     } catch (submitError) {
       setError(getApiErrorMessage(submitError));

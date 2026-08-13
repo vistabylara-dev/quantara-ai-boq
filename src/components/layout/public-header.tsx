@@ -6,8 +6,11 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Menu, X, ChevronDown } from "lucide-react";
 import { publicNavigation, NavigationSection, NavigationItem } from "@/config/public-navigation";
+import { useTranslations } from "@/lib/i18n/locale-provider";
+import { LanguageSwitcher } from "@/components/layout/language-switcher";
 
 export default function PublicHeader() {
+  const t = useTranslations();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [activeDesktopSection, setActiveDesktopSection] = useState<string | null>(null);
   const [activeMobileSection, setActiveMobileSection] = useState<string | null>(null);
@@ -118,7 +121,7 @@ export default function PublicHeader() {
     >
       <div className="container mx-auto px-4 h-16 flex items-center justify-between">
         {/* Logo */}
-        <Link href="/" className="font-bold text-xl tracking-tight text-slate-900 dark:text-white flex items-center gap-2" aria-label="Quantara Home">
+        <Link href="/" className="font-bold text-xl tracking-tight text-slate-900 dark:text-white flex items-center gap-2" aria-label={t("publicSite.header.quantaraHome")}>
           <Image
             src="/logo.png"
             alt=""
@@ -198,11 +201,12 @@ export default function PublicHeader() {
 
         {/* Desktop CTAs */}
         <div className="hidden lg:flex items-center gap-4">
+          <LanguageSwitcher />
           <Link href="/login" className="text-sm font-medium text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 rounded-md px-2 py-1">
-            Sign In
+            {t("publicSite.header.signIn")}
           </Link>
           <Link href="/register" className="inline-flex items-center justify-center rounded-md text-sm font-medium bg-blue-600 text-white hover:bg-blue-700 h-9 px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:focus:ring-offset-slate-950 transition-colors">
-            Request Early Access
+            {t("publicSite.header.requestEarlyAccess")}
           </Link>
         </div>
 
@@ -212,7 +216,7 @@ export default function PublicHeader() {
           type="button"
           aria-expanded={mobileMenuOpen}
           aria-controls="mobile-navigation"
-          aria-label={mobileMenuOpen ? "Close menu" : "Open menu"}
+          aria-label={mobileMenuOpen ? t("publicSite.header.closeMenu") : t("publicSite.header.openMenu")}
           className="lg:hidden p-2 -mr-2 text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 rounded-md"
           onClick={() => {
             if (mobileMenuOpen) closeMobileMenu();
@@ -230,7 +234,7 @@ export default function PublicHeader() {
           ref={mobileMenuRef}
           role="dialog"
           aria-modal="true"
-          aria-label="Mobile Navigation"
+          aria-label={t("publicSite.header.mobileNavigation")}
           className="absolute left-0 right-0 top-full z-40 h-[calc(100vh-4rem)] overflow-y-auto bg-white dark:bg-slate-950"
         >
           <div className="px-4 py-6 space-y-2">
@@ -284,11 +288,14 @@ export default function PublicHeader() {
             })}
             
             <div className="pt-8 space-y-4">
+              <div className="flex justify-center">
+                <LanguageSwitcher />
+              </div>
               <Link href="/login" className="block w-full text-center py-3 text-base font-medium text-slate-900 dark:text-white border border-slate-200 dark:border-slate-800 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500">
-                Sign In
+                {t("publicSite.header.signIn")}
               </Link>
               <Link href="/register" className="block w-full text-center py-3 text-base font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:focus:ring-offset-slate-950">
-                Request Early Access
+                {t("publicSite.header.requestEarlyAccess")}
               </Link>
             </div>
           </div>

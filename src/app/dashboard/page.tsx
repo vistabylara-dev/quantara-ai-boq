@@ -34,6 +34,7 @@ import DocumentCard, { type RecentDocument } from "@/components/dashboard/docume
 import ActivityTimeline, { type ActivityEvent } from "@/components/dashboard/activity-timeline";
 import ResponsiveDataTable, { type ResponsiveTableColumn } from "@/components/dashboard/responsive-data-table";
 import type { StatusTone } from "@/components/dashboard/status-badge";
+import { useTranslations } from "@/lib/i18n/locale-provider";
 
 type SessionData = {
   authenticated: boolean;
@@ -91,6 +92,7 @@ function formatLabel(value: string): string {
 }
 
 export default function DashboardPage() {
+  const t = useTranslations();
   const [session, setSession] = useState<SessionData | null>(null);
   const [metrics, setMetrics] = useState<DashboardMetrics | null>(null);
   const [subscription, setSubscription] = useState<SubscriptionSummary | null>(null);
@@ -178,7 +180,7 @@ export default function DashboardPage() {
             ))}
           </div>
         </div>
-        <p className="sr-only">Loading your workspace dashboard.</p>
+        <p className="sr-only">{t("dashboard.loadingWorkspace")}</p>
       </div>
     );
   }
@@ -186,14 +188,14 @@ export default function DashboardPage() {
   if (loadError || !metrics || !session?.user || !subscription) {
     return (
       <div className={panel}>
-        <p className="terminal-text text-sm font-bold text-red-600 dark:text-[#FF0055] uppercase tracking-widest">System Failure</p>
-        <p className="mt-2 text-xs terminal-text text-slate-400 dark:text-slate-500 dark:text-slate-400 dark:text-slate-500 dark:text-slate-400">{loadError ?? "Neural grid linkage could not be established."}</p>
+        <p className="terminal-text text-sm font-bold text-red-600 dark:text-[#FF0055] uppercase tracking-widest">{t("dashboard.systemFailure")}</p>
+        <p className="mt-2 text-xs terminal-text text-slate-400 dark:text-slate-500 dark:text-slate-400 dark:text-slate-500 dark:text-slate-400">{loadError ?? t("dashboard.linkageError")}</p>
         <button
           type="button"
           onClick={() => void load()}
           className="mt-6 border border-red-600 dark:border-[#FF0055]/50 bg-red-500/10 dark:bg-[#FF0055]/10 px-4 py-2 text-[10px] font-bold text-red-600 dark:text-[#FF0055] hover:bg-red-500/20 dark:bg-[#FF0055]/20 terminal-text uppercase tracking-widest transition-colors"
         >
-          Re-Initialize
+          {t("dashboard.reinitialize")}
         </button>
       </div>
     );
@@ -201,7 +203,7 @@ export default function DashboardPage() {
 
   const planLabel = subscription.planName
     ? `${subscription.planName} · ${formatLabel(subscription.status)}`
-    : "No active plan";
+    : t("dashboard.noActivePlan");
 
   const currentProject = projects?.find((project) => project.status !== "ARCHIVED") ?? projects?.[0] ?? null;
   const recentUpdatesCount = (projects ?? []).filter(
@@ -218,19 +220,19 @@ export default function DashboardPage() {
   const clientColumns: ResponsiveTableColumn<RecentClient>[] = [
     {
       key: "name",
-      header: "Client",
+      header: t("dashboard.client"),
       render: (client) => (
         <Link href={`/clients/${client.id}`} className="font-semibold text-[#08152E] hover:underline dark:text-slate-900 dark:text-white">
           {client.name}
         </Link>
       ),
     },
-    { key: "contact", header: "Contact", render: (client) => client.contactName },
-    { key: "projects", header: "Projects", render: (client) => client.projectCount },
+    { key: "contact", header: t("dashboard.contact"), render: (client) => client.contactName },
+    { key: "projects", header: t("dashboard.projectsColumn"), render: (client) => client.projectCount },
     {
       key: "lastActivity",
-      header: "Last activity",
-      render: (client) => (client.lastActivityAt ? formatDate(client.lastActivityAt) : "No activity yet"),
+      header: t("dashboard.lastActivity"),
+      render: (client) => (client.lastActivityAt ? formatDate(client.lastActivityAt) : t("dashboard.noActivityYet")),
     },
   ];
 
@@ -246,33 +248,33 @@ export default function DashboardPage() {
         <div className="space-y-6 flex flex-col">
           {/* AI CORE PANEL (Metrics) */}
           <div className="cyber-border cyber-panel p-5 flex flex-col relative overflow-hidden h-[250px]">
-            <h2 className="text-blue-600 dark:text-[#00F0FF] text-[10px] uppercase tracking-[0.4em] mb-4 border-b border-blue-500/30 dark:border-[#00F0FF]/30 pb-2">Core Metrics</h2>
+            <h2 className="text-blue-600 dark:text-[#00F0FF] text-[10px] uppercase tracking-[0.4em] mb-4 border-b border-blue-500/30 dark:border-[#00F0FF]/30 pb-2">{t("dashboard.coreMetrics")}</h2>
             <div className="grid grid-cols-2 gap-2 flex-1">
-               <MetricCard variant="primary" icon={FolderKanban} label="Projects" value={metrics.activeProjects} />
-               <MetricCard variant="primary" icon={FileCheck2} label="BOQs" value={metrics.totalBoqs} />
-               <MetricCard icon={Users} label="Clients" value={metrics.totalClients} />
-               <MetricCard icon={UploadCloud} label="Files" value={metrics.totalUploadedFiles} />
+               <MetricCard variant="primary" icon={FolderKanban} label={t("dashboard.metricProjects")} value={metrics.activeProjects} />
+               <MetricCard variant="primary" icon={FileCheck2} label={t("dashboard.metricBoqs")} value={metrics.totalBoqs} />
+               <MetricCard icon={Users} label={t("dashboard.metricClients")} value={metrics.totalClients} />
+               <MetricCard icon={UploadCloud} label={t("dashboard.metricFiles")} value={metrics.totalUploadedFiles} />
             </div>
           </div>
           
           {/* QUICK ACTIONS NAV */}
           <div className="cyber-border cyber-panel p-5">
-            <h2 className="text-slate-900 dark:text-white text-[10px] uppercase tracking-widest font-bold mb-4 border-b border-blue-500/30 dark:border-[#00F0FF]/30 pb-2">System Directives</h2>
+            <h2 className="text-slate-900 dark:text-white text-[10px] uppercase tracking-widest font-bold mb-4 border-b border-blue-500/30 dark:border-[#00F0FF]/30 pb-2">{t("dashboard.systemDirectives")}</h2>
             <nav className="grid grid-cols-2 gap-2">
-              <QuickActionButton href="/clients/new" label="Create Client" icon={Users} />
-              <QuickActionButton 
-                href="/catalogue" 
-                label="Catalogue" 
-                icon={Layers} 
-                image="/images/dashboard/cyber_catalogue.jpg" 
+              <QuickActionButton href="/clients/new" label={t("dashboard.createClient")} icon={Users} />
+              <QuickActionButton
+                href="/catalogue"
+                label={t("dashboard.catalogue")}
+                icon={Layers}
+                image="/images/dashboard/cyber_catalogue.jpg"
               />
-              <QuickActionButton 
-                href="/suppliers" 
-                label="Manage Suppliers" 
-                icon={Truck} 
-                image="/images/dashboard/cyber_suppliers.jpg" 
+              <QuickActionButton
+                href="/suppliers"
+                label={t("dashboard.manageSuppliers")}
+                icon={Truck}
+                image="/images/dashboard/cyber_suppliers.jpg"
               />
-              <QuickActionButton href="/templates" label="Templates" icon={BookOpen} />
+              <QuickActionButton href="/templates" label={t("dashboard.templates")} icon={BookOpen} />
             </nav>
           </div>
         </div>
@@ -282,7 +284,7 @@ export default function DashboardPage() {
           <div className="absolute top-0 text-center w-full z-20">
              <div className="inline-flex items-center gap-4 cyber-border border border-blue-500/30 dark:border-[#00F0FF]/30 bg-blue-500/5 dark:bg-[#00F0FF]/5 px-8 py-2">
                 <span className="w-2 h-2 bg-blue-600 dark:bg-[#00F0FF] animate-pulse"></span>
-                <h1 className="text-sm text-slate-900 dark:text-white tracking-[0.4em] font-bold uppercase">Quantara Core HUD</h1>
+                <h1 className="text-sm text-slate-900 dark:text-white tracking-[0.4em] font-bold uppercase">{t("dashboard.coreHud")}</h1>
                 <span className="w-2 h-2 bg-blue-600 dark:bg-[#00F0FF] animate-pulse"></span>
              </div>
           </div>
@@ -293,8 +295,8 @@ export default function DashboardPage() {
             <div className="absolute inset-10 rounded-full bg-gradient-to-b from-[#00F0FF]/10 to-transparent blur-xl group-hover:from-[#FF0055]/10 z-0 transition-colors"></div>
             <div className="text-center z-20 relative flex flex-col items-center justify-center bg-slate-100 dark:bg-black/60 w-52 h-52 rounded-full border border-white/5 cyber-border backdrop-blur-sm">
                <Upload className="w-12 h-12 text-blue-600 dark:text-[#00F0FF] mb-3 group-hover:text-red-600 dark:text-[#FF0055] transition-colors group-hover:-translate-y-1 duration-300" />
-               <p className="text-slate-900 dark:text-white text-sm font-bold uppercase tracking-widest group-hover:text-red-600 dark:text-[#FF0055] transition-colors">Data Uplink</p>
-               <p className="text-blue-600 dark:text-[#00F0FF] text-[9px] uppercase tracking-[0.2em] group-hover:text-slate-900 dark:text-white transition-colors mt-1">Initialize Import</p>
+               <p className="text-slate-900 dark:text-white text-sm font-bold uppercase tracking-widest group-hover:text-red-600 dark:text-[#FF0055] transition-colors">{t("dashboard.dataUplink")}</p>
+               <p className="text-blue-600 dark:text-[#00F0FF] text-[9px] uppercase tracking-[0.2em] group-hover:text-slate-900 dark:text-white transition-colors mt-1">{t("dashboard.initializeImport")}</p>
             </div>
           </Link>
         </div>
@@ -304,7 +306,7 @@ export default function DashboardPage() {
           {/* TERMINAL LOGS */}
           <div className="cyber-border cyber-panel p-5 flex-1 flex flex-col h-[250px]">
             <div className="flex justify-between items-center border-b border-blue-500/30 dark:border-[#00F0FF]/30 pb-2 mb-4">
-               <h2 className="text-blue-600 dark:text-[#00F0FF] text-[10px] uppercase tracking-[0.4em]">Audit Logs</h2>
+               <h2 className="text-blue-600 dark:text-[#00F0FF] text-[10px] uppercase tracking-[0.4em]">{t("dashboard.auditLogs")}</h2>
             </div>
             <div className="flex-1 overflow-y-auto space-y-1.5 font-mono text-[9px] text-slate-400 dark:text-slate-500 dark:text-slate-400 dark:text-slate-500 dark:text-slate-400 terminal-text pr-2">
               {activity && activity.length > 0 ? activity.map((event, i) => (
@@ -314,8 +316,8 @@ export default function DashboardPage() {
                 </div>
               )) : (
                 <div className="space-y-1">
-                  <p className="text-blue-600 dark:text-[#00F0FF]">Initialize log stream...</p>
-                  <p className="text-slate-900 dark:text-white">AWAITING SYSTEM DATA...</p>
+                  <p className="text-blue-600 dark:text-[#00F0FF]">{t("dashboard.initializeLogStream")}</p>
+                  <p className="text-slate-900 dark:text-white">{t("dashboard.awaitingSystemData")}</p>
                 </div>
               )}
             </div>
@@ -323,18 +325,18 @@ export default function DashboardPage() {
 
           {/* USER ACCOUNT */}
           <div className="cyber-border cyber-panel p-5">
-             <h2 className="text-blue-600 dark:text-[#00F0FF] text-[10px] uppercase tracking-[0.4em] mb-4 border-b border-blue-500/30 dark:border-[#00F0FF]/30 pb-2">Authorization</h2>
+             <h2 className="text-blue-600 dark:text-[#00F0FF] text-[10px] uppercase tracking-[0.4em] mb-4 border-b border-blue-500/30 dark:border-[#00F0FF]/30 pb-2">{t("dashboard.authorization")}</h2>
              <div className="space-y-2 text-[10px] uppercase tracking-widest text-slate-400 dark:text-slate-500 dark:text-slate-400 dark:text-slate-500 dark:text-slate-400">
                <div className="flex justify-between">
-                 <span>Identity:</span>
+                 <span>{t("dashboard.identity")}</span>
                  <span className="text-slate-900 dark:text-white font-bold">{session.user.fullName}</span>
                </div>
                <div className="flex justify-between">
-                 <span>Clearance:</span>
+                 <span>{t("dashboard.clearance")}</span>
                  <span className="text-blue-600 dark:text-[#00F0FF] font-bold">{formatLabel(session.user.role)}</span>
                </div>
                <div className="flex justify-between">
-                 <span>Grid Access:</span>
+                 <span>{t("dashboard.gridAccess")}</span>
                  <span className="text-red-600 dark:text-[#FF0055] font-bold">{planLabel}</span>
                </div>
              </div>
@@ -346,15 +348,15 @@ export default function DashboardPage() {
       <div className="px-6 mt-12 space-y-8 relative z-10">
         <h2 className="text-xl font-bold text-slate-900 dark:text-white uppercase tracking-widest border-b border-blue-500/30 dark:border-[#00F0FF]/30 pb-2 flex items-center gap-4">
           <span className="w-3 h-3 bg-blue-600 dark:bg-[#00F0FF]"></span>
-          Neural Workspace Data
+          {t("dashboard.neuralWorkspaceData")}
         </h2>
 
         {/* 1. Active projects */}
         <section className={panel}>
           <SectionHeader
-            title="Active Workspaces"
-            description="Your most recently updated project neural links."
-            action={<Link href="/projects" className={panelAction}>All projects</Link>}
+            title={t("dashboard.activeWorkspaces")}
+            description={t("dashboard.activeWorkspacesDesc")}
+            action={<Link href="/projects" className={panelAction}>{t("dashboard.allProjects")}</Link>}
           />
           {panelErrors.projects ? (
             <PanelError message={panelErrors.projects} />
@@ -363,9 +365,9 @@ export default function DashboardPage() {
           ) : projects.length === 0 ? (
             <EmptyState
               icon={FolderKanban}
-              title="No projects yet"
-              message="Create a project to begin building a BOQ workspace."
-              action={<Link href="/projects/new" className="text-sm font-semibold text-blue-600 dark:text-[#00F0FF] hover:underline">Create your first project</Link>}
+              title={t("dashboard.noProjectsYet")}
+              message={t("dashboard.createProjectPrompt")}
+              action={<Link href="/projects/new" className="text-sm font-semibold text-blue-600 dark:text-[#00F0FF] hover:underline">{t("dashboard.createFirstProject")}</Link>}
             />
           ) : (
             <div className="mt-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
@@ -377,16 +379,16 @@ export default function DashboardPage() {
         {/* 2. Recent BOQs */}
         <section className={panel}>
           <SectionHeader
-            title="Processed BOQs"
-            description="Recent bills of quantities and their calculated totals."
-            action={<Link href="/projects" className={panelAction}>All projects</Link>}
+            title={t("dashboard.processedBoqs")}
+            description={t("dashboard.processedBoqsDesc")}
+            action={<Link href="/projects" className={panelAction}>{t("dashboard.allProjects")}</Link>}
           />
           {panelErrors.boqs ? (
             <PanelError message={panelErrors.boqs} />
           ) : !boqs ? (
             <LoadingSkeleton rows={3} />
           ) : boqs.length === 0 ? (
-            <EmptyState icon={FileCheck2} title="No BOQs yet" message="Open a project to start building a bill of quantities." />
+            <EmptyState icon={FileCheck2} title={t("dashboard.noBoqsYet")} message={t("dashboard.openProjectPrompt")} />
           ) : (
             <div className="mt-4 grid gap-4 lg:grid-cols-2">
               {boqs.map((boq) => <BOQSummaryCard key={boq.id} boq={boq} />)}
@@ -396,13 +398,13 @@ export default function DashboardPage() {
 
         {/* 3. Document workspace */}
         <section className={panel}>
-          <SectionHeader title="Generated Exports" description="Recent exports across every project." />
+          <SectionHeader title={t("dashboard.generatedExports")} description={t("dashboard.generatedExportsDesc")} />
           {panelErrors.documents ? (
             <PanelError message={panelErrors.documents} />
           ) : !documents ? (
             <LoadingSkeleton rows={3} />
           ) : documents.length === 0 ? (
-            <EmptyState icon={FileCheck2} title="No documents generated yet" message="Generate a document from a project's BOQ to see it here." />
+            <EmptyState icon={FileCheck2} title={t("dashboard.noDocumentsYet")} message={t("dashboard.generateDocPrompt")} />
           ) : (
             <div className="mt-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
               {documents.map((document) => <DocumentCard key={document.id} document={document} />)}
@@ -413,9 +415,9 @@ export default function DashboardPage() {
         {/* 4. Clients */}
         <section className={panel}>
           <SectionHeader
-            title="Authorized Entities (Clients)"
-            description="Recently active clients across your projects."
-            action={<Link href="/clients" className={panelAction}>All clients</Link>}
+            title={t("dashboard.authorizedEntities")}
+            description={t("dashboard.authorizedEntitiesDesc")}
+            action={<Link href="/clients" className={panelAction}>{t("dashboard.allClients")}</Link>}
           />
           {panelErrors.clients ? (
             <PanelError message={panelErrors.clients} />
@@ -424,9 +426,9 @@ export default function DashboardPage() {
           ) : clients.length === 0 ? (
             <EmptyState
               icon={Users}
-              title="No clients yet"
-              message="Add a client to start a new project."
-              action={<Link href="/clients/new" className="text-sm font-semibold text-blue-600 dark:text-[#00F0FF] hover:underline">Add your first client</Link>}
+              title={t("dashboard.noClientsYet")}
+              message={t("dashboard.addClientPrompt")}
+              action={<Link href="/clients/new" className="text-sm font-semibold text-blue-600 dark:text-[#00F0FF] hover:underline">{t("dashboard.addFirstClient")}</Link>}
             />
           ) : (
             <div className="bg-white dark:bg-black/40 border border-blue-600 dark:border-[#00F0FF]/20 rounded-sm">
@@ -441,7 +443,7 @@ export default function DashboardPage() {
         <div className="cyber-border cyber-panel p-6 flex flex-col md:flex-row items-center justify-between text-[10px] uppercase tracking-widest text-slate-500 font-mono">
           <div className="flex items-center gap-2 mb-4 md:mb-0">
              <div className="w-2 h-2 bg-blue-600 dark:bg-[#00F0FF] animate-pulse"></div>
-             <span className="text-slate-900 dark:text-white font-bold">Quantara Support Network</span>
+             <span className="text-slate-900 dark:text-white font-bold">{t("dashboard.supportNetwork")}</span>
           </div>
           <div className="flex flex-col md:flex-row gap-4 md:gap-8 text-center md:text-left">
             <a href="https://www.vistabylara.com" target="_blank" rel="noopener noreferrer" className="hover:text-blue-600 dark:hover:text-[#00F0FF] transition-colors">
@@ -461,12 +463,13 @@ export default function DashboardPage() {
 }
 
 function PanelError({ message }: { message: string }) {
+  const t = useTranslations();
   return (
     <div className="mt-4 border border-red-500/30 dark:border-[#FF0055]/30 bg-red-600 dark:bg-[#FF0055]/5 p-4 relative overflow-hidden">
       <div className="absolute left-0 top-0 bottom-0 w-1 bg-red-600 dark:bg-[#FF0055]"></div>
       <p className="terminal-text text-[10px] text-red-600 dark:text-[#FF0055] uppercase tracking-widest flex items-center gap-2">
         <AlertTriangle className="w-4 h-4" />
-        System Failure // {message}
+        {t("dashboard.systemFailurePrefix", { message })}
       </p>
     </div>
   );

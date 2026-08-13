@@ -69,12 +69,28 @@ test.describe('Workspace and Data Workflows', () => {
     const industry = await prisma.industryEngine.findFirst();
     const indId = industry?.id || (await prisma.industryEngine.create({ data: { name: 'Construction', key: 'construction', description: 'Construction', configJson: {} } })).id;
 
+    // Project creation requires the industry engine to be enabled for this
+    // specific company (see getEnabledIndustry in industry-repository.ts) —
+    // a global IndustryEngine catalog row alone is not enough.
+    await prisma.companyIndustryEngine.upsert({
+      where: { companyId_industryEngineId: { companyId, industryEngineId: indId } },
+      update: { enabled: true },
+      create: { companyId, industryEngineId: indId, enabled: true },
+    });
+
+    // createProjectWithDefaultBoq requires an existing clientId (see
+    // project-service.ts) — clientName alone is accepted by the request
+    // schema but rejected by the service, matching the real app flow where
+    // a client is created before a project references it.
+    const client = await prisma.client.create({ data: { companyId, name: 'Test Client' } });
+
     // 2. Create Project
     const projectRes = await request.post('/api/projects', {
       data: {
+        reference: `WS-E2E-${Date.now()}`,
         name: 'Test Tower E2E',
         description: 'E2E test project',
-        clientName: 'Test Client',
+        clientId: client.id,
         location: 'Dubai',
         industryId: indId,
         currency: 'AED'
@@ -82,11 +98,17 @@ test.describe('Workspace and Data Workflows', () => {
     });
     expect(projectRes.ok()).toBeTruthy();
     const projectData = await projectRes.json();
-    const projectId = projectData.data.id;
+    // The API's public id is a slug (used in URL paths below); the raw
+    // Prisma UUID primary key is returned separately as databaseId (see
+    // `databaseId: project.id` in project-repository.ts) — direct Prisma
+    // column lookups/FKs below need the latter, not the slug.
+    const projectId = projectData.data.project.id;
+    const projectDbId = projectData.data.project.databaseId;
     expect(projectId).toBeDefined();
+    expect(projectDbId).toBeDefined();
 
     // Verify DB Persistence
-    const dbProject = await prisma.project.findUnique({ where: { id: projectId } });
+    const dbProject = await prisma.project.findUnique({ where: { id: projectDbId } });
     expect(dbProject).not.toBeNull();
     expect(dbProject?.name).toBe('Test Tower E2E');
 
@@ -100,24 +122,25 @@ test.describe('Workspace and Data Workflows', () => {
     // The route for creating BOQ might not be this exactly. We'll verify it.
     // Wait, the project creation already creates a default BOQ according to `createProjectWithDefaultBoq`!
     // So there is already a BOQ for this project. Let's find it.
-    const boqs = await prisma.bOQ.findMany({ where: { projectId: projectId } });
+    const boqs = await prisma.bOQ.findMany({ where: { projectId: projectDbId } });
     expect(boqs.length).toBeGreaterThan(0);
     const boqId = boqs[0].id;
 
     // 4. Seed BOQ data
     const section = await prisma.bOQSection.create({
       data: {
+        companyId,
         boqId: boqId,
+        code: 'GEN-REQ',
         title: 'General Requirements',
-        order: 1
+        sortOrder: 1
       }
     });
 
     await prisma.bOQItem.create({
       data: {
-        boqId: boqId,
+        companyId,
         sectionId: section.id,
-        itemType: 'REGULAR',
         specification: 'Test Spec',
         quantity: 10,
         unit: 'm2',
@@ -133,12 +156,12 @@ test.describe('Workspace and Data Workflows', () => {
         landedCost: 100,
         sellingRate: 110,
         totalAmount: 1100,
-        status: 'APPROVED',
+        status: 'CONFIRMED',
         category: 'Test Category',
         description: 'Test Description',
         itemCode: 'TEST-01',
         itemNumber: 1,
-        order: 1
+        sortOrder: 1
       }
     });
 
@@ -161,10 +184,11 @@ test.describe('Workspace and Data Workflows', () => {
     await prisma.bOQRevisionSnapshot.create({
       data: {
         companyId: companyId,
+        projectId: projectDbId,
         boqId: boqId,
         revisionNumber: boqs[0].revisionNumber,
         snapshotJson: boqRecordForSnapshot as any,
-        createdByUserId: userId
+        createdByName: 'Test User'
       }
     });
 
@@ -185,13 +209,13 @@ test.describe('Workspace and Data Workflows', () => {
     expect(uploadRes.ok()).toBeTruthy();
     const uploadData = await uploadRes.json();
     expect(uploadData.data).toBeDefined();
-    const fileId = uploadData.data.id;
+    const fileId = uploadData.data.file.id;
     
     const dbFile = await prisma.projectFile.findUnique({ where: { id: fileId } });
     expect(dbFile).not.toBeNull();
 
     // 6. Generate Document (XLSX)
-    const template = await prisma.documentTemplate.findFirst({ where: { isActive: true } });
+    const template = await prisma.documentTemplate.findFirst({ where: { companyId, isActive: true } });
     const templateId = template?.id || (await prisma.documentTemplate.create({
       data: {
         companyId: companyId,
@@ -199,6 +223,8 @@ test.describe('Workspace and Data Workflows', () => {
         code: 'TEST_TMPL',
         type: 'CORPORATE_TECHNICAL',
         isActive: true,
+        styleConfigJson: {},
+        contentConfigJson: {},
       }
     })).id;
 
@@ -219,7 +245,7 @@ test.describe('Workspace and Data Workflows', () => {
     expect(documentId).toBeDefined();
 
     // Verify DB Persistence
-    const docDownloadRes = await request.get(`/api/projects/${projectId}/documents/downloads/${documentId}`);
+    const docDownloadRes = await request.get(`/api/documents/${documentId}/download`);
     expect(docDownloadRes.ok()).toBeTruthy();
     const xlsxBuffer = await docDownloadRes.body();
     expect(xlsxBuffer.length).toBeGreaterThan(100); // Basic integrity check for an XLSX file

@@ -146,7 +146,7 @@ export default function MarketplacePage() {
                       </span>
                     ) : pkg.monthlyPrice === 0 ? (
                       <span className="flex-1 text-center rounded-xl border border-slate-700 bg-slate-900 px-3 py-2.5 text-xs font-bold text-slate-400">
-                        Request access
+                        Contact sales
                       </span>
                     ) : (
                       <button
@@ -155,7 +155,7 @@ export default function MarketplacePage() {
                         disabled={busyKey === pkg.key}
                         className="flex-1 rounded-xl border border-blue-600 bg-blue-600 hover:bg-blue-500 transition-colors px-3 py-2.5 text-xs font-bold text-white disabled:opacity-50"
                       >
-                        {busyKey === pkg.key ? "Activating…" : "Activate"}
+                        {busyKey === pkg.key ? "Requesting…" : "Request access"}
                       </button>
                     )}
                   </div>

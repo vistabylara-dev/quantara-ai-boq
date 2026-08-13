@@ -14,7 +14,7 @@ export const NAVIGATION_ITEMS: NavigationItem[] = [
   { labelKey: "navigation.dashboard", href: "/dashboard" },
   { labelKey: "navigation.projects", href: "/projects" },
   { labelKey: "navigation.clients", href: "/clients" },
-  { labelKey: "navigation.industries", href: "/industries" },
+  { labelKey: "navigation.industries", href: "/industry-engines" },
   { labelKey: "navigation.integrations", href: "/integrations" },
   { labelKey: "navigation.dataLibrary", href: "/data-library" },
   { labelKey: "navigation.companyLibrary", href: "/company-library" },

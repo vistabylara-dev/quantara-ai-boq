@@ -33,7 +33,7 @@ export default function IndustryEngineCard({ industry }: { industry: IndustryEng
       </div>
       <div className="mt-6 flex flex-wrap gap-3">
         <Link
-          href={`/industries/${industry.id}`}
+          href={`/industry-engines/${industry.id}`}
           className="rounded-2xl border border-slate-700 bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-500"
         >
           View details

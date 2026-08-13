@@ -246,73 +246,93 @@ async function applyCurrentSubscriptionState(tx: TxClient, subscription: Stripe.
   if (!companyId) return;
 
   const status = mapStripeSubscriptionStatusToQuantara(subscription.status);
-  const item = subscription.items.data[0];
-  const expiresAt = item?.current_period_end ? new Date(item.current_period_end * 1000) : null;
-  const startsAt = item?.current_period_start ? new Date(item.current_period_start * 1000) : null;
   const cancelledAt = subscription.canceled_at ? new Date(subscription.canceled_at * 1000) : null;
+  const environment: CommerceProviderEnvironment = subscription.livemode ? "LIVE" : "TEST";
 
-  /**
-   * Resolving which SoftwarePlan this subscription's price maps to is
-   * best-effort here, not a precondition for applying a status change to an
-   * ALREADY-EXISTING row. If the live-sync path (stripe-live-sync-service.ts)
-   * later archives the provider mapping for a price a customer already
-   * subscribed to, this lookup legitimately stops resolving — but a
-   * cancellation/failure webhook for that customer's subscription must still
-   * be able to move it to CANCELLED/PAST_DUE. Only *creating* a brand-new
-   * subscription record genuinely requires knowing the plan (there is
-   * nothing sensible to create otherwise).
-   */
-  let softwarePlanId: string | null = null;
-  const providerPriceId = item?.price?.id;
-  if (providerPriceId) {
-    const environment: CommerceProviderEnvironment = subscription.livemode ? "LIVE" : "TEST";
+  for (const item of subscription.items.data) {
+    const expiresAt = item.current_period_end ? new Date(item.current_period_end * 1000) : null;
+    const startsAt = item.current_period_start ? new Date(item.current_period_start * 1000) : null;
+
+    const providerPriceId = item.price?.id;
+    if (!providerPriceId) continue;
+
     const mapping = await findMappingByProviderPriceId("STRIPE", environment, providerPriceId, tx);
-    if (mapping?.commercePriceId) {
-      const commercePrice = await tx.commercePrice.findUnique({
-        where: { id: mapping.commercePriceId },
-        include: { product: true },
+    if (!mapping?.commercePriceId) continue;
+
+    const commercePrice = await tx.commercePrice.findUnique({
+      where: { id: mapping.commercePriceId },
+      include: { product: true },
+    });
+    if (!commercePrice) continue;
+
+    const product = commercePrice.product;
+
+    if (product.type === "SUBSCRIPTION" || product.type === "AI_CREDIT_PACK" || !product.industryPackageId) {
+      // Treat as software/platform subscription
+      const softwarePlan = await resolveSoftwarePlanForCommerceProductCode(product.code, tx);
+      const softwarePlanId = softwarePlan?.id ?? null;
+
+      const existing = await tx.companySoftwareSubscription.findUnique({
+        where: { externalSubscriptionId: subscription.id },
       });
-      if (commercePrice) {
-        const softwarePlan = await resolveSoftwarePlanForCommerceProductCode(commercePrice.product.code, tx);
-        softwarePlanId = softwarePlan?.id ?? null;
+
+      if (existing) {
+        if (existing.companyId !== companyId) {
+          console.warn("[stripe-webhook] Tenant mismatch for software subscription", subscription.id);
+          continue;
+        }
+        await tx.companySoftwareSubscription.update({
+          where: { id: existing.id },
+          data: { status, startsAt, expiresAt, cancelledAt, ...(softwarePlanId ? { softwarePlanId } : {}) },
+        });
+      } else if (softwarePlanId) {
+        await tx.companySoftwareSubscription.create({
+          data: {
+            companyId,
+            softwarePlanId,
+            status,
+            startsAt,
+            expiresAt,
+            cancelledAt,
+            externalSubscriptionId: subscription.id,
+            source: "stripe",
+          },
+        });
+      }
+    } else {
+      // Treat as package subscription (e.g. INDUSTRY_ACCESS)
+      const packageId = product.industryPackageId;
+      if (!packageId) continue;
+
+      const existing = await tx.companyPackageSubscription.findFirst({
+        where: { externalSubscriptionId: subscription.id, packageId },
+      });
+
+      if (existing) {
+        if (existing.companyId !== companyId) {
+          console.warn("[stripe-webhook] Tenant mismatch for package subscription", subscription.id);
+          continue;
+        }
+        await tx.companyPackageSubscription.update({
+          where: { id: existing.id },
+          data: { status, startsAt, expiresAt, cancelledAt },
+        });
+      } else {
+        await tx.companyPackageSubscription.create({
+          data: {
+            companyId,
+            packageId,
+            status,
+            startsAt,
+            expiresAt,
+            cancelledAt,
+            externalSubscriptionId: subscription.id,
+            source: "stripe",
+          },
+        });
       }
     }
   }
-
-  const existing = await tx.companySoftwareSubscription.findUnique({
-    where: { externalSubscriptionId: subscription.id },
-  });
-
-  if (existing) {
-    if (existing.companyId !== companyId) {
-      console.warn(
-        "[stripe-webhook] Tenant mismatch for subscription",
-        subscription.id,
-        "— stored company differs from the company resolved for the Stripe customer; no state applied.",
-      );
-      return; // defensive — never move a subscription across tenants
-    }
-    await tx.companySoftwareSubscription.update({
-      where: { id: existing.id },
-      data: { status, startsAt, expiresAt, cancelledAt, ...(softwarePlanId ? { softwarePlanId } : {}) },
-    });
-    return;
-  }
-
-  if (!softwarePlanId) return; // cannot create a new subscription record without knowing its plan
-
-  await tx.companySoftwareSubscription.create({
-    data: {
-      companyId,
-      softwarePlanId,
-      status,
-      startsAt,
-      expiresAt,
-      cancelledAt,
-      externalSubscriptionId: subscription.id,
-      source: "stripe",
-    },
-  });
 }
 
 export type StripeWebhookProcessResult =

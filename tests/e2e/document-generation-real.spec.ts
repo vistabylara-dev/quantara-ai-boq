@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { prisma } from '../../src/lib/db/prisma';
+import { UserRole } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 import { randomUUID } from 'crypto';
 
@@ -16,8 +17,9 @@ test.describe('Document Generation Validation', () => {
     await prisma.company.create({
       data: {
         id: companyId,
-        name: 'Doc Gen Test Company',
-        domain: 'quantara.local',
+        legalName: 'Doc Gen Test Company',
+        tradeName: 'Doc Gen Test Company',
+        email: 'docgen@example.com'
       }
     });
 
@@ -26,59 +28,77 @@ test.describe('Document Generation Validation', () => {
       data: {
         id: userId,
         email: userEmail,
-        password: hashedPassword,
-        name: 'Doc Gen User',
+        passwordHash: hashedPassword,
+        fullName: 'Doc Gen User',
         companyId,
-        emailVerified: new Date(),
-        approvalStatus: 'APPROVED'
+        role: UserRole.COMPANY_OWNER,
+        emailVerifiedAt: new Date(),
       }
     });
     
-    // Create base data to generate from
+    // Create base data to generate from. Project.clientId/industryEngineId
+    // are real foreign keys — they must reference actual Client/IndustryEngine
+    // rows, not the company's own id, and a BOQRevisionSnapshot.boqId must
+    // reference a real BOQ row (none of this existed in the original fixture).
+    const client = await prisma.client.create({ data: { companyId, name: 'Doc Gen Test Client' } });
+    const industry = await prisma.industryEngine.findFirst() ?? (await prisma.industryEngine.create({
+      data: { name: 'Construction', key: 'construction', description: 'Construction', configJson: {} }
+    }));
+    await prisma.companyIndustryEngine.upsert({
+      where: { companyId_industryEngineId: { companyId, industryEngineId: industry.id } },
+      update: { enabled: true },
+      create: { companyId, industryEngineId: industry.id, enabled: true },
+    });
+
+    // The "Generate document" button stays disabled until a template is
+    // selected, and the Template select has nothing to select without at
+    // least one DocumentTemplate for the company.
+    await prisma.documentTemplate.create({
+      data: {
+        companyId,
+        name: 'Doc Gen Test Template',
+        code: 'DOC_GEN_TEST_TMPL',
+        type: 'CORPORATE_TECHNICAL',
+        isActive: true,
+        styleConfigJson: {},
+        contentConfigJson: {},
+      },
+    });
+
     const projectId = randomUUID();
     await prisma.project.create({
         data: {
             id: projectId,
             name: 'Doc Gen Project',
             companyId,
-            boqSettingsJson: {}
+            reference: 'DOC-1',
+            slug: 'doc-gen-project',
+            clientId: client.id,
+            industryEngineId: industry.id
         }
     });
-    
+
+    // PDF/XLSX/DOCX generation requires a locked revision (see
+    // FINAL_ONLY_TYPES / computeDocumentReadiness) — seeded locked directly
+    // since this is a fixture, not exercising the lock transition itself.
+    const boq = await prisma.bOQ.create({
+      data: { companyId, projectId, title: 'Doc Gen BOQ', isLocked: true, lockedAt: new Date() },
+    });
+
     const snapshotId = randomUUID();
-    await prisma.boqRevisionSnapshot.create({
+    await prisma.bOQRevisionSnapshot.create({
         data: {
             id: snapshotId,
+            boqId: boq.id,
             projectId,
+            companyId,
             revisionNumber: 1,
-            createdById: userId,
-            summaryJson: {},
-            sectionsJson: [
-                {
-                    id: randomUUID(),
-                    key: 'SEC-1',
-                    name: 'Generated Section',
-                    orderIndex: 0,
-                    items: [
-                        {
-                            id: randomUUID(),
-                            key: 'ITM-1',
-                            name: 'Generated Item',
-                            quantity: 10,
-                            unit: 'm2',
-                            orderIndex: 0,
-                            options: []
-                        }
-                    ]
-                }
-            ]
+            createdByName: 'Test User',
+            snapshotJson: {
+                summaryJson: {},
+                sectionsJson: []
+            }
         }
-    });
-    
-    // Set the latest snapshot
-    await prisma.project.update({
-        where: { id: projectId },
-        data: { latestSnapshotId: snapshotId }
     });
   });
 
@@ -93,38 +113,30 @@ test.describe('Document Generation Validation', () => {
     await page.fill('input[type="email"]', userEmail);
     await page.fill('input[type="password"]', 'Password123!');
     await page.click('button[type="submit"]');
-    await expect(page).toHaveURL(/\/projects/);
+    await expect(page).toHaveURL(/\/dashboard/);
   });
 
   test('should generate and download PDF, XLSX, and CSV', async ({ page }) => {
     test.setTimeout(90000);
-    
-    await page.click('text=Doc Gen Project');
-    await page.click('text=Export');
-    
-    // PDF
-    const [pdfDownload] = await Promise.all([
-      page.waitForEvent('download'),
-      page.click('text=Export as PDF')
-    ]);
-    const pdfPath = await pdfDownload.path();
-    expect(pdfPath).toBeTruthy();
-    
-    // CSV
-    const [csvDownload] = await Promise.all([
-      page.waitForEvent('download'),
-      page.click('text=Export as CSV')
-    ]);
-    const csvPath = await csvDownload.path();
-    expect(csvPath).toBeTruthy();
 
-    // XLSX
-    const [xlsxDownload] = await Promise.all([
-      page.waitForEvent('download'),
-      page.click('text=Export as Excel')
-    ]);
-    const xlsxPath = await xlsxDownload.path();
-    expect(xlsxPath).toBeTruthy();
+    // Current documents page: pick Format from a select, click "Generate
+    // document", then click "Download" on the newly completed history row
+    // (see src/app/projects/[projectId]/documents/page.tsx) — there is no
+    // per-format "Export as X" button.
+    await page.goto('/projects/doc-gen-project/documents');
+
+    for (const format of ['PDF', 'CSV', 'XLSX'] as const) {
+      await page.getByLabel('Format').selectOption(format);
+      await page.click('button:has-text("Generate document")');
+      const downloadLink = page.locator('a:has-text("Download")').first();
+      await expect(downloadLink).toBeVisible({ timeout: 30000 });
+      const [download] = await Promise.all([
+        page.waitForEvent('download'),
+        downloadLink.click(),
+      ]);
+      const downloadPath = await download.path();
+      expect(downloadPath).toBeTruthy();
+    }
   });
   
   test('should generate Proposal and Technical Report', async ({ page }) => {

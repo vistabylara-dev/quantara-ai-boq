@@ -29,7 +29,7 @@ const ICONS: Record<string, LucideIcon> = {
   "/dashboard": LayoutDashboard,
   "/projects": FolderKanban,
   "/clients": Users,
-  "/industries": Factory,
+  "/industry-engines": Factory,
   "/integrations": Plug,
   "/data-library": Database,
   "/company-library": Library,
@@ -43,7 +43,7 @@ const ICONS: Record<string, LucideIcon> = {
 
 const GROUPS: Array<{ labelKey: TranslationKey; hrefs: string[] }> = [
   { labelKey: "navigation.groupWorkspace", hrefs: ["/dashboard"] },
-  { labelKey: "navigation.groupProjects", hrefs: ["/projects", "/clients", "/industries"] },
+  { labelKey: "navigation.groupProjects", hrefs: ["/projects", "/clients", "/industry-engines"] },
   { labelKey: "navigation.groupDataCatalogue", hrefs: ["/integrations", "/data-library", "/company-library", "/marketplace", "/imports", "/catalogue", "/suppliers"] },
   { labelKey: "navigation.groupDocuments", hrefs: ["/templates"] },
   { labelKey: "navigation.groupAccount", hrefs: ["/settings"] },

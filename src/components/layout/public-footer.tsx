@@ -1,11 +1,15 @@
+"use client";
+
 import React from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { publicNavigation, legalNavigation } from "@/config/public-navigation";
 import { siteConfig } from "@/config/site";
 import { QUANTARA_ENTITY_DEFINITION } from "@/lib/public-site/product-truth";
+import { useTranslations } from "@/lib/i18n/locale-provider";
 
 export default function PublicFooter() {
+  const t = useTranslations();
   const getSectionItems = (sectionLabel: string) => {
     const section = publicNavigation.find(s => s.label === sectionLabel);
     if (!section) return [];
@@ -38,22 +42,22 @@ export default function PublicFooter() {
               Quantara
             </Link>
             <p className="text-sm text-slate-500 dark:text-slate-400 mb-4 font-medium max-w-sm">
-              Quantara is developed and operated by Vista By Lara, a technology business focused on AI-assisted tools for construction, project, design and business workflows.
+              {t("publicSite.footer.description1")}
             </p>
             <p className="text-sm text-slate-500 dark:text-slate-400 mb-6 max-w-sm">
-              {QUANTARA_ENTITY_DEFINITION} It is offered through Controlled Early Access.
+              {QUANTARA_ENTITY_DEFINITION} {t("publicSite.footer.description2Suffix")}
             </p>
-            
+
             <div className="mt-8 space-y-2 text-sm text-slate-500 dark:text-slate-400">
-              <p>Email: <a href={`mailto:${siteConfig.contact.email}`} className="hover:text-slate-900 dark:hover:text-white">{siteConfig.contact.email}</a></p>
-              <p>Telephone: <a href={`tel:${siteConfig.contact.telephone.replace(/\s+/g, '')}`} className="hover:text-slate-900 dark:hover:text-white">{siteConfig.contact.telephone}</a></p>
-              <p>WhatsApp: <a href={siteConfig.contact.whatsappLink} className="hover:text-slate-900 dark:hover:text-white">{siteConfig.contact.whatsapp}</a></p>
+              <p>{t("publicSite.footer.emailLabel")} <a href={`mailto:${siteConfig.contact.email}`} className="hover:text-slate-900 dark:hover:text-white">{siteConfig.contact.email}</a></p>
+              <p>{t("publicSite.footer.telephoneLabel")} <a href={`tel:${siteConfig.contact.telephone.replace(/\s+/g, '')}`} className="hover:text-slate-900 dark:hover:text-white">{siteConfig.contact.telephone}</a></p>
+              <p>{t("publicSite.footer.whatsappLabel")} <a href={siteConfig.contact.whatsappLink} className="hover:text-slate-900 dark:hover:text-white">{siteConfig.contact.whatsapp}</a></p>
             </div>
           </div>
-          
+
           {/* Platform */}
           <div className="col-span-1">
-            <h3 className="font-bold text-slate-900 dark:text-white mb-4">Platform</h3>
+            <h3 className="font-bold text-slate-900 dark:text-white mb-4">{t("publicSite.footer.platform")}</h3>
             <ul className="space-y-3 text-sm text-slate-500 dark:text-slate-400">
               {platformItems.slice(0, 7).map((item, index) => (
                 <li key={index}><Link href={item.href} className="hover:text-slate-900 dark:hover:text-white">{item.label}</Link></li>
@@ -63,68 +67,68 @@ export default function PublicFooter() {
 
           {/* Solutions & Comparisons */}
           <div className="col-span-1">
-            <h3 className="font-bold text-slate-900 dark:text-white mb-4">Solutions</h3>
+            <h3 className="font-bold text-slate-900 dark:text-white mb-4">{t("publicSite.footer.solutions")}</h3>
             <ul className="space-y-3 text-sm text-slate-500 dark:text-slate-400 mb-8">
               {solutionsItems.slice(0, 5).map((item, index) => (
                 <li key={index}><Link href={item.href} className="hover:text-slate-900 dark:hover:text-white">{item.label}</Link></li>
               ))}
             </ul>
-            
-            <h3 className="font-bold text-slate-900 dark:text-white mb-4">Comparisons</h3>
+
+            <h3 className="font-bold text-slate-900 dark:text-white mb-4">{t("publicSite.footer.comparisons")}</h3>
             <ul className="space-y-3 text-sm text-slate-500 dark:text-slate-400">
               {comparisonsItems.slice(0, 5).map((item, index) => (
                 <li key={index}><Link href={item.href} className="hover:text-slate-900 dark:hover:text-white">{item.label}</Link></li>
               ))}
             </ul>
           </div>
-          
+
           {/* Resources */}
           <div className="col-span-1">
-            <h3 className="font-bold text-slate-900 dark:text-white mb-4">Resources</h3>
+            <h3 className="font-bold text-slate-900 dark:text-white mb-4">{t("publicSite.footer.resources")}</h3>
             <ul className="space-y-3 text-sm text-slate-500 dark:text-slate-400">
               {resourcesItems.slice(0, 8).map((item, index) => (
                 <li key={index}><Link href={item.href} className="hover:text-slate-900 dark:hover:text-white">{item.label}</Link></li>
               ))}
             </ul>
           </div>
-          
+
           {/* Regional */}
           <div className="col-span-1">
-            <h3 className="font-bold text-slate-900 dark:text-white mb-4">Regional</h3>
+            <h3 className="font-bold text-slate-900 dark:text-white mb-4">{t("publicSite.footer.regional")}</h3>
             <ul className="space-y-3 text-sm text-slate-500 dark:text-slate-400">
               {regionalItems.slice(0, 7).map((item, index) => (
                 <li key={index}><Link href={item.href} className="hover:text-slate-900 dark:hover:text-white">{item.label}</Link></li>
               ))}
             </ul>
           </div>
-          
+
           {/* Company & Legal */}
           <div className="col-span-1 lg:col-span-2 grid grid-cols-2 lg:grid-cols-1 gap-8">
             <div>
-              <h3 className="font-bold text-slate-900 dark:text-white mb-4">Workflow Requirements Review</h3>
+              <h3 className="font-bold text-slate-900 dark:text-white mb-4">{t("publicSite.footer.workflowReviewTitle")}</h3>
               <p className="text-sm text-slate-500 dark:text-slate-400 mb-2">
-                Organizations with workflow, source, output or rollout requirements can request a review before access or paid work is proposed.
+                {t("publicSite.footer.workflowReviewBody")}
               </p>
               <p className="text-xs text-slate-400 mb-4">
-                Availability, implementation scope and commercial terms are confirmed separately in writing. No public self-service checkout is currently offered.
+                {t("publicSite.footer.workflowReviewNote")}
               </p>
               <Link href="/contact-sales" className="text-sm font-medium text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300">
-                Contact Sales &rarr;
+                {t("common.contactSales")} &rarr;
               </Link>
             </div>
 
             <div>
-              <h3 className="font-bold text-slate-900 dark:text-white mb-4">Company</h3>
+              <h3 className="font-bold text-slate-900 dark:text-white mb-4">{t("publicSite.footer.company")}</h3>
               <ul className="space-y-3 text-sm text-slate-500 dark:text-slate-400">
                 {companyItems.map((item, index) => (
                   <li key={index}><Link href={item.href} className="hover:text-slate-900 dark:hover:text-white">{item.label}</Link></li>
                 ))}
-                <li><Link href="/site-map" className="hover:text-slate-900 dark:hover:text-white">HTML Sitemap</Link></li>
+                <li><Link href="/site-map" className="hover:text-slate-900 dark:hover:text-white">{t("publicSite.footer.htmlSitemap")}</Link></li>
               </ul>
             </div>
-            
+
             <div>
-              <h3 className="font-bold text-slate-900 dark:text-white mb-4">Legal</h3>
+              <h3 className="font-bold text-slate-900 dark:text-white mb-4">{t("publicSite.footer.legal")}</h3>
               <ul className="space-y-3 text-sm text-slate-500 dark:text-slate-400">
                 {legalNavigation.map((item, index) => (
                   <li key={index}><Link href={item.href} className="hover:text-slate-900 dark:hover:text-white">{item.label}</Link></li>
@@ -132,12 +136,12 @@ export default function PublicFooter() {
               </ul>
             </div>
           </div>
-          
+
         </div>
-        
+
         <div className="pt-8 border-t border-slate-200 dark:border-slate-800 text-sm text-slate-500 dark:text-slate-400 flex flex-col md:flex-row justify-between items-center">
           <div className="mb-4 md:mb-0">
-            &copy; 2026 Quantara. Operated by Vista By Lara. All rights reserved.
+            {t("publicSite.footer.copyright", { year: new Date().getFullYear() })}
           </div>
         </div>
       </div>

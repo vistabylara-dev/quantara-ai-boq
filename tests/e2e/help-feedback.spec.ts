@@ -120,7 +120,7 @@ test.describe("global Help & Feedback", () => {
     await page.keyboard.press("Tab");
     await expect(page.getByRole("button", { name: "Close Help & Feedback" })).toBeFocused();
     await expect(dialog.locator('a[href="mailto:solution@vistabylara.com"]')).toBeVisible();
-    await expect(dialog.locator('a[href="https://wa.me/971507994292"]')).toBeVisible();
+    await expect(dialog.locator('a[href="https://wa.me/9715079942952"]')).toBeVisible();
     await expect(page.locator("[data-nextjs-dialog]")).toHaveCount(0);
     await expectNoSeriousOrCriticalDialogViolations(page);
 

@@ -75,6 +75,7 @@ const en = {
     searchLabel: "Search workspace",
     activeProject: "Active Project",
     workspaceHeading: "Workspace",
+    upgrade: "Upgrade",
   },
   auth: {
     login: {
@@ -918,6 +919,7 @@ const en = {
       enterpriseFeatureScope: "Implementation scope documented before commitment",
       enterpriseFeatureWritten: "Commercial terms confirmed separately in writing",
       discussRequirements: "Discuss Requirements",
+      navDescription: "Compare Starter, Professional and Business plans with monthly and annual AED pricing.",
       saasBillingMonthly: "Monthly",
       saasBillingAnnual: "Annual",
       saasPerMonth: "/ month",

@@ -29,9 +29,9 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { apiClient, getApiErrorMessage } from "@/lib/api/client";
+import { useTranslations } from "@/lib/i18n/locale-provider";
 import IntegrationsTabs from "./integrations-tabs";
 import { withProjectContext, ProjectContextBanner, useProjectContext } from "./project-context";
-import { useTranslations } from "@/lib/i18n/locale-provider";
 import type { TranslateFn } from "@/lib/i18n/translate";
 
 const ICONS: Record<string, LucideIcon> = {
@@ -210,7 +210,7 @@ export default function IntegrationsMarketplace() {
           </div>
         </div>
         <p className="mt-3 max-w-2xl text-sm text-[#536078] dark:text-[#B8C4D8]">
-          {t("integrations.subtitle")}
+          {t("integrations.marketplaceAvailability")}
         </p>
         <p className="mt-3 text-xs text-[#7B879C] dark:text-[#7F8DA6]">
           {t("integrations.independenceNote")}

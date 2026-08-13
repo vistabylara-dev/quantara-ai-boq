@@ -5,9 +5,12 @@ import {
 import React from "react";
 import Link from "next/link";
 import { CheckCircle2 } from "lucide-react";
-import { publicAccessOptions as accessOptions } from "@/config/pricing";
+import { getPublicAccessOptions } from "@/config/pricing";
 import PublicJsonLd from "@/components/seo/public-json-ld";
 import { buildPublicPageGraph } from "@/lib/public-site/schema";
+import { getDictionary } from "@/lib/i18n/dictionaries";
+import { getServerLocale } from "@/lib/i18n/server-locale";
+import { createTranslator } from "@/lib/i18n/translate";
 
 export const metadata = createPublicPageMetadata("/pricing");
 
@@ -22,7 +25,11 @@ const pageSchema = buildPublicPageGraph({
   ],
 });
 
-export default function PricingPage() {
+export default async function PricingPage() {
+  const locale = await getServerLocale();
+  const t = createTranslator(getDictionary(locale));
+  const accessOptions = getPublicAccessOptions(t);
+
   return (
     <>
       <PublicJsonLd data={pageSchema} />
@@ -41,10 +48,10 @@ export default function PricingPage() {
           
           <div className="mx-auto max-w-4xl text-center">
             <h1 className="text-4xl font-bold tracking-tight text-slate-900 dark:text-white sm:text-5xl">
-              Quantara Access and Commercial Terms
+              {t("publicContent.pricing.pageTitle")}
             </h1>
             <p className="mx-auto mt-6 max-w-2xl text-lg leading-8 text-slate-600 dark:text-slate-300">
-              Quantara does not currently offer public self-service subscription plans or checkout. Access, supported features, implementation scope and any commercial terms are reviewed and confirmed separately in writing.
+              {t("publicContent.pricing.hero")}
             </p>
           </div>
           

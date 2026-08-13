@@ -5,6 +5,7 @@ import Sidebar from "./sidebar";
 import TopHeader from "./top-header";
 import MobileNavigation from "./mobile-navigation";
 import SimulationStatusBanner from "./simulation-status-banner";
+import { useTranslations } from "@/lib/i18n/locale-provider";
 
 type AppShellProps = {
   children: ReactNode;
@@ -12,6 +13,7 @@ type AppShellProps = {
 
 export default function AppShell({ children }: AppShellProps) {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const t = useTranslations();
 
   return (
     <div className="bg-void min-h-screen text-slate-300 font-sans selection:bg-[#00F0FF]/30 relative">
@@ -30,7 +32,7 @@ export default function AppShell({ children }: AppShellProps) {
         </div>
       </div>
       <footer className="border-t border-white/10 cyber-panel px-4 py-4 text-xs text-slate-600 xl:px-10 relative z-10">
-        <span className="terminal-text tracking-widest uppercase">Quantara // System V.1.0 // Operational</span>
+        <span className="terminal-text tracking-widest uppercase">{t("navigation.workspaceFooter")}</span>
       </footer>
     </div>
   );

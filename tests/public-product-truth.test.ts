@@ -1,9 +1,10 @@
-import { readFileSync, readdirSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { extname, join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   PROFESSIONAL_REVIEW_NOTICE,
   PUBLIC_CAPABILITIES,
+  PUBLIC_PRODUCT_TRUTH_MATRIX,
   QUANTARA_ENTITY_DEFINITION,
   QUANTARA_WORKFLOW_TRUTH,
 } from "@/lib/public-site/product-truth";
@@ -70,15 +71,58 @@ describe("public product truth", () => {
     expect(byId.get("scanned-pdf-ocr")?.status).toBe("NOT_AVAILABLE");
     expect(byId.get("automatic-drawing-takeoff")?.status).toBe("NOT_AVAILABLE");
     expect(byId.get("single-sign-on")?.status).toBe("NOT_AVAILABLE");
+    expect(byId.get("non-google-external-integrations")?.status).toBe("NOT_AVAILABLE");
+    expect(byId.get("enterprise-feature-bundle")?.status).toBe("NOT_AVAILABLE");
     expect(byId.get("typed-multi-change-proposals")?.status).toBe("NOT_AVAILABLE");
     expect(byId.get("visible-calculations")?.status).toBe("LIMITED");
     expect(byId.get("source-attribution")?.status).toBe("LIMITED");
     expect(byId.get("google-drive-import")?.status).toBe("CONTROLLED_ACCESS");
     expect(byId.get("voice-proposals")?.status).toBe("CONTROLLED_ACCESS");
-    expect(byId.get("commercial-access")?.limitation).toContain("does not offer verified self-serve");
+    expect(byId.get("commercial-access")?.summary).toContain("Authenticated recurring subscription checkout");
+    expect(byId.get("commercial-access")?.limitation).toContain("public website does not offer checkout");
+    expect(byId.get("commercial-access")?.limitation).toContain("One-time checkout");
+    expect(byId.get("commercial-access")?.limitation).toContain("direct enterprise checkout");
     expect(byId.get("technical-report-generation")?.status).toBe("LIMITED");
+    expect(byId.get("technical-report-generation")?.limitation).toContain("limited to DOCX");
     expect(byId.get("model-file-import")?.status).toBe("NOT_AVAILABLE");
     expect(OCR_IMPLEMENTATION_STATUS).toBe("NOT_IMPLEMENTED");
+  });
+
+  it("publishes a lifecycle matrix without changing the established public status taxonomy", () => {
+    const lifecycleById = new Map(
+      PUBLIC_PRODUCT_TRUTH_MATRIX.map((capability) => [capability.id, capability.lifecycle]),
+    );
+
+    expect(PUBLIC_PRODUCT_TRUTH_MATRIX).toBe(PUBLIC_CAPABILITIES);
+    expect(lifecycleById.get("project-workspaces")).toBe("LIVE");
+    expect(lifecycleById.get("scanned-pdf-detection")).toBe("LIVE");
+    expect(lifecycleById.get("visible-calculations")).toBe("LIVE");
+    expect(lifecycleById.get("commercial-access")).toBe("BETA_LIMITED");
+    expect(lifecycleById.get("technical-report-generation")).toBe("BETA_LIMITED");
+    expect(lifecycleById.get("non-google-external-integrations")).toBe("PLANNED");
+    expect(lifecycleById.get("enterprise-feature-bundle")).toBe("PLANNED");
+    expect(lifecycleById.get("automatic-drawing-takeoff")).toBe("NOT_AVAILABLE");
+    expect(lifecycleById.get("scanned-pdf-ocr")).toBe("NOT_AVAILABLE");
+
+    for (const capability of PUBLIC_PRODUCT_TRUTH_MATRIX) {
+      expect(["LIVE", "BETA_LIMITED", "PLANNED", "NOT_AVAILABLE"]).toContain(
+        capability.lifecycle,
+      );
+    }
+
+    expect(
+      new Set(PUBLIC_PRODUCT_TRUTH_MATRIX.map((capability) => capability.lifecycle)),
+    ).toEqual(new Set(["LIVE", "BETA_LIMITED", "PLANNED", "NOT_AVAILABLE"]));
+  });
+
+  it("links every capability classification to repository evidence", () => {
+    for (const capability of PUBLIC_PRODUCT_TRUTH_MATRIX) {
+      expect(capability.evidencePaths.length, capability.id).toBeGreaterThan(0);
+      for (const evidencePath of capability.evidencePaths) {
+        expect(evidencePath.trim().length, capability.id).toBeGreaterThan(0);
+        expect(existsSync(join(repoRoot, evidencePath)), `${capability.id}: ${evidencePath}`).toBe(true);
+      }
+    }
   });
 
   it("derives public availability badges from Product Truth instead of page-local status strings", () => {
@@ -113,7 +157,7 @@ describe("public product truth", () => {
     expect(textPdfCapability?.limitation).toContain("Plain paragraph text is not automatically converted");
     expect(source).not.toMatch(/captures supported text and table information into a reviewable structure/i);
     expect(source).not.toMatch(/supported information[^.\n]{0,100}captured into a review queue/i);
-    expect(source).not.toMatch(/Durable production storage is confirmed/i);
+    expect(source).not.toMatch(/Durable production storage/i);
   });
 
   it("does not publish unverified self-serve prices or conversion claims", () => {
@@ -128,7 +172,8 @@ describe("public product truth", () => {
     expect(source).not.toMatch(/\bEnterprise\b[^\n]{0,100}\b(?:AED\s*)?15,?000\b/i);
     expect(source).not.toMatch(/\bFull Source Traceability\b/i);
     expect(source).not.toMatch(/\b24\s*\/\s*7 support\b/i);
-    expect(source).toContain("Controlled Early Access");
-    expect(source).toContain("does not currently offer public self-service subscription plans or checkout");
+    expect(source).not.toMatch(/Request Early Access/i);
+    expect(source).toContain('t("publicContent.pricing.hero")');
+    expect(source).toContain('t("publicContent.home.commercialFaq")');
   });
 });

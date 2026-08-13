@@ -62,7 +62,7 @@ describe("public search registry", () => {
     }
   });
 
-  it("keeps only the four thin legal placeholders out of the public search index", () => {
+  it("keeps the four owner-confirmation-dependent legal documents out of the public search index", () => {
     expect(indexableEntries).toHaveLength(58);
     expect(
       PUBLIC_SEARCH_PAGES
@@ -121,6 +121,7 @@ describe("public search registry", () => {
     const schemaMarkers = [
       "PublicJsonLd",
       "PublicPageJsonLd",
+      "LegalPolicyPage",
       "SeoLandingPage",
       "KnowledgePage",
       "IndustryLandingPage",

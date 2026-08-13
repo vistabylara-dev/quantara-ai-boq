@@ -71,7 +71,6 @@ export default function WorkspaceHeader({
 
           <div className="mt-4 flex flex-wrap items-center gap-2">
             <StatusBadge label={planLabel} tone={planTone} />
-            <StatusBadge label="Systems operational" tone="success" />
           </div>
 
           {currentProject ? (

@@ -3,6 +3,9 @@ import Link from "next/link";
 import { ArrowRight, Globe } from "lucide-react";
 import { PublicPageJsonLd } from "@/components/seo/public-json-ld";
 import PublicBreadcrumb from "@/components/ui/public-breadcrumb";
+import { getDictionary } from "@/lib/i18n/dictionaries";
+import { getServerLocale } from "@/lib/i18n/server-locale";
+import { createTranslator } from "@/lib/i18n/translate";
 
 export const metadata = createPublicPageMetadata("/gcc-boq-software");
 
@@ -19,7 +22,10 @@ const regionalLinks = [
   { href: "/boq-software-oman", name: "Oman BOQ Software", desc: "For Oman construction and estimating teams." }
 ];
 
-export default function GCCIndexPage() {
+export default async function GCCIndexPage() {
+  const locale = await getServerLocale();
+  const t = createTranslator(getDictionary(locale));
+
   return (
     <>
       <PublicPageJsonLd
@@ -39,7 +45,7 @@ export default function GCCIndexPage() {
           </h1>
           <div className="prose prose-lg text-slate-600 mx-auto leading-relaxed">
             <p>
-              GCC markets have different contract practices and project requirements. Quantara offers a review-led BOQ workflow through Controlled Early Access, subject to current access and capability availability.
+              {t("publicContent.regional.gccAvailability")}
             </p>
             <p>
               For supported contractor packages, consultant documents or MEP schedules, Quantara captures information for review and organizes confirmed BOQ records. Available templates can support outputs, while country-specific contractual and regulatory requirements must be assessed independently.

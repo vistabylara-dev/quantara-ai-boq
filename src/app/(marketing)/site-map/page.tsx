@@ -1,7 +1,10 @@
 import Link from "next/link";
 import PublicJsonLd from "@/components/seo/public-json-ld";
 import PublicBreadcrumb from "@/components/ui/public-breadcrumb";
-import { legalNavigation, publicNavigation } from "@/config/public-navigation";
+import { getPublicNavigation, legalNavigation } from "@/config/public-navigation";
+import { getDictionary } from "@/lib/i18n/dictionaries";
+import { getServerLocale } from "@/lib/i18n/server-locale";
+import { createTranslator } from "@/lib/i18n/translate";
 import {
   createPublicPageMetadata,
   getPublicSearchPage,
@@ -15,7 +18,10 @@ const breadcrumbItems = [
   { name: "Site Map", item: "/site-map" },
 ];
 
-export default function SiteMapPage() {
+export default async function SiteMapPage() {
+  const locale = await getServerLocale();
+  const t = createTranslator(getDictionary(locale));
+  const navigation = getPublicNavigation(t);
   const page = getPublicSearchPage("/site-map");
   const jsonLd = buildPublicPageGraph({
     path: page.path,
@@ -38,7 +44,7 @@ export default function SiteMapPage() {
         </p>
 
         <div className="space-y-12">
-          {publicNavigation.map((section) => (
+          {navigation.map((section) => (
             <section key={section.label} className="border-t border-slate-200 dark:border-slate-800 pt-8">
               <h2 className="text-2xl font-bold mb-6 text-slate-900 dark:text-white">{section.label}</h2>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-8">

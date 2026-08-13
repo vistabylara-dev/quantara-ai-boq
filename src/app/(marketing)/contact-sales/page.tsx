@@ -4,8 +4,11 @@ import React, { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { siteConfig } from "@/config/site";
 import PublicBreadcrumb from "@/components/ui/public-breadcrumb";
+import { apiClient, getApiErrorMessage } from "@/lib/api/client";
+import { useTranslations } from "@/lib/i18n/locale-provider";
 
 export default function ContactSalesPage() {
+  const t = useTranslations();
   const [formData, setFormData] = useState({
     fullName: "",
     businessEmail: "",
@@ -38,21 +41,16 @@ export default function ContactSalesPage() {
     setErrorMessage("");
 
     try {
-      const res = await fetch("/api/contact", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(formData),
+      await apiClient.post("/api/contact", {
+        kind: "SALES",
+        ...formData,
+        website: "",
       });
 
-      if (!res.ok) {
-        const data = await res.json() as any;
-        throw new Error(data.message || "Something went wrong.");
-      }
-
       setStatus("success");
-    } catch (err: any) {
+    } catch (err: unknown) {
       setStatus("error");
-      setErrorMessage(err.message);
+      setErrorMessage(getApiErrorMessage(err));
     }
   };
 
@@ -82,7 +80,7 @@ export default function ContactSalesPage() {
           <div>
             <h1 className="text-4xl font-bold text-slate-900 dark:text-white mb-6">Contact Sales</h1>
             <p className="text-lg text-slate-600 dark:text-slate-400 mb-8">
-              Tell us about your BOQ workflow, project-document formats, team requirements and Early Access needs.
+              {t("publicContent.contactSales.intro")}
             </p>
             <div className="bg-blue-50 dark:bg-blue-900/20 p-6 rounded-2xl border border-blue-100 dark:border-blue-800/50 mb-8">
               <h3 className="font-bold text-slate-900 dark:text-white mb-4">Talk to the Quantara Team</h3>
@@ -92,7 +90,7 @@ export default function ContactSalesPage() {
                 <li className="flex gap-2"><strong>WhatsApp:</strong> <a href={siteConfig.contact.whatsappLink} className="text-blue-600 hover:underline">{siteConfig.contact.whatsapp}</a></li>
               </ul>
               <p className="mt-4 text-sm text-slate-600 dark:text-slate-400">
-                Sales and support requests can be submitted 24 hours a day. Response times may vary during Controlled Early Access.
+                {t("publicContent.contactSales.timing")}
               </p>
             </div>
             
@@ -101,7 +99,7 @@ export default function ContactSalesPage() {
               <ul className="space-y-2 text-sm text-slate-600 dark:text-slate-400 list-disc pl-4">
                 <li>Discuss your current BOQ process</li>
                 <li>Review supported input and output requirements</li>
-                <li>Request an Early Access product walkthrough</li>
+                <li>{t("publicContent.contactSales.walkthrough")}</li>
                 <li>Share team and project-volume requirements</li>
               </ul>
             </div>

@@ -3,15 +3,16 @@
 import React from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { publicNavigation, legalNavigation } from "@/config/public-navigation";
+import { getPublicNavigation, legalNavigation } from "@/config/public-navigation";
 import { siteConfig } from "@/config/site";
 import { QUANTARA_ENTITY_DEFINITION } from "@/lib/public-site/product-truth";
 import { useTranslations } from "@/lib/i18n/locale-provider";
 
 export default function PublicFooter() {
   const t = useTranslations();
+  const navigation = getPublicNavigation(t);
   const getSectionItems = (sectionLabel: string) => {
-    const section = publicNavigation.find(s => s.label === sectionLabel);
+    const section = navigation.find(s => s.label === sectionLabel);
     if (!section) return [];
     // Flatten all items from all groups in the section for the footer
     return section.groups.flatMap(g => g.items);
@@ -45,7 +46,7 @@ export default function PublicFooter() {
               {t("publicSite.footer.description1")}
             </p>
             <p className="text-sm text-slate-500 dark:text-slate-400 mb-6 max-w-sm">
-              {QUANTARA_ENTITY_DEFINITION} {t("publicSite.footer.description2Suffix")}
+              {QUANTARA_ENTITY_DEFINITION} {t("publicContent.shared.accountAccessBoundary")}
             </p>
 
             <div className="mt-8 space-y-2 text-sm text-slate-500 dark:text-slate-400">
@@ -110,7 +111,7 @@ export default function PublicFooter() {
                 {t("publicSite.footer.workflowReviewBody")}
               </p>
               <p className="text-xs text-slate-400 mb-4">
-                {t("publicSite.footer.workflowReviewNote")}
+                {t("publicContent.pricing.footerBoundary")}
               </p>
               <Link href="/contact-sales" className="text-sm font-medium text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300">
                 {t("common.contactSales")} &rarr;

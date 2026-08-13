@@ -12,7 +12,7 @@ const requiredPublicRoutes = [
   { path: "/boq-software-uae", h1: "BOQ Software for UAE Construction and Estimating Teams" },
   { path: "/boq-software-dubai", h1: "BOQ Software for Dubai Construction Workflows" },
   { path: "/resources", h1: "BOQ Resources & Knowledge Base" },
-  { path: "/security", h1: "Security and Controlled Early Access" },
+  { path: "/security", h1: "Security" },
 ] as const;
 
 test.describe("Quantara public website final audit", () => {
@@ -77,7 +77,7 @@ test.describe("Quantara public website final audit", () => {
     });
   }
 
-  test("navigation, footer, early-access CTA and theme remain functional", async ({ context, page }, testInfo) => {
+  test("navigation, footer, account-setup CTA and theme remain functional", async ({ context, page }, testInfo) => {
     await context.clearCookies();
     await page.goto("/", { waitUntil: "networkidle" });
 
@@ -108,10 +108,10 @@ test.describe("Quantara public website final audit", () => {
       await page.getByRole("button", { name: "Open menu" }).click();
       await page
         .getByRole("dialog", { name: "Mobile Navigation" })
-        .getByRole("link", { name: "Request Early Access", exact: true })
+        .getByRole("link", { name: "Start Account Setup", exact: true })
         .click();
     } else {
-      await page.getByRole("banner").getByRole("link", { name: "Request Early Access", exact: true }).click();
+      await page.getByRole("banner").getByRole("link", { name: "Start Account Setup", exact: true }).click();
     }
     await expect(page).toHaveURL(/\/register$/);
 

@@ -4,7 +4,8 @@ import Link from "next/link";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { CheckCircle2 } from "lucide-react";
 import { apiClient, getApiErrorMessage } from "@/lib/api/client";
-import { publicAccessOptions } from "@/config/pricing";
+import { getPublicAccessOptions } from "@/config/pricing";
+import { useTranslations } from "@/lib/i18n/locale-provider";
 
 function AccessOptionsFieldset({
   selectedOption,
@@ -13,11 +14,14 @@ function AccessOptionsFieldset({
   selectedOption: string;
   onSelect: (option: string) => void;
 }) {
+  const t = useTranslations();
+  const publicAccessOptions = getPublicAccessOptions(t);
+
   return (
     <fieldset>
-      <legend className="text-3xl font-bold text-slate-900 dark:text-white mb-6">Choose How You Want to Start</legend>
+      <legend className="text-3xl font-bold text-slate-900 dark:text-white mb-6">{t("publicContent.accountSetup.choiceHeading")}</legend>
       <p id="access-options-help" className="text-slate-600 dark:text-slate-400 mb-8">
-        This selection records a preference only. It does not create a purchase, subscription, invoice, trial or product entitlement. Availability and any future commercial terms are confirmed separately in writing.
+        {t("publicContent.accountSetup.choiceHelp")}
       </p>
 
       <div className="space-y-6">
@@ -25,11 +29,11 @@ function AccessOptionsFieldset({
           const optionId = `access-option-${index}`;
           const descriptionId = `${optionId}-description`;
           const featuresId = `${optionId}-features`;
-          const isSelected = selectedOption === option.name;
+          const isSelected = selectedOption === option.key;
 
           return (
             <div
-              key={option.name}
+              key={option.key}
               className={`rounded-2xl p-6 ring-1 transition-all focus-within:ring-2 focus-within:ring-blue-500 ${
                 isSelected
                   ? "ring-2 ring-blue-600 bg-blue-50/50 dark:bg-blue-900/20 shadow-md"
@@ -42,9 +46,9 @@ function AccessOptionsFieldset({
                     id={optionId}
                     type="radio"
                     name="accessOption"
-                    value={option.name}
+                    value={option.key}
                     checked={isSelected}
-                    onChange={() => onSelect(option.name)}
+                    onChange={() => onSelect(option.key)}
                     aria-describedby={`${descriptionId} ${featuresId}`}
                     className="sr-only"
                   />
@@ -79,6 +83,8 @@ function AccessOptionsFieldset({
 }
 
 export default function RegisterPage() {
+  const t = useTranslations();
+  const publicAccessOptions = getPublicAccessOptions(t);
   const [companyName, setCompanyName] = useState("");
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
@@ -89,7 +95,7 @@ export default function RegisterPage() {
   const [primaryIndustry, setPrimaryIndustry] = useState("");
   const [intendedUse, setIntendedUse] = useState("");
   const [approximateVolume, setApproximateVolume] = useState("");
-  const [selectedPackage, setSelectedPackage] = useState<string>(publicAccessOptions[0].name);
+  const [selectedPackage, setSelectedPackage] = useState<string>(publicAccessOptions[0].key);
   const [consent, setConsent] = useState(false);
 
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -108,7 +114,7 @@ export default function RegisterPage() {
     try {
       await apiClient.post("/api/auth/register", { 
         companyName, fullName, email, password,
-        role, country, primaryIndustry, intendedUse, approximateVolume, selectedPackage, consent
+        role, country, primaryIndustry, intendedUse: intendedUse || selectedPackage, approximateVolume, consent
       });
       setRegistered(true);
     } catch (submitError) {
@@ -124,7 +130,7 @@ export default function RegisterPage() {
         <div className="rounded-[32px] border border-slate-800 bg-slate-950 p-8">
           <h1 ref={successHeadingRef} tabIndex={-1} className="text-2xl font-semibold text-white outline-none">Check your email</h1>
           <p className="mt-3 text-sm text-slate-400">
-            Your request was received. Follow any verification instructions sent to your business email. If none arrive, contact support before attempting to register again.
+            {t("publicContent.accountSetup.success")}
           </p>
           <Link
             href="/login"
@@ -143,9 +149,9 @@ export default function RegisterPage() {
         {/* Form Section */}
         <div className="rounded-[32px] border border-slate-800 bg-slate-950 p-8 lg:sticky lg:top-24 shadow-2xl">
           <p className="text-sm uppercase tracking-[0.28em] text-slate-500">Quantara</p>
-          <h1 className="mt-2 text-2xl font-semibold text-white">Request Early Access</h1>
+          <h1 className="mt-2 text-2xl font-semibold text-white">{t("publicContent.accountSetup.title")}</h1>
           <p className="mt-2 text-sm text-slate-400">
-            Creating an Early Access account does not begin a paid subscription or automatic billing. After submitting your request, our team reviews your company requirements.
+            {t("publicContent.accountSetup.intro")}
           </p>
 
           <form onSubmit={handleSubmit} className="mt-6 space-y-4">
@@ -275,7 +281,9 @@ export default function RegisterPage() {
                     Submitting Request...
                   </span>
                 ) : (
-                  `Request Early Access - ${selectedPackage}`
+                  t("publicContent.accountSetup.submitPrefix", {
+                    option: publicAccessOptions.find((option) => option.key === selectedPackage)?.name ?? selectedPackage,
+                  })
                 )}
               </button>
             </div>

@@ -1,11 +1,17 @@
 import { createPublicPageMetadata } from "@/lib/public-site/search-registry";
 import RegionalLandingPage, { RegionalLandingPageContent } from "@/components/layout/regional-landing-page";
+import { getDictionary } from "@/lib/i18n/dictionaries";
+import { getServerLocale } from "@/lib/i18n/server-locale";
+import { createTranslator } from "@/lib/i18n/translate";
 
 export const metadata = createPublicPageMetadata("/boq-software-uae");
 
 
 
-export default function Page() {
+export default async function Page() {
+  const locale = await getServerLocale();
+  const t = createTranslator(getDictionary(locale));
+
   const content: RegionalLandingPageContent = {
     breadcrumbLabel: "BOQ Software UAE",
     breadcrumbParent: {"href":"/gcc-boq-software","label":"GCC BOQ Software"},
@@ -54,8 +60,8 @@ export default function Page() {
 ],
     faqs: [
   {
-    "question": "Is Quantara available to UAE construction companies?",
-    "answer": "Quantara is offered through Controlled Early Access. UAE contractors, estimators and quantity surveyors can request access, subject to current onboarding and capability availability."
+    "question": t("publicContent.regional.uaeAvailabilityQuestion"),
+    "answer": t("publicContent.regional.uaeAvailabilityAnswer")
   },
   {
     "question": "Does Quantara include UAE construction rates?",
@@ -71,7 +77,7 @@ export default function Page() {
   },
   {
     "question": "Is Quantara hosted in the UAE?",
-    "answer": "Quantara does not publish a verified UAE data-residency commitment. Hosting, storage location and contractual data requirements must be confirmed for the specific Controlled Early Access arrangement."
+    "answer": t("publicContent.regional.residencyAnswer")
   },
   {
     "question": "Does it comply with Dubai Municipality regulations?",
@@ -82,8 +88,8 @@ export default function Page() {
     "answer": "Quantara retains distinct BOQ revision records. Users must compare them and interpret updates from consultants or clients."
   },
   {
-    "question": "What does Controlled Early Access mean for regional users?",
-    "answer": "It means access and feature availability are managed while the product is evaluated and improved. Current capability, account access and any commercial terms must be confirmed separately."
+    "question": t("publicContent.regional.accessQuestion"),
+    "answer": t("publicContent.regional.accessAnswer")
   },
   {
     "question": "Which file formats are currently supported?",

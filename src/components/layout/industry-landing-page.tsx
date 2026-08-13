@@ -11,6 +11,9 @@ import {
   getPublicSearchPage,
   type PublicSearchPath,
 } from "@/lib/public-site/search-registry";
+import { getDictionary } from "@/lib/i18n/dictionaries";
+import { getServerLocale } from "@/lib/i18n/server-locale";
+import { createTranslator } from "@/lib/i18n/translate";
 
 export interface IndustryFAQ {
   question: string;
@@ -40,7 +43,9 @@ export interface IndustryLandingPageContent {
   schema?: Record<string, unknown>;
 }
 
-export default function IndustryLandingPage({ content }: { content: IndustryLandingPageContent }) {
+export default async function IndustryLandingPage({ content }: { content: IndustryLandingPageContent }) {
+  const locale = await getServerLocale();
+  const t = createTranslator(getDictionary(locale));
   const path = content.path ?? inferPublicPathFromSchema(content.schema);
   const searchPage = path ? getPublicSearchPage(path as PublicSearchPath) : null;
   const breadcrumbItems = [
@@ -200,7 +205,7 @@ export default function IndustryLandingPage({ content }: { content: IndustryLand
           <h2 className="text-2xl font-bold text-slate-900 mb-4">Ready to structure your BOQ workflow?</h2>
           <div className="flex flex-col sm:flex-row justify-center items-center gap-4 mt-8">
             <Link href="/register" className="w-full sm:w-auto px-6 py-3 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 transition-colors">
-              Request Early Access
+            {t("publicContent.cta.startAccountSetup")}
             </Link>
             <Link href="/features" className="w-full sm:w-auto px-6 py-3 bg-white text-slate-700 border border-slate-300 font-medium rounded-lg hover:bg-slate-50 transition-colors">
               Explore Features

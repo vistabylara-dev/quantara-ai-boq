@@ -1,10 +1,8 @@
+import LegalPolicyPage from "@/components/legal/legal-policy-page";
 import { createPublicPageMetadata } from "@/lib/public-site/search-registry";
-import LegalPlaceholder from "@/components/legal/LegalPlaceholder";
 
 export const metadata = createPublicPageMetadata("/cookie-policy");
 
-
-
 export default function CookiePolicyPage() {
-  return <LegalPlaceholder title="Cookie Policy" />;
+  return <LegalPolicyPage policy="cookies" />;
 }

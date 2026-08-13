@@ -1,10 +1,8 @@
+import LegalPolicyPage from "@/components/legal/legal-policy-page";
 import { createPublicPageMetadata } from "@/lib/public-site/search-registry";
-import LegalPlaceholder from "@/components/legal/LegalPlaceholder";
 
 export const metadata = createPublicPageMetadata("/subprocessors");
 
-
-
 export default function SubprocessorsPage() {
-  return <LegalPlaceholder title="Subprocessor List" />;
+  return <LegalPolicyPage policy="subprocessors" />;
 }

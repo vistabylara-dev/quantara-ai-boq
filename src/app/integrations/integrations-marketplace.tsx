@@ -29,6 +29,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { apiClient, getApiErrorMessage } from "@/lib/api/client";
+import { useTranslations } from "@/lib/i18n/locale-provider";
 import IntegrationsTabs from "./integrations-tabs";
 import { withProjectContext, ProjectContextBanner, useProjectContext } from "./project-context";
 
@@ -111,6 +112,7 @@ function actionLabel(provider: Provider): string {
 }
 
 export default function IntegrationsMarketplace() {
+  const t = useTranslations();
   const projectContext = useProjectContext();
   const [data, setData] = useState<ProvidersResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -204,7 +206,7 @@ export default function IntegrationsMarketplace() {
           </div>
         </div>
         <p className="mt-3 max-w-2xl text-sm text-[#536078] dark:text-[#B8C4D8]">
-          Connect design tools, BIM platforms, construction systems and cloud storage without repeatedly downloading and uploading project files.
+          {t("integrations.marketplaceAvailability")}
         </p>
         <p className="mt-3 text-xs text-[#7B879C] dark:text-[#7F8DA6]">
           Independent integrations — connection availability depends on your provider account and permissions. Quantara is not affiliated with, endorsed by, or an official partner of any provider listed here unless stated otherwise.

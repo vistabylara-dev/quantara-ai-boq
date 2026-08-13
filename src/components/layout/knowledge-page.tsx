@@ -11,6 +11,9 @@ import {
   getPublicSearchPage,
   type PublicSearchPath,
 } from "@/lib/public-site/search-registry";
+import { getDictionary } from "@/lib/i18n/dictionaries";
+import { getServerLocale } from "@/lib/i18n/server-locale";
+import { createTranslator } from "@/lib/i18n/translate";
 
 export interface KnowledgeFaq {
   question: string;
@@ -56,7 +59,9 @@ export interface KnowledgePageContent {
   schema?: Record<string, unknown>;
 }
 
-export default function KnowledgePage({ content }: { content: KnowledgePageContent }) {
+export default async function KnowledgePage({ content }: { content: KnowledgePageContent }) {
+  const locale = await getServerLocale();
+  const t = createTranslator(getDictionary(locale));
   const path = content.path ?? inferPublicPathFromSchema(content.schema);
   const searchPage = path ? getPublicSearchPage(path as PublicSearchPath) : null;
   const answerFirst = content.directAnswer ?? content.summary;
@@ -263,7 +268,7 @@ export default function KnowledgePage({ content }: { content: KnowledgePageConte
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
               <Link href="/register" className="bg-white text-blue-900 px-8 py-3 rounded-md font-semibold hover:bg-blue-50 transition-colors">
-                Request Early Access
+            {t("publicContent.cta.startAccountSetup")}
               </Link>
               <Link href="/features" className="border border-blue-400 bg-transparent text-white px-8 py-3 rounded-md font-semibold hover:bg-blue-800 transition-colors">
                 Explore Features

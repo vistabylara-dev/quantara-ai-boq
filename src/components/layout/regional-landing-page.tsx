@@ -11,6 +11,9 @@ import {
   getPublicSearchPage,
   type PublicSearchPath,
 } from "@/lib/public-site/search-registry";
+import { getDictionary } from "@/lib/i18n/dictionaries";
+import { getServerLocale } from "@/lib/i18n/server-locale";
+import { createTranslator } from "@/lib/i18n/translate";
 
 export interface RegionalFAQ {
   question: string;
@@ -41,7 +44,9 @@ export interface RegionalLandingPageContent {
   schema?: Record<string, unknown>;
 }
 
-export default function RegionalLandingPage({ content }: { content: RegionalLandingPageContent }) {
+export default async function RegionalLandingPage({ content }: { content: RegionalLandingPageContent }) {
+  const locale = await getServerLocale();
+  const t = createTranslator(getDictionary(locale));
   const path = content.path ?? inferPublicPathFromSchema(content.schema);
   const searchPage = path ? getPublicSearchPage(path as PublicSearchPath) : null;
   const breadcrumbItems = [
@@ -222,7 +227,7 @@ export default function RegionalLandingPage({ content }: { content: RegionalLand
             <p className="text-blue-100 mb-10 text-lg">Organize project documents, tender revisions, and proposal outputs in one unified platform.</p>
             <div className="flex flex-col sm:flex-row justify-center items-center gap-4">
               <Link href="/register" className="w-full sm:w-auto px-8 py-4 bg-white text-blue-900 font-bold rounded-xl hover:bg-blue-50 transition-colors shadow-lg">
-                Request Early Access
+            {t("publicContent.cta.startAccountSetup")}
               </Link>
               <Link href="/features" className="w-full sm:w-auto px-8 py-4 bg-blue-800 text-white border border-blue-700 font-semibold rounded-xl hover:bg-blue-700 transition-colors">
                 Explore Features

@@ -1,15 +1,26 @@
+import en from "@/lib/i18n/dictionaries/en";
+import type { TranslateFn } from "@/lib/i18n/translate";
+
 export type PublicCapabilityStatus =
   | "AVAILABLE"
   | "CONTROLLED_ACCESS"
   | "LIMITED"
   | "NOT_AVAILABLE";
 
+export type PublicCapabilityLifecycle =
+  | "LIVE"
+  | "BETA_LIMITED"
+  | "PLANNED"
+  | "NOT_AVAILABLE";
+
 export type PublicCapability = {
   id: string;
   name: string;
   status: PublicCapabilityStatus;
+  lifecycle: PublicCapabilityLifecycle;
   summary: string;
   limitation?: string;
+  evidencePaths: readonly string[];
 };
 
 export const PUBLIC_CAPABILITY_STATUS_LABELS: Record<PublicCapabilityStatus, string> = {
@@ -121,7 +132,7 @@ const PUBLIC_CAPABILITY_DEFINITIONS = [
     name: "Technical report generation",
     status: "LIMITED",
     summary: "Generate DOCX technical reports from reviewed project records and templates in supported configured environments.",
-    limitation: "Durable production storage must be confirmed during Controlled Early Access; other technical-report formats and voice or typed AI editing are not currently supported.",
+    limitation: en.publicContent.productTruth.technicalReportLimitation,
   },
   {
     id: "source-attribution",
@@ -141,8 +152,8 @@ const PUBLIC_CAPABILITY_DEFINITIONS = [
     id: "commercial-access",
     name: "Commercial plans and billing",
     status: "CONTROLLED_ACCESS",
-    summary: "Commercial access is confirmed through a requirements discussion during Controlled Early Access.",
-    limitation: "The public website does not offer verified self-serve plan checkout or automatic paid conversion.",
+    summary: en.publicContent.productTruth.commercialSummary,
+    limitation: en.publicContent.productTruth.commercialLimitation,
   },
   {
     id: "automatic-drawing-takeoff",
@@ -174,11 +185,151 @@ const PUBLIC_CAPABILITY_DEFINITIONS = [
     status: "NOT_AVAILABLE",
     summary: "SSO is not a verified public Quantara capability.",
   },
-] as const satisfies readonly PublicCapability[];
+  {
+    id: "non-google-external-integrations",
+    name: en.publicContent.productTruth.nonGoogleIntegrationsName,
+    status: "NOT_AVAILABLE",
+    summary: en.publicContent.productTruth.nonGoogleIntegrationsSummary,
+  },
+  {
+    id: "enterprise-feature-bundle",
+    name: en.publicContent.productTruth.enterpriseBundleName,
+    status: "NOT_AVAILABLE",
+    summary: en.publicContent.productTruth.enterpriseBundleSummary,
+  },
+] as const satisfies readonly Omit<PublicCapability, "lifecycle" | "evidencePaths">[];
 
 export type PublicCapabilityId = (typeof PUBLIC_CAPABILITY_DEFINITIONS)[number]["id"];
 
-export const PUBLIC_CAPABILITIES: readonly PublicCapability[] = PUBLIC_CAPABILITY_DEFINITIONS;
+export const PUBLIC_PRODUCT_LIFECYCLE_BY_ID = {
+  "project-workspaces": "LIVE",
+  "text-pdf-extraction": "LIVE",
+  "spreadsheet-import": "LIVE",
+  "scanned-pdf-detection": "LIVE",
+  "google-drive-import": "BETA_LIMITED",
+  "reviewed-extraction": "LIVE",
+  "boq-management": "LIVE",
+  "visible-calculations": "LIVE",
+  "voice-proposals": "BETA_LIMITED",
+  validation: "LIVE",
+  "professional-outputs": "LIVE",
+  "document-templates": "LIVE",
+  "technical-report-generation": "BETA_LIMITED",
+  "source-attribution": "LIVE",
+  "industry-packages": "BETA_LIMITED",
+  "commercial-access": "BETA_LIMITED",
+  "automatic-drawing-takeoff": "NOT_AVAILABLE",
+  "model-file-import": "NOT_AVAILABLE",
+  "scanned-pdf-ocr": "NOT_AVAILABLE",
+  "typed-multi-change-proposals": "NOT_AVAILABLE",
+  "single-sign-on": "NOT_AVAILABLE",
+  "non-google-external-integrations": "PLANNED",
+  "enterprise-feature-bundle": "PLANNED",
+} as const satisfies Record<PublicCapabilityId, PublicCapabilityLifecycle>;
+
+export const PUBLIC_PRODUCT_EVIDENCE_BY_ID = {
+  "project-workspaces": [
+    "src/lib/services/project-service.ts",
+    "tests/client-project-service.test.ts",
+  ],
+  "text-pdf-extraction": [
+    "src/lib/files/pdf-text-extraction.ts",
+    "tests/pdf-content-extraction.test.ts",
+  ],
+  "spreadsheet-import": [
+    "src/lib/services/import-service.ts",
+    "tests/import-service-file-purpose-guard.test.ts",
+  ],
+  "scanned-pdf-detection": [
+    "src/lib/files/pdf-text-extraction.ts",
+    "tests/pdf-content-extraction.test.ts",
+  ],
+  "google-drive-import": [
+    "src/lib/services/google-drive-integration-service.ts",
+    "tests/google-drive-import-service.test.ts",
+  ],
+  "reviewed-extraction": [
+    "src/lib/services/source-candidate-bridge-service.ts",
+    "tests/source-review-routes.test.ts",
+  ],
+  "boq-management": [
+    "src/lib/services/boq-validation-service.ts",
+    "tests/boq-core-workflow.test.ts",
+  ],
+  "visible-calculations": [
+    "src/lib/services/quantity-calculation-service.ts",
+    "tests/guided-boq-measurement-workflow.test.ts",
+  ],
+  "voice-proposals": [
+    "src/lib/voice/voice-command-interpreter.ts",
+    "tests/voice-command-runtime.test.ts",
+  ],
+  validation: [
+    "src/lib/services/boq-validation-service.ts",
+    "tests/boq-lock-validation.test.ts",
+  ],
+  "professional-outputs": [
+    "src/lib/services/document-generation-service.ts",
+    "tests/document-generation-service.test.ts",
+  ],
+  "document-templates": [
+    "src/lib/services/document-template-service.ts",
+    "tests/template-governance-service.test.ts",
+  ],
+  "technical-report-generation": [
+    "src/lib/services/technical-report-service.ts",
+    "tests/technical-report-service.test.ts",
+  ],
+  "source-attribution": [
+    "src/lib/services/boq-item-source-service.ts",
+    "tests/structured-source-candidate-bridge.test.ts",
+  ],
+  "industry-packages": [
+    "src/lib/entitlements/package-entitlement-service.ts",
+    "tests/catalogue-package-integrity.test.ts",
+  ],
+  "commercial-access": [
+    "src/lib/services/commerce-checkout-service.ts",
+    "tests/commerce-checkout-service.test.ts",
+  ],
+  "automatic-drawing-takeoff": [
+    "src/lib/calculations/required-dimensions-registry.ts",
+    "tests/guided-boq-measurement-workflow.test.ts",
+  ],
+  "model-file-import": [
+    "src/lib/integrations/provider-registry.ts",
+    "tests/integrations-1a-completion.test.ts",
+  ],
+  "scanned-pdf-ocr": [
+    "src/lib/files/pdf-text-extraction.ts",
+    "tests/public-product-truth.test.ts",
+  ],
+  "typed-multi-change-proposals": [
+    "src/lib/voice/voice-command-interpreter.ts",
+    "tests/voice-command-runtime.test.ts",
+  ],
+  "single-sign-on": [
+    "src/lib/services/auth-service.ts",
+    "tests/auth-service.test.ts",
+  ],
+  "non-google-external-integrations": [
+    "src/lib/integrations/provider-registry.ts",
+    "tests/integrations-1a-completion.test.ts",
+  ],
+  "enterprise-feature-bundle": [
+    "prisma/seed-data/commerce-products.ts",
+    "tests/commerce-plan-mapping.test.ts",
+  ],
+} as const satisfies Record<PublicCapabilityId, readonly string[]>;
+
+export const PUBLIC_PRODUCT_TRUTH_MATRIX: readonly PublicCapability[] =
+  PUBLIC_CAPABILITY_DEFINITIONS.map((capability) => ({
+    ...capability,
+    lifecycle: PUBLIC_PRODUCT_LIFECYCLE_BY_ID[capability.id],
+    evidencePaths: PUBLIC_PRODUCT_EVIDENCE_BY_ID[capability.id],
+  }));
+
+export const PUBLIC_CAPABILITIES = PUBLIC_PRODUCT_TRUTH_MATRIX;
 
 export function getPublicCapability(id: PublicCapabilityId): PublicCapability {
   const capability = PUBLIC_CAPABILITIES.find((entry) => entry.id === id);
@@ -186,4 +337,52 @@ export function getPublicCapability(id: PublicCapabilityId): PublicCapability {
     throw new Error(`Unknown public capability: ${id}`);
   }
   return capability;
+}
+
+export function localizePublicCapability(
+  capability: PublicCapability,
+  translate: TranslateFn,
+): PublicCapability {
+  switch (capability.id) {
+    case "technical-report-generation":
+      return {
+        ...capability,
+        limitation: translate("publicContent.productTruth.technicalReportLimitation"),
+      };
+    case "commercial-access":
+      return {
+        ...capability,
+        summary: translate("publicContent.productTruth.commercialSummary"),
+        limitation: translate("publicContent.productTruth.commercialLimitation"),
+      };
+    case "non-google-external-integrations":
+      return {
+        ...capability,
+        name: translate("publicContent.productTruth.nonGoogleIntegrationsName"),
+        summary: translate("publicContent.productTruth.nonGoogleIntegrationsSummary"),
+      };
+    case "enterprise-feature-bundle":
+      return {
+        ...capability,
+        name: translate("publicContent.productTruth.enterpriseBundleName"),
+        summary: translate("publicContent.productTruth.enterpriseBundleSummary"),
+      };
+    default:
+      return capability;
+  }
+}
+
+export function getPublicCapabilityForDisplay(
+  id: PublicCapabilityId,
+  translate: TranslateFn,
+): PublicCapability {
+  return localizePublicCapability(getPublicCapability(id), translate);
+}
+
+export function getPublicCapabilitiesForDisplay(
+  translate: TranslateFn,
+): readonly PublicCapability[] {
+  return PUBLIC_CAPABILITIES.map((capability) =>
+    localizePublicCapability(capability, translate),
+  );
 }

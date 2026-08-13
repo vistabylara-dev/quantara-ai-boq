@@ -6,6 +6,7 @@ import PublicBreadcrumb from "@/components/ui/public-breadcrumb";
 import {
   PUBLIC_CAPABILITY_STATUS_LABELS,
   getPublicCapability,
+  getPublicCapabilityForDisplay,
   type PublicCapabilityId,
   type PublicCapabilityStatus,
 } from "@/lib/public-site/product-truth";
@@ -13,6 +14,9 @@ import {
   getPublicSearchPage,
   type PublicSearchPath,
 } from "@/lib/public-site/search-registry";
+import { getDictionary } from "@/lib/i18n/dictionaries";
+import { getServerLocale } from "@/lib/i18n/server-locale";
+import { createTranslator } from "@/lib/i18n/translate";
 import { buildPublicPageGraph } from "@/lib/public-site/schema";
 
 type SeoCapabilityItem = {
@@ -86,7 +90,19 @@ function getPublicStatus(capabilityId: PublicCapabilityId) {
   };
 }
 
-export default function SeoLandingPage({ content, currentPath }: { content: SeoLandingPageContent; currentPath: string }) {
+function getCapabilityBoundary(
+  capabilityId: PublicCapabilityId,
+  translate: ReturnType<typeof createTranslator>,
+): string | undefined {
+  if (capabilityId === "technical-report-generation") {
+    return translate("publicContent.shared.technicalReportBoundary");
+  }
+  return getPublicCapabilityForDisplay(capabilityId, translate).limitation;
+}
+
+export default async function SeoLandingPage({ content, currentPath }: { content: SeoLandingPageContent; currentPath: string }) {
+  const locale = await getServerLocale();
+  const t = createTranslator(getDictionary(locale));
   const searchPage = getPublicSearchPage(currentPath as PublicSearchPath);
   const breadcrumbItems = [
     { name: "Home", item: "/" },
@@ -222,6 +238,7 @@ export default function SeoLandingPage({ content, currentPath }: { content: SeoL
                 <div className="space-y-4">
                   {content.supportedInputs.map((input) => {
                     const status = getPublicStatus(input.capabilityId);
+                    const boundary = getCapabilityBoundary(input.capabilityId, t) ?? input.limitation;
                     return (
                       <div key={input.name} className="p-4 bg-white dark:bg-slate-900/50 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
                         <div className="flex items-center justify-between mb-2">
@@ -231,8 +248,8 @@ export default function SeoLandingPage({ content, currentPath }: { content: SeoL
                           </span>
                         </div>
                         <p className="text-sm text-slate-600 dark:text-slate-400">{input.description}</p>
-                        {input.limitation && (
-                          <p className="text-xs text-amber-600 dark:text-amber-400 mt-2 font-medium">Note: {input.limitation}</p>
+                        {boundary && (
+                          <p className="text-xs text-amber-600 dark:text-amber-400 mt-2 font-medium">Note: {boundary}</p>
                         )}
                       </div>
                     );
@@ -245,6 +262,7 @@ export default function SeoLandingPage({ content, currentPath }: { content: SeoL
                 <div className="space-y-4">
                   {content.supportedOutputs.map((output) => {
                     const status = getPublicStatus(output.capabilityId);
+                    const boundary = getCapabilityBoundary(output.capabilityId, t) ?? output.limitation;
                     return (
                       <div key={output.name} className="p-4 bg-white dark:bg-slate-900/50 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
                         <div className="flex items-center justify-between mb-2">
@@ -254,8 +272,8 @@ export default function SeoLandingPage({ content, currentPath }: { content: SeoL
                           </span>
                         </div>
                         <p className="text-sm text-slate-600 dark:text-slate-400">{output.description}</p>
-                        {output.limitation && (
-                          <p className="text-xs text-amber-600 dark:text-amber-400 mt-2 font-medium">Note: {output.limitation}</p>
+                        {boundary && (
+                          <p className="text-xs text-amber-600 dark:text-amber-400 mt-2 font-medium">Note: {boundary}</p>
                         )}
                       </div>
                     );
@@ -327,7 +345,7 @@ export default function SeoLandingPage({ content, currentPath }: { content: SeoL
           <h2 className="text-3xl md:text-4xl font-bold text-white mb-8">Ready to review a structured BOQ workflow?</h2>
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
             <Link href="/register" className="inline-flex items-center justify-center rounded-lg text-base font-bold bg-white text-blue-700 hover:bg-slate-50 h-14 px-8 py-4 shadow-lg w-full sm:w-auto">
-              Request Early Access
+              {t("publicContent.cta.startAccountSetup")}
             </Link>
             <Link href="/features" className="inline-flex items-center justify-center rounded-lg text-base font-medium border border-blue-400 bg-transparent text-white hover:bg-blue-700 h-14 px-8 py-4 w-full sm:w-auto">
               Explore Features

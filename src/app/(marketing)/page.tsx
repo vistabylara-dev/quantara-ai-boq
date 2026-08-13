@@ -21,10 +21,14 @@ import {
   PUBLIC_CAPABILITY_STATUS_LABELS,
   QUANTARA_ENTITY_DEFINITION,
   QUANTARA_WORKFLOW_TRUTH,
-  getPublicCapability,
+  getPublicCapabilityForDisplay,
+  type PublicCapabilityId,
   type PublicCapabilityStatus,
 } from "@/lib/public-site/product-truth";
 import { buildPublicPageGraph } from "@/lib/public-site/schema";
+import { getDictionary } from "@/lib/i18n/dictionaries";
+import { getServerLocale } from "@/lib/i18n/server-locale";
+import { createTranslator } from "@/lib/i18n/translate";
 import {
   createPublicPageMetadata,
   getPublicSearchPage,
@@ -32,7 +36,8 @@ import {
 
 export const metadata = createPublicPageMetadata("/");
 
-const faqs = [
+function buildFaqs(commercialAnswer: string) {
+  return [
   {
     question: "What is Quantara?",
     answer:
@@ -70,10 +75,10 @@ const faqs = [
   },
   {
     question: "How is Quantara pricing confirmed?",
-    answer:
-      "Commercial access, entitlements and pricing are confirmed through a requirements discussion during Controlled Early Access. The public website does not offer verified self-serve plan checkout.",
+    answer: commercialAnswer,
   },
 ] as const;
+}
 
 const workflowStages = [
   { title: "Project setup", description: "Create the controlled project workspace and confirm the project context.", icon: FolderKanban },
@@ -87,14 +92,14 @@ const workflowStages = [
   { title: "Professional outputs", description: "Generate supported BOQ outputs; DOCX technical reports remain limited to configured environments.", icon: FileOutput },
 ] as const;
 
-const featuredCapabilities = [
-  getPublicCapability("text-pdf-extraction"),
-  getPublicCapability("spreadsheet-import"),
-  getPublicCapability("google-drive-import"),
-  getPublicCapability("visible-calculations"),
-  getPublicCapability("voice-proposals"),
-  getPublicCapability("professional-outputs"),
-];
+const featuredCapabilityIds = [
+  "text-pdf-extraction",
+  "spreadsheet-import",
+  "google-drive-import",
+  "visible-calculations",
+  "voice-proposals",
+  "professional-outputs",
+] as const satisfies readonly PublicCapabilityId[];
 
 const statusStyle: Record<PublicCapabilityStatus, string> = {
   AVAILABLE: "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200",
@@ -103,16 +108,22 @@ const statusStyle: Record<PublicCapabilityStatus, string> = {
   NOT_AVAILABLE: "bg-slate-200 text-slate-800 dark:bg-slate-800 dark:text-slate-200",
 };
 
-const homeSearchEntry = getPublicSearchPage("/");
-const homeSchema = buildPublicPageGraph({
-  path: "/",
-  title: homeSearchEntry.title,
-  description: homeSearchEntry.description,
-  breadcrumbs: [{ name: "Home", path: "/" }],
-  faqs,
-});
+export default async function HomePage() {
+  const locale = await getServerLocale();
+  const t = createTranslator(getDictionary(locale));
+  const featuredCapabilities = featuredCapabilityIds.map((id) =>
+    getPublicCapabilityForDisplay(id, t),
+  );
+  const faqs = buildFaqs(t("publicContent.home.commercialFaq"));
+  const homeSearchEntry = getPublicSearchPage("/");
+  const homeSchema = buildPublicPageGraph({
+    path: "/",
+    title: homeSearchEntry.title,
+    description: homeSearchEntry.description,
+    breadcrumbs: [{ name: "Home", path: "/" }],
+    faqs,
+  });
 
-export default function HomePage() {
   return (
     <div className="min-h-screen bg-white text-slate-950 dark:bg-slate-950 dark:text-white">
       <PublicJsonLd data={homeSchema} />
@@ -136,7 +147,7 @@ export default function HomePage() {
           </p>
           <div className="mb-12 flex flex-col items-center justify-center gap-4 sm:flex-row">
             <Link href="/register" className="inline-flex h-12 w-full items-center justify-center rounded-lg bg-blue-600 px-7 font-semibold text-white shadow-sm hover:bg-blue-500 sm:w-auto">
-              Request Early Access <ArrowRight className="ml-2 h-4 w-4" aria-hidden="true" />
+              {t("publicContent.cta.startAccountSetup")} <ArrowRight className="ml-2 h-4 w-4" aria-hidden="true" />
             </Link>
             <Link href="/features" className="inline-flex h-12 w-full items-center justify-center rounded-lg border border-slate-300 bg-white px-7 font-semibold text-slate-900 hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-950 dark:text-white dark:hover:bg-slate-900 sm:w-auto">
               Check Feature Availability
@@ -307,7 +318,7 @@ export default function HomePage() {
         <div className="container mx-auto max-w-4xl">
           <div className="mb-10 text-center">
             <h2 id="faq-heading" className="mb-4 text-3xl font-bold">Quantara BOQ Software FAQs</h2>
-            <p className="text-slate-600 dark:text-slate-400">Direct answers about current capability, limitations and Controlled Early Access.</p>
+            <p className="text-slate-600 dark:text-slate-400">{t("publicContent.home.directAnswers")}</p>
           </div>
           <div className="space-y-4">
             {faqs.map((faq) => (
@@ -333,7 +344,7 @@ export default function HomePage() {
               Discuss Requirements <ArrowRight className="ml-2 h-4 w-4" aria-hidden="true" />
             </Link>
             <Link href="/register" className="inline-flex h-12 items-center justify-center rounded-lg border border-blue-300 px-6 font-semibold hover:bg-blue-600">
-              Request Early Access
+              {t("publicContent.cta.startAccountSetup")}
             </Link>
           </div>
         </div>

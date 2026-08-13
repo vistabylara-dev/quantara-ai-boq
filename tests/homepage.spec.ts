@@ -19,8 +19,8 @@ test.describe('Homepage Shell Verification', () => {
       await expect(button).toBeVisible();
     }
     
-    // Check Request Early Access
-    const requestAccessBtn = await banners.locator('a:has-text("Request Early Access")').first();
-    await expect(requestAccessBtn).toBeVisible();
+    // Check account setup
+    const accountSetupBtn = await banners.locator('a:has-text("Start Account Setup")').first();
+    await expect(accountSetupBtn).toBeVisible();
   });
 });

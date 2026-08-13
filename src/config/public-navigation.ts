@@ -3,14 +3,18 @@ import {
   getPublicCapability,
   type PublicCapabilityStatus,
 } from "@/lib/public-site/product-truth";
+import en from "@/lib/i18n/dictionaries/en";
+import type { TranslateFn, TranslationKey } from "@/lib/i18n/translate";
 
 export type NavigationItemStatus =
   (typeof PUBLIC_CAPABILITY_STATUS_LABELS)[PublicCapabilityStatus];
 
 export interface NavigationItem {
   label: string;
+  labelKey?: TranslationKey;
   href: string;
   description?: string;
+  descriptionKey?: TranslationKey;
   status?: NavigationItemStatus;
 }
 
@@ -60,7 +64,13 @@ export const publicNavigation: NavigationSection[] = [
         label: "Professional Workflows",
         items: [
           { label: "Quantity Surveying Software", href: "/quantity-surveying-software", description: "Reviewed BOQ workflow support for quantity surveyors without replacing professional judgement." },
-          { label: "Security", href: "/security", description: "Review Quantara's current authenticated-access, data-handling and Controlled Early Access security limitations." },
+          {
+            label: en.publicContent.navigation.securityLabel,
+            labelKey: "publicContent.navigation.securityLabel",
+            href: "/security",
+            description: en.publicContent.navigation.securityDescription,
+            descriptionKey: "publicContent.navigation.securityDescription",
+          },
           { label: "About Quantara", href: "/about", description: "Learn about our mission and the team behind Quantara." }
         ]
       }
@@ -177,8 +187,16 @@ export const publicNavigation: NavigationSection[] = [
           { label: "About", href: "/about" },
           { label: "Pricing", href: "/pricing" },
           { label: "Contact Sales", href: "/contact-sales" },
-          { label: "Request Early Access", href: "/register" },
-          { label: "Security", href: "/security" }
+          {
+            label: en.publicContent.cta.startAccountSetup,
+            labelKey: "publicContent.cta.startAccountSetup",
+            href: "/register",
+          },
+          {
+            label: en.publicContent.navigation.securityLabel,
+            labelKey: "publicContent.navigation.securityLabel",
+            href: "/security",
+          }
         ]
       }
     ]
@@ -193,3 +211,28 @@ export const legalNavigation: NavigationItem[] = [
   { label: "Acceptable Use", href: "/acceptable-use" },
   { label: "Subprocessors", href: "/subprocessors" }
 ];
+
+function localizeNavigationItem(
+  item: NavigationItem,
+  translate: TranslateFn,
+): NavigationItem {
+  return {
+    ...item,
+    label: item.labelKey ? translate(item.labelKey) : item.label,
+    description: item.descriptionKey
+      ? translate(item.descriptionKey)
+      : item.description,
+  };
+}
+
+export function getPublicNavigation(
+  translate: TranslateFn,
+): NavigationSection[] {
+  return publicNavigation.map((section) => ({
+    ...section,
+    groups: section.groups.map((group) => ({
+      ...group,
+      items: group.items.map((item) => localizeNavigationItem(item, translate)),
+    })),
+  }));
+}

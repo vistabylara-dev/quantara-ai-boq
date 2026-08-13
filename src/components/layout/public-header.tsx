@@ -5,9 +5,16 @@ import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Menu, X, ChevronDown } from "lucide-react";
-import { publicNavigation, NavigationSection, NavigationItem } from "@/config/public-navigation";
+import {
+  getPublicNavigation,
+  type NavigationItem,
+  type NavigationSection,
+} from "@/config/public-navigation";
+import { useTranslations } from "@/lib/i18n/locale-provider";
 
 export default function PublicHeader() {
+  const t = useTranslations();
+  const navigation = getPublicNavigation(t);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [activeDesktopSection, setActiveDesktopSection] = useState<string | null>(null);
   const [activeMobileSection, setActiveMobileSection] = useState<string | null>(null);
@@ -132,7 +139,7 @@ export default function PublicHeader() {
 
         {/* Desktop Navigation */}
         <div className="hidden lg:flex items-center gap-1" ref={desktopMenuRef}>
-          {publicNavigation.map((section) => {
+          {navigation.map((section) => {
             const isOpen = activeDesktopSection === section.label;
             const buttonId = `desktop-nav-${section.label.toLowerCase().replace(/\s+/g, "-")}`;
             const panelId = `desktop-panel-${section.label.toLowerCase().replace(/\s+/g, "-")}`;
@@ -202,7 +209,7 @@ export default function PublicHeader() {
             Sign In
           </Link>
           <Link href="/register" className="inline-flex items-center justify-center rounded-md text-sm font-medium bg-blue-600 text-white hover:bg-blue-700 h-9 px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:focus:ring-offset-slate-950 transition-colors">
-            Request Early Access
+            {t("publicContent.cta.startAccountSetup")}
           </Link>
         </div>
 
@@ -234,7 +241,7 @@ export default function PublicHeader() {
           className="absolute left-0 right-0 top-full z-40 h-[calc(100vh-4rem)] overflow-y-auto bg-white dark:bg-slate-950"
         >
           <div className="px-4 py-6 space-y-2">
-            {publicNavigation.map((section) => {
+            {navigation.map((section) => {
               const isOpen = activeMobileSection === section.label;
               const buttonId = `mobile-nav-${section.label.toLowerCase().replace(/\s+/g, "-")}`;
               const panelId = `mobile-panel-${section.label.toLowerCase().replace(/\s+/g, "-")}`;
@@ -288,7 +295,7 @@ export default function PublicHeader() {
                 Sign In
               </Link>
               <Link href="/register" className="block w-full text-center py-3 text-base font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:focus:ring-offset-slate-950">
-                Request Early Access
+                {t("publicContent.cta.startAccountSetup")}
               </Link>
             </div>
           </div>

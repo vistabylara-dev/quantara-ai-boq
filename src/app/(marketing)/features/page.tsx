@@ -5,14 +5,17 @@ import PublicBreadcrumb from "@/components/ui/public-breadcrumb";
 import { PublicPageJsonLd } from "@/components/seo/public-json-ld";
 import {
   PROFESSIONAL_REVIEW_NOTICE,
-  PUBLIC_CAPABILITIES,
   PUBLIC_CAPABILITY_STATUS_DESCRIPTIONS,
   PUBLIC_CAPABILITY_STATUS_LABELS,
   QUANTARA_ENTITY_DEFINITION,
   QUANTARA_WORKFLOW_TRUTH,
+  getPublicCapabilitiesForDisplay,
   type PublicCapabilityStatus,
 } from "@/lib/public-site/product-truth";
 import { createPublicPageMetadata } from "@/lib/public-site/search-registry";
+import { getDictionary } from "@/lib/i18n/dictionaries";
+import { getServerLocale } from "@/lib/i18n/server-locale";
+import { createTranslator } from "@/lib/i18n/translate";
 
 export const metadata = createPublicPageMetadata("/features");
 
@@ -42,7 +45,11 @@ const statusPresentation: Record<
   },
 };
 
-export default function FeaturesPage() {
+export default async function FeaturesPage() {
+  const locale = await getServerLocale();
+  const t = createTranslator(getDictionary(locale));
+  const publicCapabilities = getPublicCapabilitiesForDisplay(t);
+
   return (
     <>
       <PublicPageJsonLd
@@ -103,14 +110,12 @@ export default function FeaturesPage() {
               Verified Public Capability Register
             </h2>
             <p className="leading-relaxed text-slate-600 dark:text-slate-400">
-              Statuses describe the public product truth as reviewed on 9 August 2026. Controlled
-              access does not mean every account has the feature enabled. Limited capabilities
-              should be read together with their stated boundary.
+              {t("publicContent.features.truthNote")}
             </p>
           </div>
 
           <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-            {PUBLIC_CAPABILITIES.map((capability) => {
+            {publicCapabilities.map((capability) => {
               const presentation = statusPresentation[capability.status];
               const Icon = presentation.icon;
               return (
@@ -164,7 +169,7 @@ export default function FeaturesPage() {
               Discuss Your Requirements <ArrowRight className="ml-2 h-4 w-4" aria-hidden="true" />
             </Link>
             <Link href="/register" className="inline-flex h-12 items-center justify-center rounded-lg border border-slate-600 px-6 font-semibold hover:bg-slate-800">
-              Request Early Access
+              {t("publicContent.cta.startAccountSetup")}
             </Link>
           </div>
         </div>

@@ -1,4 +1,5 @@
 import type { Metadata, MetadataRoute } from "next";
+import { getDictionary } from "@/lib/i18n/dictionaries";
 
 export const PUBLIC_SITE_ORIGIN = "https://quantara.vistabylara.com";
 export const PUBLIC_CONTENT_REVIEW_DATE = "2026-08-09";
@@ -29,18 +30,20 @@ function page(entry: PublicSearchPage): PublicSearchPage {
   return entry;
 }
 
+const metadataCopy = getDictionary("en").publicContent.metadata;
+
 export const PUBLIC_SEARCH_PAGES = [
   page({ path: "/", title: "AI-Assisted BOQ Workflow Software UAE | Quantara", description: "Quantara helps construction professionals review supported project sources, visible calculations, BOQ records, validation and professional outputs.", cluster: "core", intent: "commercial", priority: 1, changeFrequency: "weekly" }),
-  page({ path: "/features", title: "BOQ Workflow Features and Availability | Quantara", description: "Review Quantara's current BOQ workflow capabilities, controlled-access features and explicit limitations before requesting Early Access.", cluster: "core", intent: "commercial" }),
+  page({ path: "/features", title: metadataCopy.featuresTitle, description: metadataCopy.featuresDescription, cluster: "core", intent: "commercial" }),
   page({ path: "/about", title: "About Quantara BOQ Workflow Software", description: "Learn what Quantara is, who it supports and how Vista By Lara is developing an AI-assisted BOQ workflow for construction professionals.", cluster: "company", intent: "navigational" }),
-  page({ path: "/security", title: "Quantara Security and Controlled Early Access", description: "Review the security, access-control and professional-responsibility boundaries published for Quantara Controlled Early Access.", cluster: "company", intent: "informational" }),
-  page({ path: "/terms", title: "Quantara Controlled Early Access Terms", description: "Read the terms governing Quantara Controlled Early Access, permitted use, professional responsibility and service availability.", cluster: "legal", intent: "navigational", priority: 0.3, changeFrequency: "yearly" }),
-  page({ path: "/privacy", title: "Quantara Privacy Policy", description: "Read how Quantara and Vista By Lara describe personal-data handling for public enquiries and Controlled Early Access accounts.", cluster: "legal", intent: "navigational", priority: 0.3, changeFrequency: "yearly" }),
-  page({ path: "/data-processing", title: "Quantara Data Processing Information", description: "Contact Vista By Lara for the current Quantara data-processing terms applicable to a specific Controlled Early Access arrangement.", cluster: "legal", intent: "navigational", indexable: false, priority: 0.3, changeFrequency: "yearly" }),
-  page({ path: "/cookie-policy", title: "Quantara Cookie Information", description: "Contact Vista By Lara for the current cookie information applicable to the Quantara public website and Controlled Early Access.", cluster: "legal", intent: "navigational", indexable: false, priority: 0.3, changeFrequency: "yearly" }),
-  page({ path: "/acceptable-use", title: "Quantara Acceptable Use Information", description: "Contact Vista By Lara for the acceptable-use terms applicable to a specific Quantara Controlled Early Access arrangement.", cluster: "legal", intent: "navigational", indexable: false, priority: 0.3, changeFrequency: "yearly" }),
-  page({ path: "/subprocessors", title: "Quantara Subprocessor Information", description: "Contact Vista By Lara for the current verified subprocessor information applicable to a Quantara Controlled Early Access arrangement.", cluster: "legal", intent: "navigational", indexable: false, priority: 0.3, changeFrequency: "yearly" }),
-  page({ path: "/contact-sales", title: "Contact Quantara for Controlled Early Access", description: "Discuss Quantara's supported BOQ workflows, deployment fit and Controlled Early Access with the Vista By Lara team in the UAE.", cluster: "company", intent: "commercial" }),
+  page({ path: "/security", title: metadataCopy.securityTitle, description: metadataCopy.securityDescription, cluster: "company", intent: "informational" }),
+  page({ path: "/terms", title: metadataCopy.termsTitle, description: metadataCopy.termsDescription, cluster: "legal", intent: "navigational", priority: 0.3, changeFrequency: "yearly" }),
+  page({ path: "/privacy", title: metadataCopy.privacyTitle, description: metadataCopy.privacyDescription, cluster: "legal", intent: "navigational", priority: 0.3, changeFrequency: "yearly" }),
+  page({ path: "/data-processing", title: metadataCopy.dataProcessingTitle, description: metadataCopy.dataProcessingDescription, cluster: "legal", intent: "navigational", indexable: false, priority: 0.3, changeFrequency: "yearly" }),
+  page({ path: "/cookie-policy", title: metadataCopy.cookiePolicyTitle, description: metadataCopy.cookiePolicyDescription, cluster: "legal", intent: "navigational", indexable: false, priority: 0.3, changeFrequency: "yearly" }),
+  page({ path: "/acceptable-use", title: metadataCopy.acceptableUseTitle, description: metadataCopy.acceptableUseDescription, cluster: "legal", intent: "navigational", indexable: false, priority: 0.3, changeFrequency: "yearly" }),
+  page({ path: "/subprocessors", title: metadataCopy.subprocessorsTitle, description: metadataCopy.subprocessorsDescription, cluster: "legal", intent: "navigational", indexable: false, priority: 0.3, changeFrequency: "yearly" }),
+  page({ path: "/contact-sales", title: metadataCopy.contactSalesTitle, description: metadataCopy.contactSalesDescription, cluster: "company", intent: "commercial" }),
   page({ path: "/ai-boq-software", title: "AI BOQ Software for Reviewed Workflows | Quantara", description: "Learn how AI-assisted BOQ software can capture supported project information for review without replacing professional judgement.", cluster: "core", intent: "commercial" }),
   page({ path: "/boq-software", title: "BOQ Software for Construction Teams | Quantara", description: "Explore structured BOQ software for project sources, reviewed information, dimensions, calculations, revisions, validation and outputs.", cluster: "core", intent: "commercial" }),
   page({ path: "/construction-estimating-software", title: "Construction Estimating and BOQ Software | Quantara", description: "Understand how Quantara supports BOQ organization and reviewed estimating inputs while leaving rates, risk and professional decisions to the team.", cluster: "core", intent: "commercial" }),
@@ -91,7 +94,7 @@ export const PUBLIC_SEARCH_PAGES = [
   page({ path: "/when-to-use-boq-software", title: "When to Use BOQ Software: Decision Guide", description: "Assess when BOQ software may help with source volume, item structure, calculation review, revisions, validation and team coordination.", cluster: "comparison", intent: "informational" }),
   page({ path: "/site-map", title: "Quantara Public Website Sitemap", description: "Browse Quantara's public product, audience, regional, comparison, educational, company and legal pages from one directory.", cluster: "company", intent: "navigational", priority: 0.4 }),
   page({ path: "/boq-calculation-formulas", title: "BOQ Calculation Formulas and Quantity Guide", description: "Review common length, area, volume, weight and cost formulas with professional-input requirements and project-specific limitations.", cluster: "measurement", intent: "informational" }),
-  page({ path: "/pricing", title: "Quantara Early Access and Commercial Availability", description: "Quantara plans, entitlements and pricing are confirmed through a requirements discussion during Controlled Early Access, not self-serve checkout.", cluster: "company", intent: "commercial" }),
+  page({ path: "/pricing", title: metadataCopy.pricingTitle, description: metadataCopy.pricingDescription, cluster: "company", intent: "commercial" }),
 ] as const satisfies readonly PublicSearchPage[];
 
 export type PublicSearchPath = (typeof PUBLIC_SEARCH_PAGES)[number]["path"];

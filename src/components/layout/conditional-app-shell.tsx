@@ -4,6 +4,7 @@ import dynamic from "next/dynamic";
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 import { PUBLIC_WEBSITE_PATHS } from "@/lib/public-site/public-route-paths";
+import HelpFeedbackBubble from "@/components/support/help-feedback-bubble";
 
 const AppShell = dynamic(() => import("./app-shell"));
 
@@ -28,13 +29,28 @@ const PUBLIC_SHELL_ROUTES = new Set<string>([
  */
 export default function ConditionalAppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
+  const currentRoute = pathname || "/";
   
   if (
     pathname?.startsWith("/proposal") ||
-    pathname?.startsWith("/technical-report") ||
-    PUBLIC_SHELL_ROUTES.has(pathname || "")
+    pathname?.startsWith("/technical-report")
   ) {
     return <>{children}</>;
   }
-  return <AppShell>{children}</AppShell>;
+
+  if (PUBLIC_SHELL_ROUTES.has(currentRoute)) {
+    return (
+      <>
+        {children}
+        <HelpFeedbackBubble surface="PUBLIC" currentRoute={currentRoute} />
+      </>
+    );
+  }
+
+  return (
+    <>
+      <AppShell>{children}</AppShell>
+      <HelpFeedbackBubble surface="SAAS" currentRoute={currentRoute} />
+    </>
+  );
 }

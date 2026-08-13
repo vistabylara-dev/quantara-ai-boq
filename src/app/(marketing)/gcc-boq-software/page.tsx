@@ -45,18 +45,18 @@ export default async function GCCIndexPage() {
         path="/gcc-boq-software"
         breadcrumbs={[{ name: "Home", path: "/" }, { name: "GCC BOQ Software", path: "/gcc-boq-software" }]}
       />
-      <div className="min-h-screen bg-white text-slate-900">
+      <div className="min-h-screen bg-[#030508] text-slate-100">
       <div className="container mx-auto px-4 py-16 md:py-24 max-w-7xl">
-        <PublicBreadcrumb items={[{ name: content.home, item: "/" }, { name: content.breadcrumb }]} tone="light" />
+        <PublicBreadcrumb items={[{ name: content.home, item: "/" }, { name: content.breadcrumb }]} tone="dark" />
 
         <header className="mb-16 text-center max-w-4xl mx-auto">
-          <div className="inline-flex items-center gap-2 px-3 py-1 bg-blue-50 text-blue-700 rounded-full text-xs font-semibold mb-6 uppercase tracking-wider">
+          <div className="inline-flex items-center gap-2 px-3 py-1 bg-blue-900/30 text-blue-300 rounded-full text-xs font-semibold mb-6 uppercase tracking-wider">
             <Globe className="w-4 h-4" /> {content.eyebrow}
           </div>
-          <h1 className="text-4xl md:text-5xl font-bold text-slate-900 tracking-tight mb-8 leading-tight">
+          <h1 className="text-4xl md:text-5xl font-bold text-white tracking-tight mb-8 leading-tight">
             {content.title}
           </h1>
-          <div className="prose prose-lg text-slate-600 mx-auto leading-relaxed">
+          <div className="prose prose-invert prose-lg text-slate-300 mx-auto leading-relaxed">
             <p>
               {t("publicContent.regional.gccAvailability")}
             </p>
@@ -68,29 +68,29 @@ export default async function GCCIndexPage() {
 
         <div className="grid md:grid-cols-2 gap-6 mb-16">
           {content.links.map((link, idx) => (
-            <Link key={idx} href={link.href} className="group flex flex-col justify-between p-8 bg-white border border-slate-200 rounded-2xl hover:border-blue-300 hover:bg-blue-50/50 transition-all shadow-sm hover:shadow-md">
+            <Link key={idx} href={link.href} className="group flex flex-col justify-between p-8 bg-slate-900/50 border border-slate-800 rounded-2xl hover:border-blue-500 hover:bg-blue-900/20 transition-all shadow-sm hover:shadow-md">
               <div>
-                <h2 className="text-2xl font-bold text-slate-900 group-hover:text-blue-700 mb-3 flex items-center justify-between">
+                <h2 className="text-2xl font-bold text-white group-hover:text-blue-400 mb-3 flex items-center justify-between">
                   {link.name}
                   <ArrowRight className="w-5 h-5 opacity-0 group-hover:opacity-100 transform -translate-x-4 group-hover:translate-x-0 transition-all rtl:rotate-180" />
                 </h2>
-                <p className="text-slate-600">{link.desc}</p>
+                <p className="text-slate-400">{link.desc}</p>
               </div>
             </Link>
           ))}
         </div>
 
-        <section className="bg-white border border-slate-200 p-8 rounded-2xl text-center shadow-sm">
-          <h2 className="text-2xl font-bold text-slate-900 mb-6">{content.learnMore}</h2>
+        <section className="bg-slate-900/50 border border-slate-800 p-8 rounded-2xl text-center shadow-sm">
+          <h2 className="text-2xl font-bold text-white mb-6">{content.learnMore}</h2>
           <div className="flex flex-wrap justify-center gap-4">
-            <Link href="/about" className="px-6 py-3 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-lg text-sm font-medium text-slate-700 transition-colors">{content.about}</Link>
-            <Link href="/features" className="px-6 py-3 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-lg text-sm font-medium text-slate-700 transition-colors">{content.features}</Link>
-            <Link href="/contact-sales" className="px-6 py-3 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-lg text-sm font-medium text-slate-700 transition-colors">{content.contactSales}</Link>
+            <Link href="/about" className="px-6 py-3 bg-slate-900 hover:bg-slate-800 border border-slate-800 rounded-lg text-sm font-medium text-slate-300 transition-colors">{content.about}</Link>
+            <Link href="/features" className="px-6 py-3 bg-slate-900 hover:bg-slate-800 border border-slate-800 rounded-lg text-sm font-medium text-slate-300 transition-colors">{content.features}</Link>
+            <Link href="/contact-sales" className="px-6 py-3 bg-slate-900 hover:bg-slate-800 border border-slate-800 rounded-lg text-sm font-medium text-slate-300 transition-colors">{content.contactSales}</Link>
           </div>
         </section>
 
-        <section className="mt-16 p-5 bg-slate-100 border border-slate-200 rounded-xl text-center max-w-4xl mx-auto">
-          <p className="text-sm text-slate-600 font-medium leading-relaxed">
+        <section className="mt-16 p-5 bg-slate-900/50 border border-slate-800 rounded-xl text-center max-w-4xl mx-auto">
+          <p className="text-sm text-slate-400 font-medium leading-relaxed">
             {content.disclaimer}
           </p>
         </section>

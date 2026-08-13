@@ -34,7 +34,7 @@ export default async function SiteMapPage() {
   });
 
   return (
-    <div className="flex min-h-screen flex-col bg-white text-slate-900 dark:bg-slate-950 dark:text-slate-100">
+    <div className="flex min-h-screen flex-col bg-[#030508] text-slate-100">
       <PublicJsonLd data={jsonLd} />
       <div className="mx-auto w-full max-w-5xl px-4 py-12 md:px-6 md:py-20">
         <PublicBreadcrumb items={breadcrumbItems} />

@@ -191,7 +191,13 @@ export const publicNavigation: NavigationSection[] = [
         label: "Company",
         items: [
           { label: "About", href: "/about" },
-          { label: "Pricing", href: "/pricing" },
+          {
+            label: en.publicContent.pricing.breadcrumb,
+            labelKey: "publicContent.pricing.breadcrumb",
+            href: "/pricing",
+            description: en.publicContent.pricing.navDescription,
+            descriptionKey: "publicContent.pricing.navDescription",
+          },
           { label: "Contact Sales", href: "/contact-sales" },
           {
             label: en.publicContent.cta.startAccountSetup,

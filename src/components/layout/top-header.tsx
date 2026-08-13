@@ -1,6 +1,7 @@
 "use client";
 
-import { Bell, Menu, Search } from "lucide-react";
+import Link from "next/link";
+import { Bell, Crown, Menu, Search } from "lucide-react";
 import UserMenu from "./user-menu";
 
 import { ThemeToggle } from "@/components/theme-toggle";
@@ -23,6 +24,14 @@ export default function TopHeader({ onMenuClick }: TopHeaderProps) {
         </div>
 
         <div className="flex items-center gap-3">
+          <Link
+            href="/settings/subscription"
+            aria-label={t("navigation.upgrade")}
+            className="inline-flex h-11 items-center gap-2 border border-blue-500/30 bg-blue-500/10 px-4 text-sm font-semibold text-blue-600 hover:bg-blue-500/20 transition-all dark:border-[#00F0FF]/30 dark:bg-[#00F0FF]/10 dark:text-[#00F0FF] dark:hover:bg-[#00F0FF]/20"
+          >
+            <Crown className="h-5 w-5" aria-hidden="true" />
+            <span className="hidden sm:inline">{t("navigation.upgrade")}</span>
+          </Link>
           <LanguageSwitcher />
           <ThemeToggle />
           <button

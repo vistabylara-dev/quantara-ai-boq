@@ -129,6 +129,7 @@ const ar: Dictionary = {
     searchLabel: "البحث في مساحة العمل",
     activeProject: "المشروع النشط",
     workspaceHeading: "مساحة العمل",
+    upgrade: "ترقية الخطة",
   },
   auth: {
     login: {
@@ -960,6 +961,7 @@ const ar: Dictionary = {
       enterpriseFeatureScope: "توثيق نطاق التنفيذ قبل الالتزام",
       enterpriseFeatureWritten: "تأكيد الشروط التجارية بصورة منفصلة ومكتوبة",
       discussRequirements: "مناقشة المتطلبات",
+      navDescription: "قارن بين خطط Quantara الأساسية والاحترافية والأعمال مع الأسعار الشهرية والسنوية بالدرهم الإماراتي.",
       saasBillingMonthly: "شهري",
       saasBillingAnnual: "سنوي",
       saasPerMonth: "/ شهر",
@@ -2570,7 +2572,7 @@ const ar: Dictionary = {
         "/boq-software-saudi-arabia": "المملكة العربية السعودية",
         "/boq-software-qatar": "قطر",
         "/boq-software-oman": "عُمان",
-        "/pricing": "الأسعار والشروط التجارية",
+        "/pricing": "الأسعار",
         "/contact-sales": "تواصل مع المبيعات",
         "/register": "ابدأ إعداد الحساب"
       },

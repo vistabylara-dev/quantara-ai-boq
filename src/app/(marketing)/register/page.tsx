@@ -118,8 +118,12 @@ export default function RegisterPage() {
         role, country, primaryIndustry, intendedUse: intendedUse || selectedPackage, approximateVolume, consent
       });
       setRegistered(true);
-    } catch (submitError) {
-      setError(locale === "ar" ? t("errors.generic") : getApiErrorMessage(submitError));
+    } catch (submitError: any) {
+      if (submitError?.code === "EMAIL_ALREADY_REGISTERED") {
+        setError(t("errors.emailAlreadyRegistered"));
+      } else {
+        setError(locale === "ar" ? t("errors.generic") : getApiErrorMessage(submitError));
+      }
     } finally {
       setIsSubmitting(false);
     }
@@ -174,6 +178,7 @@ export default function RegisterPage() {
                   id="email"
                   type="email"
                   required
+                  dir="ltr"
                   value={email}
                   onChange={(event) => setEmail(event.target.value)}
                   className="mt-1 w-full rounded-2xl border border-slate-800 bg-slate-900 px-4 py-3 text-sm text-white outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
@@ -246,6 +251,7 @@ export default function RegisterPage() {
                 id="password"
                 type="password"
                 required
+                dir="ltr"
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}
                 className="mt-1 w-full rounded-2xl border border-slate-800 bg-slate-900 px-4 py-3 text-sm text-white outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"

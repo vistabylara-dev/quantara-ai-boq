@@ -1,9 +1,17 @@
 "use client";
 
+import { useSearchParams } from "next/navigation";
 import { Suspense, useCallback, useEffect, useState } from "react";
 import { apiClient, getApiErrorMessage } from "@/lib/api/client";
 import { formatDate } from "@/lib/formatting/dates";
 import { CheckoutReturnStatus } from "@/components/commercial/checkout-return-status";
+import {
+  clearPendingPricingIntent,
+  normalizePublicPriceCode,
+  readPendingPricingIntent,
+  storePendingPricingIntent,
+  type TrustedPublicPriceCode,
+} from "@/lib/commercial/pricing-intent";
 
 type Entitlements = {
   planType: string;
@@ -79,7 +87,9 @@ function unavailableLabel(reason: CheckoutUnavailableReason | null): string {
   }
 }
 
-export default function SubscriptionSettingsPage() {
+function SubscriptionSettingsContent() {
+  const searchParams = useSearchParams();
+  const [selectedPricingIntent, setSelectedPricingIntent] = useState<TrustedPublicPriceCode | null>(null);
   const [entitlements, setEntitlements] = useState<Entitlements | null>(null);
   const [trialUsage, setTrialUsage] = useState<TrialUsage>(null);
   const [packages, setPackages] = useState<PackageSubscription[]>([]);
@@ -127,6 +137,16 @@ export default function SubscriptionSettingsPage() {
     return () => controller.abort();
   }, [load]);
 
+  useEffect(() => {
+    const queryPriceCode = normalizePublicPriceCode(searchParams.get("priceCode"));
+    if (queryPriceCode) {
+      storePendingPricingIntent(queryPriceCode);
+      setSelectedPricingIntent(queryPriceCode);
+    } else {
+      setSelectedPricingIntent(readPendingPricingIntent());
+    }
+  }, [searchParams]);
+
   const runAction = useCallback(async (key: string, fn: () => Promise<void>) => {
     setBusyKey(key);
     setActionError(null);
@@ -160,6 +180,7 @@ export default function SubscriptionSettingsPage() {
 
   const checkout = useCallback((priceCode: string) => runAction(`checkout-${priceCode}`, async () => {
     const result = await apiClient.post<{ checkoutUrl: string; checkoutSessionId: string }>("/api/commerce/checkout", { priceCode });
+    clearPendingPricingIntent();
     window.location.href = result.checkoutUrl;
   }), [runAction]);
 
@@ -299,14 +320,22 @@ export default function SubscriptionSettingsPage() {
                 <h3 className="text-lg font-semibold text-white">{product.name}</h3>
                 <p className="mt-1 text-xs text-slate-500">{product.shortDescription}</p>
                 <div className="mt-4 space-y-2">
-                  {product.prices.map((price) => (
+                  {product.prices.map((price) => {
+                    const isSelectedPricingIntent = price.priceCode === selectedPricingIntent;
+                    return (
                     <button
                       key={price.priceCode}
                       type="button"
                       onClick={() => price.available && void checkout(price.priceCode)}
                       disabled={!price.available || busyKey === `checkout-${price.priceCode}`}
                       title={price.available ? undefined : unavailableLabel(price.unavailableReason)}
-                      className="flex w-full items-center justify-between rounded-2xl border border-slate-700 bg-blue-600 px-4 py-2 text-xs font-semibold text-white hover:bg-blue-500 disabled:cursor-not-allowed disabled:border-slate-800 disabled:bg-slate-800 disabled:text-slate-500"
+                      aria-current={isSelectedPricingIntent ? "true" : undefined}
+                      data-selected-pricing-intent={isSelectedPricingIntent ? "true" : undefined}
+                      className={`flex w-full items-center justify-between rounded-2xl border px-4 py-2 text-xs font-semibold text-white hover:bg-blue-500 disabled:cursor-not-allowed disabled:border-slate-800 disabled:bg-slate-800 disabled:text-slate-500 ${
+                        isSelectedPricingIntent
+                          ? "border-cyan-400 bg-blue-600 ring-2 ring-cyan-400/60"
+                          : "border-slate-700 bg-blue-600"
+                      }`}
                     >
                       <span>{price.billingInterval === "MONTH" ? "Monthly" : "Annual"}</span>
                       <span>
@@ -317,7 +346,8 @@ export default function SubscriptionSettingsPage() {
                             : formatMoney(price.amountMinor, price.currency)}
                       </span>
                     </button>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
             ))}
@@ -374,6 +404,14 @@ export default function SubscriptionSettingsPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function SubscriptionSettingsPage() {
+  return (
+    <Suspense fallback={null}>
+      <SubscriptionSettingsContent />
+    </Suspense>
   );
 }
 

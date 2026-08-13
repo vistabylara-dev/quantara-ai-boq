@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { CheckCircle2 } from "lucide-react";
+import { buildRegisterPricingHref, normalizePublicPriceCode, storePendingPricingIntent } from "@/lib/commercial/pricing-intent";
 
 type BillingCycle = "monthly" | "annual";
 
@@ -70,6 +71,8 @@ export default function PricingPlans({ plans, labels }: PricingPlansProps) {
         {plans.map((plan) => {
           const cycle = billingCycle === "monthly" ? plan.monthly : plan.annual;
           const periodLabel = billingCycle === "monthly" ? labels.perMonth : labels.perYear;
+          const trustedPriceCode = normalizePublicPriceCode(cycle.priceCode);
+          const registerHref = trustedPriceCode ? buildRegisterPricingHref(trustedPriceCode) : "/register";
 
           return (
             <div
@@ -103,8 +106,11 @@ export default function PricingPlans({ plans, labels }: PricingPlansProps) {
               </p>
 
               <Link
-                href="/register"
+                href={registerHref}
                 data-price-code={cycle.priceCode}
+                onClick={() => {
+                  if (trustedPriceCode) storePendingPricingIntent(trustedPriceCode);
+                }}
                 className={`mt-8 block rounded-md px-3 py-2 text-center text-sm font-semibold leading-6 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 ${
                   plan.recommended
                     ? "bg-blue-600 text-white hover:bg-blue-500 focus-visible:outline-blue-600"

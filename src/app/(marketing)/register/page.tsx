@@ -1,11 +1,19 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useSearchParams } from "next/navigation";
+import { Suspense, useEffect, useRef, useState, type FormEvent } from "react";
 import { CheckCircle2 } from "lucide-react";
 import { apiClient, getApiErrorMessage } from "@/lib/api/client";
 import { getPublicAccessOptions } from "@/config/pricing";
 import { useLocale, useTranslations } from "@/lib/i18n/locale-provider";
+import {
+  buildLoginPricingHref,
+  normalizePublicPriceCode,
+  readPendingPricingIntent,
+  storePendingPricingIntent,
+  type TrustedPublicPriceCode,
+} from "@/lib/commercial/pricing-intent";
 
 function AccessOptionsFieldset({
   selectedOption,
@@ -82,15 +90,16 @@ function AccessOptionsFieldset({
   );
 }
 
-export default function RegisterPage() {
+function RegisterForm() {
   const t = useTranslations();
   const { locale } = useLocale();
+  const searchParams = useSearchParams();
   const publicAccessOptions = getPublicAccessOptions(t);
   const [companyName, setCompanyName] = useState("");
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  
+
   const [role, setRole] = useState("Quantity Surveyor");
   const [country, setCountry] = useState("");
   const [primaryIndustry, setPrimaryIndustry] = useState("");
@@ -98,6 +107,7 @@ export default function RegisterPage() {
   const [approximateVolume, setApproximateVolume] = useState("");
   const [selectedPackage, setSelectedPackage] = useState<string>(publicAccessOptions[0].key);
   const [consent, setConsent] = useState(false);
+  const [pendingPriceCode, setPendingPriceCode] = useState<TrustedPublicPriceCode | null>(null);
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -107,6 +117,18 @@ export default function RegisterPage() {
   useEffect(() => {
     if (registered) successHeadingRef.current?.focus();
   }, [registered]);
+
+  useEffect(() => {
+    const queryPriceCode = normalizePublicPriceCode(searchParams.get("priceCode"));
+    if (queryPriceCode) {
+      storePendingPricingIntent(queryPriceCode);
+      setPendingPriceCode(queryPriceCode);
+    } else {
+      setPendingPriceCode(readPendingPricingIntent());
+    }
+  }, [searchParams]);
+
+  const signInHref = pendingPriceCode ? buildLoginPricingHref(pendingPriceCode) : "/login";
 
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
@@ -138,7 +160,7 @@ export default function RegisterPage() {
             {t("publicContent.accountSetup.success")}
           </p>
           <Link
-            href="/login"
+            href={signInHref}
             className="mt-6 inline-flex rounded-2xl border border-slate-700 bg-slate-900 px-4 py-2 text-sm font-semibold text-slate-200 hover:bg-slate-800"
           >
             {t("publicContent.accountSetup.backToSignIn")}
@@ -303,12 +325,20 @@ export default function RegisterPage() {
 
           <div className="mt-6 text-sm text-slate-400 text-center">
             {t("publicContent.accountSetup.existingAccount")}{" "}
-            <Link href="/login" className="text-blue-400 underline hover:text-blue-300">{t("publicContent.accountSetup.signIn")}</Link>
+            <Link href={signInHref} className="text-blue-400 underline hover:text-blue-300">{t("publicContent.accountSetup.signIn")}</Link>
           </div>
         </div>
 
         <AccessOptionsFieldset selectedOption={selectedPackage} onSelect={setSelectedPackage} />
       </div>
     </div>
+  );
+}
+
+export default function RegisterPage() {
+  return (
+    <Suspense fallback={null}>
+      <RegisterForm />
+    </Suspense>
   );
 }

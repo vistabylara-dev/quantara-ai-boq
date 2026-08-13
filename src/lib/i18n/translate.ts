@@ -1,4 +1,4 @@
-import type { Dictionary } from "./dictionaries/en";
+import en, { type Dictionary } from "./dictionaries/en";
 
 /**
  * Recursively derives every leaf dot-path of the dictionary as a union of
@@ -49,3 +49,10 @@ export function createTranslator(dictionary: Dictionary): TranslateFn {
     return interpolate(value, vars);
   };
 }
+
+/**
+ * Canonical fallback for framework-agnostic helpers and existing callers that
+ * do not render inside LocaleProvider. UI components should still inject the
+ * active locale translator so Arabic remains reactive at render time.
+ */
+export const defaultTranslator = createTranslator(en);

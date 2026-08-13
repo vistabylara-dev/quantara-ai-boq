@@ -5,6 +5,8 @@ import { useCallback, useEffect, useState, use } from "react";
 import type { Project } from "@/types/project";
 import { apiClient, getApiErrorMessage } from "@/lib/api/client";
 import { formatDate } from "@/lib/formatting/dates";
+import { useLocale } from "@/lib/i18n/locale-provider";
+import type { TranslationKey } from "@/lib/i18n/translate";
 
 type ReportTemplateSummary = {
   id: string;
@@ -29,6 +31,11 @@ type GeneratedTechnicalReportView = {
   completedAt: string | null;
 };
 
+const REPORT_STATUS_LABEL_KEYS = {
+  DRAFT: "technicalReports.statusDraft",
+  COMPLETED: "technicalReports.statusCompleted",
+} as const satisfies Record<GeneratedTechnicalReportView["status"], TranslationKey>;
+
 function formatFileSize(bytes: number | null): string {
   if (!bytes) return "—";
   if (bytes < 1024) return `${bytes} B`;
@@ -40,6 +47,7 @@ type PageProps = { params: Promise<{ projectId: string }> };
 
 export default function ProjectTechnicalReportsPage(props: PageProps) {
   const params = use(props.params);
+  const { locale, t } = useLocale();
   const [project, setProject] = useState<Project | null>(null);
   const [templates, setTemplates] = useState<ReportTemplateSummary[]>([]);
   const [reports, setReports] = useState<GeneratedTechnicalReportView[]>([]);
@@ -88,7 +96,7 @@ export default function ProjectTechnicalReportsPage(props: PageProps) {
     try {
       const created = await apiClient.post<GeneratedTechnicalReportView>(`/api/projects/${encodeURIComponent(params.projectId)}/technical-reports`, {
         templateId: selectedTemplateId,
-        name: reportName.trim() || `${templates.find((t) => t.id === selectedTemplateId)?.name ?? "Technical report"} — ${project?.name ?? ""}`.trim(),
+        name: reportName.trim() || `${templates.find((tpl) => tpl.id === selectedTemplateId)?.name ?? t("proposals.sourceReport")} — ${project?.name ?? ""}`.trim(),
       });
       setReportName("");
       window.location.href = `/projects/${params.projectId}/technical-reports/${created.id}`;
@@ -97,7 +105,7 @@ export default function ProjectTechnicalReportsPage(props: PageProps) {
     } finally {
       setIsCreating(false);
     }
-  }, [params.projectId, project?.name, reportName, selectedTemplateId, templates]);
+  }, [params.projectId, project?.name, reportName, selectedTemplateId, t, templates]);
 
   const deleteReport = useCallback(async (reportId: string) => {
     setDeletingId(reportId);
@@ -115,7 +123,7 @@ export default function ProjectTechnicalReportsPage(props: PageProps) {
   if (isLoading) {
     return (
       <div className="rounded-[32px] border border-slate-800 bg-slate-950 p-8 text-slate-300">
-        <p className="text-lg font-semibold text-white">Loading technical reports</p>
+        <p className="text-lg font-semibold text-white">{t("technicalReports.loadingList")}</p>
       </div>
     );
   }
@@ -123,23 +131,24 @@ export default function ProjectTechnicalReportsPage(props: PageProps) {
   if (loadError || !project) {
     return (
       <div className="rounded-[32px] border border-slate-800 bg-slate-950 p-8 text-slate-300">
-        <p className="text-lg font-semibold text-white">Technical reports unavailable</p>
-        <p className="mt-2 text-sm text-rose-300">{loadError ?? "This project could not be loaded."}</p>
+        <p className="text-lg font-semibold text-white">{t("technicalReports.listUnavailable")}</p>
+        <p className="mt-2 text-sm text-rose-300">{loadError ?? t("proposals.projectCouldNotLoad")}</p>
       </div>
     );
   }
 
+  const noTemplatesParts = t("technicalReports.noTemplatesYet", { link: "@@LINK@@" }).split("@@LINK@@");
+
   return (
     <div className="space-y-6">
       <div className="rounded-[32px] border border-slate-800 bg-slate-950 p-8">
-        <p className="text-sm uppercase tracking-[0.28em] text-slate-500">Technical reports</p>
-        <h2 className="mt-2 text-3xl font-semibold text-white">{project.name} technical reports</h2>
+        <p className="text-sm uppercase tracking-[0.28em] text-slate-500">{t("technicalReports.eyebrow")}</p>
+        <h2 className="mt-2 text-3xl font-semibold text-white">{t("technicalReports.title", { name: project.name })}</h2>
         <p className="mt-3 text-slate-400">
-          Pick a report template, fill in the project-specific fields, and generate a Word document — the same structure every
-          time, none of your source content invented.
+          {t("technicalReports.subtitle")}
         </p>
         <Link href="/templates" className="mt-4 inline-flex rounded-2xl border border-slate-700 bg-slate-900 px-4 py-2 text-sm font-semibold text-slate-200 hover:bg-slate-800">
-          Manage report templates
+          {t("technicalReports.manageTemplates")}
         </Link>
       </div>
 
@@ -148,7 +157,7 @@ export default function ProjectTechnicalReportsPage(props: PageProps) {
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <p>{actionError}</p>
             <button type="button" onClick={() => setActionError(null)} className="rounded-2xl border border-rose-800 px-3 py-2 font-semibold hover:bg-rose-900/40">
-              Dismiss
+              {t("boqEditor.dismiss")}
             </button>
           </div>
         </div>
@@ -156,18 +165,18 @@ export default function ProjectTechnicalReportsPage(props: PageProps) {
 
       <div className="grid gap-6 xl:grid-cols-[1fr_360px]">
         <section className="rounded-[32px] border border-slate-800 bg-slate-950 p-8">
-          <h3 className="text-xl font-semibold text-white">Reports</h3>
+          <h3 className="text-xl font-semibold text-white">{t("technicalReports.reportsHeading")}</h3>
           <div className="mt-6 overflow-x-auto rounded-3xl border border-slate-800 bg-slate-900">
             <table className="min-w-full text-left text-sm text-slate-300">
               <thead className="bg-slate-950 text-slate-400">
                 <tr>
-                  <th className="px-4 py-3">Name</th>
-                  <th className="px-4 py-3">Template</th>
-                  <th className="px-4 py-3">Status</th>
-                  <th className="px-4 py-3">Size</th>
-                  <th className="px-4 py-3">Created</th>
-                  <th className="px-4 py-3">By</th>
-                  <th className="px-4 py-3">Actions</th>
+                  <th className="px-4 py-3">{t("technicalReports.colName")}</th>
+                  <th className="px-4 py-3">{t("technicalReports.colTemplate")}</th>
+                  <th className="px-4 py-3">{t("technicalReports.colStatus")}</th>
+                  <th className="px-4 py-3">{t("technicalReports.colSize")}</th>
+                  <th className="px-4 py-3">{t("technicalReports.colCreated")}</th>
+                  <th className="px-4 py-3">{t("technicalReports.colBy")}</th>
+                  <th className="px-4 py-3">{t("technicalReports.colActions")}</th>
                 </tr>
               </thead>
               <tbody>
@@ -185,8 +194,12 @@ export default function ProjectTechnicalReportsPage(props: PageProps) {
                       )}
                     </td>
                     <td className="px-4 py-3">
-                      <span className={report.status === "COMPLETED" ? "text-emerald-300" : "text-slate-400"}>{report.status}</span>
-                      {report.errorMessage && <p className="mt-1 max-w-[200px] text-xs text-rose-400">{report.errorMessage}</p>}
+                      <span className={report.status === "COMPLETED" ? "text-emerald-300" : "text-slate-400"}>{t(REPORT_STATUS_LABEL_KEYS[report.status])}</span>
+                      {report.errorMessage && (
+                        <p className="mt-1 max-w-[200px] text-xs text-rose-400">
+                          {locale === "ar" ? t("technicalReports.generationErrorDetail") : report.errorMessage}
+                        </p>
+                      )}
                     </td>
                     <td className="px-4 py-3">{formatFileSize(report.fileSize)}</td>
                     <td className="px-4 py-3">{formatDate(report.createdAt)}</td>
@@ -198,14 +211,14 @@ export default function ProjectTechnicalReportsPage(props: PageProps) {
                             href={`/api/technical-reports/${encodeURIComponent(report.id)}/download`}
                             className="rounded-xl border border-slate-700 bg-slate-950 px-3 py-1.5 text-xs font-semibold text-slate-200 hover:bg-slate-800"
                           >
-                            Download
+                            {t("common.download")}
                           </a>
                         )}
                         <Link
                           href={`/projects/${params.projectId}/technical-reports/${report.id}`}
                           className="rounded-xl border border-slate-700 bg-slate-950 px-3 py-1.5 text-xs font-semibold text-slate-200 hover:bg-slate-800"
                         >
-                          Open
+                          {t("proposals.open")}
                         </Link>
                         <button
                           type="button"
@@ -213,7 +226,7 @@ export default function ProjectTechnicalReportsPage(props: PageProps) {
                           disabled={deletingId === report.id}
                           className="rounded-xl border border-rose-900 bg-rose-950/30 px-3 py-1.5 text-xs font-semibold text-rose-300 hover:bg-rose-900/40 disabled:cursor-not-allowed disabled:opacity-50"
                         >
-                          {deletingId === report.id ? "Deleting…" : "Delete"}
+                          {deletingId === report.id ? t("technicalReports.deleting") : t("common.delete")}
                         </button>
                       </div>
                     </td>
@@ -222,7 +235,7 @@ export default function ProjectTechnicalReportsPage(props: PageProps) {
                 {reports.length === 0 && (
                   <tr>
                     <td colSpan={7} className="px-4 py-10 text-center text-slate-400">
-                      No technical reports have been created for this project yet.
+                      {t("technicalReports.noReportsYet")}
                     </td>
                   </tr>
                 )}
@@ -233,16 +246,18 @@ export default function ProjectTechnicalReportsPage(props: PageProps) {
 
         <aside className="space-y-6">
           <section className="rounded-[32px] border border-slate-800 bg-slate-950 p-6">
-            <p className="text-sm uppercase tracking-[0.28em] text-slate-500">New report</p>
+            <p className="text-sm uppercase tracking-[0.28em] text-slate-500">{t("technicalReports.newReport")}</p>
 
             {templates.length === 0 ? (
               <p className="mt-4 text-sm text-slate-400">
-                No report templates are available yet. <Link href="/templates" className="text-blue-400 hover:underline">Import one</Link> to get started.
+                {noTemplatesParts[0]}
+                <Link href="/templates" className="text-blue-400 hover:underline">{t("technicalReports.importOne")}</Link>
+                {noTemplatesParts[1]}
               </p>
             ) : (
               <>
                 <label className="mt-5 block text-sm text-slate-300">
-                  <span className="text-slate-400">Template</span>
+                  <span className="text-slate-400">{t("technicalReports.template")}</span>
                   <select
                     value={selectedTemplateId}
                     onChange={(event) => setSelectedTemplateId(event.target.value)}
@@ -255,11 +270,11 @@ export default function ProjectTechnicalReportsPage(props: PageProps) {
                 </label>
 
                 <label className="mt-4 block text-sm text-slate-300">
-                  <span className="text-slate-400">Report name (optional)</span>
+                  <span className="text-slate-400">{t("technicalReports.reportNameOptional")}</span>
                   <input
                     value={reportName}
                     onChange={(event) => setReportName(event.target.value)}
-                    placeholder="Defaults to template + project name"
+                    placeholder={t("technicalReports.reportNamePlaceholder")}
                     className="mt-2 w-full rounded-2xl border border-slate-800 bg-slate-900 px-4 py-3 text-white outline-none focus:border-blue-500"
                   />
                 </label>
@@ -270,7 +285,7 @@ export default function ProjectTechnicalReportsPage(props: PageProps) {
                   disabled={!selectedTemplateId || isCreating}
                   className="mt-6 w-full rounded-2xl border border-slate-700 bg-blue-600 px-4 py-3 text-sm font-semibold text-white hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  {isCreating ? "Creating…" : "Create report"}
+                  {isCreating ? t("technicalReports.creatingReport") : t("technicalReports.createReport")}
                 </button>
               </>
             )}

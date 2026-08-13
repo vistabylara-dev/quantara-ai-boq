@@ -2,9 +2,9 @@
 
 import { useCallback, useEffect, useMemo, useState, use, useRef } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
-import type { BOQ } from "@/types/boq";
+import type { BOQ, BOQStatus } from "@/types/boq";
 import type { Project } from "@/types/project";
-import { apiClient, getApiErrorMessage } from "@/lib/api/client";
+import { apiClient } from "@/lib/api/client";
 import { formatCurrency } from "@/lib/formatting/currency";
 import { formatDate } from "@/lib/formatting/dates";
 import { withCalculatedBOQTotals } from "@/lib/calculations/boq-totals";
@@ -13,6 +13,9 @@ import AddItemFromSourceModal, { type AddItemTab } from "@/components/boq/add-it
 import { BoqStartWizard, type BoqCreationMethod } from "@/components/boq/boq-start-wizard";
 import { BoqWorkflowStepper } from "@/components/boq/boq-workflow-stepper";
 import { computeBoqWorkflowState, type NextStepAction } from "@/lib/workflow/boq-workflow-state";
+import { useLocale } from "@/lib/i18n/locale-provider";
+import type { TranslationKey } from "@/lib/i18n/translate";
+import { getLocalizedApiErrorMessage } from "@/lib/i18n/api-error-message";
 
 type PageProps = {
   params: Promise<{
@@ -21,6 +24,21 @@ type PageProps = {
 };
 
 type PendingAction = "save" | "create" | "revision" | "lock" | null;
+
+const WORKFLOW_FACT_TRANSLATION_KEYS = {
+  sources: "boqEditor.factSources",
+  extraction: "boqEditor.factExtraction",
+  calculations: "boqEditor.factCalculations",
+  outputHistory: "boqEditor.factOutputHistory",
+} as const;
+
+const BOQ_STATUS_TRANSLATION_KEYS: Record<BOQStatus, TranslationKey> = {
+  draft: "boqEditor.revisionStatusDraft",
+  locked: "boqEditor.revisionStatusLocked",
+  approved: "boqEditor.revisionStatusApproved",
+};
+
+type UnavailableWorkflowFact = keyof typeof WORKFLOW_FACT_TRANSLATION_KEYS;
 
 function revisionNumber(boq: BOQ): number {
   return Number(boq.revision.replace(/^R/i, "")) || 0;
@@ -35,6 +53,9 @@ function isReadOnlyBOQ(boq: BOQ | null): boolean {
 }
 
 export default function ProjectBOQPage(props: PageProps) {
+  const { locale, t } = useLocale();
+  const localizationRef = useRef({ locale, t });
+  localizationRef.current = { locale, t };
   const params = use(props.params);
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -66,7 +87,7 @@ export default function ProjectBOQPage(props: PageProps) {
     status: string;
     isDraft: boolean;
   }> | null>(null);
-  const [workflowFactsWarning, setWorkflowFactsWarning] = useState<string | null>(null);
+  const [unavailableWorkflowFacts, setUnavailableWorkflowFacts] = useState<UnavailableWorkflowFact[]>([]);
   const [validationWarningCount, setValidationWarningCount] = useState<number | null>(null);
   const [validationPreviewError, setValidationPreviewError] = useState<string | null>(null);
   const hasTriggeredAction = useRef(false);
@@ -117,17 +138,14 @@ export default function ProjectBOQPage(props: PageProps) {
         filesData === null ? "sources" : null,
         entitiesData === null ? "extraction" : null,
         calculationsData === null ? "calculations" : null,
-        documentsData === null ? "output history" : null,
-      ].filter((value): value is string => Boolean(value));
+        documentsData === null ? "outputHistory" : null,
+      ].filter((value): value is UnavailableWorkflowFact => value !== null);
 
-      setWorkflowFactsWarning(
-        unavailableFacts.length > 0
-          ? `Workflow guidance is temporarily incomplete because ${unavailableFacts.join(", ")} could not be verified. BOQ editing remains available; no unavailable count is being treated as zero.`
-          : null,
-      );
+      setUnavailableWorkflowFacts(unavailableFacts);
     } catch (error) {
       if (error instanceof DOMException && error.name === "AbortError") return;
-      setLoadError(getApiErrorMessage(error));
+      const current = localizationRef.current;
+      setLoadError(getLocalizedApiErrorMessage(error, current.t, current.locale));
     } finally {
       if (!signal?.aborted) setIsLoading(false);
     }
@@ -167,11 +185,11 @@ export default function ProjectBOQPage(props: PageProps) {
       );
       replaceRevision(saved);
     } catch (error) {
-      setActionError(getApiErrorMessage(error));
+      setActionError(getLocalizedApiErrorMessage(error, t, locale));
     } finally {
       setPendingAction(null);
     }
-  }, [project?.taxRate, replaceRevision]);
+  }, [locale, project?.taxRate, replaceRevision, t]);
 
   const persistDraft = useCallback(async (boq: BOQ) => {
     const payload = withCalculatedBOQTotals(boq, project?.taxRate ?? 0);
@@ -197,11 +215,11 @@ export default function ProjectBOQPage(props: PageProps) {
         setShowAddItem(true);
       }
     } catch (error) {
-      setActionError(getApiErrorMessage(error));
+      setActionError(getLocalizedApiErrorMessage(error, t, locale));
     } finally {
       setPendingAction(null);
     }
-  }, [params.projectId, pendingAction, replaceRevision, revisions.length]);
+  }, [locale, params.projectId, pendingAction, replaceRevision, revisions.length, t]);
 
   const createRevision = useCallback(async (draft: BOQ) => {
     if (pendingAction) return;
@@ -214,11 +232,11 @@ export default function ProjectBOQPage(props: PageProps) {
       );
       replaceRevision(revision);
     } catch (error) {
-      setActionError(getApiErrorMessage(error));
+      setActionError(getLocalizedApiErrorMessage(error, t, locale));
     } finally {
       setPendingAction(null);
     }
-  }, [pendingAction, persistDraft, replaceRevision]);
+  }, [locale, pendingAction, persistDraft, replaceRevision, t]);
 
   useEffect(() => {
     if (isLoading || hasTriggeredAction.current) return;
@@ -241,10 +259,7 @@ export default function ProjectBOQPage(props: PageProps) {
       } else if (revisions.length === 0) {
         void createInitialBOQ(true);
       } else {
-        setActionError(
-          "Reviewed source information is ready, but this project has no editable BOQ revision. "
-          + "Create a new revision before importing it.",
-        );
+        setActionError(t("boqEditor.importReadyNoRevision"));
       }
     }
     
@@ -252,7 +267,7 @@ export default function ProjectBOQPage(props: PageProps) {
     const url = new URL(window.location.href);
     url.searchParams.delete("action");
     router.replace(url.pathname + url.search);
-  }, [isLoading, searchParams, revisions, activeBoq, createInitialBOQ, createRevision, router]);
+  }, [isLoading, searchParams, revisions, activeBoq, createInitialBOQ, createRevision, router, t]);
 
   const lockRevision = useCallback(async (draft: BOQ) => {
     if (isReadOnlyBOQ(draft) || pendingAction) return;
@@ -265,11 +280,11 @@ export default function ProjectBOQPage(props: PageProps) {
       );
       replaceRevision(locked);
     } catch (error) {
-      setActionError(getApiErrorMessage(error));
+      setActionError(getLocalizedApiErrorMessage(error, t, locale));
     } finally {
       setPendingAction(null);
     }
-  }, [pendingAction, persistDraft, replaceRevision]);
+  }, [locale, pendingAction, persistDraft, replaceRevision, t]);
 
   const activeRevision = useMemo(() => activeBoq ?? revisions[0] ?? null, [activeBoq, revisions]);
 
@@ -299,12 +314,14 @@ export default function ProjectBOQPage(props: PageProps) {
         if (error instanceof DOMException && error.name === "AbortError") return;
         setValidationWarningCount(null);
         setValidationPreviewError(
-          `Validation preview is currently unavailable: ${getApiErrorMessage(error)} No zero-warning status is being assumed.`,
+          t("boqEditor.validationPreviewUnavailable", {
+            message: getLocalizedApiErrorMessage(error, t, locale),
+          }),
         );
       });
 
     return () => controller.abort();
-  }, [activeRevisionId]);
+  }, [activeRevisionId, locale, t]);
 
   const boqItemCount = useMemo(
     () => (activeRevision ? activeRevision.sections.reduce((sum, section) => sum + section.items.length, 0) : 0),
@@ -331,7 +348,7 @@ export default function ProjectBOQPage(props: PageProps) {
         validationWarningCount,
         generatedDocumentCount,
         isLocked: isReadOnlyBOQ(activeRevision),
-      }),
+      }, t),
     [
       fileCount,
       extractedEntities,
@@ -340,8 +357,17 @@ export default function ProjectBOQPage(props: PageProps) {
       validationWarningCount,
       generatedDocumentCount,
       activeRevision,
+      t,
     ],
   );
+
+  const workflowFactsWarning = unavailableWorkflowFacts.length > 0
+    ? t("boqEditor.workflowFactsWarning", {
+        facts: unavailableWorkflowFacts
+          .map((fact) => t(WORKFLOW_FACT_TRANSLATION_KEYS[fact]))
+          .join(", "),
+      })
+    : null;
 
   const handleWorkflowAction = useCallback((action: NonNullable<NextStepAction["ctaAction"]>) => {
     const encodedProjectId = encodeURIComponent(params.projectId);
@@ -363,15 +389,11 @@ export default function ProjectBOQPage(props: PageProps) {
           break;
         }
         if (isReadOnlyBOQ(activeRevision)) {
-          setActionError(
-            "This BOQ revision is locked. Create a new revision before adding or changing reviewed measurements.",
-          );
+          setActionError(t("boqEditor.lockedCreateRevisionMeasurements"));
           break;
         }
         if (hasUnsavedChanges) {
-          setActionError(
-            "Save the current BOQ changes before adding or importing another item. Your unsaved edits will not be discarded.",
-          );
+          setActionError(t("boqEditor.saveBeforeAddingOrImporting"));
           break;
         }
         setAddItemInitialTab("reviewed");
@@ -388,15 +410,11 @@ export default function ProjectBOQPage(props: PageProps) {
           break;
         }
         if (isReadOnlyBOQ(activeRevision)) {
-          setActionError(
-            "This BOQ revision is locked. Create a new revision before adding an item.",
-          );
+          setActionError(t("boqEditor.lockedCreateRevisionItem"));
           break;
         }
         if (hasUnsavedChanges) {
-          setActionError(
-            "Save the current BOQ changes before adding or importing another item. Your unsaved edits will not be discarded.",
-          );
+          setActionError(t("boqEditor.saveBeforeAddingOrImporting"));
           break;
         }
         setAddItemInitialTab(
@@ -451,6 +469,7 @@ export default function ProjectBOQPage(props: PageProps) {
     lockRevision,
     params.projectId,
     router,
+    t,
   ]);
 
   const applyCatalogueRate = useCallback(async (itemId: string, catalogueItemId: string, confirmReplaceOverrides = false) => {
@@ -495,8 +514,8 @@ export default function ProjectBOQPage(props: PageProps) {
   if (isLoading) {
     return (
       <div className="rounded-[32px] border border-slate-800 bg-slate-950 p-8 text-slate-300">
-        <p className="text-lg font-semibold text-white">Loading BOQ workspace</p>
-        <p className="mt-2 text-sm text-slate-400">Fetching project and revision data...</p>
+        <p className="text-lg font-semibold text-white">{t("boqEditor.loadingWorkspace")}</p>
+        <p className="mt-2 text-sm text-slate-400">{t("boqEditor.fetchingRevisionData")}</p>
       </div>
     );
   }
@@ -504,14 +523,14 @@ export default function ProjectBOQPage(props: PageProps) {
   if (loadError || !project) {
     return (
       <div className="rounded-[32px] border border-slate-800 bg-slate-950 p-8 text-slate-300">
-        <p className="text-lg font-semibold text-white">Project BOQ unavailable</p>
-        <p className="mt-2 text-sm text-rose-300">{loadError ?? "No project was found for this BOQ workspace."}</p>
+        <p className="text-lg font-semibold text-white">{t("boqEditor.workspaceUnavailable")}</p>
+        <p className="mt-2 text-sm text-rose-300">{loadError ?? t("boqEditor.noProjectFound")}</p>
         <button
           type="button"
           onClick={() => void loadWorkspace()}
           className="mt-6 rounded-2xl border border-slate-700 bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-500"
         >
-          Try again
+          {t("boqEditor.tryAgain")}
         </button>
       </div>
     );
@@ -525,9 +544,9 @@ export default function ProjectBOQPage(props: PageProps) {
       <div className="rounded-[32px] border border-slate-800 bg-slate-950 p-8">
         <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div>
-            <p className="text-sm uppercase tracking-[0.28em] text-slate-500">BOQ Studio</p>
-            <h2 className="mt-2 text-3xl font-semibold text-white">{project.name} BOQ</h2>
-            <p className="mt-2 text-sm text-slate-400">Review revisions, total values, and editing status.</p>
+            <p className="text-sm uppercase tracking-[0.28em] text-slate-500">{t("boqEditor.pageEyebrow")}</p>
+            <h2 className="mt-2 text-3xl font-semibold text-white">{t("boqEditor.pageTitle", { name: project.name })}</h2>
+            <p className="mt-2 text-sm text-slate-400">{t("boqEditor.pageSubtitle")}</p>
           </div>
           <div className="flex flex-wrap gap-3">
             <button
@@ -536,11 +555,11 @@ export default function ProjectBOQPage(props: PageProps) {
                 setAddItemInitialTab("search");
                 setShowAddItem(true);
               }}
-              title={hasUnsavedChanges ? "Save current BOQ changes before adding another item." : ""}
+              title={hasUnsavedChanges ? t("boqEditor.saveBeforeAddingItem") : ""}
               disabled={!activeRevision || isReadOnly || actionInProgress || hasUnsavedChanges}
               className="rounded-2xl border border-slate-700 bg-slate-900 px-4 py-2 text-sm font-semibold text-slate-200 hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              Add item
+              {t("boqCreate.addItem")}
             </button>
             <button
               type="button"
@@ -555,25 +574,25 @@ export default function ProjectBOQPage(props: PageProps) {
               className="rounded-2xl border border-slate-700 bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-50"
             >
               {pendingAction === "create" || pendingAction === "revision"
-                ? "Creating…"
+                ? t("boqEditor.creatingRevision")
                 : activeRevision
-                  ? "New revision"
-                  : "Create BOQ"}
+                  ? t("boqEditor.newRevision")
+                  : t("boqEditor.createBoq")}
             </button>
             <button
               type="button"
-              title={activeRevision?.sections.every(s => s.items.length === 0) ? "Add at least one valid item before locking this revision." : ""}
+              title={activeRevision?.sections.every(s => s.items.length === 0) ? t("boqEditor.addItemBeforeLocking") : ""}
               onClick={() => activeRevision && void lockRevision(activeRevision)}
               disabled={!activeRevision || isReadOnly || actionInProgress || activeRevision.sections.every(s => s.items.length === 0)}
               className="rounded-2xl border border-slate-700 bg-slate-900 px-4 py-2 text-sm font-semibold text-slate-200 hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
             >
               {pendingAction === "lock"
-                ? "Locking…"
+                ? t("boqEditor.lockingRevision")
                 : activeRevision?.status === "approved"
-                  ? "Revision approved"
+                  ? t("boqEditor.revisionApproved")
                   : isReadOnly
-                    ? "Revision locked"
-                    : "Lock revision"}
+                    ? t("boqEditor.revisionLocked")
+                    : t("boqEditor.lockRevision")}
             </button>
           </div>
         </div>
@@ -612,7 +631,7 @@ export default function ProjectBOQPage(props: PageProps) {
               onClick={() => setActionError(null)}
               className="rounded-2xl border border-rose-800 px-3 py-2 font-semibold hover:bg-rose-900/40"
             >
-              Dismiss
+              {t("boqEditor.dismiss")}
             </button>
           </div>
         </div>
@@ -641,9 +660,7 @@ export default function ProjectBOQPage(props: PageProps) {
               onApplyCatalogueRate={applyCatalogueRate}
               onAddItem={() => {
                 if (hasUnsavedChanges) {
-                  setActionError(
-                    "Save the current BOQ changes before adding another item. Your unsaved edits will not be discarded.",
-                  );
+                  setActionError(t("boqEditor.saveBeforeAddingOrImporting"));
                   return;
                 }
                 setAddItemInitialTab("search");
@@ -655,15 +672,15 @@ export default function ProjectBOQPage(props: PageProps) {
             </div>
           ) : (
             <div className="rounded-[32px] border border-slate-800 bg-slate-950 p-8 text-slate-300">
-              <p className="text-lg font-semibold text-white">No active BOQ revision</p>
-              <p className="mt-2 text-sm text-slate-400">Please select a revision from the history panel.</p>
+              <p className="text-lg font-semibold text-white">{t("boqEditor.noActiveRevision")}</p>
+              <p className="mt-2 text-sm text-slate-400">{t("boqEditor.selectRevisionFromHistory")}</p>
             </div>
           )}
         </div>
 
         <aside className="space-y-6">
           <section className="rounded-[32px] border border-slate-800 bg-slate-950 p-6">
-            <p className="text-sm uppercase tracking-[0.28em] text-slate-500">Revision history</p>
+            <p className="text-sm uppercase tracking-[0.28em] text-slate-500">{t("boqEditor.revisionHistory")}</p>
             <div className="mt-6 space-y-3">
               {revisions.map((boq) => (
                 <button
@@ -683,7 +700,7 @@ export default function ProjectBOQPage(props: PageProps) {
                   <div className="flex items-center justify-between gap-2">
                     <span className="font-semibold">{boq.revision}</span>
                     <span className="rounded-full bg-slate-950 px-2 py-1 text-[0.65rem] uppercase tracking-[0.24em] text-slate-400">
-                      {boq.status}
+                      {t(BOQ_STATUS_TRANSLATION_KEYS[boq.status])}
                     </span>
                   </div>
                   <p className="mt-2 text-slate-400">{formatDate(boq.createdAt)}</p>
@@ -692,7 +709,7 @@ export default function ProjectBOQPage(props: PageProps) {
               ))}
               {revisions.length === 0 && (
                 <div className="rounded-3xl border border-slate-800 bg-slate-900 p-4 text-sm text-slate-400">
-                  No BOQ revisions are available for this project.
+                  {t("boqEditor.noRevisionsAvailable")}
                 </div>
               )}
             </div>

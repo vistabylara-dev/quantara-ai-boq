@@ -1,11 +1,15 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState, use } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, use } from "react";
 import type { BOQ } from "@/types/boq";
 import type { Project } from "@/types/project";
-import { apiClient, ApiClientError, getApiErrorMessage } from "@/lib/api/client";
+import { apiClient, ApiClientError } from "@/lib/api/client";
 import { formatDate } from "@/lib/formatting/dates";
+import { useLocale } from "@/lib/i18n/locale-provider";
+import type { TranslateFn } from "@/lib/i18n/translate";
+import type { Locale } from "@/lib/i18n/config";
+import { getLocalizedApiErrorMessage } from "@/lib/i18n/api-error-message";
 
 type DocumentSummary = {
   id: string;
@@ -43,13 +47,6 @@ type ProposalSummary = {
 type ProposalType = "BOQ_REVISION" | "TECHNICAL_REPORT_REVISION";
 type WizardStep = "TYPE" | "SOURCE" | "ACCESS" | "REVIEW";
 
-const STEPS: { key: WizardStep; label: string }[] = [
-  { key: "TYPE", label: "Type" },
-  { key: "SOURCE", label: "Source" },
-  { key: "ACCESS", label: "Access" },
-  { key: "REVIEW", label: "Review" },
-];
-
 const STATUS_COLORS: Record<string, string> = {
   DRAFT: "text-slate-400",
   READY: "text-blue-300",
@@ -64,21 +61,22 @@ const STATUS_COLORS: Record<string, string> = {
 };
 
 /** Maps the server's specific error codes (see client-proposal-service.ts) to an actionable message. */
-const ERROR_MESSAGES: Record<string, string> = {
-  PROPOSAL_TYPE_REQUIRED: "Choose a proposal type before continuing.",
-  PROPOSAL_SOURCE_REQUIRED: "Select a source revision before continuing.",
-  BOQ_REVISION_NOT_LOCKED: "This revision is not locked. Lock it, then try again.",
-  REPORT_REVISION_NOT_FINAL: "This report has not finished generating. Generate its client document, then try again.",
-  GENERATED_DOCUMENT_REQUIRED: "Select or generate a client-facing document before creating this proposal.",
-  GENERATED_DOCUMENT_SOURCE_MISMATCH: "The selected document no longer matches this revision. Choose a document generated from it.",
-  PROPOSAL_RECIPIENT_INVALID: "Enter a valid recipient name and email.",
-  PROPOSAL_EXPIRY_INVALID: "Expiry must be between 1 and 365 days.",
-  PROPOSAL_CREATION_FAILED: "Failed to create the proposal. Please try again.",
-};
-
-function friendlyError(error: unknown): string {
-  if (error instanceof ApiClientError && ERROR_MESSAGES[error.code]) return ERROR_MESSAGES[error.code];
-  return getApiErrorMessage(error);
+function friendlyError(error: unknown, t: TranslateFn, locale: Locale): string {
+  if (error instanceof ApiClientError) {
+    const errorMessages: Record<string, string> = {
+      PROPOSAL_TYPE_REQUIRED: t("proposals.errorTypeRequired"),
+      PROPOSAL_SOURCE_REQUIRED: t("proposals.errorSourceRequired"),
+      BOQ_REVISION_NOT_LOCKED: t("proposals.errorRevisionNotLocked"),
+      REPORT_REVISION_NOT_FINAL: t("proposals.errorReportNotFinal"),
+      GENERATED_DOCUMENT_REQUIRED: t("proposals.errorDocumentRequired"),
+      GENERATED_DOCUMENT_SOURCE_MISMATCH: t("proposals.errorDocumentMismatch"),
+      PROPOSAL_RECIPIENT_INVALID: t("proposals.errorRecipientInvalid"),
+      PROPOSAL_EXPIRY_INVALID: t("proposals.errorExpiryInvalid"),
+      PROPOSAL_CREATION_FAILED: t("proposals.errorCreationFailed"),
+    };
+    if (errorMessages[error.code]) return errorMessages[error.code];
+  }
+  return getLocalizedApiErrorMessage(error, t, locale);
 }
 
 function isLockedBoq(boq: BOQ): boolean {
@@ -89,6 +87,27 @@ type PageProps = { params: Promise<{ projectId: string }> };
 
 export default function ProjectProposalsPage(props: PageProps) {
   const params = use(props.params);
+  const { locale, t } = useLocale();
+  const localizationRef = useRef({ locale, t });
+  localizationRef.current = { locale, t };
+  const STEPS: { key: WizardStep; label: string }[] = [
+    { key: "TYPE", label: t("proposals.stepType") },
+    { key: "SOURCE", label: t("proposals.stepSource") },
+    { key: "ACCESS", label: t("proposals.stepAccess") },
+    { key: "REVIEW", label: t("proposals.stepReview") },
+  ];
+  const STATUS_LABELS: Record<string, string> = {
+    DRAFT: t("proposals.statusDraft"),
+    READY: t("proposals.statusReady"),
+    SENT: t("proposals.statusSent"),
+    OPENED: t("proposals.statusOpened"),
+    COMMENTED: t("proposals.statusCommented"),
+    REVISION_REQUESTED: t("proposals.statusRevisionRequested"),
+    APPROVED: t("proposals.statusApproved"),
+    REJECTED: t("proposals.statusRejected"),
+    REVOKED: t("proposals.statusRevoked"),
+    EXPIRED: t("proposals.statusExpired"),
+  };
   const [project, setProject] = useState<Project | null>(null);
   const [boqs, setBoqs] = useState<BOQ[]>([]);
   const [reports, setReports] = useState<TechnicalReportSummary[]>([]);
@@ -143,7 +162,8 @@ export default function ProjectProposalsPage(props: PageProps) {
       setRecipientEmail((current) => current || projectData.clientEmail);
     } catch (error) {
       if (error instanceof DOMException && error.name === "AbortError") return;
-      setLoadError(getApiErrorMessage(error));
+      const current = localizationRef.current;
+      setLoadError(getLocalizedApiErrorMessage(error, current.t, current.locale));
     } finally {
       if (!signal?.aborted) setIsLoading(false);
     }
@@ -235,11 +255,11 @@ export default function ProjectProposalsPage(props: PageProps) {
       const nowLocked = revisions.find((boq) => boq.id === boqId);
       if (nowLocked && isLockedBoq(nowLocked)) setStep("SOURCE");
     } catch (error) {
-      setLockError(friendlyError(error));
+      setLockError(friendlyError(error, t, locale));
     } finally {
       setLockingBoqId(null);
     }
-  }, [refreshBoqs, loadDocuments]);
+  }, [locale, refreshBoqs, loadDocuments, t]);
 
   const generateAndContinue = useCallback(async (reportId: string) => {
     setGeneratingReportId(reportId);
@@ -249,11 +269,11 @@ export default function ProjectProposalsPage(props: PageProps) {
       await refreshReports();
       setSelectedReportId(reportId);
     } catch (error) {
-      setGenerateError(friendlyError(error));
+      setGenerateError(friendlyError(error, t, locale));
     } finally {
       setGeneratingReportId(null);
     }
-  }, [refreshReports]);
+  }, [locale, refreshReports, t]);
 
   const canContinueFromSource =
     proposalType === "BOQ_REVISION"
@@ -317,7 +337,7 @@ export default function ProjectProposalsPage(props: PageProps) {
       }
       window.location.href = `/projects/${params.projectId}/proposals/${result.proposal.id}`;
     } catch (error) {
-      setCreateError(friendlyError(error));
+      setCreateError(friendlyError(error, t, locale));
     } finally {
       setIsCreating(false);
     }
@@ -327,6 +347,7 @@ export default function ProjectProposalsPage(props: PageProps) {
     allowDocumentDownload,
     allowOptionSelection,
     expiresInDays,
+    locale,
     params.projectId,
     proposalType,
     recipientEmail,
@@ -335,12 +356,13 @@ export default function ProjectProposalsPage(props: PageProps) {
     selectedBoqId,
     selectedDocumentIds,
     selectedReportId,
+    t,
   ]);
 
   if (isLoading) {
     return (
       <div className="rounded-[32px] border border-slate-800 bg-slate-950 p-8 text-slate-300">
-        <p className="text-lg font-semibold text-white">Loading proposals</p>
+        <p className="text-lg font-semibold text-white">{t("proposals.loadingList")}</p>
       </div>
     );
   }
@@ -348,8 +370,8 @@ export default function ProjectProposalsPage(props: PageProps) {
   if (loadError || !project) {
     return (
       <div className="rounded-[32px] border border-slate-800 bg-slate-950 p-8 text-slate-300">
-        <p className="text-lg font-semibold text-white">Proposals unavailable</p>
-        <p className="mt-2 text-sm text-rose-300">{loadError ?? "This project could not be loaded."}</p>
+        <p className="text-lg font-semibold text-white">{t("proposals.listUnavailable")}</p>
+        <p className="mt-2 text-sm text-rose-300">{loadError ?? t("proposals.projectCouldNotLoad")}</p>
       </div>
     );
   }
@@ -361,16 +383,16 @@ export default function ProjectProposalsPage(props: PageProps) {
       <div className="rounded-[32px] border border-slate-800 bg-slate-950 p-8">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
-            <p className="text-sm uppercase tracking-[0.28em] text-slate-500">Client proposals</p>
+            <p className="text-sm uppercase tracking-[0.28em] text-slate-500">{t("proposals.eyebrow")}</p>
             <h2 className="mt-2 text-3xl font-semibold text-white">{project.name}</h2>
-            <p className="mt-3 text-slate-400">Create secure client proposal links from a locked BOQ revision or a completed technical report.</p>
+            <p className="mt-3 text-slate-400">{t("proposals.subtitle")}</p>
           </div>
           <button
             type="button"
             onClick={openCreate}
             className="rounded-2xl border border-slate-700 bg-blue-600 px-5 py-3 text-sm font-semibold text-white hover:bg-blue-500"
           >
-            Create client proposal
+            {t("proposals.createProposal")}
           </button>
         </div>
       </div>
@@ -380,25 +402,25 @@ export default function ProjectProposalsPage(props: PageProps) {
           <table className="min-w-full text-left text-sm text-slate-300">
             <thead className="bg-slate-950 text-slate-400">
               <tr>
-                <th className="px-4 py-3">Type</th>
-                <th className="px-4 py-3">Source</th>
-                <th className="px-4 py-3">Recipient</th>
-                <th className="px-4 py-3">Status</th>
-                <th className="px-4 py-3">Expires</th>
-                <th className="px-4 py-3">Created</th>
-                <th className="px-4 py-3">Action</th>
+                <th className="px-4 py-3">{t("proposals.colType")}</th>
+                <th className="px-4 py-3">{t("proposals.colSource")}</th>
+                <th className="px-4 py-3">{t("proposals.colRecipient")}</th>
+                <th className="px-4 py-3">{t("proposals.colStatus")}</th>
+                <th className="px-4 py-3">{t("proposals.colExpires")}</th>
+                <th className="px-4 py-3">{t("proposals.colCreated")}</th>
+                <th className="px-4 py-3">{t("proposals.colAction")}</th>
               </tr>
             </thead>
             <tbody>
               {proposals.map((proposal) => (
                 <tr key={proposal.id} className="border-t border-slate-800">
-                  <td className="px-4 py-3">{proposal.sourceType === "BOQ_REVISION" ? "BOQ" : "Technical report"}</td>
+                  <td className="px-4 py-3">{proposal.sourceType === "BOQ_REVISION" ? t("proposals.sourceBoq") : t("proposals.sourceReport")}</td>
                   <td className="px-4 py-3">{proposal.revisionNumber ? `R${String(proposal.revisionNumber).padStart(2, "0")}` : "—"}</td>
                   <td className="px-4 py-3">
                     <p className="text-white">{proposal.recipientName}</p>
                     <p className="text-xs text-slate-500">{proposal.recipientEmail}</p>
                   </td>
-                  <td className={`px-4 py-3 font-semibold ${STATUS_COLORS[proposal.status] ?? "text-slate-300"}`}>{proposal.status}</td>
+                  <td className={`px-4 py-3 font-semibold ${STATUS_COLORS[proposal.status] ?? "text-slate-300"}`}>{STATUS_LABELS[proposal.status] ?? proposal.status}</td>
                   <td className="px-4 py-3">{formatDate(proposal.expiresAt)}</td>
                   <td className="px-4 py-3">{formatDate(proposal.createdAt)}</td>
                   <td className="px-4 py-3">
@@ -406,7 +428,7 @@ export default function ProjectProposalsPage(props: PageProps) {
                       href={`/projects/${params.projectId}/proposals/${proposal.id}`}
                       className="rounded-xl border border-slate-700 bg-slate-950 px-3 py-1.5 text-xs font-semibold text-slate-200 hover:bg-slate-800"
                     >
-                      Open
+                      {t("proposals.open")}
                     </Link>
                   </td>
                 </tr>
@@ -414,7 +436,7 @@ export default function ProjectProposalsPage(props: PageProps) {
               {proposals.length === 0 && (
                 <tr>
                   <td colSpan={7} className="px-4 py-10 text-center text-slate-400">
-                    No proposals have been created for this project yet.
+                    {t("proposals.noProposalsYet")}
                   </td>
                 </tr>
               )}
@@ -426,7 +448,7 @@ export default function ProjectProposalsPage(props: PageProps) {
       {showCreate && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
           <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-[32px] border border-slate-800 bg-slate-950 p-8">
-            <h3 className="text-xl font-semibold text-white">Create client proposal</h3>
+            <h3 className="text-xl font-semibold text-white">{t("proposals.modalTitle")}</h3>
 
             <ol className="mt-5 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
               {STEPS.map((s, index) => (
@@ -452,16 +474,16 @@ export default function ProjectProposalsPage(props: PageProps) {
                   onClick={() => { setProposalType("BOQ_REVISION"); setStep("SOURCE"); }}
                   className="w-full rounded-2xl border border-slate-800 bg-slate-900 p-5 text-left hover:border-blue-500"
                 >
-                  <p className="text-base font-semibold text-white">Create BOQ Proposal</p>
-                  <p className="mt-1 text-sm text-slate-400">Share a commercial BOQ with quantities, pricing, revisions, options and client approval controls.</p>
+                  <p className="text-base font-semibold text-white">{t("proposals.createBoqProposal")}</p>
+                  <p className="mt-1 text-sm text-slate-400">{t("proposals.createBoqProposalDescription")}</p>
                 </button>
                 <button
                   type="button"
                   onClick={() => { setProposalType("TECHNICAL_REPORT_REVISION"); setStep("SOURCE"); }}
                   className="w-full rounded-2xl border border-slate-800 bg-slate-900 p-5 text-left hover:border-blue-500"
                 >
-                  <p className="text-base font-semibold text-white">Create Technical Report Proposal</p>
-                  <p className="mt-1 text-sm text-slate-400">Share a technical report, inspection report, assessment or recommendation with client review and download controls.</p>
+                  <p className="text-base font-semibold text-white">{t("proposals.createReportProposal")}</p>
+                  <p className="mt-1 text-sm text-slate-400">{t("proposals.createReportProposalDescription")}</p>
                 </button>
               </div>
             )}
@@ -470,8 +492,8 @@ export default function ProjectProposalsPage(props: PageProps) {
             {step === "SOURCE" && proposalType === "BOQ_REVISION" && (
               <div className="mt-6 space-y-4">
                 <div>
-                  <p className="text-sm text-slate-400">Locked BOQ revision</p>
-                  {lockedBoqs.length === 0 && <p className="mt-2 text-xs text-slate-500">No locked revisions yet. Lock a revision below to continue.</p>}
+                  <p className="text-sm text-slate-400">{t("proposals.lockedBoqRevision")}</p>
+                  {lockedBoqs.length === 0 && <p className="mt-2 text-xs text-slate-500">{t("proposals.noLockedRevisionsYet")}</p>}
                   <div className="mt-2 space-y-2">
                     {lockedBoqs.map((boq) => (
                       <label
@@ -480,7 +502,7 @@ export default function ProjectProposalsPage(props: PageProps) {
                           selectedBoqId === boq.id ? "border-blue-500 bg-slate-900" : "border-slate-800 bg-slate-900/60"
                         }`}
                       >
-                        <span className="text-slate-200">{boq.revision} · locked</span>
+                        <span className="text-slate-200">{t("proposals.revisionLockedLabel", { revision: boq.revision })}</span>
                         <input
                           type="radio"
                           name="boq-source"
@@ -495,18 +517,18 @@ export default function ProjectProposalsPage(props: PageProps) {
 
                 {draftBoqs.length > 0 && (
                   <div>
-                    <p className="text-sm text-slate-400">Not yet available</p>
+                    <p className="text-sm text-slate-400">{t("proposals.notYetAvailable")}</p>
                     <div className="mt-2 space-y-2">
                       {draftBoqs.map((boq) => (
                         <div key={boq.id} className="flex items-center justify-between rounded-2xl border border-amber-900/60 bg-amber-950/20 px-4 py-3 text-sm">
-                          <span className="text-amber-200">{boq.revision} · Draft — Action: Lock revision</span>
+                          <span className="text-amber-200">{t("proposals.revisionDraftLockAction", { revision: boq.revision })}</span>
                           <button
                             type="button"
                             onClick={() => void lockAndContinue(boq.id)}
                             disabled={lockingBoqId === boq.id}
                             className="rounded-xl border border-amber-700 bg-amber-900/40 px-3 py-1.5 text-xs font-semibold text-amber-200 hover:bg-amber-900/70 disabled:opacity-50"
                           >
-                            {lockingBoqId === boq.id ? "Locking…" : "Lock and Continue"}
+                            {lockingBoqId === boq.id ? t("proposals.locking") : t("proposals.lockAndContinue")}
                           </button>
                         </div>
                       ))}
@@ -517,22 +539,22 @@ export default function ProjectProposalsPage(props: PageProps) {
 
                 {selectedBoqId && isLockedBoq(selectedBoq!) && (
                   <div>
-                    <p className="text-sm text-slate-400">Generated BOQ document</p>
+                    <p className="text-sm text-slate-400">{t("proposals.generatedBoqDocument")}</p>
                     {boqDocuments.length === 0 && (
                       <div className="mt-2 rounded-2xl border border-slate-800 bg-slate-900 p-4 text-xs text-slate-400">
-                        No client-facing document exists for this revision yet.
+                        {t("proposals.noClientDocumentYet")}
                         <Link
                           href={`/projects/${params.projectId}/documents`}
                           className="mt-2 block w-fit rounded-xl border border-slate-700 bg-slate-950 px-3 py-1.5 font-semibold text-slate-200 hover:bg-slate-800"
                         >
-                          Generate BOQ Document
+                          {t("proposals.generateBoqDocument")}
                         </Link>
                       </div>
                     )}
                     <div className="mt-2 space-y-2">
                       {boqDocuments.map((doc) => (
                         <label key={doc.id} className="flex items-center justify-between rounded-2xl border border-slate-800 bg-slate-900 px-4 py-2 text-sm text-slate-300">
-                          <span>{doc.type} — {doc.fileName ?? "document"}</span>
+                          <span>{t("proposals.documentRow", { type: doc.type, fileName: doc.fileName ?? t("proposals.documentFallbackName") })}</span>
                           <input type="checkbox" checked={selectedDocumentIds.includes(doc.id)} onChange={() => toggleDocument(doc.id)} className="h-4 w-4" />
                         </label>
                       ))}
@@ -545,8 +567,8 @@ export default function ProjectProposalsPage(props: PageProps) {
             {step === "SOURCE" && proposalType === "TECHNICAL_REPORT_REVISION" && (
               <div className="mt-6 space-y-4">
                 <div>
-                  <p className="text-sm text-slate-400">Completed technical report</p>
-                  {completedReports.length === 0 && <p className="mt-2 text-xs text-slate-500">No completed reports yet. Generate one below to continue.</p>}
+                  <p className="text-sm text-slate-400">{t("proposals.completedTechnicalReport")}</p>
+                  {completedReports.length === 0 && <p className="mt-2 text-xs text-slate-500">{t("proposals.noCompletedReportsYet")}</p>}
                   <div className="mt-2 space-y-2">
                     {completedReports.map((report) => (
                       <label
@@ -555,7 +577,7 @@ export default function ProjectProposalsPage(props: PageProps) {
                           selectedReportId === report.id ? "border-blue-500 bg-slate-900" : "border-slate-800 bg-slate-900/60"
                         }`}
                       >
-                        <span className="text-slate-200">{report.name} · {report.templateName} · completed</span>
+                        <span className="text-slate-200">{t("proposals.reportCompletedLabel", { name: report.name, template: report.templateName })}</span>
                         <input
                           type="radio"
                           name="report-source"
@@ -570,18 +592,18 @@ export default function ProjectProposalsPage(props: PageProps) {
 
                 {notReadyReports.length > 0 && (
                   <div>
-                    <p className="text-sm text-slate-400">Not yet available</p>
+                    <p className="text-sm text-slate-400">{t("proposals.notYetAvailable")}</p>
                     <div className="mt-2 space-y-2">
                       {notReadyReports.map((report) => (
                         <div key={report.id} className="flex items-center justify-between rounded-2xl border border-amber-900/60 bg-amber-950/20 px-4 py-3 text-sm">
-                          <span className="text-amber-200">{report.name} · Draft — Action: Generate client document</span>
+                          <span className="text-amber-200">{t("proposals.reportDraftGenerateAction", { name: report.name })}</span>
                           <button
                             type="button"
                             onClick={() => void generateAndContinue(report.id)}
                             disabled={generatingReportId === report.id}
                             className="rounded-xl border border-amber-700 bg-amber-900/40 px-3 py-1.5 text-xs font-semibold text-amber-200 hover:bg-amber-900/70 disabled:opacity-50"
                           >
-                            {generatingReportId === report.id ? "Generating…" : "Generate Client Document"}
+                            {generatingReportId === report.id ? t("proposals.generatingDocument") : t("proposals.generateClientDocument")}
                           </button>
                         </div>
                       ))}
@@ -597,44 +619,44 @@ export default function ProjectProposalsPage(props: PageProps) {
               <div className="mt-6 space-y-4">
                 <div className="grid grid-cols-2 gap-4">
                   <label className="block text-sm text-slate-300">
-                    <span className="text-slate-400">Recipient name</span>
+                    <span className="text-slate-400">{t("proposals.recipientName")}</span>
                     <input value={recipientName} onChange={(event) => setRecipientName(event.target.value)} className="mt-2 w-full rounded-2xl border border-slate-800 bg-slate-900 px-4 py-3 text-white outline-none focus:border-blue-500" />
                   </label>
                   <label className="block text-sm text-slate-300">
-                    <span className="text-slate-400">Recipient email</span>
+                    <span className="text-slate-400">{t("proposals.recipientEmail")}</span>
                     <input type="email" value={recipientEmail} onChange={(event) => setRecipientEmail(event.target.value)} className="mt-2 w-full rounded-2xl border border-slate-800 bg-slate-900 px-4 py-3 text-white outline-none focus:border-blue-500" />
                   </label>
                 </div>
 
                 <label className="block text-sm text-slate-300">
-                  <span className="text-slate-400">Expiry (days)</span>
+                  <span className="text-slate-400">{t("proposals.expiryDays")}</span>
                   <input type="number" min={1} max={365} value={expiresInDays} onChange={(event) => setExpiresInDays(Number(event.target.value))} className="mt-2 w-full rounded-2xl border border-slate-800 bg-slate-900 px-4 py-3 text-white outline-none focus:border-blue-500" />
                 </label>
 
                 <div className="space-y-2">
                   {proposalType === "BOQ_REVISION" && (
                     <label className="flex items-center justify-between rounded-2xl border border-slate-800 bg-slate-900 px-4 py-2 text-sm text-slate-300">
-                      <span>Allow option selection</span>
+                      <span>{t("proposals.allowOptionSelection")}</span>
                       <input type="checkbox" checked={allowOptionSelection} onChange={(event) => setAllowOptionSelection(event.target.checked)} className="h-4 w-4" />
                     </label>
                   )}
                   <label className="flex items-center justify-between rounded-2xl border border-slate-800 bg-slate-900 px-4 py-2 text-sm text-slate-300">
-                    <span>Allow comments</span>
+                    <span>{t("proposals.allowComments")}</span>
                     <input type="checkbox" checked={allowComments} onChange={(event) => setAllowComments(event.target.checked)} className="h-4 w-4" />
                   </label>
                   <label className="flex items-center justify-between rounded-2xl border border-slate-800 bg-slate-900 px-4 py-2 text-sm text-slate-300">
-                    <span>Allow document download</span>
+                    <span>{t("proposals.allowDocumentDownload")}</span>
                     <input type="checkbox" checked={allowDocumentDownload} onChange={(event) => setAllowDocumentDownload(event.target.checked)} className="h-4 w-4" />
                   </label>
                   <label className="flex items-center justify-between rounded-2xl border border-slate-800 bg-slate-900 px-4 py-2 text-sm text-slate-300">
-                    <span>Require access passcode</span>
+                    <span>{t("proposals.requireAccessPasscode")}</span>
                     <input type="checkbox" checked={requireAccessPasscode} onChange={(event) => setRequireAccessPasscode(event.target.checked)} className="h-4 w-4" />
                   </label>
                   {requireAccessPasscode && (
                     <input
                       value={accessPasscode}
                       onChange={(event) => setAccessPasscode(event.target.value)}
-                      placeholder="Passcode (min 4 characters)"
+                      placeholder={t("proposals.passcodePlaceholder")}
                       className="w-full rounded-2xl border border-slate-800 bg-slate-900 px-4 py-3 text-white outline-none focus:border-blue-500"
                     />
                   )}
@@ -646,25 +668,25 @@ export default function ProjectProposalsPage(props: PageProps) {
             {step === "REVIEW" && (
               <div className="mt-6 space-y-3 text-sm text-slate-300">
                 <div className="rounded-2xl border border-slate-800 bg-slate-900 p-4">
-                  <p><span className="text-slate-500">Type:</span> {proposalType === "BOQ_REVISION" ? "BOQ Proposal" : "Technical Report Proposal"}</p>
-                  <p><span className="text-slate-500">Project:</span> {project.name}</p>
+                  <p><span className="text-slate-500">{t("proposals.reviewType")}</span> {proposalType === "BOQ_REVISION" ? t("proposals.boqProposalType") : t("proposals.reportProposalType")}</p>
+                  <p><span className="text-slate-500">{t("proposals.reviewProject")}</span> {project.name}</p>
                   {proposalType === "BOQ_REVISION" ? (
                     <>
-                      <p><span className="text-slate-500">BOQ revision:</span> {selectedBoq?.revision}</p>
-                      <p><span className="text-slate-500">Document:</span> {boqDocuments.filter((d) => selectedDocumentIds.includes(d.id)).map((d) => d.fileName ?? d.type).join(", ") || "—"}</p>
+                      <p><span className="text-slate-500">{t("proposals.reviewBoqRevision")}</span> {selectedBoq?.revision}</p>
+                      <p><span className="text-slate-500">{t("proposals.reviewDocument")}</span> {boqDocuments.filter((d) => selectedDocumentIds.includes(d.id)).map((d) => d.fileName ?? d.type).join(", ") || "—"}</p>
                     </>
                   ) : (
                     <>
-                      <p><span className="text-slate-500">Technical report:</span> {selectedReport?.name}</p>
-                      <p><span className="text-slate-500">Document:</span> {selectedReport?.fileName ?? "—"}</p>
+                      <p><span className="text-slate-500">{t("proposals.reviewTechnicalReport")}</span> {selectedReport?.name}</p>
+                      <p><span className="text-slate-500">{t("proposals.reviewDocument")}</span> {selectedReport?.fileName ?? "—"}</p>
                     </>
                   )}
-                  <p><span className="text-slate-500">Recipient:</span> {recipientName} ({recipientEmail})</p>
-                  <p><span className="text-slate-500">Expiry:</span> {expiresInDays} days</p>
-                  {proposalType === "BOQ_REVISION" && <p><span className="text-slate-500">Option selection:</span> {allowOptionSelection ? "Allowed" : "Not allowed"}</p>}
-                  <p><span className="text-slate-500">Comments:</span> {allowComments ? "Allowed" : "Not allowed"}</p>
-                  <p><span className="text-slate-500">Downloads:</span> {allowDocumentDownload ? "Allowed" : "Not allowed"}</p>
-                  <p><span className="text-slate-500">Passcode:</span> {requireAccessPasscode ? "Required" : "Not required"}</p>
+                  <p><span className="text-slate-500">{t("proposals.reviewRecipient")}</span> {recipientName} ({recipientEmail})</p>
+                  <p><span className="text-slate-500">{t("proposals.reviewExpiry")}</span> {t("proposals.reviewExpiryDays", { days: expiresInDays })}</p>
+                  {proposalType === "BOQ_REVISION" && <p><span className="text-slate-500">{t("proposals.reviewOptionSelection")}</span> {allowOptionSelection ? t("proposals.reviewAllowed") : t("proposals.reviewNotAllowed")}</p>}
+                  <p><span className="text-slate-500">{t("proposals.reviewComments")}</span> {allowComments ? t("proposals.reviewAllowed") : t("proposals.reviewNotAllowed")}</p>
+                  <p><span className="text-slate-500">{t("proposals.reviewDownloads")}</span> {allowDocumentDownload ? t("proposals.reviewAllowed") : t("proposals.reviewNotAllowed")}</p>
+                  <p><span className="text-slate-500">{t("proposals.reviewPasscode")}</span> {requireAccessPasscode ? t("proposals.reviewRequired") : t("proposals.reviewNotRequired")}</p>
                 </div>
                 {createError && <p className="rounded-2xl border border-rose-900 bg-rose-950/30 p-3 text-xs text-rose-300">{createError}</p>}
               </div>
@@ -672,7 +694,7 @@ export default function ProjectProposalsPage(props: PageProps) {
 
             <div className="mt-6 flex justify-between gap-3">
               <button type="button" onClick={closeCreate} className="rounded-2xl border border-slate-700 bg-slate-900 px-4 py-2 text-sm font-semibold text-slate-200 hover:bg-slate-800">
-                Cancel
+                {t("common.cancel")}
               </button>
               <div className="flex gap-3">
                 {step !== "TYPE" && (
@@ -681,7 +703,7 @@ export default function ProjectProposalsPage(props: PageProps) {
                     onClick={() => setStep(STEPS[currentStepIndex - 1].key)}
                     className="rounded-2xl border border-slate-700 bg-slate-900 px-4 py-2 text-sm font-semibold text-slate-200 hover:bg-slate-800"
                   >
-                    Back
+                    {t("common.back")}
                   </button>
                 )}
                 {step !== "REVIEW" && step !== "TYPE" && (
@@ -691,7 +713,7 @@ export default function ProjectProposalsPage(props: PageProps) {
                     disabled={step === "SOURCE" && !canContinueFromSource}
                     className="rounded-2xl border border-slate-700 bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-50"
                   >
-                    Continue
+                    {t("common.continue")}
                   </button>
                 )}
                 {step === "REVIEW" && (
@@ -701,7 +723,7 @@ export default function ProjectProposalsPage(props: PageProps) {
                     disabled={!canCreate}
                     className="rounded-2xl border border-slate-700 bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-50"
                   >
-                    {isCreating ? "Creating…" : "Create Proposal"}
+                    {isCreating ? t("proposals.creatingProposal") : t("proposals.createProposalSubmit")}
                   </button>
                 )}
               </div>

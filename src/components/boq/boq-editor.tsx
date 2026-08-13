@@ -14,12 +14,14 @@ import { formatCurrency } from "@/lib/formatting/currency";
 import { formatDate } from "@/lib/formatting/dates";
 import CatalogueRateDrawer from "@/components/boq/catalogue-rate-drawer";
 import type { CatalogueItem } from "@/types/catalogue";
-import { apiClient, getApiErrorMessage } from "@/lib/api/client";
+import { apiClient, ApiClientError } from "@/lib/api/client";
 import type { VoiceCommandProposal } from "@/lib/voice/voice-types";
 import { VoiceCommandButton } from "@/components/voice/voice-command-button";
 import { VoiceProposalCard } from "@/components/voice/voice-proposal-card";
 import { GuideTip } from "@/components/guidance/guide-tip";
-import { useTranslations } from "@/lib/i18n/locale-provider";
+import { useLocale } from "@/lib/i18n/locale-provider";
+import { defaultTranslator, type TranslateFn } from "@/lib/i18n/translate";
+import { getLocalizedApiErrorMessage } from "@/lib/i18n/api-error-message";
 
 type BoqEditorProps = {
   boq: BOQ;
@@ -42,18 +44,21 @@ export function isPersistedItemId(itemId: string): boolean {
   return !itemId.includes("-item-");
 }
 
-export function getVoiceBOQFieldLabel(field: string): string {
+export function getVoiceBOQFieldLabel(
+  field: string,
+  t: TranslateFn = defaultTranslator,
+): string {
   switch (field) {
     case "quantity":
-      return "Quantity";
+      return t("boqEditor.fieldQuantity");
     case "description":
-      return "Description";
+      return t("boqEditor.fieldDescription");
     case "unit":
-      return "Unit";
+      return t("boqEditor.fieldUnit");
     case "notes":
-      return "Notes";
+      return t("boqEditor.fieldNotes");
     case "item":
-      return "BOQ item";
+      return t("boqEditor.fieldBoqItem");
     default:
       return field.replace(/_/g, " ");
   }
@@ -123,7 +128,7 @@ export default function BoqEditor({
   hasUnsavedChanges = false,
   onVoiceApplied,
 }: BoqEditorProps) {
-  const t = useTranslations();
+  const { locale, t } = useLocale();
   const [isSaving, setIsSaving] = useState(false);
   const [rateDrawerItemId, setRateDrawerItemId] = useState<string | null>(null);
   const [isApplyingRate, setIsApplyingRate] = useState(false);
@@ -158,19 +163,19 @@ export default function BoqEditor({
 
   const handleBOQItemVoiceProposal = useCallback((sectionId: string, itemId: string, proposal: VoiceCommandProposal) => {
     if (proposal.targetType !== "BOQ_ITEM" || proposal.targetId !== itemId || !SUPPORTED_BOQ_ITEM_VOICE_COMMANDS.has(proposal.commandType)) {
-      throw new Error("This voice instruction did not resolve to a supported action for this BOQ item.");
+      throw new Error(t("boqEditor.voiceUnsupportedItemAction"));
     }
     setVoiceApplyError(null);
     setPendingVoiceProposal({ targetKey: `item:${itemId}`, sectionId, itemId, proposal });
-  }, []);
+  }, [t]);
 
   const handleBOQSectionVoiceProposal = useCallback((sectionId: string, proposal: VoiceCommandProposal) => {
     if (proposal.targetType !== "BOQ_SECTION" || proposal.targetId !== sectionId || !SUPPORTED_BOQ_SECTION_VOICE_COMMANDS.has(proposal.commandType)) {
-      throw new Error("This voice instruction did not resolve to a supported add-item action for this BOQ section.");
+      throw new Error(t("boqEditor.voiceUnsupportedSectionAction"));
     }
     setVoiceApplyError(null);
     setPendingVoiceProposal({ targetKey: `section:${sectionId}`, sectionId, proposal });
-  }, []);
+  }, [t]);
 
   const confirmBOQVoiceProposal = useCallback(async () => {
     if (!pendingVoiceProposal || !onVoiceApplied) return;
@@ -188,11 +193,11 @@ export default function BoqEditor({
       setPendingVoiceProposal(null);
       requestAnimationFrame(() => voiceButtonRefs.current.get(returnFocusKey)?.focus());
     } catch (caught) {
-      setVoiceApplyError(getApiErrorMessage(caught));
+      setVoiceApplyError(getLocalizedApiErrorMessage(caught, t, locale));
     } finally {
       setIsApplyingVoice(false);
     }
-  }, [onVoiceApplied, pendingVoiceProposal, projectId]);
+  }, [locale, onVoiceApplied, pendingVoiceProposal, projectId, t]);
 
   const updateItem = (sectionId: string, itemId: string, key: keyof BOQItem, value: string | number | boolean) => {
     if (editorControlsDisabled) return;
@@ -291,18 +296,17 @@ export default function BoqEditor({
       await onApplyCatalogueRate(rateDrawerItemId, catalogueItem.id);
       setRateDrawerItemId(null);
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Could not apply this rate.";
-      if (message.includes("manually overridden")) {
-        if (window.confirm(`${message}\n\nReplace the manual overrides with this catalogue rate?`)) {
+      if (error instanceof ApiClientError && error.code === "MANUAL_OVERRIDE_CONFIRMATION_REQUIRED") {
+        if (window.confirm(t("boqEditor.replaceOverridesConfirm"))) {
           try {
             await onApplyCatalogueRate(rateDrawerItemId, catalogueItem.id, true);
             setRateDrawerItemId(null);
           } catch (retryError) {
-            setRateError(retryError instanceof Error ? retryError.message : "Could not apply this rate.");
+            setRateError(getLocalizedApiErrorMessage(retryError, t, locale));
           }
         }
       } else {
-        setRateError(message);
+        setRateError(getLocalizedApiErrorMessage(error, t, locale));
       }
     } finally {
       setIsApplyingRate(false);
@@ -317,17 +321,17 @@ export default function BoqEditor({
       <div className="flex flex-col gap-4 rounded-[32px] border border-slate-800 bg-slate-950 p-6 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <p className="text-sm uppercase tracking-[0.28em] text-slate-500">
-            {isLegacyEmpty ? "Empty legacy revision" : "BOQ editor"}
+            {isLegacyEmpty ? t("boqEditor.emptyLegacyRevision") : t("boqEditor.editorEyebrow")}
           </p>
           <h2 className="mt-2 text-3xl font-semibold text-white">{activeBoq.title}</h2>
           <p className="mt-2 text-sm text-slate-400">
-            {isLegacyEmpty 
-              ? "This legacy revision contains no items. Create a new editable revision to continue."
+            {isLegacyEmpty
+              ? t("boqEditor.legacyEmptyDescription")
               : isReadOnly
                 ? activeBoq.status === "approved"
-                  ? "This revision is approved and read-only."
-                  : "This revision is locked and read-only."
-                : "Edit BOQ items, recalculate totals, and manage revision status."}
+                  ? t("boqEditor.approvedReadOnly")
+                  : t("boqEditor.lockedReadOnly")
+                : t("boqEditor.editDescription")}
           </p>
         </div>
         <div className="flex flex-wrap gap-3">
@@ -337,7 +341,7 @@ export default function BoqEditor({
                 type="button"
                 className="rounded-2xl border border-slate-700 bg-slate-900 px-4 py-2 text-sm font-semibold text-slate-200 hover:bg-slate-800"
               >
-                View Audit History
+                {t("boqEditor.viewAuditHistory")}
               </button>
               <button
                 type="button"
@@ -345,7 +349,7 @@ export default function BoqEditor({
                 disabled={actionPending || voiceInteractionActive}
                 className="rounded-2xl border border-slate-700 bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-50"
               >
-                Create Editable Revision
+                {t("boqEditor.createEditableRevision")}
               </button>
             </>
           ) : (
@@ -364,28 +368,28 @@ export default function BoqEditor({
                 disabled={isSaving || actionPending || voiceInteractionActive}
                 className="rounded-2xl border border-slate-700 bg-slate-900 px-4 py-2 text-sm font-semibold text-slate-200 hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
               >
-                Create revision
+                {t("boqEditor.createRevision")}
               </button>
               <span className="inline-flex items-center gap-1.5">
                 <button
                   type="button"
-                  title={activeBoq.sections.every(s => s.items.length === 0) ? "Add at least one valid item before locking this revision." : ""}
+                  title={activeBoq.sections.every(s => s.items.length === 0) ? t("boqEditor.addItemBeforeLocking") : ""}
                   onClick={() => {
-                    if (window.confirm(`Lock ${activeBoq.revision}? Locked revisions are immutable and cannot be edited.`)) {
+                    if (window.confirm(t("boqEditor.lockConfirm", { revision: activeBoq.revision }))) {
                       void onLock(currentPayload());
                     }
                   }}
                   disabled={isReadOnly || isSaving || actionPending || voiceInteractionActive || activeBoq.sections.every(s => s.items.length === 0)}
                   className="rounded-2xl border border-slate-700 bg-[#1F2937] px-4 py-2 text-sm font-semibold text-slate-200 hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  Lock revision
+                  {t("boqEditor.lockRevision")}
                 </button>
                 <GuideTip
-                  title="Lock revision"
-                  shortDescription="Locking freezes this BOQ revision so final documents can be generated from it."
-                  whatQuantaraDoes="Quantara re-runs verification, then permanently marks this exact revision as immutable — no items, quantities, or rates on it can change again."
-                  whatProfessionalCanDo="Lock only when you're professionally satisfied with the totals. To keep editing afterward, create a new revision from this one."
-                  ariaLabel="Help: Lock revision"
+                  title={t("boqEditor.lockRevisionHelpTitle")}
+                  shortDescription={t("boqEditor.lockRevisionHelpShort")}
+                  whatQuantaraDoes={t("boqEditor.lockRevisionHelpQuantara")}
+                  whatProfessionalCanDo={t("boqEditor.lockRevisionHelpProfessional")}
+                  ariaLabel={t("boqEditor.lockRevisionHelpAriaLabel")}
                 />
               </span>
             </>
@@ -395,11 +399,11 @@ export default function BoqEditor({
 
       {activeBoq.sections.every(s => s.items.length === 0) ? (
         <div className="rounded-[32px] border border-slate-800 bg-slate-950 p-12 text-center">
-          <p className="text-xl font-semibold text-white">No items have been added to this BOQ yet.</p>
-          <p className="mt-2 text-slate-400">Start building your Bill of Quantities to calculate totals.</p>
+          <p className="text-xl font-semibold text-white">{t("boqEditor.noItemsYet")}</p>
+          <p className="mt-2 text-slate-400">{t("boqEditor.startBuilding")}</p>
           <div className="mx-auto mt-4 flex max-w-xl items-center justify-center gap-2 rounded-2xl border border-blue-900/60 bg-blue-950/20 px-4 py-3 text-sm text-blue-200">
             <Mic className="h-4 w-4 shrink-0" aria-hidden="true" />
-            <span>Voice can add a reviewed draft item to a BOQ section. Saved items also support voice change and delete proposals.</span>
+            <span>{t("boqEditor.voiceAddHint")}</span>
           </div>
           {!isReadOnly && firstSection && onVoiceApplied ? (
             <div className="mx-auto mt-4 flex max-w-xl justify-center">
@@ -425,14 +429,14 @@ export default function BoqEditor({
                 }
                 disabledReason={
                   hasUnsavedChanges
-                    ? "Save the draft before using voice."
+                    ? t("boqEditor.voiceSaveDraftFirst")
                     : pendingVoiceProposal
-                      ? "Review or cancel the current voice proposal first."
+                      ? t("boqEditor.voiceReviewOrCancel")
                       : actionPending || isApplyingVoice || voiceBusyItemId !== null
-                        ? "Wait for the current BOQ action to finish."
-                        : "Voice add is unavailable."
+                        ? t("boqEditor.voiceWaitForAction")
+                        : t("boqEditor.voiceAddUnavailable")
                 }
-                ariaLabel={`Record a voice instruction to add an item to ${firstSection.title}`}
+                ariaLabel={t("boqEditor.voiceAddInstruction", { section: firstSection.title })}
               />
             </div>
           ) : null}
@@ -440,7 +444,7 @@ export default function BoqEditor({
             <div className="mx-auto mt-4 max-w-3xl">
               <VoiceProposalCard
                 proposal={pendingVoiceProposal.proposal}
-                fieldLabel="BOQ item"
+                fieldLabel={t("boqEditor.fieldBoqItem")}
                 confirmationScope="PERSISTED_BOQ_ITEM"
                 isConfirming={isApplyingVoice}
                 error={voiceApplyError}
@@ -469,7 +473,7 @@ export default function BoqEditor({
                 disabled={actionPending || voiceInteractionActive}
                 className="rounded-2xl bg-blue-600 px-6 py-3 font-semibold text-white hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-50"
               >
-                Add First Item
+                {t("boqEditor.addFirstItem")}
               </button>
               <button
                 type="button"
@@ -482,15 +486,15 @@ export default function BoqEditor({
                 disabled={actionPending || voiceInteractionActive}
                 className="rounded-2xl border border-slate-700 bg-slate-900 px-6 py-3 font-semibold text-slate-200 hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
               >
-                Enter Item Manually
+                {t("boqEditor.enterItemManually")}
               </button>
               <button
                 type="button"
                 disabled={true}
                 className="rounded-2xl border border-slate-700 bg-slate-900 px-6 py-3 font-semibold text-slate-200 opacity-50 cursor-not-allowed"
-                title="Coming soon"
+                title={t("common.comingSoon")}
               >
-                Import Measurements
+                {t("boqEditor.importMeasurements")}
               </button>
             </div>
           )}
@@ -509,7 +513,7 @@ export default function BoqEditor({
                 disabled={voiceInteractionActive}
                 className="rounded-2xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-200 hover:bg-slate-900 disabled:cursor-not-allowed disabled:opacity-50"
               >
-                {section.collapsed ? "Expand" : "Collapse"}
+                {section.collapsed ? t("boqEditor.expand") : t("boqEditor.collapse")}
               </button>
               <VoiceCommandButton
                 ref={(element) => {
@@ -535,16 +539,16 @@ export default function BoqEditor({
                 }
                 disabledReason={
                   isReadOnly
-                    ? "This BOQ revision is read-only."
+                    ? t("boqEditor.voiceReadOnly")
                     : hasUnsavedChanges
-                      ? "Save the draft before using voice."
+                      ? t("boqEditor.voiceSaveDraftFirst")
                       : pendingVoiceProposal
-                        ? "Review or cancel the current voice proposal first."
+                        ? t("boqEditor.voiceReviewOrCancel")
                         : actionPending || isApplyingVoice || voiceBusyItemId !== null
-                          ? "Wait for the current BOQ action to finish."
-                          : "Voice add is unavailable."
+                          ? t("boqEditor.voiceWaitForAction")
+                          : t("boqEditor.voiceAddUnavailable")
                 }
-                ariaLabel={`Record a voice instruction to add an item to ${section.title}`}
+                ariaLabel={t("boqEditor.voiceAddInstruction", { section: section.title })}
                 compact
               />
               <button
@@ -553,7 +557,7 @@ export default function BoqEditor({
                 disabled={editorControlsDisabled}
                 className="rounded-2xl border border-slate-700 bg-blue-600 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-50"
               >
-                Add item
+                {t("boqCreate.addItem")}
               </button>
             </div>
           </div>
@@ -562,7 +566,7 @@ export default function BoqEditor({
             <div className="border-b border-blue-800/60 bg-blue-950/10 p-4">
               <VoiceProposalCard
                 proposal={pendingVoiceProposal.proposal}
-                fieldLabel="BOQ item"
+                fieldLabel={t("boqEditor.fieldBoqItem")}
                 confirmationScope="PERSISTED_BOQ_ITEM"
                 isConfirming={isApplyingVoice}
                 error={voiceApplyError}
@@ -579,22 +583,22 @@ export default function BoqEditor({
           ) : null}
 
           {section.collapsed ? (
-            <div className="p-6 text-slate-400">Section is collapsed.</div>
+            <div className="p-6 text-slate-400">{t("boqEditor.sectionCollapsed")}</div>
           ) : (
             <div className="overflow-x-auto">
               <table className="min-w-full text-left text-sm text-slate-300">
                 <thead className="bg-slate-950 text-slate-400">
                   <tr>
-                    <th className="whitespace-nowrap px-4 py-3">#</th>
-                    <th className="whitespace-nowrap px-4 py-3">Code</th>
-                    <th className="whitespace-nowrap px-4 py-3">Description</th>
-                    <th className="whitespace-nowrap px-4 py-3">Qty</th>
-                    <th className="whitespace-nowrap px-4 py-3">Unit</th>
-                    <th className="whitespace-nowrap px-4 py-3">Unit cost</th>
-                    <th className="whitespace-nowrap px-4 py-3">Pricing margin</th>
-                    <th className="whitespace-nowrap px-4 py-3">Sell rate</th>
-                    <th className="whitespace-nowrap px-4 py-3">Total</th>
-                    <th className="whitespace-nowrap px-4 py-3">Actions</th>
+                    <th className="whitespace-nowrap px-4 py-3">{t("boqEditor.colNumber")}</th>
+                    <th className="whitespace-nowrap px-4 py-3">{t("boqEditor.colCode")}</th>
+                    <th className="whitespace-nowrap px-4 py-3">{t("boqEditor.colDescription")}</th>
+                    <th className="whitespace-nowrap px-4 py-3">{t("boqEditor.colQty")}</th>
+                    <th className="whitespace-nowrap px-4 py-3">{t("boqEditor.colUnit")}</th>
+                    <th className="whitespace-nowrap px-4 py-3">{t("boqEditor.colUnitCost")}</th>
+                    <th className="whitespace-nowrap px-4 py-3">{t("boqEditor.colPricingMargin")}</th>
+                    <th className="whitespace-nowrap px-4 py-3">{t("boqEditor.colSellRate")}</th>
+                    <th className="whitespace-nowrap px-4 py-3">{t("boqEditor.colTotal")}</th>
+                    <th className="whitespace-nowrap px-4 py-3">{t("boqEditor.colActions")}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -615,9 +619,9 @@ export default function BoqEditor({
                         {item.isPremiumSource && (
                           <span
                             className="mb-1 inline-flex items-center gap-1 rounded-full border border-amber-700 bg-amber-950/40 px-2 py-0.5 text-[0.65rem] font-semibold uppercase tracking-wide text-amber-300"
-                            title="This line uses a Premium catalogue item. Unlocking the package is only required for a clean final export."
+                            title={t("boqEditor.premiumLineTitle")}
                           >
-                            <span aria-hidden="true">👑</span> Premium
+                            <span aria-hidden="true">👑</span> {t("boq.premium")}
                           </span>
                         )}
                         <input
@@ -632,16 +636,25 @@ export default function BoqEditor({
                             className={`mt-1 text-[10px] uppercase tracking-wide ${
                               item.pricingMetadata.manuallyOverriddenFields.length > 0 ? "text-amber-400" : "text-sky-400"
                             }`}
-                            title={`Applied ${formatDate(item.pricingMetadata.rateAppliedAt)} by ${item.pricingMetadata.rateAppliedByName}${
-                              item.pricingMetadata.supplierNameSnapshot ? ` · ${item.pricingMetadata.supplierNameSnapshot}` : ""
-                            }`}
+                            title={
+                              item.pricingMetadata.supplierNameSnapshot
+                                ? t("boqEditor.appliedByWithSupplier", {
+                                    date: formatDate(item.pricingMetadata.rateAppliedAt),
+                                    name: item.pricingMetadata.rateAppliedByName,
+                                    supplier: item.pricingMetadata.supplierNameSnapshot,
+                                  })
+                                : t("boqEditor.appliedBy", {
+                                    date: formatDate(item.pricingMetadata.rateAppliedAt),
+                                    name: item.pricingMetadata.rateAppliedByName,
+                                  })
+                            }
                           >
                             {item.pricingMetadata.manuallyOverriddenFields.length > 0
-                              ? "Catalogue (overridden)"
-                              : `Catalogue · ${item.pricingMetadata.catalogueItemCode}`}
+                              ? t("boqEditor.catalogueOverridden")
+                              : t("boqEditor.catalogueCode", { code: item.pricingMetadata.catalogueItemCode })}
                           </p>
                         )}
-                        {item.notes ? <p className="mt-1 text-xs text-slate-400">Notes: {item.notes}</p> : null}
+                        {item.notes ? <p className="mt-1 text-xs text-slate-400">{t("boqEditor.itemNotes", { notes: item.notes })}</p> : null}
                       </td>
                       <td className="px-4 py-3 w-24">
                         <input
@@ -673,17 +686,17 @@ export default function BoqEditor({
                       <td className="px-4 py-3 w-24">
                         <div className="space-y-2">
                           <select
-                            aria-label={`Pricing mode for item ${item.itemNumber}`}
+                            aria-label={t("boqEditor.pricingModeLabel", { number: item.itemNumber })}
                             value={normalizeMarginMode(item.marginMode)}
                             onChange={(event) => updateItem(section.id, item.id, "marginMode", event.target.value)}
                             disabled={editorControlsDisabled}
                             className="w-full rounded-2xl border border-slate-800 bg-slate-900 px-2 py-2 text-slate-100 outline-none focus:border-blue-500 disabled:cursor-not-allowed disabled:opacity-60"
                           >
-                            <option value="markup">Markup</option>
-                            <option value="gross_margin">Gross margin</option>
+                            <option value="markup">{t("boqEditor.marginMarkup")}</option>
+                            <option value="gross_margin">{t("boqEditor.marginGross")}</option>
                           </select>
                           <input
-                            aria-label={`Margin percentage for item ${item.itemNumber}`}
+                            aria-label={t("boqEditor.marginPercentageLabel", { number: item.itemNumber })}
                             type="number"
                             step="0.01"
                             value={item.marginPercentage}
@@ -704,7 +717,7 @@ export default function BoqEditor({
                               disabled={editorControlsDisabled || isApplyingRate}
                               className="rounded-2xl border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-200 hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
                             >
-                              Apply rate
+                              {t("boqEditor.applyRate")}
                             </button>
                           )}
                           <VoiceCommandButton
@@ -732,18 +745,18 @@ export default function BoqEditor({
                               }
                               disabledReason={
                                 !isPersistedItemId(item.id)
-                                  ? "Save this BOQ item before using voice."
+                                  ? t("boqEditor.voiceSaveItemFirst")
                                   : isReadOnly
-                                    ? "This BOQ revision is read-only."
+                                    ? t("boqEditor.voiceReadOnly")
                                   : hasUnsavedChanges
-                                    ? "Save the draft before using voice so the saved old value can be verified."
+                                    ? t("boqEditor.voiceSaveDraftVerify")
                                     : pendingVoiceProposal
-                                      ? "Review or cancel the current voice proposal first."
+                                      ? t("boqEditor.voiceReviewOrCancel")
                                       : actionPending || isApplyingVoice || voiceBusyItemId !== null
-                                        ? "Wait for the current BOQ action to finish."
-                                        : "Voice updates are not available for this item."
+                                        ? t("boqEditor.voiceWaitForAction")
+                                        : t("boqEditor.voiceItemUnavailable")
                               }
-                              ariaLabel={`Record a voice instruction for BOQ item ${item.itemNumber}`}
+                              ariaLabel={t("boqEditor.voiceItemInstruction", { number: item.itemNumber })}
                             />
                           <button
                             type="button"
@@ -751,7 +764,7 @@ export default function BoqEditor({
                             disabled={editorControlsDisabled}
                             className="rounded-2xl border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-200 hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
                           >
-                            Delete
+                            {t("common.delete")}
                           </button>
                         </div>
                       </td>
@@ -761,7 +774,7 @@ export default function BoqEditor({
                         <td colSpan={10} className="px-4 py-4">
                           <VoiceProposalCard
                             proposal={pendingVoiceProposal.proposal}
-                            fieldLabel={getVoiceBOQFieldLabel(pendingVoiceProposal.proposal.field)}
+                            fieldLabel={getVoiceBOQFieldLabel(pendingVoiceProposal.proposal.field, t)}
                             confirmationScope="PERSISTED_BOQ_ITEM"
                             isConfirming={isApplyingVoice}
                             error={voiceApplyError}
@@ -782,7 +795,7 @@ export default function BoqEditor({
                   {section.items.length === 0 && (
                     <tr>
                       <td colSpan={10} className="px-4 py-10 text-center text-slate-400">
-                        <p className="mb-4">No items have been added to this section.</p>
+                        <p className="mb-4">{t("boqEditor.noSectionItems")}</p>
                         {!isReadOnly && (
                           <button
                             type="button"
@@ -790,7 +803,7 @@ export default function BoqEditor({
                             disabled={actionPending || voiceInteractionActive}
                             className="inline-flex items-center gap-2 rounded-2xl border border-slate-700 bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
                           >
-                            Add First Item
+                            {t("boqEditor.addFirstItem")}
                           </button>
                         )}
                       </td>
@@ -806,20 +819,20 @@ export default function BoqEditor({
       <section className="rounded-[32px] border border-slate-800 bg-slate-950 p-6">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <p className="text-sm uppercase tracking-[0.28em] text-slate-500">Calculated totals</p>
-            <p className="mt-1 text-slate-400">Totals are deterministic and updated from item values.</p>
+            <p className="text-sm uppercase tracking-[0.28em] text-slate-500">{t("boqEditor.calculatedTotals")}</p>
+            <p className="mt-1 text-slate-400">{t("boqEditor.totalsDeterministic")}</p>
           </div>
           <div className="grid gap-3 sm:grid-cols-3">
             <div className="rounded-3xl border border-slate-800 bg-slate-900 p-4 text-slate-300">
-              <p className="text-xs uppercase tracking-[0.24em] text-slate-500">Subtotal</p>
+              <p className="text-xs uppercase tracking-[0.24em] text-slate-500">{t("boqEditor.subtotal")}</p>
               <p className="mt-2 text-lg font-semibold text-white">{formatCurrency(totals.subtotal, currency)}</p>
             </div>
             <div className="rounded-3xl border border-slate-800 bg-slate-900 p-4 text-slate-300">
-              <p className="text-xs uppercase tracking-[0.24em] text-slate-500">Tax</p>
+              <p className="text-xs uppercase tracking-[0.24em] text-slate-500">{t("boqEditor.tax")}</p>
               <p className="mt-2 text-lg font-semibold text-white">{formatCurrency(totals.taxAmount, currency)}</p>
             </div>
             <div className="rounded-3xl border border-slate-800 bg-slate-900 p-4 text-slate-300">
-              <p className="text-xs uppercase tracking-[0.24em] text-slate-500">Grand total</p>
+              <p className="text-xs uppercase tracking-[0.24em] text-slate-500">{t("boq.grandTotal")}</p>
               <p className="mt-2 text-lg font-semibold text-white">{formatCurrency(totals.grandTotal, currency)}</p>
             </div>
           </div>
@@ -831,7 +844,7 @@ export default function BoqEditor({
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <p>{rateError}</p>
             <button type="button" onClick={() => setRateError(null)} className="rounded-2xl border border-rose-800 px-3 py-2 font-semibold hover:bg-rose-900/40">
-              Dismiss
+              {t("boqEditor.dismiss")}
             </button>
           </div>
         </div>

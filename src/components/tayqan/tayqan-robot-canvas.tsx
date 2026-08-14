@@ -47,7 +47,11 @@ export default function TayqanRobotCanvas({ compact = false, cameraDistance = 3.
       <Suspense fallback={fallback}>
         <Canvas
           dpr={[1, compact ? 1.25 : 1.5]}
-          frameloop={tabVisible ? "always" : "never"}
+          // compact/global: render once (and on any invalidation, e.g. a
+          // resize) and then sit idle — no continuous 60fps loop for a
+          // purely decorative corner element. hero: normal continuous loop
+          // while the tab is visible, so its idle bob/turn keeps animating.
+          frameloop={compact ? "demand" : tabVisible ? "always" : "never"}
           camera={{ position: [0, -0.05, cameraDistance], fov }}
           gl={{ antialias: true, alpha: true, powerPreference: "low-power" }}
           shadows={false}
@@ -60,7 +64,7 @@ export default function TayqanRobotCanvas({ compact = false, cameraDistance = 3.
           <ambientLight intensity={0.75} />
           <directionalLight position={[2, 3, 2]} intensity={1.1} />
           <directionalLight position={[-2, 1, -1.5]} intensity={0.35} />
-          <TayqanRobotModel paused={!tabVisible} scale={scale} />
+          <TayqanRobotModel paused={compact || !tabVisible} scale={scale} />
         </Canvas>
       </Suspense>
     </TayqanRobotErrorBoundary>

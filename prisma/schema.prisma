@@ -2181,6 +2181,14 @@ model WorkerRun {
   lastHeartbeatAt       DateTime?
   requestedByUserId     String               @db.Uuid
   requestedByName       String
+  /// TAYQAN-1 — the hiring user's own brief for this assignment, captured at
+  /// hire time and never modified afterward (this row is otherwise governed
+  /// by the same durable-run rules as everything else here). Plain text
+  /// only, length-bounded at the API layer — never a system prompt or model
+  /// instruction; the planner never sees these fields (see
+  /// buildBoundedPlannerInput, which is untouched by this addition).
+  assignmentObjective   String?
+  specialInstructions   String?
   resultAssignmentId    String?              @unique @db.Uuid
   startedAt             DateTime?
   completedAt           DateTime?

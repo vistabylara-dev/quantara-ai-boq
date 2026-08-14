@@ -69,7 +69,9 @@ function toFrontendBOQStatus(status: BOQStatus): "draft" | "locked" | "approved"
   return "draft";
 }
 
-export function toBOQDTO(boq: BOQRecord): BOQ & { databaseId: string; taxRate: number } {
+export function toBOQDTO(
+  boq: BOQRecord,
+): BOQ & { databaseId: string; taxRate: number; version: number; revisionNumber: number } {
   const items = boq.sections.flatMap((section) => section.items);
   const totals = calculateBOQTotals(items, boq.discountPercentage, boq.taxRate);
 
@@ -80,6 +82,14 @@ export function toBOQDTO(boq: BOQRecord): BOQ & { databaseId: string; taxRate: n
     title: boq.title,
     taxRate: boq.taxRate.toNumber(),
     revision: formatRevision(boq.revisionNumber),
+    // TAYQAN-1 — raw, comparable fields alongside the existing formatted
+    // `revision` string. The TAYQAN hire screen needs these to detect
+    // whether a BOQ has changed since its latest review (see
+    // src/lib/worker/tayqan-presentation.ts's isReviewStale) without
+    // inventing new persistence — WorkerRun already stores this same
+    // sourceBoqVersion/sourceRevisionNumber snapshot at hire time.
+    version: boq.version,
+    revisionNumber: boq.revisionNumber,
     status: toFrontendBOQStatus(boq.status),
     sections: boq.sections.map((section) => ({
       id: section.id,

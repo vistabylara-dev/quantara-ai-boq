@@ -29,8 +29,10 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { apiClient, getApiErrorMessage } from "@/lib/api/client";
+import { useTranslations } from "@/lib/i18n/locale-provider";
 import IntegrationsTabs from "./integrations-tabs";
 import { withProjectContext, ProjectContextBanner, useProjectContext } from "./project-context";
+import type { TranslateFn } from "@/lib/i18n/translate";
 
 const ICONS: Record<string, LucideIcon> = {
   Box, Boxes, Building, Building2, Calculator, ClipboardList, Cloud, Cog, Cpu,
@@ -78,19 +80,22 @@ type ProvidersResponse = {
   entitlements: Entitlements;
 };
 
-const STATUS_LABELS: Record<string, string> = {
-  AVAILABLE: "Available",
-  BETA: "Beta",
-  REQUIRES_PLUGIN: "Requires plugin",
-  FILE_IMPORT_ONLY: "File import only",
-  COMING_SOON: "Coming soon",
-  CONNECTED: "Connected",
-  REAUTH_REQUIRED: "Reconnect required",
-  SYNCING: "Syncing",
-  DEGRADED: "Degraded",
-  DISCONNECTED: "Disconnected",
-  ERROR: "Error",
-};
+function statusLabel(t: TranslateFn, status: string): string {
+  const labels: Record<string, string> = {
+    AVAILABLE: t("integrations.statusAvailable"),
+    BETA: t("integrations.statusBeta"),
+    REQUIRES_PLUGIN: t("integrations.statusRequiresPlugin"),
+    FILE_IMPORT_ONLY: t("integrations.statusFileImportOnly"),
+    COMING_SOON: t("integrations.statusComingSoon"),
+    CONNECTED: t("integrations.statusConnected"),
+    REAUTH_REQUIRED: t("integrations.statusReauthRequired"),
+    SYNCING: t("integrations.statusSyncing"),
+    DEGRADED: t("integrations.statusDegraded"),
+    DISCONNECTED: t("integrations.statusDisconnected"),
+    ERROR: t("integrations.statusError"),
+  };
+  return labels[status] ?? status;
+}
 
 const STATUS_TONES: Record<string, string> = {
   AVAILABLE: "border-emerald-700/40 bg-emerald-950/40 text-emerald-300",
@@ -102,15 +107,16 @@ const STATUS_TONES: Record<string, string> = {
   ERROR: "border-rose-700/40 bg-rose-950/40 text-rose-300",
 };
 
-function actionLabel(provider: Provider): string {
-  if (provider.connection && provider.connection.status !== "DISCONNECTED") return "Configure";
-  if (provider.status === "COMING_SOON") return "Coming Soon";
-  if (provider.status === "FILE_IMPORT_ONLY") return "Import file";
-  if (provider.status === "REQUIRES_PLUGIN") return "Download connector";
-  return `Connect ${provider.familyDisplayName}`;
+function actionLabel(t: TranslateFn, provider: Provider): string {
+  if (provider.connection && provider.connection.status !== "DISCONNECTED") return t("integrations.actionConfigure");
+  if (provider.status === "COMING_SOON") return t("integrations.actionComingSoon");
+  if (provider.status === "FILE_IMPORT_ONLY") return t("integrations.actionImportFile");
+  if (provider.status === "REQUIRES_PLUGIN") return t("integrations.actionDownloadConnector");
+  return t("integrations.actionConnect", { family: provider.familyDisplayName });
 }
 
 export default function IntegrationsMarketplace() {
+  const t = useTranslations();
   const projectContext = useProjectContext();
   const [data, setData] = useState<ProvidersResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -164,6 +170,7 @@ export default function IntegrationsMarketplace() {
   }, [data, filtered]);
 
   const selectedProvider = data?.providers.find((p) => p.id === selectedProviderId) ?? null;
+  const autodeskConnection = data?.providers.find((p) => p.id === "autodesk")?.connection ?? null;
 
   if (isLoading) {
     return (
@@ -174,7 +181,7 @@ export default function IntegrationsMarketplace() {
             {Array.from({ length: 6 }).map((_, i) => <div key={i} className="h-40 rounded-3xl bg-[#EEF3F8] dark:bg-[#111D33]" />)}
           </div>
         </div>
-        <p className="sr-only">Loading integrations marketplace.</p>
+        <p className="sr-only">{t("integrations.loadingMarketplace")}</p>
       </div>
     );
   }
@@ -182,10 +189,10 @@ export default function IntegrationsMarketplace() {
   if (loadError || !data) {
     return (
       <div className="rounded-[32px] border border-[#D9E2EC] bg-white p-8 dark:border-[#1E2A42] dark:bg-[#0B1426]">
-        <p className="text-lg font-semibold text-[#0B1630] dark:text-white">Integrations unavailable</p>
-        <p className="mt-2 text-sm text-[#D84A4A] dark:text-rose-300">{loadError ?? "Could not load the integrations marketplace."}</p>
+        <p className="text-lg font-semibold text-[#0B1630] dark:text-white">{t("integrations.unavailable")}</p>
+        <p className="mt-2 text-sm text-[#D84A4A] dark:text-rose-300">{loadError ?? t("integrations.unavailableFallback")}</p>
         <button type="button" onClick={() => void load()} className="mt-6 rounded-2xl border border-[#0EA5E9] bg-[#0EA5E9] px-4 py-2 text-sm font-semibold text-white hover:opacity-90 dark:border-[#22D3EE] dark:bg-[#22D3EE] dark:text-[#050B18]">
-          Try again
+          {t("integrations.tryAgain")}
         </button>
       </div>
     );
@@ -199,15 +206,15 @@ export default function IntegrationsMarketplace() {
             <Plug className="h-5 w-5 text-[#0284C7] dark:text-[#22D3EE]" aria-hidden="true" />
           </span>
           <div>
-            <p className="text-xs uppercase tracking-[0.28em] text-[#7B879C] dark:text-[#7F8DA6]">Integrations</p>
-            <h1 className="mt-1 text-2xl font-semibold text-[#0B1630] dark:text-white sm:text-3xl">Connect your engineering workspace</h1>
+            <p className="text-xs uppercase tracking-[0.28em] text-[#7B879C] dark:text-[#7F8DA6]">{t("integrations.eyebrow")}</p>
+            <h1 className="mt-1 text-2xl font-semibold text-[#0B1630] dark:text-white sm:text-3xl">{t("integrations.title")}</h1>
           </div>
         </div>
         <p className="mt-3 max-w-2xl text-sm text-[#536078] dark:text-[#B8C4D8]">
-          Connect design tools, BIM platforms, construction systems and cloud storage without repeatedly downloading and uploading project files.
+          {t("integrations.marketplaceAvailability")}
         </p>
         <p className="mt-3 text-xs text-[#7B879C] dark:text-[#7F8DA6]">
-          Independent integrations — connection availability depends on your provider account and permissions. Quantara is not affiliated with, endorsed by, or an official partner of any provider listed here unless stated otherwise.
+          {t("integrations.independenceNote")}
         </p>
       </header>
 
@@ -221,7 +228,7 @@ export default function IntegrationsMarketplace() {
           <input
             value={search}
             onChange={(event) => setSearch(event.target.value)}
-            placeholder="Search providers — Autodesk, Procore, Google Drive…"
+            placeholder={t("integrations.searchPlaceholder")}
             className="w-full bg-transparent text-sm text-[#0B1630] outline-none dark:text-white"
           />
         </div>
@@ -230,7 +237,7 @@ export default function IntegrationsMarketplace() {
           onChange={(event) => setCategoryFilter(event.target.value)}
           className="rounded-2xl border border-[#D9E2EC] bg-white px-4 py-3 text-sm text-[#0B1630] outline-none dark:border-[#1E2A42] dark:bg-[#0B1426] dark:text-white"
         >
-          <option value="">All categories</option>
+          <option value="">{t("integrations.allCategories")}</option>
           {Object.entries(data.categories).map(([key, label]) => <option key={key} value={key}>{label}</option>)}
         </select>
         <select
@@ -238,29 +245,29 @@ export default function IntegrationsMarketplace() {
           onChange={(event) => setStatusFilter(event.target.value)}
           className="rounded-2xl border border-[#D9E2EC] bg-white px-4 py-3 text-sm text-[#0B1630] outline-none dark:border-[#1E2A42] dark:bg-[#0B1426] dark:text-white"
         >
-          <option value="">All statuses</option>
-          <option value="CONNECTED">Connected</option>
-          <option value="AVAILABLE">Available</option>
-          <option value="BETA">Beta</option>
-          <option value="REQUIRES_PLUGIN">Requires plugin</option>
-          <option value="FILE_IMPORT_ONLY">File import only</option>
-          <option value="COMING_SOON">Coming soon</option>
+          <option value="">{t("integrations.allStatuses")}</option>
+          <option value="CONNECTED">{t("integrations.statusConnected")}</option>
+          <option value="AVAILABLE">{t("integrations.statusAvailable")}</option>
+          <option value="BETA">{t("integrations.statusBeta")}</option>
+          <option value="REQUIRES_PLUGIN">{t("integrations.statusRequiresPlugin")}</option>
+          <option value="FILE_IMPORT_ONLY">{t("integrations.statusFileImportOnly")}</option>
+          <option value="COMING_SOON">{t("integrations.statusComingSoon")}</option>
         </select>
       </div>
 
       <div className="rounded-2xl border border-[#D9E2EC] bg-[#EEF3F8] px-4 py-3 text-xs text-[#536078] dark:border-[#1E2A42] dark:bg-[#111D33] dark:text-[#8CA0BE]">
-        Plan: <span className="font-semibold text-[#0B1630] dark:text-white">{data.entitlements.planType}</span>
-        {data.entitlements.source === "owner-override" && <span className="ml-2 rounded-full bg-[#D6A84B]/20 px-2 py-0.5 text-[#8A6316] dark:text-[#E0B25C]">Platform owner override</span>}
+        {t("integrations.planPrefix")} <span className="font-semibold text-[#0B1630] dark:text-white">{data.entitlements.planType}</span>
+        {data.entitlements.source === "owner-override" && <span className="ml-2 rounded-full bg-[#D6A84B]/20 px-2 py-0.5 text-[#8A6316] dark:text-[#E0B25C]">{t("integrations.ownerOverride")}</span>}
         {" · "}
-        {data.entitlements.maxActiveConnections === null ? "Unlimited connections" : `Up to ${data.entitlements.maxActiveConnections} connection${data.entitlements.maxActiveConnections === 1 ? "" : "s"}`}
+        {data.entitlements.maxActiveConnections === null ? t("integrations.unlimitedConnections") : t("integrations.upToConnections", { count: data.entitlements.maxActiveConnections, plural: data.entitlements.maxActiveConnections === 1 ? "" : "s" })}
       </div>
 
       {connected.length > 0 && (
-        <ProviderSection title="Connected" providers={connected} onSelect={setSelectedProviderId} />
+        <ProviderSection title={t("integrations.sectionConnected")} providers={connected} onSelect={setSelectedProviderId} />
       )}
 
       {recommended.length > 0 && !categoryFilter && !statusFilter && !search && (
-        <ProviderSection title="Recommended" providers={recommended} onSelect={setSelectedProviderId} />
+        <ProviderSection title={t("integrations.sectionRecommended")} providers={recommended} onSelect={setSelectedProviderId} />
       )}
 
       {byCategory.map((group) => (
@@ -269,12 +276,17 @@ export default function IntegrationsMarketplace() {
 
       {filtered.length === 0 && (
         <div className="rounded-[32px] border border-[#D9E2EC] bg-white p-10 text-center dark:border-[#1E2A42] dark:bg-[#0B1426]">
-          <p className="text-sm text-[#7B879C] dark:text-[#7F8DA6]">No providers match these filters.</p>
+          <p className="text-sm text-[#7B879C] dark:text-[#7F8DA6]">{t("integrations.noProviders")}</p>
         </div>
       )}
 
       {selectedProvider && (
-        <ProviderDetailDrawer provider={selectedProvider} projectContext={projectContext} onClose={() => setSelectedProviderId(null)} />
+        <ProviderDetailDrawer
+          provider={selectedProvider}
+          projectContext={projectContext}
+          autodeskConnection={autodeskConnection}
+          onClose={() => setSelectedProviderId(null)}
+        />
       )}
     </div>
   );
@@ -292,6 +304,7 @@ function ProviderSection({ title, providers, onSelect }: { title: string; provid
 }
 
 function ProviderCard({ provider, onSelect }: { provider: Provider; onSelect: (id: string) => void }) {
+  const t = useTranslations();
   const Icon = ICONS[provider.icon] ?? Plug;
   const displayStatus = provider.connection ? provider.connection.status : provider.status;
   const isDisabledAction = provider.status === "COMING_SOON" && !provider.connection;
@@ -307,7 +320,7 @@ function ProviderCard({ provider, onSelect }: { provider: Provider; onSelect: (i
           <Icon className="h-5 w-5 text-[#0284C7] dark:text-[#22D3EE]" aria-hidden="true" />
         </span>
         <span className={`rounded-full border px-2.5 py-1 text-[0.65rem] font-semibold uppercase tracking-wide ${STATUS_TONES[displayStatus] ?? STATUS_TONES.COMING_SOON}`}>
-          {STATUS_LABELS[displayStatus] ?? displayStatus}
+          {statusLabel(t, displayStatus)}
         </span>
       </div>
       <p className="mt-3 text-sm font-semibold text-[#0B1630] dark:text-white">{provider.displayName}</p>
@@ -321,7 +334,7 @@ function ProviderCard({ provider, onSelect }: { provider: Provider; onSelect: (i
             : "border-[#0EA5E9] bg-[#0EA5E9]/10 text-[#0284C7] dark:border-[#22D3EE] dark:bg-[#22D3EE]/10 dark:text-[#22D3EE]"
         }`}
       >
-        {actionLabel(provider)}
+        {actionLabel(t, provider)}
       </span>
     </button>
   );
@@ -330,14 +343,19 @@ function ProviderCard({ provider, onSelect }: { provider: Provider; onSelect: (i
 function ProviderDetailDrawer({
   provider,
   projectContext,
+  autodeskConnection,
   onClose,
 }: {
   provider: Provider;
   projectContext: ReturnType<typeof useProjectContext>;
+  autodeskConnection: Provider["connection"];
   onClose: () => void;
 }) {
+  const t = useTranslations();
   const Icon = ICONS[provider.icon] ?? Plug;
   const isPlugin = provider.connectionType === "PLUGIN_DESKTOP";
+  const isAutodeskFamily = provider.providerFamily === "autodesk";
+  const hasAutodeskConnection = Boolean(autodeskConnection && autodeskConnection.status !== "DISCONNECTED");
 
   return (
     <div className="fixed inset-0 z-30 flex items-center justify-center bg-black/60 px-4" onClick={onClose}>
@@ -356,7 +374,7 @@ function ProviderDetailDrawer({
             </div>
           </div>
           <span className={`rounded-full border px-3 py-1 text-xs font-semibold uppercase tracking-wide ${STATUS_TONES[provider.status] ?? STATUS_TONES.COMING_SOON}`}>
-            {STATUS_LABELS[provider.status] ?? provider.status}
+            {statusLabel(t, provider.status)}
           </span>
         </div>
 
@@ -364,20 +382,20 @@ function ProviderDetailDrawer({
 
         {provider.isIndependentIntegration && (
           <p className="mt-3 text-xs text-[#7B879C] dark:text-[#7F8DA6]">
-            Independent integration — connection availability depends on your {provider.familyDisplayName} account and permissions.
+            {t("integrations.independentIntegrationNote", { family: provider.familyDisplayName })}
           </p>
         )}
 
         <dl className="mt-6 grid gap-3 sm:grid-cols-2">
-          <DetailField term="Category" value={provider.categoryLabel} />
-          <DetailField term="Connection method" value={provider.connectionType.replace(/_/g, " ")} />
-          <DetailField term="Entitled on your plan" value={provider.entitled ? "Yes" : "Not on your current plan"} />
-          <DetailField term="Connection" value={provider.connection ? STATUS_LABELS[provider.connection.status] ?? provider.connection.status : "Not connected"} />
+          <DetailField term={t("integrations.detailCategory")} value={provider.categoryLabel} />
+          <DetailField term={t("integrations.detailConnectionMethod")} value={provider.connectionType.replace(/_/g, " ")} />
+          <DetailField term={t("integrations.detailEntitled")} value={provider.entitled ? t("integrations.detailEntitledYes") : t("integrations.detailEntitledNo")} />
+          <DetailField term={t("integrations.detailConnection")} value={provider.connection ? statusLabel(t, provider.connection.status) : t("integrations.detailNotConnected")} />
         </dl>
 
         {provider.supportedData.length > 0 && (
           <div className="mt-5">
-            <p className="text-xs font-semibold uppercase tracking-wide text-[#7B879C] dark:text-[#7F8DA6]">Supports today</p>
+            <p className="text-xs font-semibold uppercase tracking-wide text-[#7B879C] dark:text-[#7F8DA6]">{t("integrations.supportsToday")}</p>
             <ul className="mt-2 flex flex-wrap gap-2">
               {provider.supportedData.map((d) => (
                 <li key={d} className="rounded-full border border-[#D9E2EC] bg-[#EEF3F8] px-3 py-1 text-xs text-[#0B1630] dark:border-[#1E2A42] dark:bg-[#111D33] dark:text-[#F7FAFC]">{d}</li>
@@ -388,7 +406,7 @@ function ProviderDetailDrawer({
 
         {provider.plannedData.length > 0 && (
           <div className="mt-4">
-            <p className="text-xs font-semibold uppercase tracking-wide text-[#7B879C] dark:text-[#7F8DA6]">Planned</p>
+            <p className="text-xs font-semibold uppercase tracking-wide text-[#7B879C] dark:text-[#7F8DA6]">{t("integrations.planned")}</p>
             <ul className="mt-2 flex flex-wrap gap-2">
               {provider.plannedData.map((d) => (
                 <li key={d} className="rounded-full border border-dashed border-[#D9E2EC] px-3 py-1 text-xs text-[#7B879C] dark:border-[#1E2A42] dark:text-[#7F8DA6]">{d}</li>
@@ -399,23 +417,33 @@ function ProviderDetailDrawer({
 
         {isPlugin && (
           <div className="mt-5 rounded-2xl border border-[#D9E2EC] bg-[#EEF3F8] p-4 text-xs text-[#536078] dark:border-[#1E2A42] dark:bg-[#111D33] dark:text-[#8CA0BE]">
-            This provider connects through a desktop add-on/bridge, not an ordinary cloud login. A signed connector download will be available once this integration ships — there is nothing to install yet.
+            {t("integrations.pluginNote")}
           </div>
         )}
 
         <div className="mt-6 flex flex-wrap gap-2">
+          {isAutodeskFamily && (
+            <a
+              href={hasAutodeskConnection ? "/integrations/autodesk/connect" : "/api/integrations/autodesk/connect"}
+              className="rounded-2xl border border-[#0EA5E9] bg-[#0EA5E9] px-4 py-2 text-sm font-semibold text-white hover:opacity-90 dark:border-[#22D3EE] dark:bg-[#22D3EE] dark:text-[#050B18]"
+            >
+              {hasAutodeskConnection
+                ? t("integrations.autodesk.browseAction")
+                : t("integrations.actionConnect", { family: "Autodesk" })}
+            </a>
+          )}
           <Link
             href={withProjectContext(`/integrations/${provider.id}`, projectContext)}
             className="rounded-2xl border border-[#0EA5E9] bg-[#0EA5E9]/10 px-4 py-2 text-sm font-semibold text-[#0284C7] hover:bg-[#0EA5E9]/20 dark:border-[#22D3EE] dark:bg-[#22D3EE]/10 dark:text-[#22D3EE]"
           >
-            View full details
+            {t("integrations.viewFullDetails")}
           </Link>
           <button
             type="button"
             onClick={onClose}
             className="rounded-2xl border border-[#D9E2EC] bg-white px-4 py-2 text-sm font-semibold text-[#0B1630] hover:bg-[#EEF3F8] dark:border-[#1E2A42] dark:bg-[#0B1426] dark:text-white dark:hover:bg-[#111D33]"
           >
-            Close
+            {t("integrations.close")}
           </button>
         </div>
       </div>

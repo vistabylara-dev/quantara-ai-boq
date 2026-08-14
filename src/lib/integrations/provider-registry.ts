@@ -8,9 +8,10 @@ import type { ProviderRegistryEntry } from "./connector-types";
  * `IntegrationProvider` DB rows are seeded from this file for 1B+ to
  * reference by a stable id, but the UI reads this array directly.
  *
- * Status honesty rule: Google Drive is the sole Controlled Early Access
- * connector because its OAuth, browser, and selected-file project import are
- * implemented. Every other OAuth-cloud provider remains COMING_SOON, while
+ * Status honesty rule: Google Drive and the narrow Autodesk/AutoCAD metadata
+ * workflow are Controlled Early Access connectors because their authorized,
+ * review-led paths are implemented. Other OAuth-cloud providers remain
+ * COMING_SOON, while
  * plugin/file-import-ceiling providers use the status that truthfully
  * describes how they will connect (REQUIRES_PLUGIN / FILE_IMPORT_ONLY).
  */
@@ -23,11 +24,11 @@ export const PROVIDER_REGISTRY: ProviderRegistryEntry[] = [
     displayName: "Autodesk",
     category: "BIM_CAD",
     connectionType: "OAUTH_CLOUD",
-    status: "COMING_SOON",
-    shortPurpose: "Connect your Autodesk account to browse hubs, projects, and models across the Autodesk ecosystem.",
-    description: "Autodesk Platform Services OAuth, Data Management API, and Model Derivative API — one connection powers every Autodesk product below.",
-    supportedData: [],
-    plannedData: ["Hub/account access", "Project and folder browsing", "File/model version selection", "Metadata synchronization"],
+    status: "BETA",
+    shortPurpose: "Connect Autodesk, select supported DWG files, and create reviewable Quantara extraction candidates from Autodesk model metadata.",
+    description: "Read-only Autodesk connection for browsing cloud DWG files and creating human-review candidates from Autodesk-generated model metadata.",
+    supportedData: ["Autodesk account connection", "Hub and project browsing", "Folder and file browsing", "Reviewable DWG metadata extraction candidates"],
+    plannedData: ["Additional model formats", "Model processing"],
     recommendedOrder: 1,
     icon: "Box",
     isIndependentIntegration: true,
@@ -55,11 +56,11 @@ export const PROVIDER_REGISTRY: ProviderRegistryEntry[] = [
     displayName: "AutoCAD",
     category: "BIM_CAD",
     connectionType: "OAUTH_CLOUD",
-    status: "COMING_SOON",
-    shortPurpose: "2D/3D CAD drawings.",
-    description: "Available through the Autodesk connection — DWG files and drawing property extraction where enabled.",
-    supportedData: [],
-    plannedData: ["DWG files", "Drawing property extraction"],
+    status: "BETA",
+    shortPurpose: "2D/3D CAD drawings with human-reviewed metadata candidates.",
+    description: "Connect Autodesk, select supported DWG files, and create reviewable Quantara extraction candidates from Autodesk model metadata.",
+    supportedData: ["DWG cloud file discovery via Autodesk", "Reviewable DWG metadata extraction candidates"],
+    plannedData: ["Human-reviewed quantity takeoff"],
     recommendedOrder: 3,
     icon: "PenTool",
     isIndependentIntegration: true,

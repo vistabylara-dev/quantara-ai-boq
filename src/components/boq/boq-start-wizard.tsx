@@ -182,6 +182,7 @@ function StartCard({
             shortDescription={help.shortDescription}
             whatQuantaraDoes={help.whatQuantaraDoes}
             whatProfessionalCanDo={help.whatProfessionalCanDo}
+            cta={onClick ? { label: title, onAction: onClick } : undefined}
             ariaLabel={`Help: ${help.title}`}
           />
         </div>

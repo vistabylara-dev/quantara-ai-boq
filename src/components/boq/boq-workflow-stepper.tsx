@@ -7,6 +7,7 @@ import {
   type NextStepAction,
   type WorkflowStep,
 } from "@/lib/workflow/boq-workflow-state";
+import { useLocale } from "@/lib/i18n/locale-provider";
 
 /**
  * Guided BOQ measurement workflow (Release 1), spec section 1 — the visible
@@ -16,14 +17,6 @@ import {
  * it stays testable without a DOM.
  */
 
-const STATUS_STYLES: Record<WorkflowStep["status"], { dot: string; text: string; label: string }> = {
-  COMPLETE: { dot: "bg-emerald-500", text: "text-emerald-300", label: "Complete" },
-  CURRENT: { dot: "bg-blue-500", text: "text-blue-300", label: "Current" },
-  NEEDS_ATTENTION: { dot: "bg-amber-500", text: "text-amber-300", label: "Needs attention" },
-  NOT_STARTED: { dot: "bg-slate-700", text: "text-slate-500", label: "Not started" },
-  NOT_REQUIRED: { dot: "bg-slate-600", text: "text-slate-400", label: "Not required" },
-};
-
 export type BoqWorkflowStepperProps = {
   steps: WorkflowStep[];
   nextAction: NextStepAction;
@@ -31,15 +24,23 @@ export type BoqWorkflowStepperProps = {
 };
 
 export function BoqWorkflowStepper({ steps, nextAction, onAction }: BoqWorkflowStepperProps) {
+  const { direction, t } = useLocale();
   const guidance = summarizeWorkflowGuidance(steps, nextAction);
+  const STATUS_STYLES: Record<WorkflowStep["status"], { dot: string; text: string; label: string }> = {
+    COMPLETE: { dot: "bg-emerald-500", text: "text-emerald-300", label: t("boqEditor.statusComplete") },
+    CURRENT: { dot: "bg-blue-500", text: "text-blue-300", label: t("boqEditor.statusCurrent") },
+    NEEDS_ATTENTION: { dot: "bg-amber-500", text: "text-amber-300", label: t("boqEditor.statusNeedsAttention") },
+    NOT_STARTED: { dot: "bg-slate-700", text: "text-slate-500", label: t("boqEditor.statusNotStarted") },
+    NOT_REQUIRED: { dot: "bg-slate-600", text: "text-slate-400", label: t("boqEditor.statusNotRequired") },
+  };
 
   return (
     <div className="rounded-[32px] border border-slate-800 bg-slate-950 p-6">
-      <p className="text-sm uppercase tracking-[0.28em] text-slate-500">BOQ Workflow</p>
+      <p className="text-sm uppercase tracking-[0.28em] text-slate-500">{t("boqEditor.workflowTitle")}</p>
       <ol className="mt-5 flex flex-wrap items-center gap-x-2 gap-y-4">
         {steps.map((step, index) => {
           const style = STATUS_STYLES[step.status];
-          const reason = describeWorkflowStepReason(step.status);
+          const reason = describeWorkflowStepReason(step.status, t);
           return (
             <li key={step.id} className="flex items-center gap-2">
               <button
@@ -55,7 +56,11 @@ export function BoqWorkflowStepper({ steps, nextAction, onAction }: BoqWorkflowS
                   <span className={`text-[0.65rem] uppercase tracking-wide ${style.text}`}>{style.label}</span>
                 </div>
               </button>
-              {index < steps.length - 1 && <span className="text-slate-700" aria-hidden="true">&rarr;</span>}
+              {index < steps.length - 1 && (
+                <span className="text-slate-700" aria-hidden="true">
+                  {direction === "rtl" ? "←" : "→"}
+                </span>
+              )}
             </li>
           );
         })}
@@ -63,25 +68,25 @@ export function BoqWorkflowStepper({ steps, nextAction, onAction }: BoqWorkflowS
 
       <div
         role="status"
-        aria-label="What should I do next"
+        aria-label={t("boqEditor.whatNext")}
         className="mt-6 rounded-3xl border border-blue-900/40 bg-blue-950/20 p-5"
       >
-        <p className="text-xs font-semibold uppercase tracking-[0.24em] text-blue-300">What should I do next?</p>
+        <p className="text-xs font-semibold uppercase tracking-[0.24em] text-blue-300">{t("boqEditor.whatNext")}</p>
 
         <dl className="mt-3 grid gap-3 sm:grid-cols-2">
           <div>
-            <dt className="text-[0.65rem] uppercase tracking-wide text-slate-500">Current stage</dt>
-            <dd className="text-sm font-semibold text-white">{guidance.currentStage?.label ?? "Not started"}</dd>
+            <dt className="text-[0.65rem] uppercase tracking-wide text-slate-500">{t("boqEditor.currentStage")}</dt>
+            <dd className="text-sm font-semibold text-white">{guidance.currentStage?.label ?? t("boqEditor.notStartedFallback")}</dd>
           </div>
           <div>
-            <dt className="text-[0.65rem] uppercase tracking-wide text-slate-500">Why</dt>
+            <dt className="text-[0.65rem] uppercase tracking-wide text-slate-500">{t("boqEditor.why")}</dt>
             <dd className="text-sm text-slate-200">{guidance.why}</dd>
           </div>
         </dl>
 
         <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <p className="text-sm text-slate-200">
-            <span className="text-[0.65rem] uppercase tracking-wide text-slate-500">Do this now: </span>
+            <span className="text-[0.65rem] uppercase tracking-wide text-slate-500">{t("boqEditor.doThisNow")}</span>
             {guidance.doThisNow}
           </p>
           {nextAction.ctaAction && (
@@ -97,7 +102,7 @@ export function BoqWorkflowStepper({ steps, nextAction, onAction }: BoqWorkflowS
 
         {guidance.afterThat && (
           <p className="mt-3 text-xs text-slate-500">
-            <span className="uppercase tracking-wide">After that: </span>
+            <span className="uppercase tracking-wide">{t("boqEditor.afterThat")}</span>
             {guidance.afterThat.label}
           </p>
         )}

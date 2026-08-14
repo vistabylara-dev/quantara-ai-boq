@@ -1,5 +1,6 @@
 import { Prisma } from "@prisma/client";
 import type { DecimalInput } from "@/lib/calculations/boq-calculator";
+import { isFinitePrismaDecimal } from "@/lib/validation/prisma-decimal";
 
 export type VerificationSeverityValue = "INFO" | "WARNING" | "CRITICAL";
 
@@ -94,7 +95,7 @@ function optionalDecimal(value: DecimalInput | null | undefined): Prisma.Decimal
   }
   try {
     const parsed = new Prisma.Decimal(value);
-    return parsed.isFinite() ? parsed : null;
+    return isFinitePrismaDecimal(parsed) ? parsed : null;
   } catch {
     return null;
   }

@@ -121,7 +121,10 @@ Never put secret values in `wrangler.jsonc` — that file is committed.
 npm run deploy
 ```
 
-(runs `opennextjs-cloudflare build && opennextjs-cloudflare deploy`). This
+(runs `prisma migrate deploy` against the direct origin `DATABASE_URL`
+before `opennextjs-cloudflare build && opennextjs-cloudflare deploy`). The
+command stops before publishing the Worker if migration application fails,
+and it never runs the development seed. This
 has intentionally **not** been run as part of this change — deployment
 requires explicit approval per the project's standing rules.
 

@@ -69,6 +69,9 @@ describe("i18n dictionary parity: English (canonical) vs Arabic", () => {
     const allowedIdentical = new Set([
       "common.appName",
       "documents.downloadPdf",
+      "publicContent.pricing.saasStarterFeature7",
+      "publicContent.pricing.saasProfessionalFeature7",
+      "publicContent.pricing.saasBusinessFeature7",
     ]);
     function walk(enNode: unknown, arNode: unknown, path: string, offenders: string[]) {
       if (typeof enNode === "string") {

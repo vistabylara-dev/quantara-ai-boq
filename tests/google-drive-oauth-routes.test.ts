@@ -29,6 +29,7 @@ vi.mock("@/lib/auth/current-actor", () => ({
 
 vi.mock("@/lib/auth/request-context", () => ({
   setActorContext: mocks.setActorContext,
+  withActorRequestContext: <T extends (...args: never[]) => unknown>(handler: T) => handler,
 }));
 
 vi.mock("@/lib/services/google-drive-integration-service", () => ({

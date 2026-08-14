@@ -50,7 +50,6 @@ function mockStripeClient() {
       update: vi.fn(async (id: string) => ({ id })),
       retrieve: vi.fn(async (id: string) => ({ id, unit_amount: 14900, currency: "aed", recurring: { interval: "month" } })),
     },
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
   } as any;
 }
 
@@ -209,7 +208,6 @@ describe("Stripe sync service (integration, real local Postgres, mocked Stripe)"
       const products = [
         { code: "b", type: "ONE_TIME", purchaseMode: "DIRECT", isActive: true, name: "B", description: "", prices: [] },
         { code: "a", type: "ONE_TIME", purchaseMode: "DIRECT", isActive: true, name: "A", description: "", prices: [] },
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
       ] as any;
       const reversed = [...products].reverse();
       expect(computeCatalogueFingerprint(products)).toBe(computeCatalogueFingerprint(reversed));
@@ -218,7 +216,6 @@ describe("Stripe sync service (integration, real local Postgres, mocked Stripe)"
     it("changes when a price amount changes", async () => {
       const base = [{ code: "x", type: "ONE_TIME", purchaseMode: "DIRECT", isActive: true, name: "X", description: "", prices: [{ code: "x1", amountMinor: 1000, currency: "AED", billingInterval: "ONE_TIME", isFromPrice: false, isActive: true, reviewStatus: "APPROVED" }] }];
       const changed = [{ ...base[0], prices: [{ ...base[0].prices[0], amountMinor: 2000 }] }];
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       expect(computeCatalogueFingerprint(base as any)).not.toBe(computeCatalogueFingerprint(changed as any));
     });
   });

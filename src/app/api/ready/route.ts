@@ -1,5 +1,6 @@
 import { apiSuccess, apiFailure } from "@/lib/http/api-response";
 import { prisma } from "@/lib/db/prisma";
+import { validateProductionSecuritySecrets } from "@/lib/config/security-secrets";
 
 export const dynamic = "force-dynamic";
 
@@ -10,6 +11,17 @@ export const dynamic = "force-dynamic";
  * reports pass/fail without leaking connection details.
  */
 export async function GET() {
+  try {
+    validateProductionSecuritySecrets();
+  } catch (error) {
+    console.error("[ready] production security configuration check failed:", error instanceof Error ? error.message : error);
+    return apiFailure(
+      "SECURITY_CONFIGURATION_UNAVAILABLE",
+      "Required production security configuration is unavailable.",
+      503,
+    );
+  }
+
   try {
     await prisma.$queryRaw`SELECT 1`;
     return apiSuccess({ status: "ready" });

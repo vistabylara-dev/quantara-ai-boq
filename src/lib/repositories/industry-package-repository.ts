@@ -49,6 +49,39 @@ export async function listPackageItems(packageId: string) {
   return links.map((link) => link.masterItem);
 }
 
+export async function searchPackageItems(
+  packageId: string,
+  options: { page: number; pageSize: number; search?: string }
+) {
+  const { page, pageSize, search } = options;
+  const skip = (page - 1) * pageSize;
+
+  const where = {
+    packageId,
+    ...(search ? {
+      masterItem: {
+        OR: [
+          { name: { contains: search, mode: "insensitive" as const } },
+          { itemCode: { contains: search, mode: "insensitive" as const } },
+        ]
+      }
+    } : {})
+  };
+
+  const [total, links] = await Promise.all([
+    prisma.industryDataPackageItem.count({ where }),
+    prisma.industryDataPackageItem.findMany({
+      where,
+      include: { masterItem: true },
+      orderBy: { sortOrder: "asc" },
+      skip,
+      take: pageSize,
+    })
+  ]);
+
+  return { total, items: links.map(link => link.masterItem) };
+}
+
 /** Seed-time only. Idempotent on key. */
 export async function createPackage(input: {
   key: string;

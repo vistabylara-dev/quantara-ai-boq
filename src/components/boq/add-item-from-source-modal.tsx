@@ -2,16 +2,30 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import type { QuantityCalculationType } from "@prisma/client";
-import { apiClient, getApiErrorMessage } from "@/lib/api/client";
-import { listSupportedCalculationTypes, getRequiredDimensions } from "@/lib/calculations/required-dimensions-registry";
+import type {
+  ExtractedEntityStatus,
+  ExtractedEntityType,
+  ExtractionMethod,
+  QuantityCalculationType,
+} from "@prisma/client";
+import { apiClient } from "@/lib/api/client";
+import { listSupportedCalculationTypes } from "@/lib/calculations/required-dimensions-registry";
 import { QuantityCalculationPanel } from "@/components/boq/quantity-calculation-panel";
-import { useTranslations } from "@/lib/i18n/locale-provider";
+import { useLocale } from "@/lib/i18n/locale-provider";
+import { getLocalizedApiErrorMessage } from "@/lib/i18n/api-error-message";
+import {
+  translateCalculationType,
+  translateExtractedEntityStatus,
+  translateExtractedEntityType,
+  translateExtractionMethod,
+  translateSearchSource,
+  type ItemSearchSource,
+} from "@/lib/i18n/engineering-labels";
 
 type Section = { id: string; title: string };
 
 type SearchResultItem = {
-  source: string;
+  source: ItemSearchSource;
   id: string;
   itemCode: string;
   name: string;
@@ -25,14 +39,14 @@ type ExtractedEntityView = {
   id: string;
   projectId: string;
   projectFileId: string;
-  entityType: string;
+  entityType: ExtractedEntityType;
   label: string;
   quantity: number | null;
   unit: string | null;
   confidence: number;
-  extractionMethod: string;
+  extractionMethod: ExtractionMethod;
   sourceText: string | null;
-  status: string;
+  status: ExtractedEntityStatus;
 };
 
 export type AddItemTab = "reviewed" | "search" | "manual";
@@ -55,7 +69,7 @@ function humanizeEntityType(value: string): string {
     .join(" ");
 }
 
-const SOURCE_TYPE_BY_RESULT_SOURCE: Record<string, string> = {
+const SOURCE_TYPE_BY_RESULT_SOURCE: Record<ItemSearchSource, string> = {
   COMPANY_LIBRARY: "COMPANY_LIBRARY",
   RECENT: "COMPANY_LIBRARY",
   FAVORITE: "COMPANY_LIBRARY",
@@ -77,7 +91,7 @@ export default function AddItemFromSourceModal({
   onClose,
   onAdded,
 }: Props) {
-  const t = useTranslations();
+  const { locale, t } = useLocale();
   const [tab, setTab] = useState<AddItemTab>(initialTab);
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<SearchResultItem[]>([]);
@@ -126,11 +140,11 @@ export default function AddItemFromSourceModal({
       setResults(data.items);
     } catch (err) {
       if (err instanceof DOMException && err.name === "AbortError") return;
-      setError(getApiErrorMessage(err));
+      setError(getLocalizedApiErrorMessage(err, t, locale));
     } finally {
       setIsSearching(false);
     }
-  }, [query]);
+  }, [locale, query, t]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -163,7 +177,7 @@ export default function AddItemFromSourceModal({
       })
       .catch((err) => {
         if (err instanceof DOMException && err.name === "AbortError") return;
-        setError(getApiErrorMessage(err));
+        setError(getLocalizedApiErrorMessage(err, t, locale));
       })
       .finally(() => {
         if (!controller.signal.aborted) {
@@ -173,7 +187,7 @@ export default function AddItemFromSourceModal({
       });
 
     return () => controller.abort();
-  }, [projectId, tab]);
+  }, [locale, projectId, t, tab]);
 
   const selectReviewedEntity = useCallback((entity: ExtractedEntityView) => {
     setSelectedEntity(entity);
@@ -195,7 +209,7 @@ export default function AddItemFromSourceModal({
     if (!selectedEntity) return;
 
     if (useExtractionCalculation && !confirmedExtractionCalculation) {
-      setError("Confirm the measurement calculation before importing this reviewed item.");
+      setError(t("boqEditor.confirmCalculationBeforeImport"));
       return;
     }
 
@@ -215,10 +229,7 @@ export default function AddItemFromSourceModal({
       || effectiveQuantity <= 0
       || !effectiveUnit
     ) {
-      setError(
-        "This reviewed item does not yet have a usable positive quantity and unit. "
-        + "Correct the extracted information or confirm a supported measurement calculation first.",
-      );
+      setError(t("boqEditor.reviewedItemNoUsableQuantity"));
       return;
     }
 
@@ -229,7 +240,7 @@ export default function AddItemFromSourceModal({
     const marginPercentage = Number(extractionDraft.marginPercentage);
 
     if (!itemCode || !category || !description) {
-      setError("Item code, category, and description are required before BOQ import.");
+      setError(t("boqEditor.itemFieldsRequired"));
       return;
     }
 
@@ -239,7 +250,7 @@ export default function AddItemFromSourceModal({
       || !Number.isFinite(marginPercentage)
       || marginPercentage < 0
     ) {
-      setError("Unit cost and margin must be valid non-negative numbers.");
+      setError(t("boqEditor.unitCostMarginInvalid"));
       return;
     }
 
@@ -270,7 +281,7 @@ export default function AddItemFromSourceModal({
 
       onAdded();
     } catch (err) {
-      setError(getApiErrorMessage(err));
+      setError(getLocalizedApiErrorMessage(err, t, locale));
     } finally {
       setIsSaving(false);
     }
@@ -278,11 +289,13 @@ export default function AddItemFromSourceModal({
     boqId,
     confirmedExtractionCalculation,
     extractionDraft,
+    locale,
     nextItemNumber,
     onAdded,
     projectId,
     sectionId,
     selectedEntity,
+    t,
     useExtractionCalculation,
   ]);
 
@@ -303,11 +316,11 @@ export default function AddItemFromSourceModal({
       });
       onAdded();
     } catch (err) {
-      setError(getApiErrorMessage(err));
+      setError(getLocalizedApiErrorMessage(err, t, locale));
     } finally {
       setIsSaving(false);
     }
-  }, [boqId, nextItemNumber, onAdded, quantity, sectionId, selected]);
+  }, [boqId, locale, nextItemNumber, onAdded, quantity, sectionId, selected, t]);
 
   const addManual = useCallback(async () => {
     setIsSaving(true);
@@ -322,11 +335,11 @@ export default function AddItemFromSourceModal({
       });
       onAdded();
     } catch (err) {
-      setError(getApiErrorMessage(err));
+      setError(getLocalizedApiErrorMessage(err, t, locale));
     } finally {
       setIsSaving(false);
     }
-  }, [boqId, manualDraft, nextItemNumber, onAdded, quantity, sectionId]);
+  }, [boqId, locale, manualDraft, nextItemNumber, onAdded, quantity, sectionId, t]);
 
   const directReviewedQuantityReady = Boolean(
     selectedEntity
@@ -371,7 +384,7 @@ export default function AddItemFromSourceModal({
         </div>
 
         <label className="mt-4 block text-sm text-slate-300">
-          <span className="text-slate-400">Section</span>
+          <span className="text-slate-400">{t("boqEditor.sectionLabel")}</span>
           <select value={sectionId} onChange={(e) => setSectionId(e.target.value)} className="mt-2 w-full rounded-2xl border border-slate-800 bg-slate-900 px-4 py-3 text-white outline-none focus:border-blue-500">
             {sections.map((section) => <option key={section.id} value={section.id}>{section.title}</option>)}
           </select>
@@ -380,26 +393,24 @@ export default function AddItemFromSourceModal({
         {tab === "reviewed" && (
           <div className="mt-4 space-y-4">
             <div className="rounded-2xl border border-blue-900/60 bg-blue-950/20 p-4">
-              <p className="text-sm font-semibold text-blue-200">Professionally reviewed project information</p>
+              <p className="text-sm font-semibold text-blue-200">{t("boqEditor.reviewedInfoTitle")}</p>
               <p className="mt-2 text-xs leading-5 text-slate-400">
-                Only confirmed or corrected extraction appears here. Nothing is imported automatically.
-                Select the reviewed source item, use its reviewed quantity directly when appropriate,
-                or create a visible deterministic measurement calculation before BOQ import.
+                {t("boqEditor.reviewedInfoDescription")}
               </p>
             </div>
 
             {isLoadingReviewed && (
-              <p className="text-sm text-slate-400">Loading reviewed extraction…</p>
+              <p className="text-sm text-slate-400">{t("boqEditor.loadingReviewedExtraction")}</p>
             )}
 
             {!isLoadingReviewed && hasLoadedReviewed && reviewedEntities.length === 0 && (
               <div className="rounded-2xl border border-dashed border-slate-700 p-5">
-                <p className="text-sm text-slate-300">No confirmed or corrected extracted items are ready for BOQ import.</p>
+                <p className="text-sm text-slate-300">{t("boqEditor.noReviewedItems")}</p>
                 <Link
                   href={`/projects/${encodeURIComponent(projectId)}/extractions`}
                   className="mt-3 inline-flex text-sm font-semibold text-blue-300 hover:text-blue-200"
                 >
-                  Open Extraction Review
+                  {t("boqEditor.openExtractionReview")}
                 </Link>
               </div>
             )}
@@ -420,16 +431,16 @@ export default function AddItemFromSourceModal({
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <span className="font-semibold text-white">{entity.label}</span>
                       <span className="text-[0.65rem] uppercase tracking-wide text-emerald-300">
-                        {entity.status}
+                        {translateExtractedEntityStatus(entity.status, t)}
                       </span>
                     </div>
                     <p className="mt-1 text-xs text-slate-400">
-                      {humanizeEntityType(entity.entityType)}
+                      {translateExtractedEntityType(entity.entityType, t)}
                       {" · "}
-                      {entity.quantity !== null ? entity.quantity : "Quantity not provided"}
+                      {entity.quantity !== null ? entity.quantity : t("boqEditor.quantityNotProvided")}
                       {entity.unit ? ` ${entity.unit}` : ""}
                       {" · "}
-                      confidence {entity.confidence}%
+                      {t("boqEditor.confidencePercent", { value: entity.confidence })}
                     </p>
                   </button>
                 ))}
@@ -440,30 +451,30 @@ export default function AddItemFromSourceModal({
               <div className="space-y-4 rounded-2xl border border-slate-800 bg-slate-900/50 p-5">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
-                    <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Selected reviewed source item</p>
+                    <p className="text-xs uppercase tracking-[0.2em] text-slate-500">{t("boqEditor.selectedReviewedItem")}</p>
                     <h4 className="mt-2 font-semibold text-white">{selectedEntity.label}</h4>
                     <p className="mt-1 text-xs text-slate-400">
-                      Method: {humanizeEntityType(selectedEntity.extractionMethod)}
+                      {t("boqEditor.methodLabel", { method: translateExtractionMethod(selectedEntity.extractionMethod, t) })}
                     </p>
                   </div>
                   <Link
                     href={`/projects/${encodeURIComponent(projectId)}/extractions`}
                     className="text-xs font-semibold text-blue-300 hover:text-blue-200"
                   >
-                    Review source data
+                    {t("boqEditor.reviewSourceData")}
                   </Link>
                 </div>
 
                 <div className="rounded-xl border border-slate-800 bg-slate-950 p-3">
-                  <p className="text-xs uppercase tracking-[0.18em] text-slate-500">Source evidence</p>
+                  <p className="text-xs uppercase tracking-[0.18em] text-slate-500">{t("boqEditor.sourceEvidence")}</p>
                   <p className="mt-2 whitespace-pre-wrap break-words text-xs leading-5 text-slate-300">
-                    {selectedEntity.sourceText || "No source text was retained for this candidate."}
+                    {selectedEntity.sourceText || t("boqEditor.noSourceTextRetained")}
                   </p>
                 </div>
 
                 <div className="grid gap-3 sm:grid-cols-2">
                   <label className="text-sm text-slate-300">
-                    <span className="text-slate-400">Item code</span>
+                    <span className="text-slate-400">{t("boqEditor.itemCodeLabel")}</span>
                     <input
                       value={extractionDraft.itemCode}
                       maxLength={50}
@@ -473,7 +484,7 @@ export default function AddItemFromSourceModal({
                   </label>
 
                   <label className="text-sm text-slate-300">
-                    <span className="text-slate-400">Category</span>
+                    <span className="text-slate-400">{t("boqEditor.categoryLabel")}</span>
                     <input
                       value={extractionDraft.category}
                       maxLength={100}
@@ -483,7 +494,7 @@ export default function AddItemFromSourceModal({
                   </label>
 
                   <label className="text-sm text-slate-300 sm:col-span-2">
-                    <span className="text-slate-400">BOQ description</span>
+                    <span className="text-slate-400">{t("boqEditor.boqDescriptionLabel")}</span>
                     <input
                       value={extractionDraft.description}
                       maxLength={500}
@@ -493,7 +504,7 @@ export default function AddItemFromSourceModal({
                   </label>
 
                   <label className="text-sm text-slate-300 sm:col-span-2">
-                    <span className="text-slate-400">BOQ specification — review before import</span>
+                    <span className="text-slate-400">{t("boqEditor.boqSpecificationLabel")}</span>
                     <textarea
                       value={extractionDraft.specification}
                       maxLength={2000}
@@ -502,12 +513,12 @@ export default function AddItemFromSourceModal({
                       className="mt-2 w-full rounded-xl border border-slate-800 bg-slate-950 px-3 py-2 text-white outline-none focus:border-blue-500"
                     />
                     <span className="mt-1 block text-xs text-slate-500">
-                      Prefilled from source evidence where available. Edit or clear it before import.
+                      {t("boqEditor.specificationPrefilled")}
                     </span>
                   </label>
 
                   <label className="text-sm text-slate-300">
-                    <span className="text-slate-400">Unit cost</span>
+                    <span className="text-slate-400">{t("boqEditor.unitCostLabel")}</span>
                     <input
                       type="number"
                       min="0"
@@ -519,7 +530,7 @@ export default function AddItemFromSourceModal({
                   </label>
 
                   <label className="text-sm text-slate-300">
-                    <span className="text-slate-400">Margin %</span>
+                    <span className="text-slate-400">{t("boqEditor.marginPercentLabel")}</span>
                     <input
                       type="number"
                       min="0"
@@ -532,15 +543,14 @@ export default function AddItemFromSourceModal({
                 </div>
 
                 <div className="rounded-xl border border-slate-800 bg-slate-950 p-4">
-                  <p className="text-xs uppercase tracking-[0.18em] text-slate-500">Reviewed quantity</p>
+                  <p className="text-xs uppercase tracking-[0.18em] text-slate-500">{t("boqEditor.reviewedQuantityLabel")}</p>
                   {directReviewedQuantityReady ? (
                     <p className="mt-2 text-sm font-semibold text-white">
                       {selectedEntity.quantity} {selectedEntity.unit}
                     </p>
                   ) : (
                     <p className="mt-2 text-sm text-amber-300">
-                      A usable direct quantity and unit are not available on this reviewed item.
-                      Correct the extraction or use a supported measurement calculation below.
+                      {t("boqEditor.reviewedQuantityUnavailable")}
                     </p>
                   )}
                 </div>
@@ -558,10 +568,9 @@ export default function AddItemFromSourceModal({
                     className="mt-1 h-4 w-4 rounded border-slate-700 bg-slate-900"
                   />
                   <span>
-                    Use a visible measurement calculation instead of the direct reviewed quantity
+                    {t("boqEditor.useCalculationInsteadLabel")}
                     <span className="mt-1 block text-xs text-slate-500">
-                      Use this only when the BOQ quantity must be derived from dimensions.
-                      Schedule/count quantities do not require a dimensional calculation.
+                      {t("boqEditor.useCalculationInsteadHelp")}
                     </span>
                   </span>
                 </label>
@@ -569,7 +578,7 @@ export default function AddItemFromSourceModal({
                 {useExtractionCalculation && (
                   <div className="space-y-3">
                     <label className="block text-sm text-slate-300">
-                      <span className="text-slate-400">Calculation type</span>
+                      <span className="text-slate-400">{t("boqEditor.calculationTypeLabel")}</span>
                       <select
                         value={extractionCalculationType}
                         onChange={(e) => {
@@ -578,10 +587,10 @@ export default function AddItemFromSourceModal({
                         }}
                         className="mt-2 w-full rounded-xl border border-slate-800 bg-slate-950 px-3 py-2 text-white outline-none focus:border-blue-500"
                       >
-                        <option value="">Select a supported calculation…</option>
+                        <option value="">{t("boqEditor.selectSupportedCalculation")}</option>
                         {supportedCalculationTypes.map((type) => (
                           <option key={type} value={type}>
-                            {getRequiredDimensions(type)?.label ?? type}
+                            {translateCalculationType(type, t)}
                           </option>
                         ))}
                       </select>
@@ -604,8 +613,10 @@ export default function AddItemFromSourceModal({
 
                     {confirmedExtractionCalculation && (
                       <div className="rounded-xl border border-emerald-900/60 bg-emerald-950/20 p-3 text-sm text-emerald-300">
-                        Confirmed calculation: {confirmedExtractionCalculation.resultValue}{" "}
-                        {confirmedExtractionCalculation.resultUnit}
+                        {t("boqEditor.confirmedCalculationValue", {
+                          value: confirmedExtractionCalculation.resultValue,
+                          unit: confirmedExtractionCalculation.resultUnit,
+                        })}
                       </div>
                     )}
                   </div>
@@ -619,7 +630,7 @@ export default function AddItemFromSourceModal({
                   disabled={isSaving || !reviewedImportReady}
                   className="rounded-2xl border border-slate-700 bg-blue-600 px-5 py-3 text-sm font-semibold text-white hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  {isSaving ? "Importing…" : "Add Reviewed Item to BOQ"}
+                  {isSaving ? t("boqEditor.importing") : t("boqEditor.addReviewedItemToBoq")}
                 </button>
               </div>
             )}
@@ -684,7 +695,7 @@ export default function AddItemFromSourceModal({
                   >
                     <div className="flex items-center justify-between">
                       <span className="text-white">{item.name}</span>
-                      <span className="text-[0.65rem] uppercase tracking-wide text-slate-500">{item.source.replace(/_/g, " ")}</span>
+                      <span className="text-[0.65rem] uppercase tracking-wide text-slate-500">{translateSearchSource(item.source, t)}</span>
                     </div>
                     <p className="text-xs text-slate-500"><span dir="ltr" className="inline-block">{item.itemCode}</span> · {item.unit}</p>
                   </button>
@@ -717,10 +728,10 @@ export default function AddItemFromSourceModal({
 
         {tab === "manual" && (
           <div className="mt-4 space-y-3">
-            <input value={manualDraft.itemCode} onChange={(e) => setManualDraft({ ...manualDraft, itemCode: e.target.value })} placeholder="Item code" className="w-full rounded-2xl border border-slate-800 bg-slate-900 px-4 py-3 text-white outline-none focus:border-blue-500" />
-            <input value={manualDraft.category} onChange={(e) => setManualDraft({ ...manualDraft, category: e.target.value })} placeholder="Category" className="w-full rounded-2xl border border-slate-800 bg-slate-900 px-4 py-3 text-white outline-none focus:border-blue-500" />
-            <input value={manualDraft.description} onChange={(e) => setManualDraft({ ...manualDraft, description: e.target.value })} placeholder="Description" className="w-full rounded-2xl border border-slate-800 bg-slate-900 px-4 py-3 text-white outline-none focus:border-blue-500" />
-            <input value={manualDraft.specification} onChange={(e) => setManualDraft({ ...manualDraft, specification: e.target.value })} placeholder="Specification" className="w-full rounded-2xl border border-slate-800 bg-slate-900 px-4 py-3 text-white outline-none focus:border-blue-500" />
+            <input value={manualDraft.itemCode} onChange={(e) => setManualDraft({ ...manualDraft, itemCode: e.target.value })} placeholder={t("boqEditor.manualItemCodePlaceholder")} className="w-full rounded-2xl border border-slate-800 bg-slate-900 px-4 py-3 text-white outline-none focus:border-blue-500" />
+            <input value={manualDraft.category} onChange={(e) => setManualDraft({ ...manualDraft, category: e.target.value })} placeholder={t("boqEditor.manualCategoryPlaceholder")} className="w-full rounded-2xl border border-slate-800 bg-slate-900 px-4 py-3 text-white outline-none focus:border-blue-500" />
+            <input value={manualDraft.description} onChange={(e) => setManualDraft({ ...manualDraft, description: e.target.value })} placeholder={t("boqEditor.manualDescriptionPlaceholder")} className="w-full rounded-2xl border border-slate-800 bg-slate-900 px-4 py-3 text-white outline-none focus:border-blue-500" />
+            <input value={manualDraft.specification} onChange={(e) => setManualDraft({ ...manualDraft, specification: e.target.value })} placeholder={t("boqEditor.manualSpecificationPlaceholder")} className="w-full rounded-2xl border border-slate-800 bg-slate-900 px-4 py-3 text-white outline-none focus:border-blue-500" />
 
             <label className="flex items-center gap-2 text-sm text-slate-300">
               <input
@@ -733,17 +744,17 @@ export default function AddItemFromSourceModal({
                 }}
                 className="h-4 w-4 rounded border-slate-700 bg-slate-900"
               />
-              Add measurement calculation
+              {t("boqEditor.addMeasurementCalculation")}
             </label>
 
             <p className="text-xs text-slate-500">
-              Voice input appears inside the measurement panel after you select a supported calculation type.
+              {t("boqEditor.voiceInsideMeasurementPanel")}
             </p>
 
             {useMeasurementCalculation && (
               <div className="space-y-3 rounded-2xl border border-slate-800 bg-slate-900/50 p-4">
                 <label className="block text-sm text-slate-300">
-                  <span className="text-slate-400">Calculation type</span>
+                  <span className="text-slate-400">{t("boqEditor.calculationTypeLabel")}</span>
                   <select
                     value={calculationType}
                     onChange={(e) => {
@@ -752,10 +763,10 @@ export default function AddItemFromSourceModal({
                     }}
                     className="mt-2 w-full rounded-2xl border border-slate-800 bg-slate-900 px-4 py-3 text-white outline-none focus:border-blue-500"
                   >
-                    <option value="">Select a calculation type…</option>
+                    <option value="">{t("boqEditor.selectCalculationType")}</option>
                     {supportedCalculationTypes.map((type) => (
                       <option key={type} value={type}>
-                        {getRequiredDimensions(type)?.label ?? type}
+                        {translateCalculationType(type, t)}
                       </option>
                     ))}
                   </select>
@@ -775,16 +786,16 @@ export default function AddItemFromSourceModal({
 
                 {confirmedCalculation && (
                   <p className="text-sm text-emerald-300">
-                    Using calculated quantity: {confirmedCalculation.resultValue} {confirmedCalculation.resultUnit}
+                    {t("boqEditor.usingCalculatedQuantity", { value: confirmedCalculation.resultValue, unit: confirmedCalculation.resultUnit })}
                   </p>
                 )}
               </div>
             )}
 
             <div className="grid grid-cols-3 gap-3">
-              <input value={manualDraft.unit} onChange={(e) => setManualDraft({ ...manualDraft, unit: e.target.value })} placeholder="Unit" readOnly={Boolean(confirmedCalculation)} className="rounded-2xl border border-slate-800 bg-slate-900 px-4 py-3 text-white outline-none focus:border-blue-500 read-only:opacity-70" />
-              <input value={quantity} onChange={(e) => setQuantity(e.target.value)} placeholder="Quantity" readOnly={Boolean(confirmedCalculation)} className="rounded-2xl border border-slate-800 bg-slate-900 px-4 py-3 text-white outline-none focus:border-blue-500 read-only:opacity-70" />
-              <input value={manualDraft.unitCost} onChange={(e) => setManualDraft({ ...manualDraft, unitCost: e.target.value })} placeholder="Unit cost" className="rounded-2xl border border-slate-800 bg-slate-900 px-4 py-3 text-white outline-none focus:border-blue-500" />
+              <input value={manualDraft.unit} onChange={(e) => setManualDraft({ ...manualDraft, unit: e.target.value })} placeholder={t("boqEditor.manualUnitPlaceholder")} readOnly={Boolean(confirmedCalculation)} className="rounded-2xl border border-slate-800 bg-slate-900 px-4 py-3 text-white outline-none focus:border-blue-500 read-only:opacity-70" />
+              <input value={quantity} onChange={(e) => setQuantity(e.target.value)} placeholder={t("boqEditor.manualQuantityPlaceholder")} readOnly={Boolean(confirmedCalculation)} className="rounded-2xl border border-slate-800 bg-slate-900 px-4 py-3 text-white outline-none focus:border-blue-500 read-only:opacity-70" />
+              <input value={manualDraft.unitCost} onChange={(e) => setManualDraft({ ...manualDraft, unitCost: e.target.value })} placeholder={t("boqEditor.manualUnitCostPlaceholder")} className="rounded-2xl border border-slate-800 bg-slate-900 px-4 py-3 text-white outline-none focus:border-blue-500" />
             </div>
             {error && <p className="text-xs text-rose-300">{error}</p>}
             <button
@@ -793,7 +804,7 @@ export default function AddItemFromSourceModal({
               disabled={isSaving || !manualDraft.itemCode || !manualDraft.description || !manualDraft.unit || !sectionId}
               className="rounded-2xl border border-slate-700 bg-blue-600 px-5 py-3 text-sm font-semibold text-white hover:bg-blue-500 disabled:opacity-50"
             >
-              {isSaving ? "Adding…" : "Add to BOQ"}
+              {isSaving ? t("boqCreate.adding") : t("boqCreate.addToBoq")}
             </button>
           </div>
         )}

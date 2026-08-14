@@ -1,13 +1,13 @@
 import { apiSuccess, handleApiError } from "@/lib/http/api-response";
 import { getCurrentActor } from "@/lib/auth/current-actor";
-import { setActorContext } from "@/lib/auth/request-context";
+import { setActorContext, withActorRequestContext } from "@/lib/auth/request-context";
 import { AppError } from "@/lib/errors/app-error";
 import { createImportJob, listImportJobsForCompany } from "@/lib/services/import-service";
 import { importJobMetadataSchema } from "@/lib/validation/phase7-schema";
 
 export const dynamic = "force-dynamic";
 
-export async function GET() {
+async function GETHandler() {
   try {
     const actor = await getCurrentActor();
     setActorContext(actor);
@@ -22,7 +22,7 @@ export async function GET() {
 // importJobMetadataSchema for why (base64 inflates the payload ~33%, which was tripping the
 // platform's request body size cap on moderately large CSVs before this app's own validation ever
 // got a chance to run).
-export async function POST(request: Request) {
+async function POSTHandler(request: Request) {
   try {
     const actor = await getCurrentActor();
     setActorContext(actor);
@@ -55,3 +55,6 @@ export async function POST(request: Request) {
     return handleApiError(error);
   }
 }
+
+export const GET = withActorRequestContext(GETHandler);
+export const POST = withActorRequestContext(POSTHandler);

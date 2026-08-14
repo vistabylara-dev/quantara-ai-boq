@@ -1,5 +1,6 @@
 import { Prisma } from "@prisma/client";
 import { z } from "zod";
+import { isFinitePrismaDecimal } from "@/lib/validation/prisma-decimal";
 
 export const PROJECT_STATUSES = [
   "DRAFT",
@@ -51,7 +52,7 @@ function decimalSchema(rules: DecimalRules) {
       return z.NEVER;
     }
 
-    if (!parsed.isFinite()) {
+    if (!isFinitePrismaDecimal(parsed)) {
       context.addIssue({ code: z.ZodIssueCode.custom, message: `${rules.field} must be finite.` });
       return z.NEVER;
     }

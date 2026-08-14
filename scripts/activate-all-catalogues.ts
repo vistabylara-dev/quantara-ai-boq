@@ -5,7 +5,7 @@ import { publishDatasetValidItems, assignDatasetItemsToPackage, activateDatasetP
 import type { PlatformActor } from "../src/lib/auth/platform-authorization";
 import { prisma } from "../src/lib/db/prisma";
 
-let owner: PlatformActor = { userId: "", companyId: "", platformRole: "PLATFORM_OWNER", userRole: "ADMIN" };
+let owner: PlatformActor = { userId: "", companyId: "", platformRole: "PLATFORM_OWNER", fullName: "Admin", email: "admin@quantara.ai" };
 
 async function activateAll() {
   console.log("Starting full catalogue activation pipeline...");
@@ -74,7 +74,7 @@ async function activateAll() {
       console.log(`  - Package ${pkg.packageKey} is now ${pkg.status}`);
 
       if (company) {
-        console.log(`Granting package access to company ${company.name}...`);
+        console.log(`Setting owner context for company ${company.legalName}...`);
         await grantPackageAccess(owner, pkg.packageId, company.id);
       }
 

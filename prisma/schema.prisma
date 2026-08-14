@@ -1,5 +1,6 @@
 generator client {
-  provider = "prisma-client-js"
+  provider   = "prisma-client-js"
+  engineType = "client"
 }
 
 datasource db {
@@ -36,6 +37,104 @@ enum BOQItemStatus {
   CORRECTED
   REJECTED
   LOCKED
+}
+
+enum WorkerAssignmentType {
+  REVIEW_EXISTING_BOQ
+}
+
+enum WorkerAssignmentStatus {
+  RUNNING
+  NEEDS_INPUT
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+enum WorkerReviewConclusion {
+  CLEAR
+  CLEAR_WITH_OBSERVATIONS
+  NEEDS_INPUT
+}
+
+enum WorkerDecisionOutcome {
+  PASS
+  OBSERVATION
+  NEEDS_INPUT
+}
+
+enum WorkerDecisionSeverity {
+  INFO
+  WARNING
+  MATERIAL
+}
+
+enum WorkerDecisionCode {
+  BOQ_REVIEW_CLEAR
+  BOQ_EMPTY
+  BOQ_VERIFICATION_STALE
+  UNRESOLVED_CRITICAL_EXCEPTION
+  UNRESOLVED_WARNING_EXCEPTION
+  QUANTITY_PROVENANCE_MISSING
+  QUANTITY_PROVENANCE_UNCONFIRMED
+  QUANTITY_PROVENANCE_MISMATCH
+  RATE_PROVENANCE_MISSING
+  RATE_PROVENANCE_UNCONFIRMED
+  RATE_PROVENANCE_MISMATCH
+  RATE_SOURCE_EXPIRED
+  LOCKED_REVISION_SNAPSHOT_MISSING
+  LOCKED_REVISION_EVIDENCE_MISSING
+}
+
+enum WorkerMaterialQuestionType {
+  CONFIRM_EMPTY_BOQ_SCOPE
+  RUN_CURRENT_VERIFICATION
+  RESOLVE_CRITICAL_VERIFICATION_EXCEPTION
+  CONFIRM_QUANTITY_PROVENANCE
+  CONFIRM_RATE_PROVENANCE
+  CONFIRM_EXPIRED_RATE_SOURCE
+  RESTORE_LOCKED_REVISION_EVIDENCE
+}
+
+enum WorkerMaterialQuestionStatus {
+  OPEN
+  ANSWERED
+}
+
+enum WorkerEventType {
+  ASSIGNMENT_CREATED
+  INSPECTION_STARTED
+  WORKSPACE_CAPTURED
+  DECISIONS_RECORDED
+  MATERIAL_QUESTIONS_OPENED
+  MATERIAL_QUESTION_ANSWERED
+  REVIEW_COMPLETED
+  REVIEW_NEEDS_INPUT
+  REVIEW_FAILED
+}
+
+enum WorkerRunStatus {
+  QUEUED
+  RUNNING
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+enum WorkerPlannerMode {
+  DETERMINISTIC_ONLY
+  BOUNDED_AI
+}
+
+enum WorkerRunEventType {
+  RUN_ENQUEUED
+  LEASE_ACQUIRED
+  RETRY_SCHEDULED
+  DETERMINISTIC_REVIEW_LINKED
+  AI_PLANNER_SKIPPED
+  AI_PLAN_RECORDED
+  RUN_COMPLETED
+  RUN_FAILED
 }
 
 enum MarginMode {
@@ -395,7 +494,7 @@ model CompanySoftwareSubscription {
   startsAt               DateTime?
   expiresAt              DateTime?
   cancelledAt            DateTime?
-  externalSubscriptionId String?
+  externalSubscriptionId String?                  @unique
   source                 String                   @default("development")
   createdAt              DateTime                 @default(now())
   updatedAt              DateTime                 @updatedAt
@@ -407,6 +506,43 @@ model CompanySoftwareSubscription {
   @@index([companyId])
   @@index([softwarePlanId])
   @@index([status])
+}
+
+/// Stripe webhook idempotency ledger. The raw webhook payload, card data,
+/// API keys, and webhook signing secret are never stored here. Processing
+/// code must create this row in the same database transaction as the state
+/// change it protects, so a failed transaction can be retried safely.
+model StripeWebhookEvent {
+  id            String   @id @default(uuid()) @db.Uuid
+  stripeEventId String   @unique
+  eventType     String
+  livemode      Boolean
+  companyId     String?  @db.Uuid
+  processedAt   DateTime @default(now())
+  company       Company? @relation(fields: [companyId], references: [id], onDelete: SetNull)
+
+  @@index([companyId])
+  @@index([eventType])
+  @@index([processedAt])
+}
+
+/// Stripe customer identity is kept in a standalone table instead of adding a
+/// scalar column to the hot Company table. This lets the application deploy
+/// safely before this migration is applied: pre-existing Company queries do
+/// not suddenly select a not-yet-created column. One company may have one
+/// Stripe customer in test mode and one in live mode.
+model StripeBillingCustomer {
+  id               String   @id @default(uuid()) @db.Uuid
+  companyId        String   @db.Uuid
+  stripeCustomerId String   @unique
+  livemode         Boolean
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  company          Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, livemode])
+  @@index([companyId])
+  @@index([livemode])
 }
 
 model CompanyTrialUsage {
@@ -1436,6 +1572,8 @@ model Company {
   importJobs                  ImportJob[]
   importRows                  ImportRow[]
   projectFiles                ProjectFile[]
+  projectFileArchives         ProjectFileArchive[]
+  technicalReportRetentions   TechnicalReportRetention[]
   projectFileUploadSessions   ProjectFileUploadSession[]
   extractionJobs              ExtractionJob[]
   tablePageResolutions        TablePageResolution[]
@@ -1458,6 +1596,10 @@ model Company {
   findingBoqLinks             FindingBoqLink[]
   externalConnections         ExternalConnection[]
   integrationEvents           IntegrationEvent[]
+  stripeWebhookEvents         StripeWebhookEvent[]
+  stripeBillingCustomers      StripeBillingCustomer[]
+  workerAssignments           WorkerAssignment[]
+  workerRuns                  WorkerRun[]
 }
 
 model User {
@@ -1493,6 +1635,7 @@ model User {
   copiedBoqItems                         BOQItem[]                        @relation("BoqItemCopiedByUser")
   lockedBOQs                             BOQ[]                            @relation("BOQLockedByUser")
   uploadedProjectFiles                   ProjectFile[]                    @relation("ProjectFileUploadedByUser")
+  projectFileArchivesCreated             ProjectFileArchive[]             @relation("ProjectFileArchivedByUser")
   classificationConfirmedFiles           ProjectFile[]                    @relation("ProjectFileClassificationConfirmedByUser")
   projectFileUploadSessions              ProjectFileUploadSession[]
   createdExtractionJobs                  ExtractionJob[]
@@ -1512,6 +1655,8 @@ model User {
   synchronizationRunsActed               SynchronizationRun[]             @relation("SynchronizationRunActor")
   integrationEventsActed                 IntegrationEvent[]               @relation("IntegrationEventActor")
   tablePageResolutionsDecided            TablePageResolution[]
+  workerAssignmentsRequested             WorkerAssignment[]               @relation("WorkerAssignmentRequestedBy")
+  workerRunsRequested                    WorkerRun[]                      @relation("WorkerRunRequestedBy")
 
   @@index([companyId])
   @@index([role])
@@ -1646,6 +1791,8 @@ model Project {
   quantityCalculations      QuantityCalculation[]
   inspections               Inspection[]
   projectIntegrations       ProjectIntegration[]
+  workerAssignments         WorkerAssignment[]
+  workerRuns                WorkerRun[]
 
   @@unique([companyId, reference])
   @@unique([companyId, slug])
@@ -1683,6 +1830,8 @@ model BOQ {
   clientProposals        ClientProposal[]
   emailDispatches        EmailDispatch[]
   itemUsages             CompanyItemUsage[]
+  workerAssignments      WorkerAssignment[]
+  workerRuns             WorkerRun[]
 
   @@unique([projectId, revisionNumber])
   @@index([companyId])
@@ -1711,63 +1860,65 @@ model BOQSection {
 }
 
 model BOQItem {
-  id                         String                  @id @default(uuid()) @db.Uuid
-  companyId                  String                  @db.Uuid
-  sectionId                  String                  @db.Uuid
+  id                         String                     @id @default(uuid()) @db.Uuid
+  companyId                  String                     @db.Uuid
+  sectionId                  String                     @db.Uuid
   itemNumber                 Int
   itemCode                   String
   category                   String
   description                String
-  specification              String                  @default("")
-  quantity                   Decimal                 @db.Decimal(18, 4)
+  specification              String                     @default("")
+  quantity                   Decimal                    @db.Decimal(18, 4)
   unit                       String
-  unitCost                   Decimal                 @default(0) @db.Decimal(18, 4)
-  freightCost                Decimal                 @default(0) @db.Decimal(18, 4)
-  installationCost           Decimal                 @default(0) @db.Decimal(18, 4)
-  additionalCost             Decimal                 @default(0) @db.Decimal(18, 4)
-  landedCost                 Decimal                 @default(0) @db.Decimal(18, 4)
-  marginMode                 MarginMode              @default(MARKUP)
-  marginPercentage           Decimal                 @default(0) @db.Decimal(7, 4)
-  sellingRate                Decimal                 @default(0) @db.Decimal(18, 4)
-  totalAmount                Decimal                 @default(0) @db.Decimal(20, 4)
-  wastagePercentage          Decimal                 @default(0) @db.Decimal(7, 4)
-  taxApplicable              Boolean                 @default(true)
-  sourceReference            String                  @default("")
-  roomOrZone                 String                  @default("")
-  drawingReference           String                  @default("")
-  confidenceScore            Decimal                 @default(100) @db.Decimal(7, 4)
-  status                     BOQItemStatus           @default(DRAFT)
-  notes                      String                  @default("")
+  unitCost                   Decimal                    @default(0) @db.Decimal(18, 4)
+  freightCost                Decimal                    @default(0) @db.Decimal(18, 4)
+  installationCost           Decimal                    @default(0) @db.Decimal(18, 4)
+  additionalCost             Decimal                    @default(0) @db.Decimal(18, 4)
+  landedCost                 Decimal                    @default(0) @db.Decimal(18, 4)
+  marginMode                 MarginMode                 @default(MARKUP)
+  marginPercentage           Decimal                    @default(0) @db.Decimal(7, 4)
+  sellingRate                Decimal                    @default(0) @db.Decimal(18, 4)
+  totalAmount                Decimal                    @default(0) @db.Decimal(20, 4)
+  wastagePercentage          Decimal                    @default(0) @db.Decimal(7, 4)
+  taxApplicable              Boolean                    @default(true)
+  sourceReference            String                     @default("")
+  roomOrZone                 String                     @default("")
+  drawingReference           String                     @default("")
+  confidenceScore            Decimal                    @default(100) @db.Decimal(7, 4)
+  status                     BOQItemStatus              @default(DRAFT)
+  notes                      String                     @default("")
   pricingMetadataJson        Json?
   sortOrder                  Int
-  sourceType                 BoqItemSourceType       @default(MANUAL)
-  sourceMasterItemId         String?                 @db.Uuid
-  sourceCompanyLibraryItemId String?                 @db.Uuid
-  sourceCatalogueItemId      String?                 @db.Uuid
-  sourcePreviousBoqItemId    String?                 @db.Uuid
+  sourceType                 BoqItemSourceType          @default(MANUAL)
+  sourceMasterItemId         String?                    @db.Uuid
+  sourceCompanyLibraryItemId String?                    @db.Uuid
+  sourceCatalogueItemId      String?                    @db.Uuid
+  sourcePreviousBoqItemId    String?                    @db.Uuid
   copiedAt                   DateTime?
-  copiedByUserId             String?                 @db.Uuid
+  copiedByUserId             String?                    @db.Uuid
   /// MASTER-BOQ-1A BOQ snapshot behavior: the exact master item version used
   /// when this line was added/last resolved from the master catalogue, plus
   /// a point-in-time snapshot of classification/attributes/region that don't
   /// otherwise have a dedicated column here. Editing this line never mutates
   /// the master item; a later master-item edit never mutates this line.
-  sourceMasterItemVersionId  String?                 @db.Uuid
+  sourceMasterItemVersionId  String?                    @db.Uuid
   masterItemSnapshotJson     Json?
-  createdAt                  DateTime                @default(now())
-  updatedAt                  DateTime                @updatedAt
-  company                    Company                 @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  section                    BOQSection              @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  createdAt                  DateTime                   @default(now())
+  updatedAt                  DateTime                   @updatedAt
+  company                    Company                    @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  section                    BOQSection                 @relation(fields: [sectionId], references: [id], onDelete: Cascade)
   options                    BOQItemOption[]
   verificationExceptions     VerificationException[]
-  sourceMasterItem           MasterItem?             @relation(fields: [sourceMasterItemId], references: [id], onDelete: SetNull)
-  sourceMasterItemVersion    MasterItemVersion?      @relation(fields: [sourceMasterItemVersionId], references: [id], onDelete: SetNull)
-  sourceCompanyLibraryItem   CompanyLibraryItem?     @relation(fields: [sourceCompanyLibraryItemId], references: [id], onDelete: SetNull)
-  sourceCatalogueItem        RateCatalogueItem?      @relation(fields: [sourceCatalogueItemId], references: [id], onDelete: SetNull)
-  sourcePreviousBoqItem      BOQItem?                @relation("BoqItemSourceChain", fields: [sourcePreviousBoqItemId], references: [id], onDelete: SetNull)
-  copiedIntoItems            BOQItem[]               @relation("BoqItemSourceChain")
-  copiedByUser               User?                   @relation("BoqItemCopiedByUser", fields: [copiedByUserId], references: [id], onDelete: SetNull)
+  sourceMasterItem           MasterItem?                @relation(fields: [sourceMasterItemId], references: [id], onDelete: SetNull)
+  sourceMasterItemVersion    MasterItemVersion?         @relation(fields: [sourceMasterItemVersionId], references: [id], onDelete: SetNull)
+  sourceCompanyLibraryItem   CompanyLibraryItem?        @relation(fields: [sourceCompanyLibraryItemId], references: [id], onDelete: SetNull)
+  sourceCatalogueItem        RateCatalogueItem?         @relation(fields: [sourceCatalogueItemId], references: [id], onDelete: SetNull)
+  sourcePreviousBoqItem      BOQItem?                   @relation("BoqItemSourceChain", fields: [sourcePreviousBoqItemId], references: [id], onDelete: SetNull)
+  copiedIntoItems            BOQItem[]                  @relation("BoqItemSourceChain")
+  copiedByUser               User?                      @relation("BoqItemCopiedByUser", fields: [copiedByUserId], references: [id], onDelete: SetNull)
   itemUsages                 CompanyItemUsage[]
+  quantityProvenance         BOQItemQuantityProvenance?
+  rateProvenance             BOQItemRateProvenance?
 
   @@index([companyId])
   @@index([sectionId])
@@ -1777,6 +1928,355 @@ model BOQItem {
   @@index([sourceMasterItemId])
   @@index([sourceMasterItemVersionId])
   @@index([sourceCompanyLibraryItemId])
+}
+
+enum QuantityProvenanceSource {
+  MANUAL_CONFIRMED
+  CONFIRMED_CALCULATION
+  REVIEWED_EXTRACTION
+  COPIED
+  LEGACY_UNVERIFIED
+}
+
+enum RateProvenanceSource {
+  MANUAL_CONFIRMED
+  MIXED_CONFIRMED
+  RATE_CATALOGUE
+  COMPANY_LIBRARY
+  PREVIOUS_BOQ
+  IMPORT
+  MASTER_ITEM
+  COPIED
+  LEGACY_UNVERIFIED
+}
+
+/**
+ * Relational quantity lineage for the current editable BOQ item. The source
+ * ids are deliberately scalar in Prisma because the database migration owns
+ * the cross-model tenant/project checks; the BOQ item relation is exposed for
+ * integrity-gate reads.
+ */
+model BOQItemQuantityProvenance {
+  id                                String                   @id @default(uuid()) @db.Uuid
+  companyId                         String                   @db.Uuid
+  projectId                         String                   @db.Uuid
+  boqItemId                         String                   @unique @db.Uuid
+  sourceType                        QuantityProvenanceSource
+  extractedEntityId                 String?                  @db.Uuid
+  quantityCalculationId             String?                  @db.Uuid
+  projectFileId                     String?                  @db.Uuid
+  sourceBoqItemQuantityProvenanceId String?                  @db.Uuid
+  quantitySnapshot                  Decimal                  @db.Decimal(18, 6)
+  unitSnapshot                      String
+  confirmedByUserId                 String?                  @db.Uuid
+  confirmedByName                   String
+  confirmedAt                       DateTime?
+  createdAt                         DateTime                 @default(now())
+  updatedAt                         DateTime                 @updatedAt
+  boqItem                           BOQItem                  @relation(fields: [boqItemId], references: [id], onDelete: Cascade)
+
+  @@index([companyId, projectId])
+  @@index([extractedEntityId])
+  @@index([quantityCalculationId])
+  @@index([projectFileId])
+  @@index([sourceBoqItemQuantityProvenanceId])
+}
+
+/**
+ * Separate, point-in-time commercial lineage for the current BOQ item.
+ */
+model BOQItemRateProvenance {
+  id                            String               @id @default(uuid()) @db.Uuid
+  companyId                     String               @db.Uuid
+  projectId                     String               @db.Uuid
+  boqItemId                     String               @unique @db.Uuid
+  sourceType                    RateProvenanceSource
+  rateCatalogueItemId           String?              @db.Uuid
+  sourceBoqItemRateProvenanceId String?              @db.Uuid
+  unitCostSnapshot              Decimal              @db.Decimal(18, 4)
+  freightCostSnapshot           Decimal              @db.Decimal(18, 4)
+  installationCostSnapshot      Decimal              @db.Decimal(18, 4)
+  additionalCostSnapshot        Decimal              @db.Decimal(18, 4)
+  marginModeSnapshot            MarginMode
+  marginPercentageSnapshot      Decimal              @db.Decimal(7, 4)
+  currencySnapshot              String               @default("AED")
+  sourceEffectiveDate           DateTime?
+  sourceExpiryDate              DateTime?
+  confirmedByUserId             String?              @db.Uuid
+  confirmedByName               String
+  confirmedAt                   DateTime?
+  createdAt                     DateTime             @default(now())
+  updatedAt                     DateTime             @updatedAt
+  boqItem                       BOQItem              @relation(fields: [boqItemId], references: [id], onDelete: Cascade)
+
+  @@index([companyId, projectId])
+  @@index([rateCatalogueItemId])
+  @@index([sourceBoqItemRateProvenanceId])
+}
+
+/**
+ * Immutable relational evidence frozen when a verified BOQ revision locks.
+ */
+model BOQRevisionItemEvidence {
+  id                    String   @id @default(uuid()) @db.Uuid
+  companyId             String   @db.Uuid
+  projectId             String   @db.Uuid
+  boqRevisionSnapshotId String   @db.Uuid
+  boqItemId             String   @db.Uuid
+  quantityProvenanceId  String   @db.Uuid
+  rateProvenanceId      String   @db.Uuid
+  itemCodeSnapshot      String
+  quantitySnapshot      Decimal  @db.Decimal(18, 6)
+  unitSnapshot          String
+  unitCostSnapshot      Decimal  @db.Decimal(18, 4)
+  createdAt             DateTime @default(now())
+
+  @@unique([boqRevisionSnapshotId, boqItemId])
+  @@index([companyId, projectId])
+  @@index([boqItemId])
+  @@index([quantityProvenanceId])
+  @@index([rateProvenanceId])
+}
+
+/**
+ * Worker V0 is deliberately limited to one read-only assignment type. The
+ * worker records its own coordination state but never receives a relation
+ * that can write BOQ items, provenance, approvals, or source evidence.
+ */
+model WorkerAssignment {
+  id                    String                   @id @default(uuid()) @db.Uuid
+  companyId             String                   @db.Uuid
+  projectId             String                   @db.Uuid
+  boqId                 String                   @db.Uuid
+  assignmentType        WorkerAssignmentType
+  status                WorkerAssignmentStatus   @default(RUNNING)
+  inspectionVersion     String
+  inspectionAsOf        DateTime
+  sourceBoqVersion      Int
+  sourceVerifiedVersion Int?
+  sourceRevisionNumber  Int
+  requestedByUserId     String?                  @db.Uuid
+  requestedByName       String
+  startedAt             DateTime                 @default(now())
+  completedAt           DateTime?
+  failureCode           String?
+  failureMessage        String?
+  createdAt             DateTime                 @default(now())
+  updatedAt             DateTime                 @updatedAt
+  company               Company                  @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  project               Project                  @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  boq                   BOQ                      @relation(fields: [boqId], references: [id], onDelete: Restrict)
+  requestedByUser       User?                    @relation("WorkerAssignmentRequestedBy", fields: [requestedByUserId], references: [id], onDelete: Restrict)
+  workspace             WorkerReviewWorkspace?
+  decisions             WorkerDecision[]
+  materialQuestions     WorkerMaterialQuestion[]
+  events                WorkerEvent[]
+  runnerRun             WorkerRun?               @relation("WorkerRunResult")
+  aiPlan                WorkerAIPlan?
+
+  @@index([companyId, createdAt])
+  @@index([projectId, createdAt])
+  @@index([boqId, createdAt])
+  @@index([status, createdAt])
+}
+
+/**
+ * Durable serverless queue record. A run is idempotent and links to one immutable V0 assignment.
+ */
+model WorkerRun {
+  id                    String               @id @default(uuid()) @db.Uuid
+  companyId             String               @db.Uuid
+  projectId             String               @db.Uuid
+  boqId                 String               @db.Uuid
+  assignmentType        WorkerAssignmentType
+  idempotencyKey        String
+  status                WorkerRunStatus      @default(QUEUED)
+  plannerMode           WorkerPlannerMode    @default(DETERMINISTIC_ONLY)
+  sourceBoqVersion      Int
+  sourceVerifiedVersion Int?
+  sourceRevisionNumber  Int
+  maximumAttempts       Int                  @default(3)
+  attempts              Int                  @default(0)
+  availableAt           DateTime             @default(now())
+  leaseOwner            String?
+  leaseExpiresAt        DateTime?
+  lastHeartbeatAt       DateTime?
+  requestedByUserId     String               @db.Uuid
+  requestedByName       String
+  resultAssignmentId    String?              @unique @db.Uuid
+  startedAt             DateTime?
+  completedAt           DateTime?
+  failureCode           String?
+  failureMessage        String?
+  createdAt             DateTime             @default(now())
+  updatedAt             DateTime             @updatedAt
+  company               Company              @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  project               Project              @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  boq                   BOQ                  @relation(fields: [boqId], references: [id], onDelete: Restrict)
+  requestedByUser       User                 @relation("WorkerRunRequestedBy", fields: [requestedByUserId], references: [id], onDelete: Restrict)
+  resultAssignment      WorkerAssignment?    @relation("WorkerRunResult", fields: [resultAssignmentId], references: [id], onDelete: Restrict)
+  events                WorkerRunEvent[]
+  aiPlan                WorkerAIPlan?
+
+  @@unique([companyId, assignmentType, idempotencyKey])
+  @@index([status, availableAt])
+  @@index([companyId, createdAt])
+  @@index([projectId, createdAt])
+  @@index([boqId, createdAt])
+  @@index([leaseExpiresAt])
+}
+
+/**
+ * Append-only execution journal for atomic lease, retry, and completion transitions.
+ */
+model WorkerRunEvent {
+  id             String             @id @default(uuid()) @db.Uuid
+  companyId      String             @db.Uuid
+  projectId      String             @db.Uuid
+  boqId          String             @db.Uuid
+  workerRunId    String             @db.Uuid
+  sequenceNumber Int
+  eventType      WorkerRunEventType
+  payloadJson    Json
+  createdAt      DateTime           @default(now())
+  workerRun      WorkerRun          @relation(fields: [workerRunId], references: [id], onDelete: Restrict)
+
+  @@unique([workerRunId, sequenceNumber])
+  @@index([companyId, projectId])
+  @@index([boqId])
+  @@index([eventType, createdAt])
+}
+
+/**
+ * Immutable, advisory-only output from the optional one-call bounded planner.
+ */
+model WorkerAIPlan {
+  id                 String           @id @default(uuid()) @db.Uuid
+  companyId          String           @db.Uuid
+  projectId          String           @db.Uuid
+  boqId              String           @db.Uuid
+  workerRunId        String           @unique @db.Uuid
+  assignmentId       String           @unique @db.Uuid
+  plannerVersion     String
+  provider           String
+  model              String
+  providerResponseId String?
+  contextSha256      String
+  contextSummaryJson Json
+  planJson           Json
+  usageJson          Json?
+  createdAt          DateTime         @default(now())
+  workerRun          WorkerRun        @relation(fields: [workerRunId], references: [id], onDelete: Restrict)
+  assignment         WorkerAssignment @relation(fields: [assignmentId], references: [id], onDelete: Restrict)
+
+  @@index([companyId, projectId])
+  @@index([boqId])
+}
+
+/**
+ * Immutable point-in-time review context. It is evidence of what V0 read, not a commercial source of truth.
+ */
+model WorkerReviewWorkspace {
+  id                      String                 @id @default(uuid()) @db.Uuid
+  companyId               String                 @db.Uuid
+  projectId               String                 @db.Uuid
+  boqId                   String                 @db.Uuid
+  assignmentId            String                 @unique @db.Uuid
+  conclusion              WorkerReviewConclusion
+  sectionCount            Int
+  itemCount               Int
+  activeItemCount         Int
+  confirmedQuantityCount  Int
+  confirmedRateCount      Int
+  unresolvedCriticalCount Int
+  unresolvedWarningCount  Int
+  revisionEvidenceCount   Int
+  summaryJson             Json
+  itemsJson               Json
+  createdAt               DateTime               @default(now())
+  assignment              WorkerAssignment       @relation(fields: [assignmentId], references: [id], onDelete: Restrict)
+
+  @@index([companyId, projectId])
+  @@index([boqId])
+}
+
+/**
+ * Immutable deterministic conclusions, kept separately from the generic audit log.
+ */
+model WorkerDecision {
+  id               String                  @id @default(uuid()) @db.Uuid
+  companyId        String                  @db.Uuid
+  projectId        String                  @db.Uuid
+  boqId            String                  @db.Uuid
+  assignmentId     String                  @db.Uuid
+  sequenceNumber   Int
+  code             WorkerDecisionCode
+  outcome          WorkerDecisionOutcome
+  severity         WorkerDecisionSeverity
+  subjectType      String
+  subjectId        String?                 @db.Uuid
+  summary          String
+  rationaleJson    Json
+  evidenceRefsJson Json
+  createdAt        DateTime                @default(now())
+  assignment       WorkerAssignment        @relation(fields: [assignmentId], references: [id], onDelete: Restrict)
+  materialQuestion WorkerMaterialQuestion?
+
+  @@unique([assignmentId, sequenceNumber])
+  @@index([companyId, projectId])
+  @@index([boqId])
+  @@index([code])
+}
+
+/**
+ * A typed human-coordination question. Answering it never edits the governed BOQ graph.
+ */
+model WorkerMaterialQuestion {
+  id                String                       @id @default(uuid()) @db.Uuid
+  companyId         String                       @db.Uuid
+  projectId         String                       @db.Uuid
+  boqId             String                       @db.Uuid
+  assignmentId      String                       @db.Uuid
+  decisionId        String                       @unique @db.Uuid
+  questionType      WorkerMaterialQuestionType
+  status            WorkerMaterialQuestionStatus @default(OPEN)
+  subjectType       String
+  subjectId         String?                      @db.Uuid
+  prompt            String
+  whyMaterial       String
+  recommendedAction String
+  answeredByUserId  String?                      @db.Uuid
+  answerJson        Json?
+  answeredAt        DateTime?
+  createdAt         DateTime                     @default(now())
+  updatedAt         DateTime                     @updatedAt
+  assignment        WorkerAssignment             @relation(fields: [assignmentId], references: [id], onDelete: Restrict)
+  decision          WorkerDecision               @relation(fields: [decisionId], references: [id], onDelete: Restrict)
+
+  @@index([companyId, projectId])
+  @@index([boqId])
+  @@index([status, createdAt])
+}
+
+/**
+ * Append-only lifecycle journal for a worker assignment.
+ */
+model WorkerEvent {
+  id             String           @id @default(uuid()) @db.Uuid
+  companyId      String           @db.Uuid
+  projectId      String           @db.Uuid
+  boqId          String           @db.Uuid
+  assignmentId   String           @db.Uuid
+  sequenceNumber Int
+  eventType      WorkerEventType
+  payloadJson    Json
+  createdAt      DateTime         @default(now())
+  assignment     WorkerAssignment @relation(fields: [assignmentId], references: [id], onDelete: Restrict)
+
+  @@unique([assignmentId, sequenceNumber])
+  @@index([companyId, projectId])
+  @@index([boqId])
+  @@index([eventType, createdAt])
 }
 
 model BOQItemOption {
@@ -2089,8 +2589,8 @@ model GeneratedDocument {
   completedAt            DateTime?
   failedAt               DateTime?
   company                Company                  @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  project                Project                  @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  boq                    BOQ                      @relation(fields: [boqId], references: [id], onDelete: Cascade)
+  project                Project                  @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  boq                    BOQ                      @relation(fields: [boqId], references: [id], onDelete: Restrict)
   template               DocumentTemplate         @relation(fields: [templateId], references: [id], onDelete: Restrict)
   templateVersion        DocumentTemplateVersion? @relation(fields: [templateVersionId], references: [id], onDelete: SetNull)
   generatedByUser        User?                    @relation(fields: [generatedByUserId], references: [id], onDelete: SetNull)
@@ -2198,9 +2698,10 @@ model GeneratedTechnicalReport {
   updatedAt            DateTime                        @updatedAt
   completedAt          DateTime?
   company              Company                         @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  project              Project                         @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  project              Project                         @relation(fields: [projectId], references: [id], onDelete: Restrict)
   template             TechnicalReportTemplate         @relation(fields: [templateId], references: [id], onDelete: Restrict)
   templateVersion      TechnicalReportTemplateVersion? @relation(fields: [templateVersionId], references: [id], onDelete: SetNull)
+  retention            TechnicalReportRetention?
   generatedByUser      User?                           @relation(fields: [generatedByUserId], references: [id], onDelete: SetNull)
   emailDispatches      EmailDispatch[]
   clientProposals      ClientProposal[]
@@ -2211,6 +2712,22 @@ model GeneratedTechnicalReport {
   @@index([templateVersionId])
   @@index([status])
   @@index([createdAt])
+}
+
+/// A completed technical report is retained as governed output. The child
+/// retention row makes deletion fail at the database boundary, even if a
+/// caller bypasses the service-layer status check.
+model TechnicalReportRetention {
+  id                         String                   @id @default(uuid()) @db.Uuid
+  companyId                  String                   @db.Uuid
+  generatedTechnicalReportId String                   @unique @db.Uuid
+  reason                     String                   @default("COMPLETED")
+  protectedAt                DateTime                 @default(now())
+  company                    Company                  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  generatedTechnicalReport   GeneratedTechnicalReport @relation(fields: [generatedTechnicalReportId], references: [id], onDelete: Restrict)
+
+  @@index([companyId])
+  @@index([protectedAt])
 }
 
 /// Email service 1B follow-up — which send flow a template is meant for. Existing rows (all
@@ -2311,9 +2828,9 @@ model ClientProposal {
   createdAt           DateTime                  @default(now())
   updatedAt           DateTime                  @updatedAt
   company             Company                   @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  project             Project                   @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  boq                 BOQ?                      @relation(fields: [boqId], references: [id], onDelete: Cascade)
-  technicalReport     GeneratedTechnicalReport? @relation(fields: [technicalReportId], references: [id], onDelete: Cascade)
+  project             Project                   @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  boq                 BOQ?                      @relation(fields: [boqId], references: [id], onDelete: Restrict)
+  technicalReport     GeneratedTechnicalReport? @relation(fields: [technicalReportId], references: [id], onDelete: Restrict)
   client              Client                    @relation(fields: [clientId], references: [id], onDelete: Restrict)
   createdByUser       User?                     @relation(fields: [createdByUserId], references: [id], onDelete: SetNull)
   documents           ClientProposalDocument[]
@@ -2336,8 +2853,8 @@ model ClientProposalDocument {
   generatedDocumentId String            @db.Uuid
   createdAt           DateTime          @default(now())
   company             Company           @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  clientProposal      ClientProposal    @relation(fields: [clientProposalId], references: [id], onDelete: Cascade)
-  generatedDocument   GeneratedDocument @relation(fields: [generatedDocumentId], references: [id], onDelete: Cascade)
+  clientProposal      ClientProposal    @relation(fields: [clientProposalId], references: [id], onDelete: Restrict)
+  generatedDocument   GeneratedDocument @relation(fields: [generatedDocumentId], references: [id], onDelete: Restrict)
 
   @@unique([clientProposalId, generatedDocumentId])
   @@index([companyId])
@@ -2358,7 +2875,7 @@ model ClientProposalEvent {
   metadataJson     Json?
   createdAt        DateTime                @default(now())
   company          Company                 @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  clientProposal   ClientProposal          @relation(fields: [clientProposalId], references: [id], onDelete: Cascade)
+  clientProposal   ClientProposal          @relation(fields: [clientProposalId], references: [id], onDelete: Restrict)
   actorUser        User?                   @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
 
   @@index([companyId])
@@ -2404,7 +2921,7 @@ model EmailDispatch {
   project                    Project                   @relation(fields: [projectId], references: [id], onDelete: Cascade)
   boq                        BOQ?                      @relation(fields: [boqId], references: [id], onDelete: SetNull)
   clientProposal             ClientProposal?           @relation(fields: [clientProposalId], references: [id], onDelete: SetNull)
-  generatedTechnicalReport   GeneratedTechnicalReport? @relation(fields: [generatedTechnicalReportId], references: [id], onDelete: SetNull)
+  generatedTechnicalReport   GeneratedTechnicalReport? @relation(fields: [generatedTechnicalReportId], references: [id], onDelete: Restrict)
   emailTemplate              EmailTemplate?            @relation(fields: [emailTemplateId], references: [id], onDelete: SetNull)
   emailTemplateVersion       EmailTemplateVersion?     @relation(fields: [emailTemplateVersionId], references: [id], onDelete: SetNull)
   createdByUser              User?                     @relation(fields: [createdByUserId], references: [id], onDelete: SetNull)
@@ -2457,7 +2974,7 @@ model ProjectFile {
   createdAt                       DateTime                  @default(now())
   updatedAt                       DateTime                  @updatedAt
   company                         Company                   @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  project                         Project                   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  project                         Project                   @relation(fields: [projectId], references: [id], onDelete: Restrict)
   uploadedByUser                  User                      @relation("ProjectFileUploadedByUser", fields: [uploadedByUserId], references: [id], onDelete: Restrict)
   classificationConfirmedByUser   User?                     @relation("ProjectFileClassificationConfirmedByUser", fields: [classificationConfirmedByUserId], references: [id], onDelete: SetNull)
   extractionJobs                  ExtractionJob[]
@@ -2465,6 +2982,7 @@ model ProjectFile {
   tablePageResolutions            TablePageResolution[]
   drawingPages                    DrawingPage[]
   extractedEntities               ExtractedEntity[]
+  archiveRecord                   ProjectFileArchive?
 
   @@index([companyId])
   @@index([projectId])
@@ -2472,6 +2990,24 @@ model ProjectFile {
   @@index([classification])
   @@index([companyId, checksum])
 }
+
+model ProjectFileArchive {
+  id               String      @id @default(uuid()) @db.Uuid
+  companyId        String      @db.Uuid
+  projectFileId    String      @unique @db.Uuid
+  archivedByUserId String?     @db.Uuid
+  archivedAt       DateTime    @default(now())
+  company          Company     @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  projectFile      ProjectFile @relation(fields: [projectFileId], references: [id], onDelete: Restrict)
+  archivedByUser   User?       @relation("ProjectFileArchivedByUser", fields: [archivedByUserId], references: [id], onDelete: SetNull)
+
+  @@index([companyId])
+  @@index([archivedAt])
+}
+
+/// Archival is terminal for an uploaded source: its database row, storage
+/// key, original bytes, and downstream reviewed evidence remain addressable.
+/// The archive child row prevents later hard deletion at the FK boundary.
 
 enum ProjectFileClassification {
   ARCHITECTURAL_PLAN
@@ -2532,32 +3068,32 @@ enum ProjectFileStatus {
  * handlers). Processed by the queue in src/lib/jobs/*.
  */
 model ExtractionJob {
-  id                 String               @id @default(uuid()) @db.Uuid
-  companyId          String               @db.Uuid
-  projectId          String               @db.Uuid
-  projectFileId      String               @db.Uuid
-  engineType         ExtractionEngineType
-  provider           String               @default("local")
-  status             ExtractionJobStatus  @default(QUEUED)
-  progressPercentage Int                  @default(0)
-  currentStep        String?
-  startedAt          DateTime?
-  completedAt        DateTime?
-  failedAt           DateTime?
-  attempts           Int                  @default(0)
-  maximumAttempts    Int                  @default(3)
-  configurationJson  Json?
-  resultSummaryJson  Json?
-  usageMetadataJson  Json?
-  errorCode          String?
-  errorMessage       String?
-  createdByUserId    String               @db.Uuid
-  createdAt          DateTime             @default(now())
-  updatedAt          DateTime             @updatedAt
-  company            Company              @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  project            Project              @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  projectFile        ProjectFile          @relation(fields: [projectFileId], references: [id], onDelete: Cascade)
-  createdByUser      User                 @relation(fields: [createdByUserId], references: [id], onDelete: Restrict)
+  id                   String                @id @default(uuid()) @db.Uuid
+  companyId            String                @db.Uuid
+  projectId            String                @db.Uuid
+  projectFileId        String                @db.Uuid
+  engineType           ExtractionEngineType
+  provider             String                @default("local")
+  status               ExtractionJobStatus   @default(QUEUED)
+  progressPercentage   Int                   @default(0)
+  currentStep          String?
+  startedAt            DateTime?
+  completedAt          DateTime?
+  failedAt             DateTime?
+  attempts             Int                   @default(0)
+  maximumAttempts      Int                   @default(3)
+  configurationJson    Json?
+  resultSummaryJson    Json?
+  usageMetadataJson    Json?
+  errorCode            String?
+  errorMessage         String?
+  createdByUserId      String                @db.Uuid
+  createdAt            DateTime              @default(now())
+  updatedAt            DateTime              @updatedAt
+  company              Company               @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  project              Project               @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  projectFile          ProjectFile           @relation(fields: [projectFileId], references: [id], onDelete: Restrict)
+  createdByUser        User                  @relation(fields: [createdByUserId], references: [id], onDelete: Restrict)
   tablePageResolutions TablePageResolution[]
 
   @@index([companyId])
@@ -2628,7 +3164,7 @@ model TablePageResolution {
   updatedAt       DateTime                    @updatedAt
   company         Company                     @relation(fields: [companyId], references: [id], onDelete: Cascade)
   project         Project                     @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  projectFile     ProjectFile                 @relation(fields: [projectFileId], references: [id], onDelete: Cascade)
+  projectFile     ProjectFile                 @relation(fields: [projectFileId], references: [id], onDelete: Restrict)
   extractionJob   ExtractionJob?              @relation(fields: [extractionJobId], references: [id], onDelete: SetNull)
   decidedByUser   User?                       @relation(fields: [decidedByUserId], references: [id], onDelete: SetNull)
 
@@ -2661,7 +3197,7 @@ model ExtractedTable {
   createdAt            DateTime             @default(now())
   updatedAt            DateTime             @updatedAt
   company              Company              @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  projectFile          ProjectFile          @relation(fields: [projectFileId], references: [id], onDelete: Cascade)
+  projectFile          ProjectFile          @relation(fields: [projectFileId], references: [id], onDelete: Restrict)
   rows                 ExtractedTableRow[]
 
   @@index([companyId])
@@ -2769,7 +3305,7 @@ model DrawingPage {
   createdAt            DateTime                  @default(now())
   updatedAt            DateTime                  @updatedAt
   company              Company                   @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  projectFile          ProjectFile               @relation(fields: [projectFileId], references: [id], onDelete: Cascade)
+  projectFile          ProjectFile               @relation(fields: [projectFileId], references: [id], onDelete: Restrict)
   layers               DrawingLayer[]
   scaleCalibrations    DrawingScaleCalibration[]
 
@@ -2865,7 +3401,7 @@ model ExtractedEntity {
   updatedAt                   DateTime              @updatedAt
   company                     Company               @relation(fields: [companyId], references: [id], onDelete: Cascade)
   project                     Project               @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  projectFile                 ProjectFile           @relation(fields: [projectFileId], references: [id], onDelete: Cascade)
+  projectFile                 ProjectFile           @relation(fields: [projectFileId], references: [id], onDelete: Restrict)
   quantityCalculations        QuantityCalculation[]
 
   @@index([companyId])

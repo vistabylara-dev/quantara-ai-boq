@@ -1,12 +1,12 @@
 import { apiSuccess, handleApiError } from "@/lib/http/api-response";
 import { getCurrentActor } from "@/lib/auth/current-actor";
-import { setActorContext } from "@/lib/auth/request-context";
+import { setActorContext, withActorRequestContext } from "@/lib/auth/request-context";
 import { requireCapability } from "@/lib/auth/rbac";
 import { expireDevelopmentSoftwarePlan } from "@/lib/entitlements/entitlement-service";
 
 export const dynamic = "force-dynamic";
 
-export async function POST() {
+async function POSTHandler() {
   try {
     const actor = await getCurrentActor();
     setActorContext(actor);
@@ -17,3 +17,5 @@ export async function POST() {
     return handleApiError(error);
   }
 }
+
+export const POST = withActorRequestContext(POSTHandler);

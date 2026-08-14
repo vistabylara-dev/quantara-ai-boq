@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { apiSuccess, handleApiError, parseJsonBody } from "@/lib/http/api-response";
 import { getCurrentActor } from "@/lib/auth/current-actor";
-import { setActorContext } from "@/lib/auth/request-context";
+import { setActorContext, withActorRequestContext } from "@/lib/auth/request-context";
 import { authorizeDrawingUpload } from "@/lib/services/drawing-service";
 import { projectIdParamsSchema } from "@/lib/validation/boq-route-schemas";
 
@@ -25,7 +25,7 @@ const authorizationRequestSchema = z
  * server-generated pathname it is valid for; never a Blob secret, never a
  * browser-influenced storage path.
  */
-export async function POST(request: Request, context: RouteContext) {
+async function POSTHandler(request: Request, context: RouteContext) {
   try {
     const actor = await getCurrentActor();
     setActorContext(actor);
@@ -37,3 +37,5 @@ export async function POST(request: Request, context: RouteContext) {
     return handleApiError(error);
   }
 }
+
+export const POST = withActorRequestContext(POSTHandler);

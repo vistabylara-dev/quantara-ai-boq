@@ -1,3 +1,4 @@
+import { createDirectPrismaClient } from "../src/lib/db/direct-prisma-client";
 /**
  * MASTER-SCALE-1B — normalizes the two validated, staged HVAC CSVs
  * (data-imports/hvac/*.csv, 707 + 184 = 891 rows) into the master catalogue
@@ -16,10 +17,10 @@
  */
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { PrismaClient, PlatformRole } from "@prisma/client";
+import { PlatformRole } from "@prisma/client";
 import { dryRunHvacMasterImport, executeHvacMasterImport } from "../src/lib/services/hvac-master-import-service";
 
-const prisma = new PrismaClient();
+const prisma = createDirectPrismaClient();
 
 const FILES = [
   "data-imports/hvac/hvac-company-library-import.csv",

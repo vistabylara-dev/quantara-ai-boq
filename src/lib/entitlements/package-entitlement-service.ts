@@ -90,18 +90,18 @@ export async function listCompanyAccessiblePackages(companyId: string) {
   }));
 }
 
-export async function listAccessibleMasterItems(companyId: string, packageKeyOrId: string) {
+export async function listAccessibleMasterItemsPaginated(
+  companyId: string, 
+  packageKeyOrId: string,
+  options: { page: number; pageSize: number; search?: string }
+) {
   const pkg = await resolvePackage(packageKeyOrId);
   if (!pkg) throw new NotFoundError("Package not found.");
   const hasAccess = await companyHasPackageAccess(companyId, pkg.id);
   if (!hasAccess) throw new PermissionDeniedError("This package is not active for your company.");
 
-  const items = await prisma.industryDataPackageItem.findMany({
-    where: { packageId: pkg.id },
-    include: { masterItem: true },
-    orderBy: { sortOrder: "asc" },
-  });
-  return items.map((link) => link.masterItem);
+  const { searchPackageItems } = await import("@/lib/repositories/industry-package-repository");
+  return searchPackageItems(pkg.id, options);
 }
 
 /** Server-side gate for full technical detail / copying — never rely on the UI hiding a button. */

@@ -38,6 +38,8 @@ type GeneratedDocumentView = {
   generatedByName: string;
   errorMessage: string | null;
   createdAt: string;
+  retentionLocked: boolean;
+  canDelete: boolean;
   completedAt: string | null;
 };
 
@@ -350,14 +352,20 @@ export default function ProjectDocumentsPage(props: PageProps) {
                         >
                           Regenerate
                         </button>
-                        <button
-                          type="button"
-                          onClick={() => void deleteDocument(doc.id)}
-                          disabled={deletingId === doc.id}
-                          className="rounded-xl border border-rose-900 bg-rose-950/30 px-3 py-1.5 text-xs font-semibold text-rose-300 hover:bg-rose-900/40 disabled:cursor-not-allowed disabled:opacity-50"
-                        >
-                          {deletingId === doc.id ? "Deleting…" : "Delete"}
-                        </button>
+                        {doc.canDelete ? (
+                          <button
+                            type="button"
+                            onClick={() => void deleteDocument(doc.id)}
+                            disabled={deletingId === doc.id}
+                            className="rounded-xl border border-rose-900 bg-rose-950/30 px-3 py-1.5 text-xs font-semibold text-rose-300 hover:bg-rose-900/40 disabled:cursor-not-allowed disabled:opacity-50"
+                          >
+                            {deletingId === doc.id ? "Deleting…" : "Delete"}
+                          </button>
+                        ) : (
+                          <span className="rounded-xl border border-emerald-900 bg-emerald-950/30 px-3 py-1.5 text-xs font-semibold text-emerald-300">
+                            Retained by proposal
+                          </span>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -375,7 +383,11 @@ export default function ProjectDocumentsPage(props: PageProps) {
         </section>
 
         <aside className="space-y-6">
-          <section className="rounded-[32px] border border-slate-800 bg-slate-950 p-6">
+          <section
+            id="document-generation-controls"
+            tabIndex={-1}
+            className="rounded-[32px] border border-slate-800 bg-slate-950 p-6 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-blue-500"
+          >
             <p className="text-sm uppercase tracking-[0.28em] text-slate-500">Generate a document</p>
 
             <label className="mt-5 block text-sm text-slate-300">
@@ -548,6 +560,14 @@ export default function ProjectDocumentsPage(props: PageProps) {
                 shortDescription="Creates a real document file from this exact BOQ revision and template."
                 whatQuantaraDoes="Quantara renders the selected format from this revision and adds it to the generation history below — PDF, XLSX, and DOCX use the revision's locked totals; CSV and HTML drafts use its current totals, locked or not."
                 whatProfessionalCanDo="PDF, XLSX, and DOCX require a locked revision. CSV and HTML drafts are available any time — switch Format above to try one now."
+                cta={{
+                  label: "Generate a document",
+                  onAction: () => {
+                    const generationControls = document.getElementById("document-generation-controls");
+                    generationControls?.scrollIntoView({ behavior: "smooth", block: "start" });
+                    generationControls?.focus({ preventScroll: true });
+                  },
+                }}
                 ariaLabel="Help: Generate document"
               />
             </div>

@@ -37,9 +37,23 @@ describe("canonical Prisma client (real, unmocked — proves the direct/no-Hyper
   it("repository modules only ever import the canonical src/lib/db/prisma module, never instantiate PrismaClient directly", () => {
     const srcDir = path.join(repoRoot, "src");
     const files = listFilesRecursive(srcDir, ".ts").filter(
-      (file) => file !== path.join(srcDir, "lib", "db", "prisma.ts"),
+      (file) => ![
+        path.join(srcDir, "lib", "db", "prisma.ts"),
+        path.join(srcDir, "lib", "db", "direct-prisma-client.ts"),
+      ].includes(file),
     );
     const offenders = files.filter((file) => /new PrismaClient\(/.test(readFileSync(file, "utf8")));
+    expect(offenders).toEqual([]);
+  });
+
+  it("seed, maintenance, and browser-test setup never construct an adapterless Prisma client", () => {
+    const roots = ["prisma", "scripts", path.join("tests", "e2e")].map((directory) =>
+      path.join(repoRoot, directory),
+    );
+    const files = roots.flatMap((directory) => listFilesRecursive(directory, ".ts"));
+    const offenders = files
+      .filter((file) => /new PrismaClient\(\s*\)/.test(readFileSync(file, "utf8")))
+      .map((file) => path.relative(repoRoot, file));
     expect(offenders).toEqual([]);
   });
 

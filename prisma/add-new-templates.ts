@@ -1,3 +1,4 @@
+import { createDirectPrismaClient } from "../src/lib/db/direct-prisma-client";
 /**
  * One-off, fast alternative to the full `prisma db seed` run — inserts just
  * the two new document templates (Minimal Client Summary, Internal Cost
@@ -6,11 +7,11 @@
  * database connection. Safe to re-run — upserts by the same
  * (companyId, code) uniqueness the app already enforces.
  */
-import { DocumentTemplateType, PrismaClient } from "@prisma/client";
+import { DocumentTemplateType } from "@prisma/client";
 import { getDevelopmentCompanyId } from "../src/lib/tenancy/development-company";
 import { DEFAULT_CONTENT_CONFIG, DEFAULT_STYLE_CONFIG } from "../src/lib/documents/template-config";
 
-const prisma = new PrismaClient();
+const prisma = createDirectPrismaClient();
 
 function json(value: unknown) {
   return JSON.parse(JSON.stringify(value));

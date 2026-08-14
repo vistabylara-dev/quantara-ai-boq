@@ -1,7 +1,7 @@
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import { getCurrentActor } from "@/lib/auth/current-actor";
-import { setActorContext } from "@/lib/auth/request-context";
+import { setActorContext, withActorRequestContext } from "@/lib/auth/request-context";
 import { AppError, UnauthorizedError } from "@/lib/errors/app-error";
 import {
   completeGoogleDriveConnection,
@@ -23,7 +23,7 @@ export const dynamic = "force-dynamic";
  * context comes from verifyGoogleDriveOAuthState, which re-validates
  * project ownership; it is never trusted from an unsigned query param.
  */
-export async function GET(request: Request) {
+async function GETHandler(request: Request) {
   const url = new URL(request.url);
   const connectPageUrl = new URL("/integrations/google-drive/connect", url.origin);
 
@@ -101,3 +101,5 @@ export async function GET(request: Request) {
     return NextResponse.redirect(connectPageUrl);
   }
 }
+
+export const GET = withActorRequestContext(GETHandler);

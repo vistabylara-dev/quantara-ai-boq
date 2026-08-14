@@ -20,6 +20,7 @@ import { LockedBOQError } from "../src/lib/domain/boq-guards";
 import { NotFoundError } from "../src/lib/errors/app-error";
 import type { CurrentActor } from "../src/lib/auth/current-actor";
 import { grantUnlimitedPlanForTests } from "./helpers/grant-unlimited-plan";
+import { preserveIssuedEvidenceDuringCleanup } from "./helpers/preserve-issued-evidence";
 
 const RUN_ID = `${Date.now()}-${process.pid}`;
 
@@ -97,6 +98,10 @@ describe("BOQ core end-to-end workflow (integration, real local Postgres)", () =
   afterAll(async () => {
     for (const key of cleanupStorageKeys) {
       await localDocumentStorageAdapter.deleteObject(key).catch(() => undefined);
+    }
+    if (await preserveIssuedEvidenceDuringCleanup([companyAId, companyBId])) {
+      await prisma.$disconnect();
+      return;
     }
     await prisma.masterItem.deleteMany({ where: { disciplineId } });
     await prisma.masterCategory.deleteMany({ where: { disciplineId } });

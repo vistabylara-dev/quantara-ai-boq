@@ -1,5 +1,5 @@
+import { createDirectPrismaClient } from "../../src/lib/db/direct-prisma-client";
 import { test, expect, type Page } from "@playwright/test";
-import { PrismaClient } from "@prisma/client";
 
 /**
  * CANVA-HUMAN-JOURNEY-FINAL — a focused test for the checkout CANCEL
@@ -12,7 +12,7 @@ import { PrismaClient } from "@prisma/client";
  * project/BOQ the unlock was requested from — never a generic settings page.
  */
 
-const prisma = new PrismaClient();
+const prisma = createDirectPrismaClient();
 const COMPANY_ID = "00000000-0000-4000-8000-000000000001";
 const CLIENT_ID = "00000000-0000-4000-8000-000000000201";
 

@@ -1,6 +1,6 @@
 import { apiSuccess, handleApiError, parseJsonBody } from "@/lib/http/api-response";
 import { getCurrentActor } from "@/lib/auth/current-actor";
-import { setActorContext } from "@/lib/auth/request-context";
+import { setActorContext, withActorRequestContext } from "@/lib/auth/request-context";
 import { requireCapability } from "@/lib/auth/rbac";
 import { resolveVerificationException } from "@/lib/repositories/verification-repository";
 import { verificationResolutionSchema } from "@/lib/validation/backend-schemas";
@@ -8,7 +8,7 @@ import { verificationExceptionIdParamsSchema } from "@/lib/validation/route-para
 
 export const dynamic = "force-dynamic";
 
-export async function POST(request: Request, context: { params: Promise<{ exceptionId: string }> }) {
+async function POSTHandler(request: Request, context: { params: Promise<{ exceptionId: string }> }) {
   try {
     const actor = await getCurrentActor();
     setActorContext(actor);
@@ -26,3 +26,5 @@ export async function POST(request: Request, context: { params: Promise<{ except
     return handleApiError(error);
   }
 }
+
+export const POST = withActorRequestContext(POSTHandler);

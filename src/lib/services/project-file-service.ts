@@ -1,12 +1,13 @@
 import { ExtractionEngineType, ProjectFileStatus, type ProjectFileClassification } from "@prisma/client";
+import { prisma } from "@/lib/db/prisma";
 import { AppError } from "@/lib/errors/app-error";
 import type { CurrentActor } from "@/lib/auth/current-actor";
 import { requireCapability } from "@/lib/auth/rbac";
 import { getProjectRecord } from "@/lib/repositories/project-repository";
 import {
+  archiveProjectFileRow,
   confirmOrReclassifyProjectFile,
   createProjectFile,
-  deleteProjectFileRow,
   findDuplicateByChecksum,
   getProjectFileRecord,
   listProjectFiles,
@@ -47,6 +48,17 @@ function getProjectFileStorageAdapter(): DocumentStorageAdapter {
     cachedStorageAdapter = createStorageAdapter({ provider: resolveStorageProvider(), purpose: "project-files" });
   }
   return cachedStorageAdapter;
+}
+
+/**
+ * Autodesk DWG candidate sources are explicit metadata-only references: they
+ * satisfy the source FK without claiming that Quantara uploaded or stores the
+ * remote DWG bytes. Storage operations must never try to open that namespace.
+ */
+function isMetadataOnlyExternalSource(metadataJson: unknown): boolean {
+  if (!metadataJson || typeof metadataJson !== "object" || Array.isArray(metadataJson)) return false;
+  const metadata = metadataJson as Record<string, unknown>;
+  return metadata.sourceKind === "EXTERNAL_REFERENCE" && metadata.localCopy === false;
 }
 
 /**
@@ -131,6 +143,13 @@ export type DownloadByteRange = { start: number; end: number };
  */
 export async function getProjectFileDownloadMeta(actor: CurrentActor, fileId: string) {
   const row = await getProjectFileRecord(actor.companyId, fileId);
+  if (isMetadataOnlyExternalSource(row.metadataJson)) {
+    throw new AppError(
+      "EXTERNAL_SOURCE_NO_LOCAL_COPY",
+      "This Autodesk source is connected externally and has no local file copy.",
+      409,
+    );
+  }
   return { fileName: row.originalName, mimeType: row.mimeType, totalSize: row.fileSize };
 }
 
@@ -148,6 +167,14 @@ export async function getProjectFileDownloadMeta(actor: CurrentActor, fileId: st
  */
 export async function getProjectFileForStreamingDownload(actor: CurrentActor, fileId: string, range?: DownloadByteRange) {
   const row = await getProjectFileRecord(actor.companyId, fileId);
+
+  if (isMetadataOnlyExternalSource(row.metadataJson)) {
+    throw new AppError(
+      "EXTERNAL_SOURCE_NO_LOCAL_COPY",
+      "This Autodesk source is connected externally and has no local file copy.",
+      409,
+    );
+  }
 
   if (range) {
     if (range.start < 0 || range.end < range.start || range.start >= row.fileSize) {
@@ -176,26 +203,30 @@ export async function getProjectFileForStreamingDownload(actor: CurrentActor, fi
   };
 }
 
-/**
- * Hard-deletes the file row and its stored bytes. Later sub-phases that
- * introduce downstream records referencing a ProjectFile (DrawingPage,
- * ExtractionJob, ExtractedEntity, InspectionPhoto, issued reports, etc.)
- * must extend this with a reference check before the delete — per spec
- * section 5, "deletion blocked where a file is referenced by issued
- * records." No such downstream records exist yet in this sub-phase.
- */
-export async function deleteProjectFile(actor: CurrentActor, fileId: string) {
-  requireCapability(actor, "files:manage");
-  const row = await getProjectFileRecord(actor.companyId, fileId);
-  await deleteProjectFileRow(actor.companyId, fileId);
-  await getProjectFileStorageAdapter().deleteObject(row.storageKey);
-
-  await createAuditLog(actor.companyId, {
-    entityType: "ProjectFile",
-    entityId: fileId,
-    action: "FILE_DELETED",
-    payload: { projectId: row.projectId, originalName: row.originalName },
+/** Archives the source without deleting its immutable bytes or downstream
+ * extraction/review evidence. Direct retrieval and download remain available
+ * to authorized users; active project lists hide the archived source. */
+export async function archiveProjectFile(actor: CurrentActor, fileId: string) {
+  requireCapability(actor, "files:archive");
+  const result = await prisma.$transaction(async (tx) => {
+    const archived = await archiveProjectFileRow(actor.companyId, fileId, actor.userId, tx);
+    if (!archived.alreadyArchived) {
+      await createAuditLog(actor.companyId, {
+        entityType: "ProjectFile",
+        entityId: fileId,
+        action: "FILE_ARCHIVED",
+        payload: {
+          projectId: archived.record.projectId,
+          originalName: archived.record.originalName,
+          storageKeyRetained: true,
+          bytesRetained: !isMetadataOnlyExternalSource(archived.record.metadataJson),
+        },
+        actorName: actor.fullName,
+      }, tx);
+    }
+    return archived;
   });
+  return toProjectFileDTO(result.record);
 }
 
 /** Enqueues the automatic classification engine. Idempotent — re-triggering while a job is already in flight returns that same job rather than starting a duplicate. */

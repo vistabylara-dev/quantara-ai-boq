@@ -1,3 +1,4 @@
+import { createDirectPrismaClient } from "../src/lib/db/direct-prisma-client";
 /**
  * Read-only diagnostic — no writes. Reports how many MasterDiscipline and
  * MasterItem rows currently exist in the target database, grouped by
@@ -6,9 +7,8 @@
  *
  * Usage: npx tsx prisma/check-master-catalogue-state.ts
  */
-import { PrismaClient } from "@prisma/client";
 
-const prisma = new PrismaClient();
+const prisma = createDirectPrismaClient();
 
 async function main(): Promise<void> {
   const disciplines = await prisma.masterDiscipline.findMany({

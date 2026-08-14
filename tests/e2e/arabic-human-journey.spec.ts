@@ -1,5 +1,5 @@
+import { createDirectPrismaClient } from "../../src/lib/db/direct-prisma-client";
 import { test, expect, type Page } from "@playwright/test";
-import { PrismaClient } from "@prisma/client";
 
 /**
  * ARABIC-RTL-LOCALIZATION — TEST 3: a focused Arabic Human Journey.
@@ -16,7 +16,7 @@ import { PrismaClient } from "@prisma/client";
  * Arabic text there would be a false claim.
  */
 
-const prisma = new PrismaClient();
+const prisma = createDirectPrismaClient();
 const COMPANY_ID = "00000000-0000-4000-8000-000000000001";
 const CLIENT_ID = "00000000-0000-4000-8000-000000000201";
 

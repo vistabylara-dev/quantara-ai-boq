@@ -1,165 +1,156 @@
 # Quantara AI BOQ
 
-Quantara AI BOQ is a multi-industry BOQ workspace. Backend Foundation Phase 1 connected the core project/BOQ experience to real PostgreSQL; Phase 2 adds real email/password authentication, database-backed sessions, and role-based access control. Remaining demo modules (catalogue, industries admin, settings, documents, client preview, project creation) are still local and migrate in later phases.
+Quantara is a private, multi-tenant BOQ and quantity-workflow application for construction and related industries. It combines controlled drawing intake, professional review, quantity calculation, BOQ revisioning, catalogue/rate data, document and proposal workflows, and guarded commercial integrations.
+
+This repository is under active development. A passing local build proves code integrity; it does not by itself prove a production deployment, provider configuration, payment readiness, or professional approval of any extracted quantity.
+
+## Release contract
+
+- Node.js `24.17.0` and npm `11.13.0` are pinned in `.nvmrc`, `package.json`, and the lockfile.
+- PostgreSQL is the system of record through Prisma.
+- `npm ci` is the only supported dependency install for verification and CI.
+- TypeScript and Next.js build errors are release blockers; the build does not ignore them.
+- Tests reset and seed a dedicated database whose name must contain `test` or `ci`.
+- Production proposal links require a private `PROPOSAL_ACCESS_SECRET` of at least 32 bytes.
+- The private durable-worker drain endpoint requires a separate `WORKER_RUNNER_SECRET` of at least 32 bytes.
+- Database migrations and seeds run through explicit commands, not public HTTP routes.
+- The production deploy command runs `prisma migrate deploy` first and stops before publishing code if migration application fails.
 
 ## Architecture
 
-- Next.js 14 App Router and TypeScript provide the UI and route handlers.
-- Zod validates every API write at the server boundary.
-- Repository modules in `src/lib/repositories` own database access and require a `companyId`.
-- Prisma maps the domain to PostgreSQL and stores money and quantities as fixed-precision `Decimal` values.
-- `src/lib/calculations/boq-calculator.ts` is the deterministic financial calculation service.
-- `src/lib/verification/run-verification.ts` is the deterministic verification rule engine.
-- `src/lib/auth/current-actor.ts` resolves the authenticated `{ userId, companyId, role }` from a hashed, database-backed session cookie — see [docs/authentication.md](docs/authentication.md). The old `getDevelopmentCompanyId()` bridge has been removed from every API route.
-- `src/lib/auth/rbac.ts` enforces role-based capability checks on every mutating route — see the same doc.
-- API responses use `{ "ok": true, "data": ... }` on success and structured `{ "ok": false, "error": ... }` responses on failure.
+- Next.js 15 App Router, React 18, and TypeScript
+- PostgreSQL with Prisma repositories and tenant-scoped services
+- Zod validation at server boundaries
+- Database-backed sessions and server-enforced role checks
+- Immutable BOQ revision snapshots and audit records
+- Background extraction/catalogue job state with idempotency and recovery checks
+- PostgreSQL-backed BOQ review runs with atomic leases, bounded retries, and an immutable execution journal
+- PDF, DOCX, XLSX, and CSV document workflows where supported by the relevant feature
+- OpenNext build target for Cloudflare
 
-React components do not access Prisma. The connected flow is:
+The central ownership path is:
 
-`Company -> Users -> Industry Engines -> Projects -> BOQs -> Sections -> Items -> Verification Exceptions -> Revisions`
+`Company -> Users -> Clients -> Projects -> BOQs -> Sections -> Items -> Verification -> Revisions`
 
-## PostgreSQL with Docker
+React components do not access Prisma directly. API success responses use `{ "ok": true, "data": ... }`; failures use structured `{ "ok": false, "error": ... }` responses.
 
-Requirements:
+## Requirements
 
-- Node.js 20 or later
-- npm
-- Docker Desktop with Docker Compose
+- Node.js `24.17.0`
+- npm `11.13.0`
+- PostgreSQL 16 or newer (local PostgreSQL or the included Docker Compose service)
 
-Create a local environment file before starting. `.env.example` contains placeholders only. Replace both password placeholders with the same development password; `.env` is ignored by Git.
+Confirm the pinned tools before installing:
+
+```powershell
+node --version
+npm --version
+npm ci
+```
+
+The repository sets `engine-strict=true`, so a mismatched runtime fails instead of silently producing different results.
+
+## Local setup
+
+1. Copy `.env.example` to `.env` and replace the placeholders.
+2. Start PostgreSQL.
+3. Apply the committed migrations and seed development data.
+4. Start the application.
 
 ```powershell
 Copy-Item .env.example .env
-notepad .env
 docker compose up -d
-npm install
-npm run db:generate
-npm run db:migrate -- --name init
+npm ci
+npm run db:migrate:deploy
 npm run db:seed
 npm run dev
 ```
 
-Open `http://localhost:3000` and go to `/register` to create a company, or sign in with the
-seeded development owner (`DEV_OWNER_EMAIL` / `DEV_OWNER_PASSWORD` from `.env`). Check database
-connectivity at `http://localhost:3000/api/health` (public, no auth required).
+Open `http://localhost:3000`. The public health endpoints are `/api/health` and `/api/ready`.
 
-To stop PostgreSQL without deleting its named volume:
+For local schema development, create a migration with:
 
 ```powershell
-docker compose stop
-```
-
-## Environment variables
-
-| Variable | Purpose |
-| --- | --- |
-| `POSTGRES_DB` | Local Docker database name |
-| `POSTGRES_USER` | Local Docker database user |
-| `POSTGRES_PASSWORD` | Local Docker database password |
-| `DATABASE_URL` | Prisma PostgreSQL connection string using the same values |
-| `APP_BASE_URL` | Base URL used to build links inside dev-mode auth emails |
-| `DEV_OWNER_EMAIL` | Seeded development company owner's login email |
-| `DEV_OWNER_PASSWORD` | Seeded development company owner's login password |
-| `DEV_OWNER_NAME` | Seeded development company owner's display name |
-
-Never commit `.env` or production credentials. If `DEV_OWNER_EMAIL`/`DEV_OWNER_PASSWORD` are unset, the seed falls back to an insecure default and prints a warning — set both for anything beyond a throwaway local run.
-
-## Database commands
-
-```powershell
-npm run db:generate
 npm run db:migrate -- --name <migration-name>
-npm run db:seed
-npm run db:studio
-npm run db:reset
 ```
 
-`db:reset` deletes local database data and reseeds it. Use it only for disposable development data.
+Never run `db:reset` against retained data. It destroys and recreates the selected database.
 
-The seed is repeatable and creates:
-
-- Quantara AI Development Workspace
-- 10 industry engines
-- 6 demo projects, including the stable `project-construction-001` route slug
-- realistic BOQs, sections, items, options, catalogue rates, verification examples, and audit history
-
-## Authentication
-
-Real email/password authentication with hashed, database-backed sessions (no JWTs, no
-LocalStorage tokens) and server-enforced role-based access control. Full detail, including why
-JWTs were deliberately not used and exactly how tenant isolation is enforced, is in
-[docs/authentication.md](docs/authentication.md) and [docs/multi-tenancy.md](docs/multi-tenancy.md).
-
-Public routes: `/login`, `/register`, `/verify-email`, `/forgot-password`, `/reset-password`,
-`/api/health`, `/api/auth/*`. Every other page and API route requires a valid session.
-
-## Data model
-
-The Prisma schema contains `Company`, `User`, `Session`, `EmailVerificationToken`, `PasswordResetToken`, `IndustryEngine`, `CompanyIndustryEngine`, `Client`, `Project`, `BOQ`, `BOQSection`, `BOQItem`, `BOQItemOption`, `VerificationException`, `BOQRevisionSnapshot`, `RateCatalogueItem`, and `AuditLog`.
-
-All tenant-owned records carry `companyId`. Project references and slugs are unique within a company. BOQ revisions are unique within a project. Locking writes an immutable JSON snapshot and audit record. Editing a BOQ invalidates its previous verification version, so only the current verified version can be locked. `AuditLog.userId` links each entry to the authenticated user who caused it (nullable, `SetNull` on user deletion — `actorName` remains as a point-in-time display label).
-
-## Backend-connected pages
-
-- `/dashboard`
-- `/projects`, `/projects/new`, `/projects/[projectId]`
-- `/projects/[projectId]/boq`
-- `/projects/[projectId]/verification`
-- `/clients`, `/clients/new`, `/clients/[clientId]`
-- `/login`, `/register`, `/verify-email`, `/forgot-password`, `/reset-password`
-
-These pages use the real API and include loading, error, and empty states. The seeded end-to-end route is `/projects/project-construction-001`.
-
-Creating a project (`/projects/new` or `POST /api/projects`) requires a real client — select an
-existing one or create one inline without leaving the form — and an enabled industry engine. It
-atomically creates the project, its default R01 BOQ, and the industry's default sections in one
-database transaction (`src/lib/services/project-service.ts`): if section creation fails, the
-project and BOQ roll back too, so there is never an orphan project without a BOQ. New companies
-get every industry engine enabled at registration so this works immediately after sign-up.
-
-## Pages and modules still local
-
-The following are intentionally outside the frontend migration so far and retain their existing demo/static behavior:
-
-- `/catalogue`
-- `/industries` and `/industries/[industryId]`
-- `/settings`
-- `/templates`
-- project document and client-preview modules
-- the marketing/home demo content
-
-Their LocalStorage adapters and Zustand stores remain in place. Do not remove them until each exact module has a tested database-backed replacement.
-
-## Validation
-
-Run the quality gates with PostgreSQL running:
+For a controlled production release, set the direct origin `DATABASE_URL` and run:
 
 ```powershell
-npm run lint
-npm run build
-npm test
+npm run db:migrate:deploy
+npm run deploy
 ```
 
-`npm test` includes integration suites (`tests/auth-service.test.ts`,
-`tests/client-project-service.test.ts`) that talk to the real local Postgres database — Docker
-must be running for the full suite to pass.
+`npm run deploy` repeats the idempotent `prisma migrate deploy` gate before building and publishing the Worker. It never seeds data. There is no application or browser endpoint for applying schema changes; a migration failure must be investigated and resolved by an operator before code deployment continues.
 
-The API surface includes auth, health, company, industries, clients, projects, BOQs, sections, items, verification, revision/lock, and rate catalogue routes under `/api`.
+## Environment and secrets
 
-## Known limitations
+`.env.example` documents the complete local contract. At minimum, configure:
 
-- User management UI (invite, list, change role, deactivate) is not built — the data model and RBAC support it, but there is no `/settings/users` page or `/api/users` route yet.
-- Rate limiting on `/api/auth/*` is not implemented.
-- CSRF protection relies on `SameSite=Lax` cookies and same-origin fetches only; no dedicated CSRF token exists yet.
-- Client duplicate-email detection is an application-level check, not a database constraint — a genuine race between two concurrent requests could still create two clients with the same email. Low risk at current scale; noted rather than fixed with a partial unique index.
-- Catalogue, industry administration, settings, documents, and client preview are not yet migrated. A brand-new company gets every industry engine enabled at registration specifically so this gap doesn't block project creation, but engines can only be *disabled* once the industries admin page is migrated.
-- Verification is deterministic and rule-based; no OCR or AI extraction is present.
-- No SMTP integration yet — verification and password-reset links are logged to the server console in development mode only.
+- `DATABASE_URL`
+- `APP_BASE_URL`
+- `DEV_OWNER_EMAIL` and `DEV_OWNER_PASSWORD` before seeding anything non-throwaway
+- `PROPOSAL_ACCESS_SECRET` with at least 32 private random bytes
+- `WORKER_RUNNER_SECRET` with at least 32 private random bytes
+- `INTEGRATION_CREDENTIALS_ENCRYPTION_KEY` before connecting an external provider
 
-## Next backend phase
+Email defaults to a development adapter that logs rather than sends. Storage defaults to a private local adapter. Stripe, SMTP, Blob, Google Drive, OpenAI, and Arcade credentials are optional feature-specific secrets and must never be committed.
 
-Phase 4 connects the rate catalogue and supplier pricing to BOQ items before document generation.
-After that: `/catalogue`, `/settings`, and `/industries` admin migration to the database, a
-user-management UI on top of the existing `User`/RBAC model, then file upload, structured
-extraction, document generation, email delivery, and the client proposal portal. OCR, drawing
-intelligence, payments, and legally qualified e-signatures remain explicitly out of scope for now.
+Production readiness fails closed when a required security secret is missing or weak. `/api/ready` validates the proposal-signing secret, durable-runner secret, and 32-byte integration-credential encryption key before reporting ready, without returning any value or secret name. Provider credentials and production database access belong in the hosting provider's secret store, not `.env` in Git.
+
+## Durable BOQ review worker
+
+`POST /api/boqs/{boqId}/worker/review` requires an authenticated actor with `verification:manage` and a caller-supplied `Idempotency-Key` header. It records a durable `REVIEW_EXISTING_BOQ` run and returns `202`; it does not depend on request-lifecycle background execution. `GET /api/worker/runs/{runId}` returns only the active company's run, immutable event journal, deterministic assignment link, and optional advisory plan.
+
+A private scheduler or operator drains queued work through `POST /api/internal/worker/drain` with `Authorization: Bearer <WORKER_RUNNER_SECRET>`. The endpoint accepts at most five runs per request. Never place this secret in a browser, public scheduler payload, source file, or log.
+
+The AI planner is disabled unless `WORKER_AI_PLANNER_ENABLED=true`. Enabling it also requires server-only `OPENAI_API_KEY` and `WORKER_AI_MODEL`. Its single structured call receives a bounded context with commercial numeric values removed, and its validated output is stored as immutable advice requiring human review. It cannot change BOQ quantities, rates, provenance, verification, approval, or revision evidence.
+
+## Quality gates
+
+Use a disposable PostgreSQL database whose name contains `test` or `ci`:
+
+```powershell
+$env:TEST_DATABASE_URL = "postgresql://quantara:password@localhost:5432/quantara_ai_boq_test?schema=public"
+npm run db:validate
+npm run lint
+npm run typecheck
+npm test
+npm run build
+npm run build:cloudflare
+```
+
+`npm test` is intentionally destructive only to `TEST_DATABASE_URL`: it verifies the database name, creates a missing local test database when needed, runs all committed migrations, seeds it, and then executes Vitest. If `TEST_DATABASE_URL` is omitted, the runner derives a separate `_test` database from `DATABASE_URL`; if both are omitted it uses the documented local test default. Never point it at production or any database containing retained data.
+
+CI repeats the same gates with PostgreSQL 16 and the pinned Node/npm versions.
+
+## Authentication and tenant safety
+
+Authentication uses hashed passwords, hashed database-backed session tokens, active-account and email-verification gates, and server-side role enforcement. Tenant-owned records carry `companyId`, and repository/service boundaries must derive authority from the current actor rather than client-supplied tenant IDs.
+
+See [authentication](docs/authentication.md) and [multi-tenancy](docs/multi-tenancy.md) for the detailed contracts.
+
+## Operational boundaries
+
+- Drawing extraction creates evidence and review candidates; it does not grant professional approval.
+- Confirming or correcting an extracted entity is separate from importing it into a BOQ.
+- BOQ verification and locking use explicit state transitions and immutable revision evidence.
+- Deterministic worker review remains authoritative; optional AI output is advisory coordination only and never grants professional or commercial approval.
+- Stripe checkout, synchronization, and webhooks remain configuration-gated. Local tests use mocked provider calls and do not prove a live account is ready.
+- Autodesk/AutoCAD support is limited to the explicitly declared beta metadata path; unattended native geometry extraction is not represented as available.
+- Deployments, live provider writes, owner provisioning, and production migrations are deliberate operator actions and are not performed by CI.
+
+## Administrative commands
+
+```powershell
+npm run admin:bootstrap-owner
+npm run admin:provision-owner
+```
+
+These commands change privileged identity state. Run them only for an already verified target account and never from build or deploy hooks.
+
+## Release status
+
+The canonical release-integrity workflow is `.github/workflows/ci.yml`. A release candidate is locally verified only after clean install, Prisma validation, lint, type checking, the full database-backed test suite, the Next.js build, and the Cloudflare adapter build all pass from the same checkout. Deployment and provider verification are separate evidence states.

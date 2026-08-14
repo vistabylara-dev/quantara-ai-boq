@@ -1,13 +1,13 @@
 import { apiSuccess, handleApiError } from "@/lib/http/api-response";
 import { getCurrentActor } from "@/lib/auth/current-actor";
-import { setActorContext } from "@/lib/auth/request-context";
+import { setActorContext, withActorRequestContext } from "@/lib/auth/request-context";
 import { prefillDimensionValues } from "@/lib/services/quantity-calculation-service";
 import { prefillDimensionsQuerySchema } from "@/lib/validation/quantity-calculation-schema";
 
 export const dynamic = "force-dynamic";
 
 /** Read-only evidence lookup (spec section 3) — never invents a value, only surfaces what already exists on the extracted entity / detected room. */
-export async function GET(request: Request) {
+async function GETHandler(request: Request) {
   try {
     const actor = await getCurrentActor();
     setActorContext(actor);
@@ -28,3 +28,5 @@ export async function GET(request: Request) {
     return handleApiError(error);
   }
 }
+
+export const GET = withActorRequestContext(GETHandler);

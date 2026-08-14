@@ -1,4 +1,4 @@
-import { ImportJobStatus, ImportRowStatus } from "@prisma/client";
+import { ImportJobStatus, ImportRowStatus, RateProvenanceSource } from "@prisma/client";
 import { prisma } from "@/lib/db/prisma";
 import type { CurrentActor } from "@/lib/auth/current-actor";
 import { requireCapability } from "@/lib/auth/rbac";
@@ -533,6 +533,9 @@ async function executeDraftBoqRow(actor: CurrentActor, projectId: string, normal
     unitCost: normalized.cost ? Number(normalized.cost) : 0,
     marginPercentage: normalized.margin ? Number(normalized.margin) : 0,
     sortOrder: itemNumber,
+  }, undefined, {
+    integrityActor: { userId: actor.userId, name: actor.fullName },
+    initialRateSource: RateProvenanceSource.IMPORT,
   });
   return item;
 }

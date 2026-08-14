@@ -154,8 +154,12 @@ describe("Quantara Guide v2 registry and advisory navigation", () => {
   it("emits only supported real project routes and no dead query parameters", () => {
     const hrefs = GUIDE_STAGE_IDS.map((stageId) => getGuideStageHref(stageId, PROJECT_ID));
     expect(hrefs.every(isSupportedGuideHref)).toBe(true);
-    expect(getGuideStageHref("DIMENSIONS", PROJECT_ID)).toBe(`/projects/${PROJECT_ID}/boq`);
-    expect(getGuideStageHref("CALCULATIONS", PROJECT_ID)).toBe(`/projects/${PROJECT_ID}/boq`);
+    expect(getGuideStageHref("DIMENSIONS", PROJECT_ID)).toBe(
+      `/projects/${PROJECT_ID}/boq?action=review_dimensions`,
+    );
+    expect(getGuideStageHref("CALCULATIONS", PROJECT_ID)).toBe(
+      `/projects/${PROJECT_ID}/boq?action=review_calculations`,
+    );
     expect(getGuideStageHref("REVIEW", PROJECT_ID)).toBe(`/projects/${PROJECT_ID}/extractions`);
     expect(getGuideStageHref("VALIDATION", PROJECT_ID)).toBe(`/projects/${PROJECT_ID}/verification`);
     expect(getGuideStageHref("OUTPUT", PROJECT_ID)).toBe(`/projects/${PROJECT_ID}/documents`);
@@ -322,7 +326,9 @@ describe("Quantara Guide v2 snapshot and workflow decisions", () => {
     expect(stateOf(result, "CALCULATIONS")).toBe("NOT_STARTED");
     expect(stateOf(result, "BOQ")).toBe("NOT_STARTED");
     expect(result.nextStep?.ctaLabel).toBe("Review Dimensions");
-    expect(result.nextStep?.href).toBe(`/projects/${PROJECT_ID}/boq`);
+    expect(result.nextStep?.href).toBe(
+      `/projects/${PROJECT_ID}/boq?action=review_dimensions`,
+    );
 
     const sourceStillNeedsReview = workflow({
       files: [file("source-1")],

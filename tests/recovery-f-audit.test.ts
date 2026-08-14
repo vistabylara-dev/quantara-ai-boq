@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import { computeBoqWorkflowState } from "../src/lib/workflow/boq-workflow-state";
 import { buildProjectWorkflowSnapshot } from "../src/lib/guidance/project-workflow-snapshot";
 import { deriveProjectWorkflow } from "../src/lib/guidance/project-workflow";
+import en from "../src/lib/i18n/dictionaries/en";
 
 function stepStatus(
   result: ReturnType<typeof computeBoqWorkflowState>,
@@ -13,16 +14,21 @@ function stepStatus(
 }
 
 describe("Recovery F final workflow audit", () => {
-  it("keeps read-only table listing decoupled from the heavy table handler", () => {
+  it("keeps table constants lightweight while loading handlers through the composition root", () => {
     const service = readFileSync(
       path.resolve(__dirname, "../src/lib/services/table-extraction-service.ts"),
+      "utf8",
+    );
+    const handlers = readFileSync(
+      path.resolve(__dirname, "../src/lib/jobs/register-handlers.ts"),
       "utf8",
     );
     expect(service).toContain("@/lib/files/table-extraction/constants");
     expect(service).not.toContain(
       'import { TABLE_EXTRACTABLE_EXTENSIONS } from "@/lib/files/table-extraction-handler"',
     );
-    expect(service).toContain('await import("@/lib/files/table-extraction-handler")');
+    expect(service).toContain('await import("@/lib/jobs/register-handlers")');
+    expect(handlers).toContain('import "@/lib/files/table-extraction-handler"');
   });
 
   it("keeps local env defaults local while documenting Vercel Blob override", () => {
@@ -33,11 +39,11 @@ describe("Recovery F final workflow audit", () => {
 
   it("records PDF grid detection truthfully", () => {
     const parser = readFileSync(
-      path.resolve(__dirname, "../src/lib/files/table-extraction/pdf-table-parser.ts"),
+      path.resolve(__dirname, "../src/lib/files/table-extraction/pdf-table-grid-normalization.ts"),
       "utf8",
     );
     expect(parser).toContain('method: "pdf-grid-detection"');
-    expect(parser).not.toContain('method: "pdf-whitespace-heuristic"');
+    expect(parser).not.toContain('method: "pdf-positional-text-fallback"');
   });
 
   it("sends PDF table candidates requiring review to Extraction Review", () => {
@@ -139,7 +145,10 @@ describe("Recovery F final workflow audit", () => {
       path.resolve(__dirname, "../src/app/projects/[projectId]/boq/page.tsx"),
       "utf8",
     );
-    expect(page).toContain("Your unsaved edits will not be discarded");
+    expect(page).toContain('t("boqEditor.saveBeforeAddingOrImporting")');
+    expect(en.boqEditor.saveBeforeAddingOrImporting).toContain(
+      "Your unsaved edits will not be discarded",
+    );
     expect(page).toContain("actionInProgress || hasUnsavedChanges");
   });
 
@@ -157,7 +166,10 @@ describe("Recovery F final workflow audit", () => {
       "utf8",
     );
 
-    expect(modal).toContain("BOQ specification — review before import");
+    expect(modal).toContain('t("boqEditor.boqSpecificationLabel")');
+    expect(en.boqEditor.boqSpecificationLabel).toBe(
+      "BOQ specification — review before import",
+    );
     expect(modal).toContain("specification: extractionDraft.specification");
     expect(route).toContain("specification: z.string().max(2000)");
     expect(service).toContain("specification: input.specification ?? entity.sourceText ??");

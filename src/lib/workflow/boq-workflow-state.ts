@@ -1,4 +1,5 @@
 import type { BOQ } from "@/types/boq";
+import { defaultTranslator, type TranslateFn } from "@/lib/i18n/translate";
 
 /**
  * BOQ workflow state derived only from evidence that is actually available.
@@ -64,16 +65,18 @@ export const WORKFLOW_STEP_ACTIONS: Record<WorkflowStepId, NonNullable<NextStepA
   output: "view_output",
 };
 
-const STEP_STATUS_REASON: Record<WorkflowStepStatus, string> = {
-  COMPLETE: "This stage is complete. Click to review it.",
-  CURRENT: "This is the current stage. Click to continue.",
-  NEEDS_ATTENTION: "This stage needs your attention. Click to resolve it.",
-  NOT_STARTED: "This stage hasn't started yet. Click to begin.",
-  NOT_REQUIRED: "This stage isn't required for this BOQ. Click to view it anyway.",
-};
-
-export function describeWorkflowStepReason(status: WorkflowStepStatus): string {
-  return STEP_STATUS_REASON[status];
+export function describeWorkflowStepReason(
+  status: WorkflowStepStatus,
+  t: TranslateFn = defaultTranslator,
+): string {
+  const reasons: Record<WorkflowStepStatus, string> = {
+    COMPLETE: t("boqEditor.reasonComplete"),
+    CURRENT: t("boqEditor.reasonCurrent"),
+    NEEDS_ATTENTION: t("boqEditor.reasonNeedsAttention"),
+    NOT_STARTED: t("boqEditor.reasonNotStarted"),
+    NOT_REQUIRED: t("boqEditor.reasonNotRequired"),
+  };
+  return reasons[status];
 }
 
 export type WorkflowEntityFact = {
@@ -128,6 +131,7 @@ function hasUsableDirectReviewedQuantity(entity: WorkflowEntityFact): boolean {
 
 export function computeBoqWorkflowState(
   input: BoqWorkflowStateInput,
+  t: TranslateFn = defaultTranslator,
 ): { steps: WorkflowStep[]; nextAction: NextStepAction } {
   const unreviewedEntities = input.extractedEntities.filter(
     (entity) => !REVIEWED_ENTITY_STATUSES.has(entity.status),
@@ -234,80 +238,78 @@ export function computeBoqWorkflowState(
       : "CURRENT";
 
   const steps: WorkflowStep[] = [
-    { id: "sources", label: "Sources", status: sourcesStatus },
-    { id: "extraction", label: "Extraction", status: extractionStatus },
-    { id: "dimensions", label: "Dimensions", status: dimensionsStatus },
-    { id: "calculation", label: "Calculation", status: calculationStatus },
-    { id: "boq_review", label: "BOQ Review", status: boqReviewStatus },
-    { id: "validation", label: "Validation", status: validationStatus },
-    { id: "output", label: "Output", status: outputStatus },
+    { id: "sources", label: t("boqEditor.stepSources"), status: sourcesStatus },
+    { id: "extraction", label: t("boqEditor.stepExtraction"), status: extractionStatus },
+    { id: "dimensions", label: t("boqEditor.stepDimensions"), status: dimensionsStatus },
+    { id: "calculation", label: t("boqEditor.stepCalculation"), status: calculationStatus },
+    { id: "boq_review", label: t("boqEditor.stepBoqReview"), status: boqReviewStatus },
+    { id: "validation", label: t("boqEditor.stepValidation"), status: validationStatus },
+    { id: "output", label: t("boqEditor.stepOutput"), status: outputStatus },
   ];
 
   let nextAction: NextStepAction;
 
   if (input.fileCount === 0 && input.boqItemCount === 0) {
     nextAction = {
-      message: "Add project drawings or source files first.",
-      ctaLabel: "Add source files",
+      message: t("boqEditor.nextAddSources"),
+      ctaLabel: t("boqEditor.nextAddSourcesCta"),
       ctaAction: "open_files",
     };
   } else if (unreviewedEntities.length > 0) {
     nextAction = {
-      message: `Review the information Quantara found — ${unreviewedEntities.length} item(s) need your confirmation.`,
-      ctaLabel: "Review extracted items",
+      message: t("boqEditor.nextReviewExtractions", { count: unreviewedEntities.length }),
+      ctaLabel: t("boqEditor.nextReviewExtractionsCta"),
       ctaAction: "review_extractions",
     };
   } else if (entitiesMissingDimensions.length > 0) {
     nextAction = {
-      message: `${entitiesMissingDimensions.length} reviewed item(s) need professional dimensions before a quantity can be calculated.`,
-      ctaLabel: "Add dimensions",
+      message: t("boqEditor.nextAddDimensions", { count: entitiesMissingDimensions.length }),
+      ctaLabel: t("boqEditor.nextAddDimensionsCta"),
       ctaAction: "review_dimensions",
     };
   } else if (unconfirmedCalculations.length > 0) {
     nextAction = {
-      message: `${unconfirmedCalculations.length} calculation(s) are ready for professional review.`,
-      ctaLabel: "Review calculations",
+      message: t("boqEditor.nextReviewCalculations", { count: unconfirmedCalculations.length }),
+      ctaLabel: t("boqEditor.nextReviewCalculationsCta"),
       ctaAction: "review_calculations",
     };
   } else if (input.boqItemCount === 0) {
     nextAction = {
       message:
         importableEntities.length > 0
-          ? "Reviewed project information is ready to be added to the BOQ."
-          : "Add your first BOQ item to get started.",
+          ? t("boqEditor.nextReviewedReady")
+          : t("boqEditor.nextAddFirstItem"),
       ctaLabel:
         importableEntities.length > 0
-          ? "Open reviewed items"
-          : "Open BOQ",
+          ? t("boqEditor.nextOpenReviewedCta")
+          : t("boqEditor.nextOpenBoqCta"),
       ctaAction: "open_boq",
     };
   } else if (input.isLocked) {
     nextAction = {
       message:
         input.generatedDocumentCount !== null && input.generatedDocumentCount > 0
-          ? "This locked BOQ revision has professional output available."
-          : "This BOQ revision is locked and ready for professional output generation.",
-      ctaLabel: "View output",
+          ? t("boqEditor.nextOutputAvailable")
+          : t("boqEditor.nextReadyForOutput"),
+      ctaLabel: t("boqEditor.nextViewOutputCta"),
       ctaAction: "view_output",
     };
   } else if (input.validationWarningCount === null) {
     nextAction = {
-      message:
-        "Validation status is currently unavailable. Open verification and run the checks before locking this revision.",
-      ctaLabel: "Open validation",
+      message: t("boqEditor.nextValidationUnavailable"),
+      ctaLabel: t("boqEditor.nextOpenValidationCta"),
       ctaAction: "run_validation",
     };
   } else if (input.validationWarningCount > 0) {
     nextAction = {
-      message: `${input.validationWarningCount} validation warning(s) need professional attention before this BOQ is locked.`,
-      ctaLabel: "Review validation",
+      message: t("boqEditor.nextValidationWarnings", { count: input.validationWarningCount }),
+      ctaLabel: t("boqEditor.nextReviewValidationCta"),
       ctaAction: "run_validation",
     };
   } else {
     nextAction = {
-      message:
-        "The validation preview reports no structural warnings. Review verification, then use the explicit Lock revision control when professionally satisfied.",
-      ctaLabel: "Open validation",
+      message: t("boqEditor.nextValidationClean"),
+      ctaLabel: t("boqEditor.nextOpenValidationCta"),
       ctaAction: "run_validation",
     };
   }

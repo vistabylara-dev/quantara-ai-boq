@@ -49,7 +49,7 @@ export async function createBoqItemsFromFinding(actor: CurrentActor, boqId: stri
     unitCost: input.unitCost,
     marginMode: MarginMode.MARKUP,
     marginPercentage: input.marginPercentage,
-  });
+  }, undefined, { integrityActor: { userId: actor.userId, name: actor.fullName } });
 
   const link = await prisma.findingBoqLink.create({
     data: {

@@ -1,6 +1,6 @@
 import { ExtractionJobStatus, Prisma, type ExtractionEngineType, type ExtractionJob } from "@prisma/client";
 import { prisma } from "@/lib/db/prisma";
-import { NotFoundError } from "@/lib/errors/app-error";
+import { AppError, NotFoundError } from "@/lib/errors/app-error";
 
 /** Statuses a job can be re-triggered/cancelled from — anything not yet in a terminal state. */
 export const QUEUE_NON_TERMINAL_STATUSES: ExtractionJobStatus[] = [
@@ -114,6 +114,19 @@ export async function findOrCreateQueuedExtractionJob(input: CreateQueuedExtract
     try {
       return await prisma.$transaction(
         async (tx) => {
+          const file = await tx.projectFile.findFirst({
+            where: {
+              id: input.projectFileId,
+              companyId: input.companyId,
+              projectId: input.projectId,
+            },
+            select: { id: true, status: true },
+          });
+          if (!file) throw new NotFoundError("Project file not found.");
+          if (file.status === "ARCHIVED") {
+            throw new AppError("FILE_ARCHIVED", "Archived project files cannot start new extraction jobs.", 409);
+          }
+
           const existing = await tx.extractionJob.findFirst({
             where: { companyId: input.companyId, projectFileId: input.projectFileId, engineType: input.engineType, status: { in: QUEUE_NON_TERMINAL_STATUSES } },
             orderBy: { createdAt: "desc" },

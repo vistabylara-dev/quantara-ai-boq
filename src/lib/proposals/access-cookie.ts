@@ -1,17 +1,10 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
+import { loadProposalAccessSecret } from "@/lib/config/security-secrets";
 
 const ACCESS_GRANT_TTL_MS = 30 * 60 * 1000;
 
-function secret(): string {
-  // A dev-only fallback keeps local/demo use frictionless (matching this
-  // project's other optional-with-safe-fallback env vars); production
-  // deployments should set a real secret so grants aren't forgeable by
-  // anyone who can read the repository.
-  return process.env.PROPOSAL_ACCESS_SECRET ?? "dev-only-proposal-access-secret-not-for-production";
-}
-
 function sign(payload: string): string {
-  return createHmac("sha256", secret()).update(payload).digest("hex");
+  return createHmac("sha256", loadProposalAccessSecret()).update(payload).digest("hex");
 }
 
 /**

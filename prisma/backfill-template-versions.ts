@@ -1,3 +1,4 @@
+import { createDirectPrismaClient } from "../src/lib/db/direct-prisma-client";
 /**
  * TEMPLATE-LINK-1 — every DocumentTemplate/TechnicalReportTemplate/EmailTemplate
  * row that existed before versioning gets a version 1 PUBLISHED using its own
@@ -12,9 +13,9 @@
  *   npx tsx prisma/backfill-template-versions.ts --dry-run
  *   npx tsx prisma/backfill-template-versions.ts
  */
-import { PrismaClient, PlatformRole } from "@prisma/client";
+import { PlatformRole } from "@prisma/client";
 
-const prisma = new PrismaClient();
+const prisma = createDirectPrismaClient();
 
 async function run() {
   const dryRun = process.argv.includes("--dry-run");

@@ -1,9 +1,10 @@
+import { createDirectPrismaClient } from "../../src/lib/db/direct-prisma-client";
 import { test, expect, type Page } from "@playwright/test";
 import path from "node:path";
 import fs from "node:fs";
-import { PrismaClient, BOQStatus } from "@prisma/client";
+import { BOQStatus } from "@prisma/client";
 
-const prisma = new PrismaClient();
+const prisma = createDirectPrismaClient();
 const SEED_BOQ_ID = "50000000-0000-4000-8000-000000000001";
 const SEED_ITEM_ID = "70000000-0000-4000-8000-000000000001";
 

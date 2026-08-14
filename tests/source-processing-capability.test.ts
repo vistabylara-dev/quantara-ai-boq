@@ -21,12 +21,24 @@ describe("source-processing capability truth", () => {
   });
 
   it("keeps Autodesk-family marketplace claims aligned with runtime reality", () => {
-    for (const id of ["autodesk", "autocad", "revit", "autodesk-construction-cloud", "bim-360", "civil-3d", "navisworks"]) {
+    for (const id of ["autodesk", "autocad"]) {
+      const provider = PROVIDER_REGISTRY.find((entry) => entry.id === id);
+      expect(provider).toBeDefined();
+      expect(provider?.status).toBe("BETA");
+      expect(provider?.supportedData.length).toBeGreaterThan(0);
+      expect(provider?.description).toMatch(/metadata|review/i);
+    }
+
+    for (const id of ["revit", "autodesk-construction-cloud", "bim-360", "civil-3d", "navisworks"]) {
       const provider = PROVIDER_REGISTRY.find((entry) => entry.id === id);
       expect(provider).toBeDefined();
       expect(provider?.status).toBe("COMING_SOON");
       expect(provider?.supportedData).toEqual([]);
     }
+
+    // Marketplace beta status never upgrades direct CAD/BIM upload support:
+    // the runtime still requires the controlled connector and human review.
+    expect(getSourceProcessingCapability("dwg").mode).toBe("CAD_BIM_CONNECTOR_REQUIRED");
     expect(ARCADE_PROVIDER_CONFIGURATIONS).toEqual([]);
   });
 });

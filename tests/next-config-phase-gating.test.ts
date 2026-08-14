@@ -53,11 +53,26 @@ describe("next.config.mjs phase gating", () => {
     expect(devConfig).toEqual(buildConfig);
     expect(buildConfig).toMatchObject({
       reactStrictMode: true,
-      serverExternalPackages: ["pdfkit", "pdf-parse", "pdfjs-dist"],
     });
+    expect(buildConfig.serverExternalPackages).toEqual(
+      expect.arrayContaining(["@prisma/client", ".prisma/client", "pdfkit", "pdf-parse", "pdfjs-dist"]),
+    );
   });
 
-  it("keeps read-only file and page-image services decoupled from the global extraction registry", async () => {
+  it("aliases only bare undici imports to the fetch-only shim shipped by @vercel/blob", async () => {
+    const buildConfig = await nextConfigFn(PHASE_PRODUCTION_BUILD);
+    const webpack = buildConfig.webpack as (config: {
+      resolve: { alias: Record<string, string> };
+    }) => { resolve: { alias: Record<string, string> } };
+    const configured = webpack({ resolve: { alias: { preserved: "existing-alias" } } });
+
+    expect(configured.resolve.alias.preserved).toBe("existing-alias");
+    expect(configured.resolve.alias["undici$"]).toMatch(
+      /node_modules[\\/]@vercel[\\/]blob[\\/]dist[\\/]undici-browser\.js$/,
+    );
+  });
+
+  it("loads the complete handler composition only inside processing command boundaries", async () => {
     const { readFile } = await import("node:fs/promises");
 
     const drawingService = await readFile(
@@ -77,10 +92,11 @@ describe("next.config.mjs phase gating", () => {
       "utf8",
     );
 
-    expect(drawingService).not.toContain('import "@/lib/jobs/register-handlers"');
-    expect(projectFileService).not.toContain('import "@/lib/jobs/register-handlers"');
-    expect(drawingService).toContain('await import("@/lib/files/preprocessing-handler")');
-    expect(projectFileService).toContain('await import("@/lib/files/classification-handler")');
+    expect(drawingService).not.toMatch(/^import "@\/lib\/jobs\/register-handlers"/m);
+    expect(projectFileService).not.toMatch(/^import "@\/lib\/jobs\/register-handlers"/m);
+    expect(drawingService).toContain('await import("@/lib/jobs/register-handlers")');
+    expect(projectFileService).toContain('await import("@/lib/jobs/register-handlers")');
+    expect(preprocessing).not.toContain('import "@/lib/jobs/register-handlers"');
 
     expect(preprocessing).toContain("allowOverwrite: true");
     expect(blobAdapter).toContain("allowOverwrite: input.allowOverwrite ?? false");
@@ -116,13 +132,13 @@ describe("next.config.mjs phase gating", () => {
       'from "@/lib/files/table-extraction/constants"',
     );
     expect(serviceSource).toContain(
-      'await import("@/lib/files/table-extraction-handler")',
+      'await import("@/lib/jobs/register-handlers")',
     );
     expect(serviceSource).not.toContain(
       'import { TABLE_EXTRACTABLE_EXTENSIONS } from "@/lib/files/table-extraction-handler"',
     );
     expect(serviceSource).not.toContain(
-      'import "@/lib/jobs/register-handlers"',
+      'import "@/lib/jobs/register-handlers";',
     );
   });
 });

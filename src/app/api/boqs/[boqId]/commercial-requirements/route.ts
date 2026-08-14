@@ -1,6 +1,6 @@
 import { apiSuccess, handleApiError } from "@/lib/http/api-response";
 import { getCurrentActor } from "@/lib/auth/current-actor";
-import { setActorContext } from "@/lib/auth/request-context";
+import { setActorContext, withActorRequestContext } from "@/lib/auth/request-context";
 import { requireCapability } from "@/lib/auth/rbac";
 import { getBOQRecord } from "@/lib/repositories/boq-repository";
 import { boqIdParamsSchema } from "@/lib/validation/boq-route-schemas";
@@ -14,7 +14,7 @@ export const dynamic = "force-dynamic";
  * this project needs to unlock a clean final export, derived entirely from
  * server-side BOQ/entitlement state — the client never constructs this.
  */
-export async function GET(request: Request, context: { params: Promise<{ boqId: string }> }) {
+async function GETHandler(request: Request, context: { params: Promise<{ boqId: string }> }) {
   try {
     const actor = await getCurrentActor();
     setActorContext(actor);
@@ -32,3 +32,5 @@ export async function GET(request: Request, context: { params: Promise<{ boqId: 
     return handleApiError(error);
   }
 }
+
+export const GET = withActorRequestContext(GETHandler);

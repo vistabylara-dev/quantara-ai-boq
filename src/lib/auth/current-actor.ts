@@ -50,13 +50,10 @@ async function resolveActorFromCookie(): Promise<CurrentActor | null> {
  * UnauthorizedError (401) when there is no valid session, so route handlers
  * can call this once and let handleApiError translate the failure.
  *
- * IMPORTANT: this does NOT set the audit request-context itself. Node's
- * AsyncLocalStorage.enterWith(), called from inside an awaited function,
- * does not propagate back out through the caller's own await boundary (the
- * caller's continuation is already linked to the pre-call context by the
- * time this function's internals run). Route handlers that need audit
- * attribution must call `setActorContext(actor)` themselves, directly in
- * their own function body, immediately after awaiting this:
+ * IMPORTANT: this does NOT assign the audit actor itself. Route handlers are
+ * wrapped with `withActorRequestContext()` and must call
+ * `setActorContext(actor)` immediately after awaiting this so every downstream
+ * audit write sees the authenticated actor:
  *
  *   const actor = await getCurrentActor();
  *   setActorContext(actor);

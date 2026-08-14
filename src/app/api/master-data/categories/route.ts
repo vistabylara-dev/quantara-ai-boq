@@ -1,13 +1,13 @@
 import { apiSuccess, handleApiError } from "@/lib/http/api-response";
 import { getCurrentActor } from "@/lib/auth/current-actor";
-import { setActorContext } from "@/lib/auth/request-context";
+import { setActorContext, withActorRequestContext } from "@/lib/auth/request-context";
 import { AppError } from "@/lib/errors/app-error";
 import { getCategoryTree, listCategories } from "@/lib/repositories/master-taxonomy-repository";
 
 export const dynamic = "force-dynamic";
 
 /** ?disciplineId=&parentCategoryId=  (omit parentCategoryId for top-level, or pass tree=1 for the full nested tree) */
-export async function GET(request: Request) {
+async function GETHandler(request: Request) {
   try {
     const actor = await getCurrentActor();
     setActorContext(actor);
@@ -27,3 +27,5 @@ export async function GET(request: Request) {
     return handleApiError(error);
   }
 }
+
+export const GET = withActorRequestContext(GETHandler);

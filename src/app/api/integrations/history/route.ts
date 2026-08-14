@@ -1,6 +1,6 @@
 import { apiSuccess, handleApiError } from "@/lib/http/api-response";
 import { getCurrentActor } from "@/lib/auth/current-actor";
-import { setActorContext } from "@/lib/auth/request-context";
+import { setActorContext, withActorRequestContext } from "@/lib/auth/request-context";
 import { listEventsForCompany } from "@/lib/services/integration-event-service";
 
 export const dynamic = "force-dynamic";
@@ -11,7 +11,7 @@ const VALID_EVENT_TYPES = new Set([
 ]);
 
 /** Bounded, filterable, paginated — never the full history in one response. */
-export async function GET(request: Request) {
+async function GETHandler(request: Request) {
   try {
     const actor = await getCurrentActor();
     setActorContext(actor);
@@ -33,3 +33,5 @@ export async function GET(request: Request) {
     return handleApiError(error);
   }
 }
+
+export const GET = withActorRequestContext(GETHandler);

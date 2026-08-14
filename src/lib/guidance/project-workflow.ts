@@ -328,7 +328,7 @@ export function deriveProjectWorkflow(input: ProjectWorkflowInput): ProjectWorkf
           ? {
               message: "Extraction review is complete. Continue to the BOQ workspace to review the dimensions used for professional quantities.",
               ctaLabel: "Review Dimensions",
-              href: getProjectBoqHref(input.projectId),
+              href: getProjectBoqHref(input.projectId, "review_dimensions"),
             }
           : {
               message: "Extraction review is complete. Open the BOQ workspace to begin professional dimension review.",

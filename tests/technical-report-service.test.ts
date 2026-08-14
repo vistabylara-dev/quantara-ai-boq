@@ -114,6 +114,7 @@ describe("technical report service (integration, real local Postgres)", () => {
       await localDocumentStorageAdapter.deleteObject(key).catch(() => undefined);
     }
     await prisma.emailDispatch.deleteMany({ where: { companyId: { in: [companyAId, companyBId] } } });
+    await prisma.technicalReportRetention.deleteMany({ where: { companyId: { in: [companyAId, companyBId] } } });
     await prisma.generatedTechnicalReport.deleteMany({ where: { companyId: { in: [companyAId, companyBId] } } });
     await prisma.technicalReportTemplateVersion.deleteMany({ where: { technicalReportTemplateId: { in: [templateAId, templateBId] } } });
     await prisma.technicalReportTemplate.deleteMany({ where: { companyId: { in: [companyAId, companyBId] } } });
@@ -230,17 +231,28 @@ describe("technical report service (integration, real local Postgres)", () => {
   });
 
   describe("deletion", () => {
-    it("deletes both the database record and the stored file", async () => {
-      const report = await createReportFromTemplate(actor(companyAId), projectAId, { templateId: templateAId, name: "To delete" });
+    it("retains a completed report, its bytes, and its immutable database evidence", async () => {
+      const report = await createReportFromTemplate(actor(companyAId), projectAId, { templateId: templateAId, name: "Retained report" });
       await updateReportFields(actor(companyAId), report.id, { "[Insert project name]": "X", "[Insert findings]": "Y" });
-      await generateReportDocument(actor(companyAId), report.id, GeneratedDocumentType.DOCX);
+      const completed = await generateReportDocument(actor(companyAId), report.id, GeneratedDocumentType.DOCX);
       const storageKey = (await prisma.generatedTechnicalReport.findUniqueOrThrow({ where: { id: report.id } })).storageKey!;
       const { localDocumentStorageAdapter } = await import("../src/lib/storage/local-document-storage-adapter");
       expect(await localDocumentStorageAdapter.objectExists(storageKey)).toBe(true);
 
-      await deleteReport(actor(companyAId), report.id);
+      expect(completed).toMatchObject({ status: "COMPLETED", retentionLocked: true, retentionReason: "COMPLETED", canDelete: false });
+      await expect(deleteReport(actor(companyAId), report.id)).rejects.toMatchObject({ code: "TECHNICAL_REPORT_RETENTION_LOCKED" });
+      await expect(updateReportFields(actor(companyAId), report.id, { "[Insert findings]": "Changed" })).rejects.toMatchObject({ code: "TECHNICAL_REPORT_IMMUTABLE" });
+      await expect(generateReportDocument(actor(companyAId), report.id, GeneratedDocumentType.DOCX)).rejects.toMatchObject({ code: "TECHNICAL_REPORT_IMMUTABLE" });
+      await expect(prisma.generatedTechnicalReport.delete({ where: { id: report.id } })).rejects.toThrow();
+      expect(await localDocumentStorageAdapter.objectExists(storageKey)).toBe(true);
+      expect(await prisma.technicalReportRetention.findUnique({ where: { generatedTechnicalReportId: report.id } })).toMatchObject({ reason: "COMPLETED" });
+      expect((await getReport(actor(companyAId), report.id)).status).toBe("COMPLETED");
+    });
 
-      expect(await localDocumentStorageAdapter.objectExists(storageKey)).toBe(false);
+    it("still deletes an unissued draft report", async () => {
+      const report = await createReportFromTemplate(actor(companyAId), projectAId, { templateId: templateAId, name: "Disposable draft" });
+      expect(report.canDelete).toBe(true);
+      await deleteReport(actor(companyAId), report.id);
       await expect(getReport(actor(companyAId), report.id)).rejects.toThrow(NotFoundError);
     });
 

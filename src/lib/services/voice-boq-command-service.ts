@@ -344,6 +344,7 @@ export async function applyVoiceBOQCommand(
       undefined,
       {
         expectedBoqVersion: input.proposal.expectedBoqVersion,
+        integrityActor: { userId: actor.userId, name: actor.fullName },
         additionalAudit: {
           action: "VOICE_BOQ_ITEM_ADDED",
           payload: {
@@ -407,6 +408,7 @@ export async function applyVoiceBOQCommand(
 
   return updateBOQItem(actor.companyId, item.id, patch, {
     expectedCurrent: expectedCurrentValues(proposal),
+    integrityActor: { userId: actor.userId, name: actor.fullName },
     additionalAudit: { action: "VOICE_BOQ_CHANGE_APPLIED", payload: auditPayload },
   });
 }

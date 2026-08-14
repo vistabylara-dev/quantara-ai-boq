@@ -2,13 +2,15 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { QuantityCalculationType } from "@prisma/client";
-import { apiClient, getApiErrorMessage } from "@/lib/api/client";
+import { apiClient } from "@/lib/api/client";
 import { getRequiredDimensions } from "@/lib/calculations/required-dimensions-registry";
 import type { FormulaResult } from "@/lib/calculations/quantity-formulas";
 import type { VoiceCommandProposal } from "@/lib/voice/voice-types";
 import { VoiceCommandButton } from "@/components/voice/voice-command-button";
 import { applyConfirmedDimensionVoiceProposal, VoiceProposalCard } from "@/components/voice/voice-proposal-card";
-import { useTranslations } from "@/lib/i18n/locale-provider";
+import { useLocale } from "@/lib/i18n/locale-provider";
+import { translateCalculationType, translateDimensionLabel } from "@/lib/i18n/engineering-labels";
+import { getLocalizedApiErrorMessage } from "@/lib/i18n/api-error-message";
 
 /**
  * Guided BOQ measurement workflow (Release 1), spec sections 2-6 — the
@@ -56,7 +58,9 @@ export type QuantityCalculationPanelProps = {
 };
 
 export function QuantityCalculationPanel({ projectId, calculationType, extractedEntityId, onConfirmed, onCancel }: QuantityCalculationPanelProps) {
-  const t = useTranslations();
+  const { locale, t } = useLocale();
+  const localizationRef = useRef({ locale, t });
+  localizationRef.current = { locale, t };
   const definition = useMemo(() => getRequiredDimensions(calculationType), [calculationType]);
   const [dimensionValues, setDimensionValues] = useState<DimensionValueState[]>([]);
   const [isLoadingPrefill, setIsLoadingPrefill] = useState(true);
@@ -69,6 +73,7 @@ export function QuantityCalculationPanel({ projectId, calculationType, extracted
   const [pendingVoiceProposal, setPendingVoiceProposal] = useState<PendingDimensionVoiceProposal | null>(null);
   const [voiceProposalError, setVoiceProposalError] = useState<string | null>(null);
   const voiceButtonRef = useRef<HTMLButtonElement>(null);
+  const calculationLabel = translateCalculationType(calculationType, t);
 
   useEffect(() => {
     if (!definition) {
@@ -89,7 +94,8 @@ export function QuantityCalculationPanel({ projectId, calculationType, extracted
       })
       .catch((err) => {
         if (err instanceof DOMException && err.name === "AbortError") return;
-        setError(getApiErrorMessage(err));
+        const current = localizationRef.current;
+        setError(getLocalizedApiErrorMessage(err, current.t, current.locale));
       })
       .finally(() => setIsLoadingPrefill(false));
     return () => controller.abort();
@@ -107,7 +113,8 @@ export function QuantityCalculationPanel({ projectId, calculationType, extracted
       .then((data) => setPreview({ result: data.result, missing: data.missingRequiredDimensions }))
       .catch((err) => {
         if (err instanceof DOMException && err.name === "AbortError") return;
-        setError(getApiErrorMessage(err));
+        const current = localizationRef.current;
+        setError(getLocalizedApiErrorMessage(err, current.t, current.locale));
       });
     return () => controller.abort();
   }, [calculationType, definition, dimensionValues]);
@@ -143,15 +150,15 @@ export function QuantityCalculationPanel({ projectId, calculationType, extracted
 
   const handleDimensionVoiceProposal = useCallback(async (proposal: VoiceCommandProposal) => {
     if (proposal.commandType !== "SET_DIMENSION" || !proposal.dimensionKey) {
-      throw new Error("This voice instruction did not resolve to a supported dimension change.");
+      throw new Error(t("measurement.voiceUnsupportedDimensionAction"));
     }
     if (typeof proposal.newValue !== "number" || !Number.isFinite(proposal.newValue) || proposal.newValue < 0) {
-      throw new Error("The proposed dimension must be a valid non-negative number.");
+      throw new Error(t("measurement.voiceInvalidDimensionValue"));
     }
 
     const target = dimensionValues.find((dimension) => dimension.key === proposal.dimensionKey);
     if (!target) {
-      throw new Error("The proposed dimension is not valid for this calculation type.");
+      throw new Error(t("measurement.voiceDimensionNotApplicable"));
     }
 
     const proposedValues = applyConfirmedDimensionVoiceProposal(
@@ -185,9 +192,9 @@ export function QuantityCalculationPanel({ projectId, calculationType, extracted
         newResult: proposedPreview.result,
       });
     } catch (caught) {
-      throw new Error(getApiErrorMessage(caught));
+      throw new Error(getLocalizedApiErrorMessage(caught, t, locale));
     }
-  }, [calculationType, dimensionValues]);
+  }, [calculationType, dimensionValues, locale, t]);
 
   const confirmDimensionVoiceProposal = useCallback(() => {
     if (!pendingVoiceProposal) return;
@@ -222,11 +229,11 @@ export function QuantityCalculationPanel({ projectId, calculationType, extracted
       });
       setSavedCalculation(created);
     } catch (err) {
-      setError(getApiErrorMessage(err));
+      setError(getLocalizedApiErrorMessage(err, t, locale));
     } finally {
       setIsSaving(false);
     }
-  }, [calculationType, dimensionValues, extractedEntityId, projectId]);
+  }, [calculationType, dimensionValues, extractedEntityId, locale, projectId, t]);
 
   const confirmCalculation = useCallback(async () => {
     if (!savedCalculation) return;
@@ -237,16 +244,16 @@ export function QuantityCalculationPanel({ projectId, calculationType, extracted
       setSavedCalculation(confirmed);
       onConfirmed?.(confirmed);
     } catch (err) {
-      setError(getApiErrorMessage(err));
+      setError(getLocalizedApiErrorMessage(err, t, locale));
     } finally {
       setIsConfirming(false);
     }
-  }, [onConfirmed, savedCalculation]);
+  }, [locale, onConfirmed, savedCalculation, t]);
 
   if (!definition) {
     return (
       <div className="rounded-3xl border border-amber-900 bg-amber-950/30 p-5 text-sm text-amber-200">
-        {t("measurement.noFormulaAvailable", { type: calculationType })}
+        {t("measurement.noFormulaAvailable", { type: calculationLabel })}
       </div>
     );
   }
@@ -255,7 +262,7 @@ export function QuantityCalculationPanel({ projectId, calculationType, extracted
     <div className="space-y-5 rounded-3xl border border-slate-800 bg-slate-950 p-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <p className="text-sm uppercase tracking-[0.24em] text-slate-500">{definition.label}</p>
+          <p className="text-sm uppercase tracking-[0.24em] text-slate-500">{calculationLabel}</p>
           <p className="mt-1 text-xs text-slate-500">{t("measurement.resultUnit", { unit: definition.resultUnit })}</p>
         </div>
         <VoiceCommandButton
@@ -266,7 +273,7 @@ export function QuantityCalculationPanel({ projectId, calculationType, extracted
           onBusyChange={setIsVoiceBusy}
           disabled={isLoadingPrefill || pendingVoiceProposal !== null}
           disabledReason={pendingVoiceProposal ? t("measurement.voiceReviewOrCancel") : t("measurement.voiceWaitForEvidence")}
-          ariaLabel={t("measurement.voiceRecordInstruction", { label: definition.label })}
+          ariaLabel={t("measurement.voiceRecordInstruction", { label: calculationLabel })}
         />
       </div>
 
@@ -279,7 +286,7 @@ export function QuantityCalculationPanel({ projectId, calculationType, extracted
             <div key={dim.key} className="rounded-2xl border border-slate-800 bg-slate-900 p-4">
               <div className="flex items-center justify-between gap-3">
                 <label htmlFor={`dim-${dim.key}`} className="text-sm font-semibold text-white">
-                  {dim.label} {dim.unit ? <span className="text-slate-500">({dim.unit})</span> : null}
+                  {translateDimensionLabel(dim.key, t, dim.label)} {dim.unit ? <span className="text-slate-500">({dim.unit})</span> : null}
                   {!dim.required && <span className="ms-2 text-[0.65rem] uppercase tracking-wide text-slate-500">{t("measurement.optional")}</span>}
                 </label>
                 {dim.reviewStatus === "MISSING" && dim.required ? (
@@ -317,7 +324,10 @@ export function QuantityCalculationPanel({ projectId, calculationType, extracted
       {pendingVoiceProposal ? (
         <VoiceProposalCard
           proposal={pendingVoiceProposal.proposal}
-          fieldLabel={dimensionValues.find((dimension) => dimension.key === pendingVoiceProposal.dimensionKey)?.label}
+          fieldLabel={(() => {
+            const dimension = dimensionValues.find((candidate) => candidate.key === pendingVoiceProposal.dimensionKey);
+            return dimension ? translateDimensionLabel(dimension.key, t, dimension.label) : undefined;
+          })()}
           confirmationScope="LOCAL_DIMENSION"
           affectedCalculation={{
             oldValue: pendingVoiceProposal.oldResult?.resultValue ?? null,
@@ -339,7 +349,7 @@ export function QuantityCalculationPanel({ projectId, calculationType, extracted
       <div className="rounded-2xl border border-slate-800 bg-slate-900 p-4">
         <p className="text-xs uppercase tracking-[0.24em] text-slate-500">{t("measurement.engineeringCalculation")}</p>
         {preview.missing.length > 0 ? (
-          <p className="mt-2 text-sm text-amber-300">{t("measurement.missing", { fields: preview.missing.map((m) => m.label).join(", ") })}</p>
+          <p className="mt-2 text-sm text-amber-300">{t("measurement.missing", { fields: preview.missing.map((dimension) => translateDimensionLabel(dimension.key, t, dimension.label)).join(", ") })}</p>
         ) : preview.result ? (
           <div className="mt-2 space-y-2">
             <p dir="ltr" className="font-mono text-sm text-slate-200 text-start">{preview.result.formula}</p>

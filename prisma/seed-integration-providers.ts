@@ -1,3 +1,4 @@
+import { createDirectPrismaClient } from "../src/lib/db/direct-prisma-client";
 /**
  * INTEGRATIONS-1A — seeds the IntegrationProvider table from the code-side
  * provider registry (src/lib/integrations/provider-registry.ts). The
@@ -8,10 +9,9 @@
  *
  * Usage: npx tsx prisma/seed-integration-providers.ts
  */
-import { PrismaClient } from "@prisma/client";
 import { PROVIDER_REGISTRY } from "../src/lib/integrations/provider-registry";
 
-const prisma = new PrismaClient();
+const prisma = createDirectPrismaClient();
 
 async function main(): Promise<void> {
   let created = 0;

@@ -67,3 +67,30 @@ export type CommercePriceIdParams = z.output<typeof commercePriceIdParamsSchema>
 export type CommercePriceReviewUpdateInput = z.output<typeof commercePriceReviewUpdateSchema>;
 export type StripeSynchronizeRequestInput = z.output<typeof stripeSynchronizeRequestSchema>;
 export type StripeHistoryQuery = z.output<typeof stripeHistoryQuerySchema>;
+
+// ---------------------------------------------------------------------------
+// STRIPE-COMMERCIAL-2 — customer checkout. Deliberately the only field
+// accepted from the browser: every other checkout fact (amount, currency,
+// Stripe price ID, company identity) is resolved server-side. `.strict()`
+// rejects any extra field (amount, currency, providerPriceId, companyId,
+// metadata, ...) outright instead of silently ignoring it.
+// ---------------------------------------------------------------------------
+
+export const commerceCheckoutRequestSchema = z
+  .object({
+    checkoutMode: z.enum(["SUBSCRIPTION", "BOQ_UNLOCK"]).default("SUBSCRIPTION"),
+    priceCode: z.string().trim().max(200).optional(),
+    boqId: z.string().trim().optional(),
+    revisionNumber: z.number().int().optional(),
+    billingInterval: z.enum(["MONTH", "YEAR"]).default("YEAR"),
+  })
+  .refine(
+    (data) => {
+      if (data.checkoutMode === "SUBSCRIPTION") return !!data.priceCode;
+      if (data.checkoutMode === "BOQ_UNLOCK") return !!data.boqId && data.revisionNumber !== undefined;
+      return false;
+    },
+    { message: "Invalid payload for the chosen checkout mode." }
+  );
+
+export type CommerceCheckoutRequestInput = z.output<typeof commerceCheckoutRequestSchema>;

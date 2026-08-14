@@ -7,7 +7,7 @@ import { prisma } from "@/lib/db/prisma";
 import { NotFoundError } from "@/lib/errors/app-error";
 import { LockedBOQError } from "@/lib/domain/boq-guards";
 import { createClient } from "@/lib/repositories/client-repository";
-import { lockBOQ, updateBOQItem } from "@/lib/repositories/boq-repository";
+import { createBOQItem, lockBOQ, updateBOQItem } from "@/lib/repositories/boq-repository";
 import { runBOQVerification } from "@/lib/repositories/verification-repository";
 import {
   applyVoiceBOQCommand,
@@ -38,6 +38,7 @@ import {
   verifyVoiceProposalToken,
 } from "@/lib/voice/voice-proposal-token";
 import { grantUnlimitedPlanForTests } from "./helpers/grant-unlimited-plan";
+import { preserveIssuedEvidenceDuringCleanup } from "./helpers/preserve-issued-evidence";
 
 /**
  * proposeVoiceCommand now also returns a navigation result for phrases like
@@ -457,24 +458,17 @@ describe("Release 1 voice proposal/apply integration (real local Postgres)", () 
       language: "English",
     });
     lockProjectId = lockedProject.project.databaseId;
-    const lockItem = await prisma.bOQItem.create({
-      data: {
-        companyId: companyAId,
-        sectionId: lockedProject.boq.sections[0].id,
-        itemNumber: 1,
-        itemCode: `VOICE-LOCK-ITEM-${RUN_ID}`,
-        category: "General",
-        description: "Locked item",
-        quantity: 5,
-        unit: "m2",
-        unitCost: 10,
-        marginPercentage: 10,
-        landedCost: 10,
-        sellingRate: 11,
-        totalAmount: 55,
-        sortOrder: 1,
-      },
-    });
+    const { item: lockItem } = await createBOQItem(companyAId, lockedProject.boq.sections[0].id, {
+      itemNumber: 1,
+      itemCode: `VOICE-LOCK-ITEM-${RUN_ID}`,
+      category: "General",
+      description: "Locked item",
+      quantity: 5,
+      unit: "m2",
+      unitCost: 10,
+      marginPercentage: 10,
+      sortOrder: 1,
+    }, undefined, { integrityActor: { userId: userAId, name: actorA().fullName } });
     lockItemId = lockItem.id;
     await runBOQVerification(companyAId, lockedProject.boq.databaseId);
     await lockBOQ(companyAId, lockedProject.boq.databaseId, actorA().fullName, userAId);
@@ -482,6 +476,10 @@ describe("Release 1 voice proposal/apply integration (real local Postgres)", () 
 
   afterAll(async () => {
     if (!companyAId || !companyBId) {
+      await prisma.$disconnect();
+      return;
+    }
+    if (await preserveIssuedEvidenceDuringCleanup([companyAId, companyBId])) {
       await prisma.$disconnect();
       return;
     }

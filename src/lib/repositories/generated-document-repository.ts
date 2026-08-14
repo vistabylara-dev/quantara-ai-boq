@@ -1,12 +1,13 @@
 import { DocumentAudience, GeneratedDocumentStatus, GeneratedDocumentType, Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db/prisma";
-import { NotFoundError } from "@/lib/errors/app-error";
+import { AppError, NotFoundError } from "@/lib/errors/app-error";
 import { createAuditLog } from "@/lib/repositories/audit-repository";
 
 const documentInclude = {
   template: true,
   templateVersion: { select: { versionNumber: true } },
   generatedByUser: { select: { fullName: true } },
+  _count: { select: { proposalDocuments: true } },
 } satisfies Prisma.GeneratedDocumentInclude;
 
 type DocumentRecord = Prisma.GeneratedDocumentGetPayload<{ include: typeof documentInclude }>;
@@ -28,6 +29,8 @@ export function toGeneratedDocumentDTO(row: DocumentRecord) {
     isDraft: row.isDraft,
     fileName: row.fileName,
     mimeType: row.mimeType,
+    retentionLocked: row._count.proposalDocuments > 0,
+    canDelete: row._count.proposalDocuments === 0,
     fileSize: row.fileSize,
     checksum: row.checksum,
     generatedByUserId: row.generatedByUserId,
@@ -167,6 +170,13 @@ export async function recordDownload(companyId: string, documentId: string) {
 
 export async function deleteGeneratedDocument(companyId: string, documentId: string) {
   const current = await getGeneratedDocumentRecord(companyId, documentId);
+  if (current._count.proposalDocuments > 0) {
+    throw new AppError(
+      "DOCUMENT_RETENTION_LOCKED",
+      "This document is attached to proposal evidence and cannot be deleted.",
+      409,
+    );
+  }
   await prisma.$transaction(async (tx) => {
     await tx.generatedDocument.delete({ where: { id: current.id, companyId } });
     await createAuditLog(companyId, {

@@ -24,17 +24,17 @@ export default function PublicBreadcrumb({
     ? "text-slate-900"
     : tone === "dark"
       ? "text-white"
-      : "text-slate-900 dark:text-white";
+      : "text-white";
   const linkClass = tone === "light"
     ? "text-slate-500 hover:text-slate-900"
     : tone === "dark"
       ? "text-slate-300 hover:text-white"
-      : "text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white";
+      : "text-slate-400 hover:text-white";
   const separatorClass = tone === "light"
     ? "text-slate-400"
     : tone === "dark"
       ? "text-slate-500"
-      : "text-slate-400 dark:text-slate-600";
+      : "text-slate-600";
 
   return (
     <nav aria-label="Breadcrumb" className={className}>

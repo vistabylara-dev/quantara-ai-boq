@@ -62,7 +62,7 @@ describe("public search registry", () => {
     }
   });
 
-  it("keeps only the four thin legal placeholders out of the public search index", () => {
+  it("keeps the four owner-confirmation-dependent legal documents out of the public search index", () => {
     expect(indexableEntries).toHaveLength(58);
     expect(
       PUBLIC_SEARCH_PAGES
@@ -121,6 +121,7 @@ describe("public search registry", () => {
     const schemaMarkers = [
       "PublicJsonLd",
       "PublicPageJsonLd",
+      "LegalPolicyPage",
       "SeoLandingPage",
       "KnowledgePage",
       "IndustryLandingPage",
@@ -194,7 +195,9 @@ describe("public search registry", () => {
     expect(llms).toMatch(/^# Quantara/m);
     expect(llms).toContain("https://quantara.vistabylara.com/features");
     expect(llms).toContain("https://quantara.vistabylara.com/site-map");
-    expect(llms).toContain("does not claim automatic drawing measurement");
+    expect(llms).toContain(
+      "does not make a blanket claim of fully unattended computer-vision takeoff",
+    );
   });
 
   it("lets public metadata and AI-discovery files bypass authentication middleware", () => {
@@ -282,7 +285,7 @@ describe("public search registry", () => {
     expect(marketingLayout).toContain("PublicFooter");
     expect(marketingLayout).not.toContain("AppShell");
     expect(existsSync(join(marketingRoot, "industries", "[industryId]", "page.tsx"))).toBe(false);
-    expect(existsSync(join(repoRoot, "src", "app", "industries", "[industryId]", "page.tsx"))).toBe(true);
+    expect(existsSync(join(repoRoot, "src", "app", "industry-engines", "[industryId]", "page.tsx"))).toBe(true);
   });
 
   it("documents every indexable route in both required website reports", () => {

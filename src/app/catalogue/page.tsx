@@ -8,6 +8,7 @@ import { formatCurrency } from "@/lib/formatting/currency";
 import { apiClient, getApiErrorMessage } from "@/lib/api/client";
 import CatalogueItemForm from "@/components/catalogue/catalogue-item-form";
 import PriceHistoryDrawer from "@/components/catalogue/price-history-drawer";
+import { useTranslations } from "@/lib/i18n/locale-provider";
 
 type IndustryOption = { id: string; key: string; name: string; enabled: boolean };
 
@@ -19,6 +20,7 @@ const STATUS_BADGE: Record<string, string> = {
 };
 
 export default function CataloguePage() {
+  const t = useTranslations();
   const [result, setResult] = useState<CatalogueListResult | null>(null);
   const [industries, setIndustries] = useState<IndustryOption[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
@@ -92,16 +94,16 @@ export default function CataloguePage() {
       <div className="rounded-[32px] border border-slate-800 bg-slate-950 p-8">
         <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div>
-            <p className="text-sm uppercase tracking-[0.28em] text-slate-500">Catalogue</p>
-            <h1 className="mt-2 text-3xl font-semibold text-white">Rate catalogue</h1>
-            <p className="mt-3 text-slate-400">Maintain supplier-priced rates and apply them to BOQ items.</p>
+            <p className="text-sm uppercase tracking-[0.28em] text-slate-500">{t("catalogue.eyebrow")}</p>
+            <h1 className="mt-2 text-3xl font-semibold text-white">{t("catalogue.title")}</h1>
+            <p className="mt-3 text-slate-400">{t("catalogue.subtitle")}</p>
           </div>
           <button
             type="button"
             onClick={() => setEditingItem("new")}
             className="inline-flex rounded-2xl border border-slate-700 bg-blue-600 px-5 py-3 text-sm font-semibold text-white transition hover:bg-blue-500"
           >
-            Add rate
+            {t("catalogue.addRate")}
           </button>
         </div>
       </div>
@@ -111,37 +113,37 @@ export default function CataloguePage() {
           type="search"
           value={search}
           onChange={(event) => setSearch(event.target.value)}
-          placeholder="Search code, description, category"
+          placeholder={t("catalogue.searchPlaceholder")}
           className="min-w-[240px] flex-1 rounded-2xl border border-slate-800 bg-slate-900 px-4 py-3 text-sm text-white outline-none focus:border-blue-500"
         />
         <select value={industryFilter} onChange={(event) => setIndustryFilter(event.target.value)} className="rounded-2xl border border-slate-800 bg-slate-900 px-4 py-3 text-sm text-white outline-none focus:border-blue-500">
-          <option value="">All industries</option>
+          <option value="">{t("catalogue.allIndustries")}</option>
           {industries.map((industry) => (
             <option key={industry.id} value={industry.key}>{industry.name}</option>
           ))}
         </select>
         <select value={categoryFilter} onChange={(event) => setCategoryFilter(event.target.value)} className="rounded-2xl border border-slate-800 bg-slate-900 px-4 py-3 text-sm text-white outline-none focus:border-blue-500">
-          <option value="">All categories</option>
+          <option value="">{t("catalogue.allCategories")}</option>
           {categories.map((category) => (
             <option key={category} value={category}>{category}</option>
           ))}
         </select>
         <select value={supplierFilter} onChange={(event) => setSupplierFilter(event.target.value)} className="rounded-2xl border border-slate-800 bg-slate-900 px-4 py-3 text-sm text-white outline-none focus:border-blue-500">
-          <option value="">All suppliers</option>
+          <option value="">{t("catalogue.allSuppliers")}</option>
           {suppliers.map((supplier) => (
             <option key={supplier.id} value={supplier.id}>{supplier.name}</option>
           ))}
         </select>
         <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)} className="rounded-2xl border border-slate-800 bg-slate-900 px-4 py-3 text-sm text-white outline-none focus:border-blue-500">
-          <option value="">All statuses</option>
-          <option value="ACTIVE">Active</option>
-          <option value="PENDING">Pending</option>
-          <option value="EXPIRED">Expired</option>
-          <option value="INACTIVE">Inactive</option>
+          <option value="">{t("catalogue.allStatuses")}</option>
+          <option value="ACTIVE">{t("catalogue.statusActive")}</option>
+          <option value="PENDING">{t("catalogue.statusPending")}</option>
+          <option value="EXPIRED">{t("catalogue.statusExpired")}</option>
+          <option value="INACTIVE">{t("catalogue.statusInactive")}</option>
         </select>
         <label className="flex items-center gap-2 rounded-2xl border border-slate-800 bg-slate-900 px-4 py-3 text-sm text-slate-300">
           <input type="checkbox" checked={expiredOnly} onChange={(event) => setExpiredOnly(event.target.checked)} />
-          Expired only
+          {t("catalogue.expiredOnly")}
         </label>
       </div>
 
@@ -149,15 +151,15 @@ export default function CataloguePage() {
 
       {isLoading ? (
         <div className="rounded-[32px] border border-slate-800 bg-slate-950 p-8 text-slate-300">
-          <p className="text-lg font-semibold text-white">Loading catalogue</p>
-          <p className="mt-2 text-sm text-slate-400">Fetching rate catalogue items...</p>
+          <p className="text-lg font-semibold text-white">{t("catalogue.loading")}</p>
+          <p className="mt-2 text-sm text-slate-400">{t("catalogue.fetching")}</p>
         </div>
       ) : error ? (
         <div className="rounded-[32px] border border-slate-800 bg-slate-950 p-8 text-slate-300">
-          <p className="text-lg font-semibold text-white">Catalogue unavailable</p>
+          <p className="text-lg font-semibold text-white">{t("catalogue.unavailable")}</p>
           <p className="mt-2 text-sm text-rose-300">{error}</p>
           <button type="button" onClick={() => void loadCatalogue()} className="mt-6 rounded-2xl border border-slate-700 bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-500">
-            Try again
+            {t("catalogue.tryAgain")}
           </button>
         </div>
       ) : (
@@ -165,18 +167,18 @@ export default function CataloguePage() {
           <table className="min-w-full text-left text-sm text-slate-300">
             <thead className="bg-slate-900 text-slate-400">
               <tr>
-                <th className="px-6 py-4">Code</th>
-                <th className="px-6 py-4">Description</th>
-                <th className="px-6 py-4">Category</th>
-                <th className="px-6 py-4">Supplier</th>
-                <th className="px-6 py-4 text-right">Base cost</th>
-                <th className="px-6 py-4 text-right">Landed cost</th>
-                <th className="px-6 py-4 text-right">Margin</th>
-                <th className="px-6 py-4 text-right">Selling rate</th>
-                <th className="px-6 py-4">Effective</th>
-                <th className="px-6 py-4">Expiry</th>
-                <th className="px-6 py-4">Status</th>
-                <th className="px-6 py-4">Actions</th>
+                <th className="px-6 py-4">{t("catalogue.colCode")}</th>
+                <th className="px-6 py-4">{t("catalogue.colDescription")}</th>
+                <th className="px-6 py-4">{t("catalogue.colCategory")}</th>
+                <th className="px-6 py-4">{t("catalogue.colSupplier")}</th>
+                <th className="px-6 py-4 text-right">{t("catalogue.colBaseCost")}</th>
+                <th className="px-6 py-4 text-right">{t("catalogue.colLandedCost")}</th>
+                <th className="px-6 py-4 text-right">{t("catalogue.colMargin")}</th>
+                <th className="px-6 py-4 text-right">{t("catalogue.colSellingRate")}</th>
+                <th className="px-6 py-4">{t("catalogue.colEffective")}</th>
+                <th className="px-6 py-4">{t("catalogue.colExpiry")}</th>
+                <th className="px-6 py-4">{t("catalogue.colStatus")}</th>
+                <th className="px-6 py-4">{t("catalogue.colActions")}</th>
               </tr>
             </thead>
             <tbody>
@@ -192,7 +194,7 @@ export default function CataloguePage() {
                   <td className="px-6 py-4 text-right tabular-nums text-white">
                     {formatCurrency(item.sellingRate, item.currency)}
                     {item.belowMinimum && (
-                      <span className="ml-2 rounded-full border border-amber-800 bg-amber-950 px-2 py-0.5 text-[10px] font-semibold uppercase text-amber-300">Below min</span>
+                      <span className="ml-2 rounded-full border border-amber-800 bg-amber-950 px-2 py-0.5 text-[10px] font-semibold uppercase text-amber-300">{t("catalogue.belowMin")}</span>
                     )}
                   </td>
                   <td className="px-6 py-4 text-slate-300">{formatDate(item.effectiveDate)}</td>
@@ -205,14 +207,14 @@ export default function CataloguePage() {
                   <td className="px-6 py-4">
                     <div className="flex flex-wrap gap-2">
                       <button type="button" onClick={() => setEditingItem(item)} className="rounded-2xl border border-slate-700 bg-slate-900 px-3 py-2 text-xs text-slate-200 hover:bg-slate-800">
-                        Edit
+                        {t("catalogue.edit")}
                       </button>
                       <button type="button" onClick={() => setHistoryItem(item)} className="rounded-2xl border border-slate-700 bg-slate-900 px-3 py-2 text-xs text-slate-200 hover:bg-slate-800">
-                        History
+                        {t("catalogue.history")}
                       </button>
                       {item.status !== "INACTIVE" && (
                         <button type="button" onClick={() => void handleDeactivate(item)} className="rounded-2xl border border-rose-800 bg-rose-950/40 px-3 py-2 text-xs text-rose-300 hover:bg-rose-950">
-                          Deactivate
+                          {t("catalogue.deactivate")}
                         </button>
                       )}
                     </div>
@@ -221,7 +223,7 @@ export default function CataloguePage() {
               ))}
               {items.length === 0 && (
                 <tr>
-                  <td colSpan={12} className="px-6 py-10 text-center text-slate-400">No catalogue items match these filters.</td>
+                  <td colSpan={12} className="px-6 py-10 text-center text-slate-400">{t("catalogue.noItems")}</td>
                 </tr>
               )}
             </tbody>
@@ -232,7 +234,7 @@ export default function CataloguePage() {
       {editingItem && (
         <div className="fixed inset-0 z-30 flex items-center justify-center bg-black/60 px-4">
           <div className="max-h-[85vh] w-full max-w-4xl overflow-y-auto rounded-[32px] border border-slate-800 bg-slate-950 p-6">
-            <h3 className="mb-4 text-lg font-semibold text-white">{editingItem === "new" ? "Add catalogue rate" : `Edit ${editingItem.itemCode}`}</h3>
+            <h3 className="mb-4 text-lg font-semibold text-white">{editingItem === "new" ? t("catalogue.addModalTitle") : t("catalogue.editModalTitle", { code: editingItem.itemCode })}</h3>
             <CatalogueItemForm
               industries={industries}
               suppliers={suppliers}

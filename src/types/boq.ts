@@ -54,6 +54,10 @@ export type BOQItem = {
   pricingMetadata?: BOQItemPricingMetadata | null;
   /** CANVA-MODEL-1 — true when this line's source is a premium MasterItem. Usable in the working draft regardless of entitlement; drives the commercial-requirements panel at export time. Optional so demo/sample/generator fixtures that predate this field don't need updating; treat as false when absent. */
   isPremiumSource?: boolean;
+  integrity?: {
+    quantity: { sourceType: string | null; confirmed: boolean };
+    rate: { sourceType: string | null; confirmed: boolean };
+  };
 };
 
 export type BOQSection = {

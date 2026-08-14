@@ -1,7 +1,7 @@
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import { getCurrentActor } from "@/lib/auth/current-actor";
-import { setActorContext } from "@/lib/auth/request-context";
+import { setActorContext, withActorRequestContext } from "@/lib/auth/request-context";
 import { AppError, UnauthorizedError } from "@/lib/errors/app-error";
 import {
   createGoogleDriveOAuthState,
@@ -24,7 +24,7 @@ export const dynamic = "force-dynamic";
  * connectors previously lost this context the moment the browser left for
  * Google, unlike the already-connected in-app path.
  */
-export async function GET(request: Request) {
+async function GETHandler(request: Request) {
   try {
     const actor = await getCurrentActor();
     setActorContext(actor);
@@ -57,3 +57,5 @@ export async function GET(request: Request) {
     return NextResponse.redirect(new URL(`/integrations/google-drive/connect?connectError=${code}`, request.url));
   }
 }
+
+export const GET = withActorRequestContext(GETHandler);

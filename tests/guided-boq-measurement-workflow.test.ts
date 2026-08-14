@@ -6,9 +6,10 @@ import { createClient } from "../src/lib/repositories/client-repository";
 import { createProjectWithDefaultBoq } from "../src/lib/services/project-service";
 import { NotFoundError } from "../src/lib/errors/app-error";
 import { LockedBOQError } from "../src/lib/domain/boq-guards";
-import { lockBOQ } from "../src/lib/repositories/boq-repository";
+import { confirmBOQItemIntegrity, createBOQItem, lockBOQ } from "../src/lib/repositories/boq-repository";
 import { runBOQVerification } from "../src/lib/repositories/verification-repository";
 import { grantUnlimitedPlanForTests } from "./helpers/grant-unlimited-plan";
+import { preserveIssuedEvidenceDuringCleanup } from "./helpers/preserve-issued-evidence";
 
 import { getRequiredDimensions, getMissingRequiredDimensions } from "../src/lib/calculations/required-dimensions-registry";
 import type { DimensionValue } from "../src/lib/calculations/required-dimensions-registry";
@@ -24,6 +25,7 @@ import {
 import { proposeCalculatedQuantityForItem, confirmCalculatedQuantityForItem } from "../src/lib/services/boq-quantity-update-service";
 import { importExtractedEntityToBoq } from "../src/lib/services/extraction-to-boq-service";
 import { correctExtractedEntity } from "../src/lib/services/extracted-entity-service";
+import { copyItemProvenance } from "../src/lib/services/estimate-integrity-service";
 
 const RUN_ID = `${Date.now()}-${process.pid}`;
 
@@ -141,6 +143,10 @@ describe("Guided BOQ measurement workflow (Release 1) — integration (real loca
   });
 
   afterAll(async () => {
+    if (await preserveIssuedEvidenceDuringCleanup([companyAId, companyBId])) {
+      await prisma.$disconnect();
+      return;
+    }
     await prisma.auditLog.deleteMany({ where: { companyId: { in: [companyAId, companyBId] } } });
     await prisma.quantityCalculation.deleteMany({ where: { companyId: { in: [companyAId, companyBId] } } });
     await prisma.extractedEntity.deleteMany({ where: { companyId: { in: [companyAId, companyBId] } } });
@@ -192,6 +198,103 @@ describe("Guided BOQ measurement workflow (Release 1) — integration (real loca
 
     const reloaded = await getCalculation(ownerActor(), created.id);
     expect(reloaded.status).toBe("CONFIRMED");
+  });
+
+  it("requires explicit professional confirmation to promote an unverified existing item", async () => {
+    const legacyItem = await prisma.bOQItem.create({
+      data: {
+        companyId: companyAId,
+        sectionId: sectionAId,
+        itemNumber: 799,
+        itemCode: `LEGACY-${RUN_ID}`,
+        category: "General",
+        description: "Existing item awaiting integrity confirmation",
+        quantity: 3,
+        unit: "ea",
+        unitCost: 25,
+        landedCost: 25,
+        marginPercentage: 10,
+        sellingRate: 27.5,
+        totalAmount: 82.5,
+        sortOrder: 799,
+      },
+    });
+    expect(await prisma.bOQItemQuantityProvenance.findUnique({ where: { boqItemId: legacyItem.id } })).toBeNull();
+
+    await confirmBOQItemIntegrity(companyAId, legacyItem.id, { userId: ownerUserId, name: ownerActor().fullName });
+    const [quantityProvenance, rateProvenance] = await Promise.all([
+      prisma.bOQItemQuantityProvenance.findUniqueOrThrow({ where: { boqItemId: legacyItem.id } }),
+      prisma.bOQItemRateProvenance.findUniqueOrThrow({ where: { boqItemId: legacyItem.id } }),
+    ]);
+    expect(quantityProvenance.sourceType).toBe("MANUAL_CONFIRMED");
+    expect(rateProvenance.sourceType).toBe("MANUAL_CONFIRMED");
+    expect(quantityProvenance.confirmedByUserId).toBe(ownerUserId);
+    expect(rateProvenance.confirmedByUserId).toBe(ownerUserId);
+  });
+
+  it("does not silently promote copied legacy-unverified evidence", async () => {
+    const base = {
+      companyId: companyAId,
+      sectionId: sectionAId,
+      category: "General",
+      description: "Legacy copy source",
+      quantity: 2,
+      unit: "ea",
+      unitCost: 10,
+      landedCost: 10,
+      marginPercentage: 5,
+      sellingRate: 10.5,
+      totalAmount: 21,
+    };
+    const source = await prisma.bOQItem.create({
+      data: { ...base, itemNumber: 797, itemCode: `LEGACY-SOURCE-${RUN_ID}`, sortOrder: 797 },
+    });
+    const target = await prisma.bOQItem.create({
+      data: { ...base, itemNumber: 798, itemCode: `LEGACY-COPY-${RUN_ID}`, sortOrder: 798 },
+    });
+    await prisma.bOQItemQuantityProvenance.create({
+      data: {
+        companyId: companyAId,
+        projectId: projectAId,
+        boqItemId: source.id,
+        sourceType: "LEGACY_UNVERIFIED",
+        quantitySnapshot: source.quantity,
+        unitSnapshot: source.unit,
+        confirmedByName: "Legacy data - confirmation unavailable",
+      },
+    });
+    await prisma.bOQItemRateProvenance.create({
+      data: {
+        companyId: companyAId,
+        projectId: projectAId,
+        boqItemId: source.id,
+        sourceType: "LEGACY_UNVERIFIED",
+        unitCostSnapshot: source.unitCost,
+        freightCostSnapshot: source.freightCost,
+        installationCostSnapshot: source.installationCost,
+        additionalCostSnapshot: source.additionalCost,
+        marginModeSnapshot: source.marginMode,
+        marginPercentageSnapshot: source.marginPercentage,
+        confirmedByName: "Legacy data - confirmation unavailable",
+      },
+    });
+
+    await prisma.$transaction((tx) => copyItemProvenance(tx, {
+      companyId: companyAId,
+      projectId: projectAId,
+      sourceItemId: source.id,
+      item: target,
+      actor: { userId: ownerUserId, name: ownerActor().fullName },
+    }));
+
+    const [quantityCopy, rateCopy] = await Promise.all([
+      prisma.bOQItemQuantityProvenance.findUniqueOrThrow({ where: { boqItemId: target.id } }),
+      prisma.bOQItemRateProvenance.findUniqueOrThrow({ where: { boqItemId: target.id } }),
+    ]);
+    expect(quantityCopy.sourceType).toBe("LEGACY_UNVERIFIED");
+    expect(rateCopy.sourceType).toBe("LEGACY_UNVERIFIED");
+    expect(quantityCopy.confirmedAt).toBeNull();
+    expect(rateCopy.confirmedAt).toBeNull();
   });
 
   it("preserves the ORIGINAL result across repeated overrides, never drifting to the last overridden value", async () => {
@@ -267,6 +370,10 @@ describe("Guided BOQ measurement workflow (Release 1) — integration (real loca
     await confirmCalculatedQuantityForItem(ownerActor(), item.id, calculation.id);
     const updatedItem = await prisma.bOQItem.findUniqueOrThrow({ where: { id: item.id } });
     expect(updatedItem.quantity.toNumber()).toBeCloseTo(49.52, 2);
+    const calculationProvenance = await prisma.bOQItemQuantityProvenance.findUniqueOrThrow({ where: { boqItemId: item.id } });
+    expect(calculationProvenance.sourceType).toBe("CONFIRMED_CALCULATION");
+    expect(calculationProvenance.quantityCalculationId).toBe(calculation.id);
+    expect(calculationProvenance.quantitySnapshot.toNumber()).toBeCloseTo(49.52, 2);
 
     const auditEntry = await prisma.auditLog.findFirst({
       where: { companyId: companyAId, entityId: item.id, action: "BOQ_QUANTITY_UPDATED_FROM_CALCULATION" },
@@ -370,6 +477,10 @@ describe("Guided BOQ measurement workflow (Release 1) — integration (real loca
     expect(imported.item.quantity.toNumber()).toBe(10);
     expect(imported.item.sourceReference).toBe(""); // entity had no sourceReference set
     expect(imported.item.confidenceScore.toNumber()).toBe(85);
+    const extractionProvenance = await prisma.bOQItemQuantityProvenance.findUniqueOrThrow({ where: { boqItemId: imported.item.id } });
+    expect(extractionProvenance.sourceType).toBe("REVIEWED_EXTRACTION");
+    expect(extractionProvenance.extractedEntityId).toBe(entity.id);
+    expect(extractionProvenance.projectFileId).toBe(projectFileAId);
 
     const reloadedEntity = await prisma.extractedEntity.findUniqueOrThrow({ where: { id: entity.id } });
     expect(reloadedEntity.status).toBe("IMPORTED");
@@ -416,27 +527,31 @@ describe("Guided BOQ measurement workflow (Release 1) — integration (real loca
     });
     const lockBoqId = boq.databaseId;
     const lockSectionId = boq.sections[0].id;
-    const lockItem = await prisma.bOQItem.create({
-      data: {
-        companyId: companyAId,
-        sectionId: lockSectionId,
-        itemNumber: 1,
-        itemCode: `LOCK-${RUN_ID}`,
-        category: "General",
-        description: "Item to be locked",
-        quantity: 5,
-        unit: "m2",
-        unitCost: 10,
-        marginPercentage: 10,
-        sellingRate: 11,
-        totalAmount: 55,
-        landedCost: 10,
-        sortOrder: 1,
-      },
-    });
+    const { item: lockItem } = await createBOQItem(companyAId, lockSectionId, {
+      itemNumber: 1,
+      itemCode: `LOCK-${RUN_ID}`,
+      category: "General",
+      description: "Item to be locked",
+      quantity: 5,
+      unit: "m2",
+      unitCost: 10,
+      marginPercentage: 10,
+      sortOrder: 1,
+    }, undefined, { integrityActor: { userId: ownerUserId, name: ownerActor().fullName } });
 
     await runBOQVerification(companyAId, lockBoqId);
     await lockBOQ(companyAId, lockBoqId, ownerActor().fullName, ownerUserId);
+    const frozenEvidence = await prisma.bOQRevisionItemEvidence.findFirstOrThrow({
+      where: { companyId: companyAId, boqItemId: lockItem.id },
+    });
+    expect(frozenEvidence.quantitySnapshot.toNumber()).toBe(5);
+    expect(frozenEvidence.unitCostSnapshot.toNumber()).toBe(10);
+    await expect(
+      prisma.bOQRevisionItemEvidence.update({
+        where: { id: frozenEvidence.id },
+        data: { itemCodeSnapshot: "TAMPERED" },
+      }),
+    ).rejects.toThrow(/immutable/i);
 
     const calculation = await createCalculation(ownerActor(), {
       projectId: lockProject.databaseId,

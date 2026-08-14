@@ -1,5 +1,6 @@
+import { createDirectPrismaClient } from "../src/lib/db/direct-prisma-client";
 import { fileURLToPath } from "node:url";
-import { PlatformRole, Prisma, PrismaClient, UserRole } from "@prisma/client";
+import { PlatformRole, Prisma, UserRole, type PrismaClient } from "@prisma/client";
 import { hashPassword } from "../src/lib/auth/password";
 import { passwordSchema } from "../src/lib/validation/auth-schemas";
 import {
@@ -226,7 +227,7 @@ function promptHidden(promptText: string): Promise<string> {
 
 async function runCli(): Promise<void> {
   const activateExisting = process.argv.includes("--activate");
-  const database = new PrismaClient();
+  const database = createDirectPrismaClient();
 
   try {
     const result = await provisionPlatformOwner(database, process.env.PLATFORM_OWNER_EMAIL, {

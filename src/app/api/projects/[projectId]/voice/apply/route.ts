@@ -1,5 +1,5 @@
 import { getCurrentActor } from "@/lib/auth/current-actor";
-import { setActorContext } from "@/lib/auth/request-context";
+import { setActorContext, withActorRequestContext } from "@/lib/auth/request-context";
 import { requireCapability } from "@/lib/auth/rbac";
 import { readSessionTokenFromCookies } from "@/lib/auth/session";
 import { apiSuccess, handleApiError, parseJsonBody } from "@/lib/http/api-response";
@@ -13,7 +13,7 @@ export const dynamic = "force-dynamic";
 type RouteContext = { params: Promise<{ projectId: string }> };
 
 /** The only voice route allowed to persist a change; requires the visible proposal's explicit confirmation. */
-export async function POST(request: Request, context: RouteContext) {
+async function POSTHandler(request: Request, context: RouteContext) {
   try {
     const actor = await getCurrentActor();
     setActorContext(actor);
@@ -29,3 +29,5 @@ export async function POST(request: Request, context: RouteContext) {
     return handleApiError(error);
   }
 }
+
+export const POST = withActorRequestContext(POSTHandler);

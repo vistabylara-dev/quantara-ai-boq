@@ -1,5 +1,6 @@
+import { createDirectPrismaClient } from "../src/lib/db/direct-prisma-client";
 import { fileURLToPath } from "node:url";
-import { PlatformRole, Prisma, PrismaClient } from "@prisma/client";
+import { PlatformRole, Prisma, type PrismaClient } from "@prisma/client";
 
 const BOOTSTRAP_ACTION = "PLATFORM_OWNER_BOOTSTRAPPED";
 const MAX_SERIALIZABLE_ATTEMPTS = 3;
@@ -158,7 +159,7 @@ function shortUserId(userId: string): string {
 }
 
 async function runCli(): Promise<void> {
-  const database = new PrismaClient();
+  const database = createDirectPrismaClient();
 
   try {
     const result = await bootstrapPlatformOwner(database);

@@ -1,6 +1,6 @@
 import { apiSuccess, handleApiError, parseJsonBody } from "@/lib/http/api-response";
 import { getCurrentActor } from "@/lib/auth/current-actor";
-import { setActorContext } from "@/lib/auth/request-context";
+import { setActorContext, withActorRequestContext } from "@/lib/auth/request-context";
 import { updateImportRow } from "@/lib/services/import-service";
 import { importRowUpdateSchema } from "@/lib/validation/phase7-schema";
 import { importJobRowIdParamsSchema } from "@/lib/validation/route-params";
@@ -12,7 +12,7 @@ type RouteContext = { params: Promise<{ importJobId: string; rowId: string }> };
 /** Patches in values a reviewer fills in by hand (missing item code, unit, etc.) and re-validates
  * the whole job so status/counts stay correct — used from the "ignore missing / fix in place"
  * flow on the import job page instead of forcing a full re-upload for one bad row. */
-export async function PATCH(request: Request, context: RouteContext) {
+async function PATCHHandler(request: Request, context: RouteContext) {
   try {
     const actor = await getCurrentActor();
     setActorContext(actor);
@@ -25,3 +25,5 @@ export async function PATCH(request: Request, context: RouteContext) {
     return handleApiError(error);
   }
 }
+
+export const PATCH = withActorRequestContext(PATCHHandler);

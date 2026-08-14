@@ -1,4 +1,5 @@
 import { createCipheriv, createDecipheriv, randomBytes } from "crypto";
+import { loadIntegrationCredentialsEncryptionKey } from "@/lib/config/security-secrets";
 
 /**
  * Symmetric encryption for OAuth tokens before they're persisted to
@@ -18,27 +19,9 @@ const ALGORITHM = "aes-256-gcm";
 const IV_LENGTH_BYTES = 12;
 const AUTH_TAG_LENGTH_BYTES = 16;
 
-function loadKey(): Buffer {
-  const raw = process.env.INTEGRATION_CREDENTIALS_ENCRYPTION_KEY;
-  if (!raw) {
-    throw new Error(
-      "INTEGRATION_CREDENTIALS_ENCRYPTION_KEY is not set. Generate one with `openssl rand -base64 32` " +
-        "and set it in the environment before connecting any integration provider.",
-    );
-  }
-  const key = Buffer.from(raw, "base64");
-  if (key.length !== 32) {
-    throw new Error(
-      `INTEGRATION_CREDENTIALS_ENCRYPTION_KEY must decode to exactly 32 bytes (got ${key.length}). ` +
-        "Generate one with `openssl rand -base64 32`.",
-    );
-  }
-  return key;
-}
-
 /** Encrypts a plaintext string (typically JSON-stringified token data). Returns a single base64 payload: iv || authTag || ciphertext. */
 export function encryptCredential(plaintext: string): string {
-  const key = loadKey();
+  const key = loadIntegrationCredentialsEncryptionKey();
   const iv = randomBytes(IV_LENGTH_BYTES);
   const cipher = createCipheriv(ALGORITHM, key, iv);
   const ciphertext = Buffer.concat([cipher.update(plaintext, "utf8"), cipher.final()]);
@@ -48,7 +31,7 @@ export function encryptCredential(plaintext: string): string {
 
 /** Reverses encryptCredential. Throws if the payload was tampered with or the key is wrong (GCM auth tag mismatch). */
 export function decryptCredential(payload: string): string {
-  const key = loadKey();
+  const key = loadIntegrationCredentialsEncryptionKey();
   const raw = Buffer.from(payload, "base64");
   const iv = raw.subarray(0, IV_LENGTH_BYTES);
   const authTag = raw.subarray(IV_LENGTH_BYTES, IV_LENGTH_BYTES + AUTH_TAG_LENGTH_BYTES);

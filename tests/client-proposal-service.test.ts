@@ -6,7 +6,7 @@ import { createProjectWithDefaultBoq } from "../src/lib/services/project-service
 import { createBOQItem, lockBOQ } from "../src/lib/repositories/boq-repository";
 import { runBOQVerification } from "../src/lib/repositories/verification-repository";
 import { createTemplate } from "../src/lib/repositories/document-template-repository";
-import { generateDocument } from "../src/lib/services/document-generation-service";
+import { deleteGeneratedDocument, generateDocument } from "../src/lib/services/document-generation-service";
 import { createEmailTemplate } from "../src/lib/repositories/email-template-repository";
 import { createReportTemplate } from "../src/lib/repositories/report-template-repository";
 import { createReportFromTemplate, generateReportDocument } from "../src/lib/services/technical-report-service";
@@ -32,6 +32,7 @@ import { NotFoundError, PermissionDeniedError } from "../src/lib/errors/app-erro
 import { localDocumentStorageAdapter } from "../src/lib/storage/local-document-storage-adapter";
 import type { CurrentActor } from "../src/lib/auth/current-actor";
 import { grantUnlimitedPlanForTests } from "./helpers/grant-unlimited-plan";
+import { preserveIssuedEvidenceDuringCleanup } from "./helpers/preserve-issued-evidence";
 
 const RUN_ID = Date.now();
 const userIdByCompany = new Map<string, string>();
@@ -198,6 +199,10 @@ describe("client proposal + email delivery (integration, real local Postgres)", 
     for (const key of cleanupStorageKeys) {
       await localDocumentStorageAdapter.deleteObject(key).catch(() => undefined);
     }
+    if (await preserveIssuedEvidenceDuringCleanup([companyAId, companyBId])) {
+      await prisma.$disconnect();
+      return;
+    }
     const companyIds = [companyAId, companyBId];
     await prisma.emailDispatch.deleteMany({ where: { companyId: { in: companyIds } } });
     await prisma.clientProposalEvent.deleteMany({ where: { companyId: { in: companyIds } } });
@@ -206,6 +211,7 @@ describe("client proposal + email delivery (integration, real local Postgres)", 
     await prisma.emailTemplate.deleteMany({ where: { companyId: { in: companyIds } } });
     await prisma.generatedDocument.deleteMany({ where: { companyId: { in: companyIds } } });
     await prisma.documentTemplate.deleteMany({ where: { companyId: { in: companyIds } } });
+    await prisma.technicalReportRetention.deleteMany({ where: { companyId: { in: companyIds } } });
     await prisma.generatedTechnicalReport.deleteMany({ where: { companyId: { in: companyIds } } });
     await prisma.technicalReportTemplateVersion.deleteMany({ where: { technicalReportTemplateId: { in: [reportTemplateAId, reportTemplateBId] } } });
     await prisma.technicalReportTemplate.deleteMany({ where: { companyId: { in: companyIds } } });
@@ -413,6 +419,37 @@ describe("client proposal + email delivery (integration, real local Postgres)", 
         }),
       ).rejects.toThrow(NotFoundError);
       await prisma.generatedDocument.delete({ where: { id: otherDoc.id } });
+    });
+
+    it("retains an issued proposal document, its bytes, attachment, and event history", async () => {
+      const { boq, documentId, project } = await fixture("issued-document-retention");
+      const { proposal } = await createProposalForProject(actor(companyAId), project.databaseId, {
+        sourceType: "BOQ_REVISION",
+        boqId: boq.id,
+        recipientEmail: "client@example.com",
+        recipientName: "Client",
+        documentIds: [documentId],
+      });
+      await markProposalReadyForCompany(actor(companyAId), proposal.id);
+      await markProposalSent(companyAId, proposal.id);
+      const document = await prisma.generatedDocument.findUniqueOrThrow({ where: { id: documentId } });
+      const eventCount = await prisma.clientProposalEvent.count({ where: { clientProposalId: proposal.id } });
+
+      await expect(deleteGeneratedDocument(actor(companyAId), documentId)).rejects.toMatchObject({ code: "DOCUMENT_RETENTION_LOCKED" });
+      await expect(prisma.generatedDocument.update({
+        where: { id: documentId },
+        data: { storageKey: "tampered-issued-document" },
+      })).rejects.toThrow();
+      await expect(prisma.generatedDocument.delete({ where: { id: documentId } })).rejects.toThrow();
+      await expect(prisma.clientProposal.delete({ where: { id: proposal.id } })).rejects.toThrow();
+
+      expect(await localDocumentStorageAdapter.objectExists(document.storageKey!)).toBe(true);
+      expect(await prisma.generatedDocument.findUnique({ where: { id: documentId } })).not.toBeNull();
+      expect(await prisma.clientProposalDocument.findUnique({
+        where: { clientProposalId_generatedDocumentId: { clientProposalId: proposal.id, generatedDocumentId: documentId } },
+      })).not.toBeNull();
+      expect(eventCount).toBeGreaterThan(0);
+      expect(await prisma.clientProposalEvent.count({ where: { clientProposalId: proposal.id } })).toBe(eventCount);
     });
 
     it("returns the existing active proposal instead of duplicating by default", async () => {
@@ -803,20 +840,13 @@ describe("client proposal + email delivery (integration, real local Postgres)", 
       ).rejects.toMatchObject({ code: "REPORT_REVISION_NOT_FINAL" });
     });
 
-    it("blocks creation when a completed report is somehow missing its generated document (defense in depth)", async () => {
-      const { project, report } = await reportFixture("missing-doc");
-      // COMPLETED always sets storageKey together in markReportCompleted — force an inconsistent
-      // row directly to prove the service-layer guard, mirroring the CRITICAL_VERIFICATION_EXCEPTIONS
-      // defense-in-depth test above for the BOQ path.
-      await prisma.generatedTechnicalReport.update({ where: { id: report.id }, data: { storageKey: null } });
+    it("prevents database-level corruption of a completed report's generated evidence", async () => {
+      const { report } = await reportFixture("immutable-completed-report");
       await expect(
-        createProposalForProject(actor(companyAId), project.databaseId, {
-          sourceType: "TECHNICAL_REPORT_REVISION",
-          technicalReportId: report.id,
-          recipientEmail: "client@example.com",
-          recipientName: "Client",
-        }),
-      ).rejects.toMatchObject({ code: "GENERATED_DOCUMENT_REQUIRED" });
+        prisma.generatedTechnicalReport.update({ where: { id: report.id }, data: { storageKey: null } }),
+      ).rejects.toThrow();
+      expect((await prisma.generatedTechnicalReport.findUniqueOrThrow({ where: { id: report.id } })).storageKey).not.toBeNull();
+      expect(await prisma.technicalReportRetention.findUnique({ where: { generatedTechnicalReportId: report.id } })).not.toBeNull();
     });
 
     it("rejects a technical report belonging to a different company (tenant isolation)", async () => {

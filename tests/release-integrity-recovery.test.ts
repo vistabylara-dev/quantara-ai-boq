@@ -98,7 +98,7 @@ describe("Release integrity recovery", () => {
     );
     expect(source).toContain("const activeRevisionId = activeRevision?.id ?? null;");
     expect(source).toContain("encodeURIComponent(activeRevisionId)");
-    expect(source).toContain("}, [activeRevisionId]);");
+    expect(source).toContain("}, [activeRevisionId, locale, t]);");
     expect(source).not.toContain("}, [activeRevision]);");
   });
 });

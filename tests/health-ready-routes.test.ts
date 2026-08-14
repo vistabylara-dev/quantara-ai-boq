@@ -28,6 +28,7 @@ vi.mock("../src/lib/cloudflare/env", () => ({
 describe("GET /api/health", () => {
   afterEach(() => {
     queryRawMock.mockReset();
+    vi.unstubAllEnvs();
     getPrismaConnectionMethodMock.mockReset();
     isCloudflareRuntimeMock.mockReset();
   });
@@ -85,6 +86,7 @@ describe("GET /api/health", () => {
 describe("GET /api/ready", () => {
   afterEach(() => {
     queryRawMock.mockReset();
+    vi.unstubAllEnvs();
   });
 
   it("returns 200 when the readiness query succeeds", async () => {
@@ -108,5 +110,71 @@ describe("GET /api/ready", () => {
     const body = (await response.json()) as ApiErrorBody;
     expect(body.ok).toBe(false);
     expect(body.error.code).toBe("DATABASE_UNAVAILABLE");
+  });
+
+  it("fails readiness closed in production when a required security secret is missing", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("PROPOSAL_ACCESS_SECRET", "");
+    vi.stubEnv("INTEGRATION_CREDENTIALS_ENCRYPTION_KEY", Buffer.alloc(32, 4).toString("base64"));
+    vi.stubEnv("WORKER_RUNNER_SECRET", "production-worker-secret-with-more-than-thirty-two-bytes");
+    vi.stubEnv("WORKER_AI_PLANNER_ENABLED", "false");
+
+    const { GET } = await import("../src/app/api/ready/route");
+    const response = await GET();
+
+    expect(response.status).toBe(503);
+    expect(queryRawMock).not.toHaveBeenCalled();
+    const body = (await response.json()) as ApiErrorBody;
+    expect(body.error.code).toBe("SECURITY_CONFIGURATION_UNAVAILABLE");
+    expect(JSON.stringify(body)).not.toContain("PROPOSAL_ACCESS_SECRET");
+  });
+
+  it("accepts valid production security configuration before checking the database", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("PROPOSAL_ACCESS_SECRET", "production-proposal-secret-with-more-than-thirty-two-bytes");
+    vi.stubEnv("INTEGRATION_CREDENTIALS_ENCRYPTION_KEY", Buffer.alloc(32, 4).toString("base64"));
+    vi.stubEnv("WORKER_RUNNER_SECRET", "production-worker-secret-with-more-than-thirty-two-bytes");
+    vi.stubEnv("WORKER_AI_PLANNER_ENABLED", "false");
+    queryRawMock.mockResolvedValue([{ "?column?": 1 }]);
+
+    const { GET } = await import("../src/app/api/ready/route");
+    const response = await GET();
+
+    expect(response.status).toBe(200);
+    expect(queryRawMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("fails readiness closed in production when the worker runner secret is missing", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("PROPOSAL_ACCESS_SECRET", "production-proposal-secret-with-more-than-thirty-two-bytes");
+    vi.stubEnv("INTEGRATION_CREDENTIALS_ENCRYPTION_KEY", Buffer.alloc(32, 4).toString("base64"));
+    vi.stubEnv("WORKER_RUNNER_SECRET", "");
+    vi.stubEnv("WORKER_AI_PLANNER_ENABLED", "false");
+
+    const { GET } = await import("../src/app/api/ready/route");
+    const response = await GET();
+
+    expect(response.status).toBe(503);
+    expect(queryRawMock).not.toHaveBeenCalled();
+    const body = (await response.json()) as ApiErrorBody;
+    expect(body.error.code).toBe("SECURITY_CONFIGURATION_UNAVAILABLE");
+    expect(JSON.stringify(body)).not.toContain("WORKER_RUNNER_SECRET");
+  });
+
+  it("fails readiness closed when the bounded AI planner lacks its model", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("PROPOSAL_ACCESS_SECRET", "production-proposal-secret-with-more-than-thirty-two-bytes");
+    vi.stubEnv("INTEGRATION_CREDENTIALS_ENCRYPTION_KEY", Buffer.alloc(32, 4).toString("base64"));
+    vi.stubEnv("WORKER_RUNNER_SECRET", "production-worker-secret-with-more-than-thirty-two-bytes");
+    vi.stubEnv("WORKER_AI_PLANNER_ENABLED", "true");
+    vi.stubEnv("OPENAI_API_KEY", "server-side-test-key");
+    vi.stubEnv("WORKER_AI_MODEL", "");
+
+    const { GET } = await import("../src/app/api/ready/route");
+    const response = await GET();
+
+    expect(response.status).toBe(503);
+    expect(queryRawMock).not.toHaveBeenCalled();
+    expect((await response.json() as ApiErrorBody).error.code).toBe("SECURITY_CONFIGURATION_UNAVAILABLE");
   });
 });

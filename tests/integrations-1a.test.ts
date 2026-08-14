@@ -58,9 +58,22 @@ describe("INTEGRATIONS-1A: AEC applications and connected data hub foundation (i
       expect(new Set(ids).size).toBe(ids.length);
     });
 
-    it("marks only Google Drive as BETA and leaves every other cloud provider non-live", () => {
+    it("marks only the implemented Google Drive and Autodesk metadata paths as BETA", () => {
       const liveProviders = PROVIDER_REGISTRY.filter((provider) => ["AVAILABLE", "BETA"].includes(provider.status));
-      expect(liveProviders.map((provider) => provider.id)).toEqual(["google-drive"]);
+      expect(liveProviders.map((provider) => provider.id)).toEqual(["autodesk", "autocad", "google-drive"]);
+      expect(getProviderById("autodesk")).toMatchObject({
+        status: "BETA",
+        supportedData: [
+          "Autodesk account connection",
+          "Hub and project browsing",
+          "Folder and file browsing",
+          "Reviewable DWG metadata extraction candidates",
+        ],
+      });
+      expect(getProviderById("autocad")).toMatchObject({
+        status: "BETA",
+        supportedData: ["DWG cloud file discovery via Autodesk", "Reviewable DWG metadata extraction candidates"],
+      });
       expect(getProviderById("google-drive")).toMatchObject({
         status: "BETA",
         supportedData: ["Folder/file browsing", "Selected supported file import into a Quantara project"],

@@ -1,3 +1,4 @@
+import { createDirectPrismaClient } from "../src/lib/db/direct-prisma-client";
 /**
  * CATALOGUE-CLOSE — normalizes the 13 validated, staged plumbing CSVs
  * (data-imports/plumbing/*.csv, 13,111 rows combined) into the master
@@ -11,10 +12,10 @@
  */
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
-import { PrismaClient, PlatformRole } from "@prisma/client";
+import { PlatformRole } from "@prisma/client";
 import { dryRunPlumbingImport, executePlumbingImport } from "../src/lib/services/plumbing-master-import-service";
 
-const prisma = new PrismaClient();
+const prisma = createDirectPrismaClient();
 const DIR = "data-imports/plumbing";
 
 async function run() {

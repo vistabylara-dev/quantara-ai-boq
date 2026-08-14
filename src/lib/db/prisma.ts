@@ -7,20 +7,18 @@ type ConnectionMethod = "direct" | "hyperdrive";
 
 /**
  * Thrown when running inside a Cloudflare Worker with no `HYPERDRIVE`
- * binding configured. Verified empirically (via `wrangler dev` against the
- * actual OpenNext build): the standard Prisma Client's binary query engine
- * cannot load inside the Workers V8 isolate at all — attempting the
- * Node.js "direct" fallback there fails with a low-level, confusing
- * "could not locate the Query Engine for runtime ..." error instead of an
- * actionable one. Unlike Node.js, there is no safe direct-connection
- * fallback in a Worker, so this is raised explicitly instead.
+ * binding configured. The generated client uses Prisma's JavaScript engine
+ * and the pg driver adapter, but production Worker connections are still
+ * required to go through the explicitly configured Hyperdrive binding.
+ * Unlike local Node.js development, there is no authorized direct-origin
+ * fallback in the Worker, so this is raised explicitly instead.
  */
 export class HyperdriveNotConfiguredError extends Error {
   constructor() {
     super(
       "Running inside a Cloudflare Worker but no HYPERDRIVE binding is configured. " +
-        "The Prisma binary query engine cannot run in the Workers runtime, so there is " +
-        "no direct-connection fallback here. Add a hyperdrive binding to wrangler.jsonc " +
+        "Direct-origin database fallback is disabled in the Workers runtime. " +
+        "Add a Hyperdrive binding to wrangler.jsonc " +
         "— see docs/cloudflare-hyperdrive-setup.md.",
     );
     this.name = "HyperdriveNotConfiguredError";
@@ -89,20 +87,20 @@ function createDirectClient(): PrismaClient {
 }
 
 /**
- * Hyperdrive already pools connections to the origin Postgres centrally, so
- * each Worker isolate only needs a small local pool to borrow connections
- * from it. Workers can scale to many concurrent isolates, so a large
- * per-isolate `max` here would multiply against isolate count and exhaust
- * Hyperdrive's own connection budget rather than protect it.
+ * Hyperdrive already pools connections to the origin Postgres centrally.
+ * OpenNext requests must not share a pg Pool across request boundaries, so
+ * the Worker path creates a fresh adapter for each top-level Prisma operation
+ * and retires each borrowed connection after one use. The Node/local path
+ * below remains cached because it runs in a normal long-lived process.
  */
 function createHyperdriveClient(connectionString: string): PrismaClient {
-  const pool = new Pool({
+  const adapter = new PrismaPg({
     connectionString,
-    max: 5,
+    max: 1,
+    maxUses: 1,
     idleTimeoutMillis: 30_000,
     connectionTimeoutMillis: 5_000,
   });
-  const adapter = new PrismaPg(pool);
   return new PrismaClient({ adapter, log: logLevels, ...(PENDING_MASTER_BOQ_1A_OMIT ? { omit: PENDING_MASTER_BOQ_1A_OMIT } : {}) });
 }
 
@@ -110,6 +108,20 @@ let cachedClient: PrismaClient | undefined;
 let cachedConnectionMethod: ConnectionMethod | undefined;
 
 function resolveClient(): PrismaClient {
+  // A Worker may reuse its module scope for many requests, but pg sockets and
+  // pools are request-scoped resources in workerd. Never put the Hyperdrive
+  // client into `cachedClient`; doing so makes the first request succeed and a
+  // later request hang when it tries to reuse the earlier request's I/O state.
+  const hyperdrive = getHyperdriveBinding();
+  if (hyperdrive) {
+    cachedConnectionMethod = "hyperdrive";
+    return createHyperdriveClient(hyperdrive.connectionString);
+  }
+
+  if (isCloudflareRuntime()) {
+    throw new HyperdriveNotConfiguredError();
+  }
+
   if (cachedClient) return cachedClient;
 
   // Outside production (i.e. `next dev`), Next.js Fast Refresh re-evaluates
@@ -129,16 +141,8 @@ function resolveClient(): PrismaClient {
   // Resolved lazily (on first real use) rather than at module load: in a
   // Cloudflare Worker, bindings like Hyperdrive only become available once
   // a request is being handled, not during cold-start module evaluation.
-  const hyperdrive = getHyperdriveBinding();
-  if (hyperdrive) {
-    cachedClient = createHyperdriveClient(hyperdrive.connectionString);
-    cachedConnectionMethod = "hyperdrive";
-  } else if (isCloudflareRuntime()) {
-    throw new HyperdriveNotConfiguredError();
-  } else {
-    cachedClient = createDirectClient();
-    cachedConnectionMethod = "direct";
-  }
+  cachedClient = createDirectClient();
+  cachedConnectionMethod = "direct";
 
   if (process.env.NODE_ENV !== "production") {
     globalForPrisma.quantaraPrisma = cachedClient;

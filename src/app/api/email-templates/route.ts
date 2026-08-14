@@ -1,7 +1,7 @@
 import { EmailTemplateCategory } from "@prisma/client";
 import { apiSuccess, handleApiError, parseJsonBody } from "@/lib/http/api-response";
 import { getCurrentActor } from "@/lib/auth/current-actor";
-import { setActorContext } from "@/lib/auth/request-context";
+import { setActorContext, withActorRequestContext } from "@/lib/auth/request-context";
 import {
   createEmailTemplateForCompany,
   listEmailTemplatesForCompany,
@@ -19,7 +19,7 @@ function parseCategory(value: string | null): EmailTemplateCategory | null {
 /** ?category=BOQ|TECHNICAL_REPORT|GENERAL scopes the list to a single send flow's own templates
  *  (active only) — used by the proposal and technical-report send pickers. Omit it to get the full
  *  list (active + inactive, per includeInactive) for the Settings management page. */
-export async function GET(request: Request) {
+async function GETHandler(request: Request) {
   try {
     const actor = await getCurrentActor();
     setActorContext(actor);
@@ -37,7 +37,7 @@ export async function GET(request: Request) {
   }
 }
 
-export async function POST(request: Request) {
+async function POSTHandler(request: Request) {
   try {
     const actor = await getCurrentActor();
     setActorContext(actor);
@@ -48,3 +48,6 @@ export async function POST(request: Request) {
     return handleApiError(error);
   }
 }
+
+export const GET = withActorRequestContext(GETHandler);
+export const POST = withActorRequestContext(POSTHandler);

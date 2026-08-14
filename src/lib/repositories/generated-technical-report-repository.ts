@@ -1,12 +1,13 @@
 import { GeneratedDocumentType, Prisma, TechnicalReportStatus } from "@prisma/client";
 import { prisma } from "@/lib/db/prisma";
-import { NotFoundError } from "@/lib/errors/app-error";
+import { AppError, NotFoundError } from "@/lib/errors/app-error";
 import { createAuditLog } from "@/lib/repositories/audit-repository";
 import type { ReportTemplateSections } from "@/lib/documents/report-template-sections";
 import { generateReportShareToken, hashReportShareToken } from "@/lib/documents/technical-report-share";
 
 const reportInclude = {
   template: { select: { id: true, name: true, code: true } },
+  retention: { select: { protectedAt: true, reason: true } },
   templateVersion: { select: { versionNumber: true } },
 } satisfies Prisma.GeneratedTechnicalReportInclude;
 
@@ -33,6 +34,9 @@ export function toGeneratedTechnicalReportDTO(row: ReportRecord) {
     fileSize: row.fileSize,
     checksum: row.checksum,
     generatedByUserId: row.generatedByUserId,
+    retentionLocked: Boolean(row.retention),
+    retentionReason: row.retention?.reason ?? null,
+    canDelete: row.status === TechnicalReportStatus.DRAFT && !row.retention,
     generatedByName: row.generatedByName,
     errorMessage: row.errorMessage,
     // The token hash itself is never exposed to any API response — only whether a link currently
@@ -111,6 +115,13 @@ export async function listGeneratedTechnicalReportsForProject(companyId: string,
 
 export async function updateReportFieldValues(companyId: string, reportId: string, fieldValues: Record<string, string>) {
   const current = await getReportRecord(companyId, reportId);
+  if (current.status === TechnicalReportStatus.COMPLETED || current.retention) {
+    throw new AppError(
+      "TECHNICAL_REPORT_IMMUTABLE",
+      "Completed technical reports are immutable. Create a new report revision instead.",
+      409,
+    );
+  }
   const updated = await prisma.generatedTechnicalReport.update({
     where: { id: current.id, companyId },
     data: { fieldValuesJson: fieldValues as unknown as Prisma.InputJsonValue },
@@ -145,13 +156,21 @@ export async function markReportCompleted(companyId: string, reportId: string, i
       },
       include: reportInclude,
     });
+    await tx.technicalReportRetention.upsert({
+      where: { generatedTechnicalReportId: row.id },
+      update: {},
+      create: { companyId, generatedTechnicalReportId: row.id, reason: "COMPLETED" },
+    });
     await createAuditLog(companyId, {
       entityType: "GeneratedTechnicalReport",
       entityId: row.id,
       action: "TECHNICAL_REPORT_GENERATED",
       payload: { fileName: row.fileName, fileSize: row.fileSize, checksum: row.checksum },
     }, tx);
-    return row;
+    return tx.generatedTechnicalReport.findUniqueOrThrow({
+      where: { id: row.id },
+      include: reportInclude,
+    });
   });
   return toGeneratedTechnicalReportDTO(updated);
 }
@@ -227,6 +246,13 @@ export async function revokeReportShareLink(companyId: string, reportId: string)
 
 export async function deleteGeneratedTechnicalReport(companyId: string, reportId: string) {
   const current = await getReportRecord(companyId, reportId);
+  if (current.status === TechnicalReportStatus.COMPLETED || current.retention) {
+    throw new AppError(
+      "TECHNICAL_REPORT_RETENTION_LOCKED",
+      "Completed technical reports are retained as governed evidence and cannot be deleted.",
+      409,
+    );
+  }
   await prisma.$transaction(async (tx) => {
     await tx.generatedTechnicalReport.delete({ where: { id: current.id, companyId } });
     await createAuditLog(companyId, {

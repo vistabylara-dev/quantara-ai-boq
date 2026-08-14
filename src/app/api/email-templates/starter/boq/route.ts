@@ -1,6 +1,6 @@
 import { apiSuccess, handleApiError } from "@/lib/http/api-response";
 import { getCurrentActor } from "@/lib/auth/current-actor";
-import { setActorContext } from "@/lib/auth/request-context";
+import { setActorContext, withActorRequestContext } from "@/lib/auth/request-context";
 import { installBoqStarterTemplatesForCompany } from "@/lib/services/email-template-service";
 
 export const dynamic = "force-dynamic";
@@ -9,7 +9,7 @@ export const dynamic = "force-dynamic";
  * Installs the two built-in BOQ proposal email starter templates (attached / secure-link) into the
  * caller's company. Idempotent — safe to call more than once.
  */
-export async function POST() {
+async function POSTHandler() {
   try {
     const actor = await getCurrentActor();
     setActorContext(actor);
@@ -19,3 +19,5 @@ export async function POST() {
     return handleApiError(error);
   }
 }
+
+export const POST = withActorRequestContext(POSTHandler);

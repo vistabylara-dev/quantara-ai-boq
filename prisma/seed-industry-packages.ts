@@ -1,3 +1,4 @@
+import { createDirectPrismaClient } from "../src/lib/db/direct-prisma-client";
 /**
  * Seeds IndustryDataPackage + IndustryDataPackageItem rows from real
  * MasterItem data already in the database, so the /marketplace page has
@@ -14,10 +15,9 @@
  *
  * Usage: npx tsx prisma/seed-industry-packages.ts
  */
-import { PrismaClient } from "@prisma/client";
 import { createPackage, addItemsToPackage } from "../src/lib/repositories/industry-package-repository";
 
-const prisma = new PrismaClient();
+const prisma = createDirectPrismaClient();
 
 const DISCIPLINE_PACKAGES: {
   disciplineName: string;

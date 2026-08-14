@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { apiSuccess, handleApiError } from "@/lib/http/api-response";
 import { getCurrentActor } from "@/lib/auth/current-actor";
-import { setActorContext } from "@/lib/auth/request-context";
+import { setActorContext, withActorRequestContext } from "@/lib/auth/request-context";
 import { listProjectIntegrationsForActor } from "@/lib/services/integration-service";
 import { linkProjectSource } from "@/lib/services/project-integration-service";
 import { projectIdParamsSchema } from "@/lib/validation/boq-route-schemas";
@@ -21,7 +21,7 @@ const linkSchema = z.object({
 });
 
 /** External project/model/folder/file links for this Quantara project. */
-export async function GET(_request: Request, context: RouteContext) {
+async function GETHandler(_request: Request, context: RouteContext) {
   try {
     const actor = await getCurrentActor();
     setActorContext(actor);
@@ -34,7 +34,7 @@ export async function GET(_request: Request, context: RouteContext) {
 }
 
 /** Links a connected external source (project/folder/file/model/version) to this Quantara project. */
-export async function POST(request: Request, context: RouteContext) {
+async function POSTHandler(request: Request, context: RouteContext) {
   try {
     const actor = await getCurrentActor();
     setActorContext(actor);
@@ -45,3 +45,6 @@ export async function POST(request: Request, context: RouteContext) {
     return handleApiError(error);
   }
 }
+
+export const GET = withActorRequestContext(GETHandler);
+export const POST = withActorRequestContext(POSTHandler);

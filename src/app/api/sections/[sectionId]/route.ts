@@ -1,6 +1,6 @@
 import { apiSuccess, handleApiError, parseJsonBody } from "@/lib/http/api-response";
 import { getCurrentActor } from "@/lib/auth/current-actor";
-import { setActorContext } from "@/lib/auth/request-context";
+import { setActorContext, withActorRequestContext } from "@/lib/auth/request-context";
 import { requireCapability } from "@/lib/auth/rbac";
 import {
   deleteBOQSection,
@@ -15,7 +15,7 @@ export const dynamic = "force-dynamic";
 
 type RouteContext = { params: Promise<{ sectionId: string }> };
 
-export async function PUT(request: Request, context: RouteContext) {
+async function PUTHandler(request: Request, context: RouteContext) {
   try {
     const actor = await getCurrentActor();
     setActorContext(actor);
@@ -30,7 +30,7 @@ export async function PUT(request: Request, context: RouteContext) {
   }
 }
 
-export async function DELETE(_request: Request, context: RouteContext) {
+async function DELETEHandler(_request: Request, context: RouteContext) {
   try {
     const actor = await getCurrentActor();
     setActorContext(actor);
@@ -43,3 +43,6 @@ export async function DELETE(_request: Request, context: RouteContext) {
     return handleApiError(error);
   }
 }
+
+export const PUT = withActorRequestContext(PUTHandler);
+export const DELETE = withActorRequestContext(DELETEHandler);

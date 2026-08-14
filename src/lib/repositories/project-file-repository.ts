@@ -1,12 +1,13 @@
-import { Prisma, ProjectFileClassification, ProjectFileStatus } from "@prisma/client";
+import { ExtractionJobStatus, Prisma, ProjectFileClassification, ProjectFileStatus } from "@prisma/client";
 import { prisma } from "@/lib/db/prisma";
-import { NotFoundError } from "@/lib/errors/app-error";
+import { AppError, NotFoundError } from "@/lib/errors/app-error";
 import { getSourceProcessingCapability } from "@/lib/files/source-processing-capability";
 
 type DbClient = typeof prisma | Prisma.TransactionClient;
 
 const projectFileInclude = {
   uploadedByUser: { select: { id: true, fullName: true, email: true } },
+  archiveRecord: { select: { archivedAt: true, archivedByUserId: true } },
   classificationConfirmedByUser: { select: { id: true, fullName: true, email: true } },
 } satisfies Prisma.ProjectFileInclude;
 
@@ -46,6 +47,8 @@ export function toProjectFileDTO(row: ProjectFileRecord) {
     checksum: row.checksum,
     classification: row.classification,
     classificationConfidence: row.classificationConfidence?.toNumber() ?? null,
+    isArchived: row.status === ProjectFileStatus.ARCHIVED,
+    archivedAt: row.archiveRecord?.archivedAt.toISOString() ?? null,
     classificationConfirmedAt: row.classificationConfirmedAt?.toISOString() ?? null,
     classificationConfirmedBy: row.classificationConfirmedByUser
       ? { id: row.classificationConfirmedByUser.id, fullName: row.classificationConfirmedByUser.fullName }
@@ -112,7 +115,7 @@ export async function findProjectFileRecord(companyId: string, fileId: string, d
 
 export async function listProjectFiles(companyId: string, projectId: string, db: DbClient = prisma): Promise<ProjectFileRecord[]> {
   return db.projectFile.findMany({
-    where: { companyId, projectId },
+    where: { companyId, projectId, status: { not: ProjectFileStatus.ARCHIVED } },
     include: projectFileInclude,
     orderBy: { createdAt: "desc" },
   });
@@ -121,19 +124,65 @@ export async function listProjectFiles(companyId: string, projectId: string, db:
 /** Non-blocking duplicate signal — the caller decides whether to warn or proceed; uploads are never silently rejected on this alone. */
 export async function findDuplicateByChecksum(companyId: string, projectId: string, checksum: string, db: DbClient = prisma): Promise<ProjectFileRecord | null> {
   return db.projectFile.findFirst({
-    where: { companyId, projectId, checksum },
+    where: { companyId, projectId, checksum, status: { not: ProjectFileStatus.ARCHIVED } },
     include: projectFileInclude,
     orderBy: { createdAt: "desc" },
   });
 }
 
-export async function deleteProjectFileRow(companyId: string, fileId: string, db: DbClient = prisma): Promise<void> {
-  const result = await db.projectFile.deleteMany({ where: { id: fileId, companyId } });
-  if (result.count === 0) throw new NotFoundError("File not found.");
+export type ArchiveProjectFileResult = {
+  record: ProjectFileRecord;
+  alreadyArchived: boolean;
+};
+
+export async function archiveProjectFileRow(
+  companyId: string,
+  fileId: string,
+  archivedByUserId: string,
+  db: Prisma.TransactionClient,
+): Promise<ArchiveProjectFileResult> {
+  // Serialize archival against job creation. The ExtractionJob trigger takes a
+  // shared lock on this same row, so either the job commits first and is seen by
+  // the in-flight check below, or archival commits first and the job is rejected.
+  await db.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+    SELECT "id"
+    FROM "ProjectFile"
+    WHERE "id" = ${fileId}::uuid AND "companyId" = ${companyId}::uuid
+    FOR UPDATE
+  `);
+
+  const current = await db.projectFile.findFirst({
+    where: { id: fileId, companyId },
+    include: projectFileInclude,
+  });
+  if (!current) throw new NotFoundError("File not found.");
+  if (current.status === ProjectFileStatus.ARCHIVED && current.archiveRecord) {
+    return { record: current, alreadyArchived: true };
+  }
+
+  const inFlightJob = await db.extractionJob.findFirst({
+    where: {
+      companyId,
+      projectFileId: fileId,
+      status: { in: [ExtractionJobStatus.QUEUED, ExtractionJobStatus.RUNNING] },
+    },
+    select: { id: true },
+  });
+  if (inFlightJob) {
+    throw new AppError("FILE_PROCESSING_IN_PROGRESS", "Wait for active file processing to finish before archiving this source.", 409);
+  }
+
+  await db.projectFile.update({ where: { id: fileId }, data: { status: ProjectFileStatus.ARCHIVED } });
+  await db.projectFileArchive.upsert({
+    where: { projectFileId: fileId },
+    update: {},
+    create: { companyId, projectFileId: fileId, archivedByUserId },
+  });
+  return { record: await getProjectFileRecord(companyId, fileId, db), alreadyArchived: false };
 }
 
 export async function updateProjectFileStatus(companyId: string, fileId: string, status: ProjectFileStatus, db: DbClient = prisma): Promise<void> {
-  const result = await db.projectFile.updateMany({ where: { id: fileId, companyId }, data: { status } });
+  const result = await db.projectFile.updateMany({ where: { id: fileId, companyId, status: { not: ProjectFileStatus.ARCHIVED } }, data: { status } });
   if (result.count === 0) throw new NotFoundError("File not found.");
 }
 
@@ -155,6 +204,9 @@ export async function updateProjectFileMetadata(
   const row = await db.projectFile.findFirst({ where: { id: fileId, companyId } });
   if (!row) throw new NotFoundError("File not found.");
 
+  if (row.status === ProjectFileStatus.ARCHIVED) {
+    throw new AppError("FILE_ARCHIVED", "Archived project sources are immutable.", 409);
+  }
   return db.projectFile.update({
     where: { id: fileId },
     data: patch,
@@ -179,6 +231,9 @@ export async function applyAutoClassification(
   if (!file) throw new NotFoundError("File not found.");
 
   const existingMeta = (file.metadataJson as Record<string, unknown> | null) ?? {};
+  if (file.status === ProjectFileStatus.ARCHIVED) {
+    throw new AppError("FILE_ARCHIVED", "Archived project sources are immutable.", 409);
+  }
   const metadataJson = {
     ...existingMeta,
     autoClassification: { ...suggestion, ranAt: new Date().toISOString() },
@@ -214,6 +269,9 @@ export async function confirmOrReclassifyProjectFile(
   if (!file) throw new NotFoundError("File not found.");
 
   const isReclassification = newClassification !== undefined && newClassification !== file.classification;
+  if (file.status === ProjectFileStatus.ARCHIVED) {
+    throw new AppError("FILE_ARCHIVED", "Archived project sources are immutable.", 409);
+  }
   const updated = await db.projectFile.update({
     where: { id: fileId },
     data: {

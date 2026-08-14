@@ -28,18 +28,10 @@ import {
   previewCalculationSchema,
 } from "../src/lib/validation/quantity-calculation-schema";
 import { grantUnlimitedPlanForTests } from "./helpers/grant-unlimited-plan";
+import { requireIsolatedLocalTestDatabase } from "./helpers/require-isolated-test-database";
 
 const RUN_ID = `${Date.now()}-${process.pid}`;
 
-function requireIsolatedLocalTestDatabase(): void {
-  const rawUrl = process.env.DATABASE_URL;
-  if (!rawUrl) throw new Error("DATABASE_URL is required for this integration test.");
-  const parsed = new URL(rawUrl);
-  const databaseName = parsed.pathname.replace(/^\//, "");
-  if (!["localhost", "127.0.0.1"].includes(parsed.hostname) || databaseName !== "quantara_e2e_boq") {
-    throw new Error("Refusing quantity-integrity integration test outside localhost/quantara_e2e_boq.");
-  }
-}
 
 function dim(
   key: string,
@@ -290,12 +282,12 @@ describe("Release 1 quantity integrity - persistence and atomic audit", () => {
   afterAll(async () => {
     if (!companyId) return;
     await prisma.auditLog.deleteMany({ where: { companyId } });
+    await prisma.bOQItem.deleteMany({ where: { companyId } });
     await prisma.quantityCalculation.deleteMany({ where: { companyId } });
     await prisma.extractedEntity.deleteMany({ where: { companyId } });
     await prisma.projectFile.deleteMany({ where: { companyId } });
     await prisma.verificationException.deleteMany({ where: { companyId } });
     await prisma.bOQRevisionSnapshot.deleteMany({ where: { companyId } });
-    await prisma.bOQItem.deleteMany({ where: { companyId } });
     await prisma.bOQSection.deleteMany({ where: { companyId } });
     await prisma.bOQ.deleteMany({ where: { companyId } });
     await prisma.project.deleteMany({ where: { companyId } });

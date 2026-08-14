@@ -1,6 +1,6 @@
-import { PlanType, SubscriptionStatus } from "@prisma/client";
+import { PlanType, PlatformRole, SubscriptionStatus } from "@prisma/client";
 import { prisma } from "@/lib/db/prisma";
-import { AppError, NotFoundError } from "@/lib/errors/app-error";
+import { AppError, NotFoundError, PermissionDeniedError } from "@/lib/errors/app-error";
 import { createAuditLog } from "@/lib/repositories/audit-repository";
 import type { CurrentActor } from "@/lib/auth/current-actor";
 import { companyHasPackageAccess, companyHasPackageAccessForItem } from "./package-entitlement-service";
@@ -172,11 +172,17 @@ export async function canCreateProject(companyId: string): Promise<CheckResult> 
 
   const activeProjectCount = await prisma.project.count({ where: { companyId } });
   if (activeProjectCount >= entitlements.maxProjects) {
-    return deny(
-      entitlements.isTrial
-        ? "The 3-day Pro trial allows one project. Upgrade to create additional projects."
-        : "The free plan allows one draft project. Upgrade to create additional projects.",
-    );
+    if (entitlements.isTrial) {
+      return deny("The 3-day Pro trial allows one project. Upgrade to create additional projects.");
+    }
+    if (entitlements.status === "NONE") {
+      return deny("The free plan allows one draft project. Upgrade to create additional projects.");
+    }
+    // A genuine paid, limited plan (e.g. Starter/Professional) — the message
+    // must name the actual plan and its actual limit, not the free-plan
+    // wording every non-trial limited plan previously got regardless of
+    // what the customer is paying for.
+    return deny(`${entitlements.planName} allows ${entitlements.maxProjects} project${entitlements.maxProjects === 1 ? "" : "s"}. Upgrade to create additional projects.`);
   }
   return allow();
 }
@@ -407,8 +413,39 @@ export async function startTrial(actor: CurrentActor): Promise<StartTrialResult>
   return { subscriptionId: subscription.id, trialExpiresAt: trialExpiresAt.toISOString() };
 }
 
-/** Development-only activation, clearly not a real payment flow (spec section 11/25). */
+/**
+ * Development activation/expiry is a manual test control, never a real
+ * payment path, and must never function as a free bypass of Stripe checkout
+ * for a real paying customer. Restricted to a platform-owner acting on a
+ * sandbox/demo company (Company.isTestCompany) — both facts are re-read
+ * fresh from the database here, never trusted from the session-cached
+ * actor, mirroring requirePlatformActor's own re-read discipline. This is
+ * the actual security boundary; hiding the controls in the UI (settings/
+ * subscription/page.tsx) is a UX convenience on top of this, not a
+ * substitute for it.
+ */
+async function assertDevelopmentControlsAllowed(actor: CurrentActor): Promise<void> {
+  const [company, user] = await Promise.all([
+    prisma.company.findUniqueOrThrow({ where: { id: actor.companyId }, select: { isTestCompany: true } }),
+    prisma.user.findUniqueOrThrow({ where: { id: actor.userId }, select: { companyId: true, platformRole: true, isActive: true, emailVerifiedAt: true } }),
+  ]);
+
+  if (!company.isTestCompany) {
+    throw new AppError(
+      "DEVELOPMENT_CONTROLS_NOT_AVAILABLE",
+      "Development plan activation is not available for this company. Use checkout to purchase a real subscription.",
+      403,
+    );
+  }
+  if (user.companyId !== actor.companyId || !user.isActive || !user.emailVerifiedAt || user.platformRole !== PlatformRole.PLATFORM_OWNER) {
+    throw new PermissionDeniedError("Development plan activation requires platform owner access.");
+  }
+}
+
+/** Development-only activation, clearly not a real payment flow (spec section 11/25). Test-company + platform-owner only — see assertDevelopmentControlsAllowed. */
 export async function activateDevelopmentSoftwarePlan(actor: CurrentActor, planKey: string): Promise<void> {
+  await assertDevelopmentControlsAllowed(actor);
+
   const plan = await prisma.softwarePlan.findUnique({ where: { key: planKey } });
   if (!plan) throw new NotFoundError("Software plan not found.");
 
@@ -428,12 +465,19 @@ export async function activateDevelopmentSoftwarePlan(actor: CurrentActor, planK
   });
 }
 
+/** Test-company + platform-owner only — see assertDevelopmentControlsAllowed. Never matches a Stripe-sourced subscription (source: "stripe" is explicitly excluded below), so a real paid subscription can never be expired through this development-only path. */
 export async function expireDevelopmentSoftwarePlan(actor: CurrentActor): Promise<void> {
+  await assertDevelopmentControlsAllowed(actor);
+
   const subscription = await prisma.companySoftwareSubscription.findFirst({
-    where: { companyId: actor.companyId, status: { in: [SubscriptionStatus.ACTIVE, SubscriptionStatus.TRIAL] } },
+    where: {
+      companyId: actor.companyId,
+      status: { in: [SubscriptionStatus.ACTIVE, SubscriptionStatus.TRIAL] },
+      source: { not: "stripe" },
+    },
     orderBy: { createdAt: "desc" },
   });
-  if (!subscription) throw new NotFoundError("No active subscription to expire.");
+  if (!subscription) throw new NotFoundError("No active development subscription to expire.");
 
   await prisma.$transaction(async (tx) => {
     await tx.companySoftwareSubscription.update({ where: { id: subscription.id }, data: { status: SubscriptionStatus.EXPIRED } });

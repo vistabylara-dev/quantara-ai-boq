@@ -1,30 +1,38 @@
-export const publicAccessOptions = [
-  {
-    name: "Controlled Early Access",
-    commercialTerms: "Access reviewed before activation",
-    description: "Request access to Quantara's currently supported BOQ workflows.",
-    features: [
-      "Supported text-based PDF, XLSX and CSV workflows",
-      "Structured BOQ review and project records",
-      "Professional review required before commercial use",
-      "Workspace and feature availability confirmed during review"
-    ],
-    href: "/register",
-    ctaLabel: "Request Early Access",
-    featured: true
-  },
-  {
-    name: "Requirements and Commercial Review",
-    commercialTerms: "Custom written scope and quotation",
-    description: "Discuss organizational requirements before access or paid services are proposed.",
-    features: [
-      "Workflow and supported-format review",
-      "Configuration and integration availability check",
-      "Implementation scope documented before commitment",
-      "Commercial terms confirmed separately in writing"
-    ],
-    href: "/contact-sales",
-    ctaLabel: "Discuss Requirements",
-    featured: false
-  }
-] as const;
+import type { TranslateFn } from "@/lib/i18n/translate";
+
+export function getPublicAccessOptions(t: TranslateFn) {
+  return [
+    {
+      key: "ACCOUNT_ONBOARDING",
+      name: t("publicContent.pricing.accountName"),
+      commercialTerms: t("publicContent.pricing.accountTerms"),
+      description: t("publicContent.pricing.accountDescription"),
+      features: [
+        t("publicContent.pricing.accountFeatureFormats"),
+        t("publicContent.pricing.accountFeatureReview"),
+        t("publicContent.pricing.accountFeatureProfessional"),
+        t("publicContent.pricing.accountFeatureControlled"),
+      ],
+      href: "/register",
+      ctaLabel: t("publicContent.cta.startAccountSetup"),
+      featured: true,
+    },
+    {
+      key: "ENTERPRISE_REVIEW",
+      name: t("publicContent.pricing.enterpriseName"),
+      commercialTerms: t("publicContent.pricing.enterpriseTerms"),
+      description: t("publicContent.pricing.enterpriseDescription"),
+      features: [
+        t("publicContent.pricing.enterpriseFeatureWorkflow"),
+        t("publicContent.pricing.enterpriseFeatureConfiguration"),
+        t("publicContent.pricing.enterpriseFeatureScope"),
+        t("publicContent.pricing.enterpriseFeatureWritten"),
+      ],
+      href: "/contact-sales",
+      ctaLabel: t("publicContent.pricing.discussRequirements"),
+      featured: false,
+    },
+  ] as const;
+}
+
+export type PublicAccessOption = ReturnType<typeof getPublicAccessOptions>[number];

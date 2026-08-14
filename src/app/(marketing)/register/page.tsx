@@ -1,10 +1,19 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useSearchParams } from "next/navigation";
+import { Suspense, useEffect, useRef, useState, type FormEvent } from "react";
 import { CheckCircle2 } from "lucide-react";
 import { apiClient, getApiErrorMessage } from "@/lib/api/client";
-import { publicAccessOptions } from "@/config/pricing";
+import { getPublicAccessOptions } from "@/config/pricing";
+import { useLocale, useTranslations } from "@/lib/i18n/locale-provider";
+import {
+  buildLoginPricingHref,
+  normalizePublicPriceCode,
+  readPendingPricingIntent,
+  storePendingPricingIntent,
+  type TrustedPublicPriceCode,
+} from "@/lib/commercial/pricing-intent";
 
 function AccessOptionsFieldset({
   selectedOption,
@@ -13,11 +22,14 @@ function AccessOptionsFieldset({
   selectedOption: string;
   onSelect: (option: string) => void;
 }) {
+  const t = useTranslations();
+  const publicAccessOptions = getPublicAccessOptions(t);
+
   return (
     <fieldset>
-      <legend className="text-3xl font-bold text-slate-900 dark:text-white mb-6">Choose How You Want to Start</legend>
+      <legend className="text-3xl font-bold text-slate-900 dark:text-white mb-6">{t("publicContent.accountSetup.choiceHeading")}</legend>
       <p id="access-options-help" className="text-slate-600 dark:text-slate-400 mb-8">
-        This selection records a preference only. It does not create a purchase, subscription, invoice, trial or product entitlement. Availability and any future commercial terms are confirmed separately in writing.
+        {t("publicContent.accountSetup.choiceHelp")}
       </p>
 
       <div className="space-y-6">
@@ -25,11 +37,11 @@ function AccessOptionsFieldset({
           const optionId = `access-option-${index}`;
           const descriptionId = `${optionId}-description`;
           const featuresId = `${optionId}-features`;
-          const isSelected = selectedOption === option.name;
+          const isSelected = selectedOption === option.key;
 
           return (
             <div
-              key={option.name}
+              key={option.key}
               className={`rounded-2xl p-6 ring-1 transition-all focus-within:ring-2 focus-within:ring-blue-500 ${
                 isSelected
                   ? "ring-2 ring-blue-600 bg-blue-50/50 dark:bg-blue-900/20 shadow-md"
@@ -42,9 +54,9 @@ function AccessOptionsFieldset({
                     id={optionId}
                     type="radio"
                     name="accessOption"
-                    value={option.name}
+                    value={option.key}
                     checked={isSelected}
-                    onChange={() => onSelect(option.name)}
+                    onChange={() => onSelect(option.key)}
                     aria-describedby={`${descriptionId} ${featuresId}`}
                     className="sr-only"
                   />
@@ -57,12 +69,12 @@ function AccessOptionsFieldset({
                     </span>
                   </label>
                 </div>
-                <p className="max-w-48 text-right text-sm font-semibold text-slate-700 dark:text-slate-300">
+                <p className="max-w-48 text-end text-sm font-semibold text-slate-700 dark:text-slate-300">
                   {option.commercialTerms}
                 </p>
               </div>
-              <p id={descriptionId} className="text-sm text-slate-600 dark:text-slate-400 mb-4 pl-8">{option.description}</p>
-              <ul id={featuresId} className="space-y-2 text-sm text-slate-600 dark:text-slate-400 pl-8 grid sm:grid-cols-2 gap-x-4">
+              <p id={descriptionId} className="text-sm text-slate-600 dark:text-slate-400 mb-4 ps-8">{option.description}</p>
+              <ul id={featuresId} className="space-y-2 text-sm text-slate-600 dark:text-slate-400 ps-8 grid sm:grid-cols-2 gap-x-4">
                 {option.features.map((feature) => (
                   <li key={feature} className="flex gap-x-2">
                     <CheckCircle2 className="h-5 w-4 flex-none text-blue-600" aria-hidden="true" />
@@ -78,19 +90,24 @@ function AccessOptionsFieldset({
   );
 }
 
-export default function RegisterPage() {
+function RegisterForm() {
+  const t = useTranslations();
+  const { locale } = useLocale();
+  const searchParams = useSearchParams();
+  const publicAccessOptions = getPublicAccessOptions(t);
   const [companyName, setCompanyName] = useState("");
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  
+
   const [role, setRole] = useState("Quantity Surveyor");
   const [country, setCountry] = useState("");
   const [primaryIndustry, setPrimaryIndustry] = useState("");
   const [intendedUse, setIntendedUse] = useState("");
   const [approximateVolume, setApproximateVolume] = useState("");
-  const [selectedPackage, setSelectedPackage] = useState<string>(publicAccessOptions[0].name);
+  const [selectedPackage, setSelectedPackage] = useState<string>(publicAccessOptions[0].key);
   const [consent, setConsent] = useState(false);
+  const [pendingPriceCode, setPendingPriceCode] = useState<TrustedPublicPriceCode | null>(null);
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -101,6 +118,18 @@ export default function RegisterPage() {
     if (registered) successHeadingRef.current?.focus();
   }, [registered]);
 
+  useEffect(() => {
+    const queryPriceCode = normalizePublicPriceCode(searchParams.get("priceCode"));
+    if (queryPriceCode) {
+      storePendingPricingIntent(queryPriceCode);
+      setPendingPriceCode(queryPriceCode);
+    } else {
+      setPendingPriceCode(readPendingPricingIntent());
+    }
+  }, [searchParams]);
+
+  const signInHref = pendingPriceCode ? buildLoginPricingHref(pendingPriceCode) : "/login";
+
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
     setIsSubmitting(true);
@@ -108,11 +137,15 @@ export default function RegisterPage() {
     try {
       await apiClient.post("/api/auth/register", { 
         companyName, fullName, email, password,
-        role, country, primaryIndustry, intendedUse, approximateVolume, selectedPackage, consent
+        role, country, primaryIndustry, intendedUse: intendedUse || selectedPackage, approximateVolume, consent
       });
       setRegistered(true);
-    } catch (submitError) {
-      setError(getApiErrorMessage(submitError));
+    } catch (submitError: any) {
+      if (submitError?.code === "EMAIL_ALREADY_REGISTERED") {
+        setError(t("errors.emailAlreadyRegistered"));
+      } else {
+        setError(locale === "ar" ? t("errors.generic") : getApiErrorMessage(submitError));
+      }
     } finally {
       setIsSubmitting(false);
     }
@@ -122,15 +155,15 @@ export default function RegisterPage() {
     return (
       <div className="mx-auto max-w-md py-12">
         <div className="rounded-[32px] border border-slate-800 bg-slate-950 p-8">
-          <h1 ref={successHeadingRef} tabIndex={-1} className="text-2xl font-semibold text-white outline-none">Check your email</h1>
+          <h1 ref={successHeadingRef} tabIndex={-1} className="text-2xl font-semibold text-white outline-none">{t("publicContent.accountSetup.checkEmail")}</h1>
           <p className="mt-3 text-sm text-slate-400">
-            Your request was received. Follow any verification instructions sent to your business email. If none arrive, contact support before attempting to register again.
+            {t("publicContent.accountSetup.success")}
           </p>
           <Link
-            href="/login"
+            href={signInHref}
             className="mt-6 inline-flex rounded-2xl border border-slate-700 bg-slate-900 px-4 py-2 text-sm font-semibold text-slate-200 hover:bg-slate-800"
           >
-            Back to sign in
+            {t("publicContent.accountSetup.backToSignIn")}
           </Link>
         </div>
       </div>
@@ -143,16 +176,16 @@ export default function RegisterPage() {
         {/* Form Section */}
         <div className="rounded-[32px] border border-slate-800 bg-slate-950 p-8 lg:sticky lg:top-24 shadow-2xl">
           <p className="text-sm uppercase tracking-[0.28em] text-slate-500">Quantara</p>
-          <h1 className="mt-2 text-2xl font-semibold text-white">Request Early Access</h1>
+          <h1 className="mt-2 text-2xl font-semibold text-white">{t("publicContent.accountSetup.title")}</h1>
           <p className="mt-2 text-sm text-slate-400">
-            Creating an Early Access account does not begin a paid subscription or automatic billing. After submitting your request, our team reviews your company requirements.
+            {t("publicContent.accountSetup.intro")}
           </p>
 
           <form onSubmit={handleSubmit} className="mt-6 space-y-4">
             
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label className="text-sm text-slate-300" htmlFor="fullName">Full name</label>
+                <label className="text-sm text-slate-300" htmlFor="fullName">{t("publicContent.accountSetup.fullName")}</label>
                 <input
                   id="fullName"
                   required
@@ -162,11 +195,12 @@ export default function RegisterPage() {
                 />
               </div>
               <div>
-                <label className="text-sm text-slate-300" htmlFor="email">Business Email</label>
+                <label className="text-sm text-slate-300" htmlFor="email">{t("publicContent.accountSetup.businessEmail")}</label>
                 <input
                   id="email"
                   type="email"
                   required
+                  dir="ltr"
                   value={email}
                   onChange={(event) => setEmail(event.target.value)}
                   className="mt-1 w-full rounded-2xl border border-slate-800 bg-slate-900 px-4 py-3 text-sm text-white outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
@@ -176,7 +210,7 @@ export default function RegisterPage() {
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label className="text-sm text-slate-300" htmlFor="companyName">Company</label>
+                <label className="text-sm text-slate-300" htmlFor="companyName">{t("publicContent.accountSetup.company")}</label>
                 <input
                   id="companyName"
                   required
@@ -186,29 +220,29 @@ export default function RegisterPage() {
                 />
               </div>
               <div>
-                <label className="text-sm text-slate-300" htmlFor="role">Role</label>
+                <label className="text-sm text-slate-300" htmlFor="role">{t("publicContent.accountSetup.role")}</label>
                 <select
                   id="role"
                   value={role}
                   onChange={(event) => setRole(event.target.value)}
                   className="mt-1 w-full rounded-2xl border border-slate-800 bg-slate-900 px-4 py-3 text-sm text-white outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 appearance-none"
                 >
-                  <option value="Quantity Surveyor">Quantity Surveyor</option>
-                  <option value="Estimator">Estimator</option>
-                  <option value="Engineer">Engineer</option>
-                  <option value="Project Manager">Project Manager</option>
-                  <option value="Contractor">Contractor</option>
-                  <option value="Procurement Professional">Procurement Professional</option>
-                  <option value="Company Owner">Company Owner</option>
-                  <option value="Consultant">Consultant</option>
-                  <option value="Other">Other</option>
+                  <option value="Quantity Surveyor">{t("publicContent.accountSetup.roles.quantitySurveyor")}</option>
+                  <option value="Estimator">{t("publicContent.accountSetup.roles.estimator")}</option>
+                  <option value="Engineer">{t("publicContent.accountSetup.roles.engineer")}</option>
+                  <option value="Project Manager">{t("publicContent.accountSetup.roles.projectManager")}</option>
+                  <option value="Contractor">{t("publicContent.accountSetup.roles.contractor")}</option>
+                  <option value="Procurement Professional">{t("publicContent.accountSetup.roles.procurement")}</option>
+                  <option value="Company Owner">{t("publicContent.accountSetup.roles.owner")}</option>
+                  <option value="Consultant">{t("publicContent.accountSetup.roles.consultant")}</option>
+                  <option value="Other">{t("publicContent.accountSetup.roles.other")}</option>
                 </select>
               </div>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label className="text-sm text-slate-300" htmlFor="country">Country</label>
+                <label className="text-sm text-slate-300" htmlFor="country">{t("publicContent.accountSetup.country")}</label>
                 <input
                   id="country"
                   required
@@ -218,33 +252,33 @@ export default function RegisterPage() {
                 />
               </div>
               <div>
-                <label className="text-sm text-slate-300" htmlFor="approximateVolume">Monthly Project Volume</label>
+                <label className="text-sm text-slate-300" htmlFor="approximateVolume">{t("publicContent.accountSetup.monthlyVolume")}</label>
                 <select
                   id="approximateVolume"
                   value={approximateVolume}
                   onChange={(event) => setApproximateVolume(event.target.value)}
                   className="mt-1 w-full rounded-2xl border border-slate-800 bg-slate-900 px-4 py-3 text-sm text-white outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 appearance-none"
                 >
-                  <option value="">Select volume...</option>
-                  <option value="1-5">1-5 projects</option>
-                  <option value="6-20">6-20 projects</option>
-                  <option value="21-50">21-50 projects</option>
-                  <option value="50+">50+ projects</option>
+                  <option value="">{t("publicContent.accountSetup.selectVolume")}</option>
+                  {(["1-5", "6-20", "21-50", "50+"] as const).map((count) => (
+                    <option key={count} value={count}>{t("publicContent.accountSetup.projects", { count })}</option>
+                  ))}
                 </select>
               </div>
             </div>
 
             <div>
-              <label className="text-sm text-slate-300" htmlFor="password">Password</label>
+              <label className="text-sm text-slate-300" htmlFor="password">{t("publicContent.accountSetup.password")}</label>
               <input
                 id="password"
                 type="password"
                 required
+                dir="ltr"
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}
                 className="mt-1 w-full rounded-2xl border border-slate-800 bg-slate-900 px-4 py-3 text-sm text-white outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
               />
-              <p className="mt-1 text-xs text-slate-500">At least 8 characters, with a letter and a number.</p>
+              <p className="mt-1 text-xs text-slate-500">{t("publicContent.accountSetup.passwordHelp")}</p>
             </div>
 
             <div className="flex items-start gap-3 mt-4">
@@ -257,7 +291,7 @@ export default function RegisterPage() {
                 className="mt-1 h-4 w-4 rounded border-slate-800 bg-slate-900 text-blue-600 focus:ring-blue-500/20 focus:ring-offset-slate-950" 
               />
               <label htmlFor="consent" className="text-sm text-slate-400">
-                I consent to the collection of my information in accordance with the <Link href="/privacy" className="text-blue-400 underline hover:text-blue-300">Privacy Policy</Link>.
+                {t("publicContent.accountSetup.consentPrefix")} <Link href="/privacy" className="text-blue-400 underline hover:text-blue-300">{t("publicContent.accountSetup.privacyPolicy")}</Link>.
               </label>
             </div>
 
@@ -272,29 +306,39 @@ export default function RegisterPage() {
                 {isSubmitting ? (
                   <span className="flex items-center gap-2">
                     <span className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
-                    Submitting Request...
+                    {t("publicContent.accountSetup.submitting")}
                   </span>
                 ) : (
-                  `Request Early Access - ${selectedPackage}`
+                  t("publicContent.accountSetup.submitPrefix", {
+                    option: publicAccessOptions.find((option) => option.key === selectedPackage)?.name ?? selectedPackage,
+                  })
                 )}
               </button>
             </div>
             
             <div className="pt-4 border-t border-slate-800">
               <p className="text-xs text-slate-400 text-center leading-relaxed">
-                We use this information to review your request and contact you. Do not submit confidential project documents through this form.
+                {t("publicContent.accountSetup.dataNotice")}
               </p>
             </div>
           </form>
 
           <div className="mt-6 text-sm text-slate-400 text-center">
-            Already have an account?{" "}
-            <Link href="/login" className="text-blue-400 underline hover:text-blue-300">Sign in</Link>
+            {t("publicContent.accountSetup.existingAccount")}{" "}
+            <Link href={signInHref} className="text-blue-400 underline hover:text-blue-300">{t("publicContent.accountSetup.signIn")}</Link>
           </div>
         </div>
 
         <AccessOptionsFieldset selectedOption={selectedPackage} onSelect={setSelectedPackage} />
       </div>
     </div>
+  );
+}
+
+export default function RegisterPage() {
+  return (
+    <Suspense fallback={null}>
+      <RegisterForm />
+    </Suspense>
   );
 }

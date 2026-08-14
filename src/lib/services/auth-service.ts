@@ -214,6 +214,11 @@ export async function resetPassword(rawToken: string, newPassword: string): Prom
     // Invalidate every existing session so a compromised session can't survive a reset.
     prisma.session.deleteMany({ where: { userId: record.userId } }),
   ]);
+
+  // The database sessions are now invalid, so also remove the current
+  // browser cookie. Otherwise middleware can mistake the stale cookie
+  // for a valid session and redirect /login back to the protected app.
+  await destroyCurrentSession();
 }
 
 export async function getUserById(userId: string) {

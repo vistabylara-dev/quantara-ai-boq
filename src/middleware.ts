@@ -20,7 +20,6 @@ const PUBLIC_PREFIXES = [
   "/technical-report/",
 ];
 
-const AUTH_ENTRY_PAGES = ["/login", "/register"];
 
 function isPublicPage(pathname: string): boolean {
   if (PUBLIC_ROUTES.has(pathname)) return true;
@@ -44,9 +43,6 @@ export function middleware(request: NextRequest) {
 
   const hasSessionCookie = Boolean(request.cookies.get(SESSION_COOKIE_NAME)?.value);
 
-  if (AUTH_ENTRY_PAGES.includes(pathname) && hasSessionCookie) {
-    return NextResponse.redirect(new URL("/dashboard", request.url));
-  }
 
   if (!isPublicPage(pathname) && !hasSessionCookie) {
     const isAdminPage = pathname === "/admin" || pathname.startsWith("/admin/");

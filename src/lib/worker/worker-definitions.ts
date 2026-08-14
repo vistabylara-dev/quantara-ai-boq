@@ -5,6 +5,14 @@
  * title/capabilities independently. Shaped so a second worker can be added
  * later without redesigning this type — Phase 1 deliberately registers only
  * `tayqan`.
+ *
+ * `name` is the brand ("TAYQAN") and is intentionally never translated, the
+ * same way `common.appName` ("Quantara") stays identical in both locales
+ * (see the allowed-identical list in tests/i18n-dictionary-parity.test.ts).
+ * Every other presented string is a dictionary key, not English prose — this
+ * file must stay usable from both English and Arabic UI without the caller
+ * reaching into the dictionary independently, so `titleKey` and
+ * `capabilityKeys` are always resolved through `t()` by the caller.
  */
 
 export type WorkerDefinitionStatus = "AVAILABLE" | "COMING_SOON";
@@ -15,10 +23,10 @@ export type WorkerAssignmentTypeKey = "REVIEW_EXISTING_BOQ";
 export type WorkerDefinition = {
   key: string;
   name: string;
-  title: string;
-  description: string;
-  /** Human-readable capability statements shown on the hire card — must stay in sync with what is actually implemented; never list an unimplemented capability. */
-  capabilities: readonly string[];
+  /** Dot-path into the i18n dictionary for the role/title shown under the brand name, e.g. "tayqan.roleTitle" — resolve with t(). */
+  titleKey: string;
+  /** Semantic capability IDs shown on the hire card. Resolve each with t(`tayqan.capabilities.${id}`) — never render an id directly. Must stay in sync with what is actually implemented; never list an unimplemented capability. */
+  capabilityKeys: readonly string[];
   supportedAssignmentTypes: readonly WorkerAssignmentTypeKey[];
   status: WorkerDefinitionStatus;
 };
@@ -26,17 +34,15 @@ export type WorkerDefinition = {
 export const TAYQAN_WORKER_DEFINITION: WorkerDefinition = {
   key: "tayqan",
   name: "TAYQAN",
-  title: "AI Quantity Surveyor & Estimator",
-  description:
-    "A persistent AI quantity-surveying worker that reviews BOQs, evidence, quantities, rates, revisions and material uncertainties while keeping the human QS in control of governed decisions.",
-  capabilities: [
-    "Review existing BOQ",
-    "Check quantity provenance",
-    "Check rate provenance",
-    "Detect unresolved verification issues",
-    "Review revision evidence",
-    "Ask material questions",
-    "Produce governed QA findings",
+  titleKey: "tayqan.roleTitle",
+  capabilityKeys: [
+    "reviewExistingBoq",
+    "quantityProvenance",
+    "rateProvenance",
+    "verificationIssues",
+    "revisionEvidence",
+    "materialQuestions",
+    "qaFindings",
   ],
   supportedAssignmentTypes: ["REVIEW_EXISTING_BOQ"],
   status: "AVAILABLE",

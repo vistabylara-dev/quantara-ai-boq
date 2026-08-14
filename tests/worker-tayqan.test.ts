@@ -24,15 +24,30 @@ import type { WorkerPlanner } from "../src/lib/worker/openai-worker-planner";
 import {
   buildAssignmentTimeline,
   buildRunTimeline,
+  capabilityTranslationKey,
   deriveStage,
   presentAssignmentStatus,
   presentRunStatus,
+  statusTranslationKey,
+  type TayqanPresentationState,
 } from "../src/lib/worker/tayqan-presentation";
+import { nextHireIdempotencyKey, type HireAttemptKeyState } from "../src/lib/worker/tayqan-hire-attempt";
 import {
   getWorkerDefinition,
   listWorkerDefinitions,
   TAYQAN_WORKER_DEFINITION,
 } from "../src/lib/worker/worker-definitions";
+
+/** Reads a dotted path (e.g. "tayqan.status.working") out of a dictionary object — mirrors src/lib/i18n/translate.ts's readPath, kept local since that function isn't exported. */
+function readDictionaryPath(dictionary: unknown, key: string): string | undefined {
+  const parts = key.split(".");
+  let node: unknown = dictionary;
+  for (const part of parts) {
+    if (node == null || typeof node !== "object") return undefined;
+    node = (node as Record<string, unknown>)[part];
+  }
+  return typeof node === "string" ? node : undefined;
+}
 
 const RUN_ID = `${Date.now()}-${process.pid}`;
 const DETERMINISTIC_ENV = { ...process.env, WORKER_AI_PLANNER_ENABLED: "false" };
@@ -47,10 +62,20 @@ describe("TAYQAN-1 worker definition registry", () => {
   it("defines exactly one canonical, AVAILABLE TAYQAN worker with a non-empty identity", () => {
     expect(TAYQAN_WORKER_DEFINITION.key).toBe("tayqan");
     expect(TAYQAN_WORKER_DEFINITION.name).toBe("TAYQAN");
-    expect(TAYQAN_WORKER_DEFINITION.title.length).toBeGreaterThan(0);
+    expect(TAYQAN_WORKER_DEFINITION.titleKey.length).toBeGreaterThan(0);
     expect(TAYQAN_WORKER_DEFINITION.status).toBe("AVAILABLE");
-    expect(TAYQAN_WORKER_DEFINITION.capabilities.length).toBeGreaterThan(0);
+    expect(TAYQAN_WORKER_DEFINITION.capabilityKeys.length).toBeGreaterThan(0);
     expect(TAYQAN_WORKER_DEFINITION.supportedAssignmentTypes).toContain("REVIEW_EXISTING_BOQ");
+  });
+
+  it("exposes no hard-coded English presentation text — title and capabilities are i18n keys, not prose", () => {
+    expect(TAYQAN_WORKER_DEFINITION).not.toHaveProperty("title");
+    expect(TAYQAN_WORKER_DEFINITION).not.toHaveProperty("capabilities");
+    expect(TAYQAN_WORKER_DEFINITION.titleKey).toMatch(/^tayqan\./);
+    for (const capabilityKey of TAYQAN_WORKER_DEFINITION.capabilityKeys) {
+      // A semantic id (e.g. "reviewExistingBoq"), never a rendered English sentence.
+      expect(capabilityKey).toMatch(/^[a-z][a-zA-Z]*$/);
+    }
   });
 
   it("is resolvable by key and appears exactly once in the registry listing", () => {
@@ -85,7 +110,7 @@ describe("TAYQAN-1 presentation mapping (pure functions)", () => {
     expect(deriveStage({ runEventTypes: [], assignmentEventTypes: ["DECISIONS_RECORDED"] })).toBe("QA_REVIEW");
   });
 
-  it("builds timeline entries only from the events it was given, in the same order, never fabricating extras", () => {
+  it("builds timeline entries as dictionary keys (not pre-rendered English labels), only from the events it was given, never fabricating extras", () => {
     const events = [
       { eventType: WorkerEventType.ASSIGNMENT_CREATED, createdAt: "2026-08-14T00:00:00.000Z" },
       { eventType: WorkerEventType.REVIEW_COMPLETED, createdAt: "2026-08-14T00:00:05.000Z" },
@@ -93,26 +118,135 @@ describe("TAYQAN-1 presentation mapping (pure functions)", () => {
     const timeline = buildAssignmentTimeline(events);
     expect(timeline).toHaveLength(events.length);
     expect(timeline.map((entry) => entry.createdAt)).toEqual(events.map((event) => event.createdAt));
+    // Every entry is a dot-path into the dictionary, never English prose.
+    for (const entry of timeline) {
+      expect(entry.i18nKey).toMatch(/^tayqan\.timeline\.[a-zA-Z]+$/);
+      expect(readDictionaryPath(en, entry.i18nKey)).toBeTruthy();
+      expect(readDictionaryPath(ar, entry.i18nKey)).toBeTruthy();
+    }
     expect(buildAssignmentTimeline([])).toEqual([]);
 
     const runEvents = [{ eventType: WorkerRunEventType.RUN_ENQUEUED, createdAt: "2026-08-14T00:00:00.000Z" }];
-    expect(buildRunTimeline(runEvents)).toHaveLength(1);
+    const runTimeline = buildRunTimeline(runEvents);
+    expect(runTimeline).toHaveLength(1);
+    expect(runTimeline[0]!.i18nKey).toMatch(/^tayqan\.timeline\.[a-zA-Z]+$/);
     expect(buildRunTimeline([])).toEqual([]);
+  });
+
+  it("picks a singular vs. plural key (with a count var) when a material-questions-opened event carries a count", () => {
+    const one = buildAssignmentTimeline([{
+      eventType: WorkerEventType.MATERIAL_QUESTIONS_OPENED,
+      createdAt: "2026-08-14T00:00:00.000Z",
+      payload: { materialQuestionCount: 1 },
+    }]);
+    expect(one[0]).toMatchObject({ i18nKey: "tayqan.timeline.materialQuestionsOpenedOne", vars: { count: 1 } });
+
+    const many = buildAssignmentTimeline([{
+      eventType: WorkerEventType.MATERIAL_QUESTIONS_OPENED,
+      createdAt: "2026-08-14T00:00:00.000Z",
+      payload: { materialQuestionCount: 3 },
+    }]);
+    expect(many[0]).toMatchObject({ i18nKey: "tayqan.timeline.materialQuestionsOpenedOther", vars: { count: 3 } });
+
+    const noCount = buildAssignmentTimeline([{
+      eventType: WorkerEventType.MATERIAL_QUESTIONS_OPENED,
+      createdAt: "2026-08-14T00:00:00.000Z",
+    }]);
+    expect(noCount[0]).toMatchObject({ i18nKey: "tayqan.timeline.materialQuestionsOpened" });
+  });
+
+  it("resolves every TayqanPresentationState to a dictionary key with a real, non-empty translation in both locales", () => {
+    const states: TayqanPresentationState[] = [
+      "WORKING", "WAITING_FOR_YOU", "READY_FOR_REVIEW", "COMPLETED", "NEEDS_ATTENTION", "CANCELLED",
+    ];
+    for (const state of states) {
+      const key = statusTranslationKey(state);
+      expect(key).toMatch(/^tayqan\.status\.[a-zA-Z]+$/);
+      expect(readDictionaryPath(en, key)).toBeTruthy();
+      expect(readDictionaryPath(ar, key)).toBeTruthy();
+    }
+  });
+
+  it("resolves every TAYQAN capability id to a dictionary key with a real, non-empty translation in both locales", () => {
+    for (const capabilityKey of TAYQAN_WORKER_DEFINITION.capabilityKeys) {
+      const key = capabilityTranslationKey(capabilityKey);
+      expect(key).toBe(`tayqan.capabilities.${capabilityKey}`);
+      expect(readDictionaryPath(en, key)).toBeTruthy();
+      expect(readDictionaryPath(ar, key)).toBeTruthy();
+    }
+  });
+});
+
+describe("TAYQAN-1 hire idempotency-key state machine (pure function)", () => {
+  function counter() {
+    let n = 0;
+    return () => `key-${(n += 1)}`;
+  }
+
+  it("mints a key on the first attempt for a BOQ", () => {
+    const generate = counter();
+    const key = nextHireIdempotencyKey("boq-A", null, generate);
+    expect(key).toBe("key-1");
+  });
+
+  it("reuses the same key on an uncertain retry for the same BOQ (lost response, response was never seen)", () => {
+    const generate = counter();
+    const first = nextHireIdempotencyKey("boq-A", null, generate);
+    const pending: HireAttemptKeyState = { boqId: "boq-A", key: first };
+    const retry = nextHireIdempotencyKey("boq-A", pending, generate);
+    expect(retry).toBe(first);
+    // generate() must not even be called again once a pending key exists.
+    expect(generate()).toBe("key-2");
+  });
+
+  it("mints a fresh key when the BOQ selection changes, even if a previous attempt is still pending", () => {
+    const generate = counter();
+    const first = nextHireIdempotencyKey("boq-A", null, generate);
+    const pending: HireAttemptKeyState = { boqId: "boq-A", key: first };
+    const forOtherBoq = nextHireIdempotencyKey("boq-B", pending, generate);
+    expect(forOtherBoq).not.toBe(first);
+  });
+
+  it("mints a fresh key for a later, genuinely new hire once the previous attempt is resolved (state cleared to null)", () => {
+    const generate = counter();
+    const first = nextHireIdempotencyKey("boq-A", null, generate);
+    // Simulate resolution: the page clears hireAttempt to null once the run
+    // is definitively observed (success, or a confirmed-via-lookup run).
+    const resolved: HireAttemptKeyState = null;
+    const later = nextHireIdempotencyKey("boq-A", resolved, generate);
+    expect(later).not.toBe(first);
   });
 });
 
 describe("TAYQAN-1 EN/AR dictionary keys", () => {
-  const TAYQAN_KEYS = [
+  const TAYQAN_FLAT_KEYS = [
     "eyebrow", "tagline", "selectBoq", "available", "capabilitiesTitle", "briefTitle",
     "objectiveLabel", "objectivePlaceholder", "instructionsLabel", "instructionsPlaceholder",
     "hiring", "hireCta", "assignmentTitle", "questionsTitle", "recommendedAction",
     "affectedSubject", "answerPlaceholder", "answerAcknowledged", "answerWillCorrect",
     "answerExplain", "needsYourDecision", "findingsTitle", "advisoryTitle",
-    "advisoryDisclaimer", "timelineTitle", "completedNote",
+    "advisoryDisclaimer", "timelineTitle", "completedNote", "loading", "unavailable",
+    "noBoqTitle", "noBoqDescription", "roleTitle", "revisionLabel", "fallbackAnswerNote",
   ] as const;
 
-  it("has every required TAYQAN key present as a non-empty string in both English and Arabic", () => {
-    for (const key of TAYQAN_KEYS) {
+  const TAYQAN_NESTED_KEYS = [
+    "stats.items", "stats.quantityConfirmed", "stats.rateConfirmed", "stats.criticalIssues",
+    "stats.warnings", "stats.revisionEvidence",
+    "status.working", "status.waitingForYou", "status.readyForReview", "status.completed",
+    "status.needsAttention", "status.cancelled",
+    "timeline.assignmentCreated", "timeline.inspectionStarted", "timeline.workspaceCaptured",
+    "timeline.decisionsRecorded", "timeline.materialQuestionsOpened", "timeline.materialQuestionsOpenedOne",
+    "timeline.materialQuestionsOpenedOther", "timeline.materialQuestionAnswered", "timeline.reviewCompleted",
+    "timeline.reviewNeedsInput", "timeline.reviewFailed", "timeline.runEnqueued", "timeline.leaseAcquired",
+    "timeline.retryScheduled", "timeline.deterministicReviewLinked", "timeline.aiPlannerSkipped",
+    "timeline.aiPlanRecorded", "timeline.runCompleted", "timeline.runFailed",
+    "capabilities.reviewExistingBoq", "capabilities.quantityProvenance", "capabilities.rateProvenance",
+    "capabilities.verificationIssues", "capabilities.revisionEvidence", "capabilities.materialQuestions",
+    "capabilities.qaFindings",
+  ] as const;
+
+  it("has every required flat TAYQAN key present as a non-empty string in both English and Arabic", () => {
+    for (const key of TAYQAN_FLAT_KEYS) {
       expect(typeof en.tayqan[key]).toBe("string");
       expect((en.tayqan[key] as string).length).toBeGreaterThan(0);
       expect(typeof ar.tayqan[key]).toBe("string");
@@ -120,10 +254,50 @@ describe("TAYQAN-1 EN/AR dictionary keys", () => {
     }
   });
 
-  it("has an actual Arabic translation (not byte-identical to English) for TAYQAN prose", () => {
-    for (const key of TAYQAN_KEYS) {
+  it("has every required nested TAYQAN key (stats/status/timeline/capabilities) present in both locales", () => {
+    for (const key of TAYQAN_NESTED_KEYS) {
+      const enValue = readDictionaryPath(en.tayqan, key);
+      const arValue = readDictionaryPath(ar.tayqan, key);
+      expect(enValue, `en.tayqan.${key}`).toBeTruthy();
+      expect(arValue, `ar.tayqan.${key}`).toBeTruthy();
+    }
+  });
+
+  it("has an actual Arabic translation (not byte-identical to English) for TAYQAN prose, brand name aside", () => {
+    for (const key of TAYQAN_FLAT_KEYS) {
       expect(ar.tayqan[key]).not.toBe(en.tayqan[key]);
     }
+    for (const key of TAYQAN_NESTED_KEYS) {
+      const enValue = readDictionaryPath(en.tayqan, key);
+      const arValue = readDictionaryPath(ar.tayqan, key);
+      expect(arValue).not.toBe(enValue);
+    }
+  });
+
+  it("the Arabic TAYQAN screen introduces no English-only presentation strings beyond the TAYQAN brand/technical identifiers", () => {
+    // Everything the page renders through t() must now resolve through the
+    // dictionary — this walks every ar.tayqan.* leaf and asserts it isn't
+    // plain untranslated English prose. "TAYQAN" itself (the brand) and bare
+    // technical identifiers are allowed to contain Latin letters.
+    const LATIN_PROSE = /[A-Za-z]{2,}/;
+    function walk(node: unknown, path: string, offenders: string[]) {
+      if (typeof node === "string") {
+        // Strip the brand name and {vars} interpolation placeholders (e.g.
+        // "{count}", "{number}") before checking for stray English prose —
+        // those are template syntax, not untranslated presentation text.
+        const withoutBrandAndVars = node.replace(/TAYQAN/g, "").replace(/\{\w+\}/g, "");
+        if (LATIN_PROSE.test(withoutBrandAndVars)) offenders.push(`${path} = ${JSON.stringify(node)}`);
+        return;
+      }
+      if (node && typeof node === "object") {
+        for (const [key, value] of Object.entries(node as Record<string, unknown>)) {
+          walk(value, path ? `${path}.${key}` : key, offenders);
+        }
+      }
+    }
+    const offenders: string[] = [];
+    walk(ar.tayqan, "tayqan", offenders);
+    expect(offenders).toEqual([]);
   });
 });
 
@@ -312,6 +486,44 @@ describe("TAYQAN-1 hire flow and assignment lifecycle (integration, real local P
     expect(runs).toBe(1);
 
     await drainWorkerRuns({ runnerId: `runner-tayqan-dup-${RUN_ID}`, limit: 1, env: DETERMINISTIC_ENV });
+  });
+
+  it("a successful first hire plus a retry with the same key (simulating a lost response) cannot create a second WorkerRun", async () => {
+    const boq = await createBOQ(companyAId, projectAId, "Lost response retry");
+    const key = `worker-tayqan-lost-response-${RUN_ID}`;
+
+    // First hire genuinely succeeds server-side...
+    const first = await enqueueWorkerReview(actorA(), boq.id, key, DETERMINISTIC_ENV);
+    // ...but the client never saw the response and retries with the SAME
+    // key (per the "reuse the same key on an uncertain retry" rule in
+    // src/lib/worker/tayqan-hire-attempt.ts — this call reproduces exactly
+    // what the UI sends on that retry).
+    const retry = await enqueueWorkerReview(actorA(), boq.id, key, DETERMINISTIC_ENV);
+
+    expect(retry.id).toBe(first.id);
+    expect(await prisma.workerRun.count({ where: { companyId: companyAId, boqId: boq.id } })).toBe(1);
+
+    await drainWorkerRuns({ runnerId: `runner-tayqan-lost-response-${RUN_ID}`, limit: 1, env: DETERMINISTIC_ENV });
+    expect(await prisma.workerRun.count({ where: { companyId: companyAId, boqId: boq.id } })).toBe(1);
+  });
+
+  it("a later, genuinely new hire (a different BOQ, per tayqan-hire-attempt's own-BOQ-scoped key) is not blocked by an earlier pending key", async () => {
+    const [firstBoq, laterBoq] = await Promise.all([
+      createBOQ(companyAId, projectAId, "Earlier pending hire"),
+      createBOQ(companyAId, projectAId, "Later legitimate hire"),
+    ]);
+    const earlierKey = `worker-tayqan-earlier-${RUN_ID}`;
+    const laterKey = `worker-tayqan-later-${RUN_ID}`;
+    expect(earlierKey).not.toBe(laterKey);
+
+    const earlier = await enqueueWorkerReview(actorA(), firstBoq.id, earlierKey, DETERMINISTIC_ENV);
+    const later = await enqueueWorkerReview(actorA(), laterBoq.id, laterKey, DETERMINISTIC_ENV);
+
+    expect(later.id).not.toBe(earlier.id);
+    expect(await prisma.workerRun.count({ where: { companyId: companyAId, boqId: firstBoq.id } })).toBe(1);
+    expect(await prisma.workerRun.count({ where: { companyId: companyAId, boqId: laterBoq.id } })).toBe(1);
+
+    await drainWorkerRuns({ runnerId: `runner-tayqan-earlier-later-${RUN_ID}`, limit: 2, env: DETERMINISTIC_ENV });
   });
 
   it("still completes an ordinary REVIEW_EXISTING_BOQ assignment when hired through TAYQAN's enqueue path", async () => {

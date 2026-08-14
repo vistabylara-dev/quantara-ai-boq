@@ -3,20 +3,46 @@
 import { useCallback, useEffect, useState } from "react";
 import { use } from "react";
 import { apiClient, ApiClientError, getApiErrorMessage, type ApiErrorPayload } from "@/lib/api/client";
-import { TAYQAN_WORKER_DEFINITION } from "@/lib/worker/worker-definitions";
 import { useTranslations } from "@/lib/i18n/locale-provider";
+import type { TranslationKey } from "@/lib/i18n/translate";
+import { nextHireIdempotencyKey, type HireAttemptKeyState } from "@/lib/worker/tayqan-hire-attempt";
+import {
+  buildAssignmentTimeline,
+  buildRunTimeline,
+  capabilityTranslationKey,
+  presentAssignmentStatus,
+  presentRunStatus,
+  statusTranslationKey,
+} from "@/lib/worker/tayqan-presentation";
+import { TAYQAN_WORKER_DEFINITION } from "@/lib/worker/worker-definitions";
 
 /**
  * TAYQAN-1 — the hireable-worker foundation UI. Reuses the existing
  * WorkerRun/WorkerAssignment/WorkerDecision/WorkerMaterialQuestion system
  * end to end; this file adds no new persistence of its own beyond what the
  * extended enqueueWorkerReview/GET review-status routes already expose.
+ *
+ * Every user-visible string here comes from the i18n dictionary (t(...)) or
+ * from tayqan-presentation.ts's dictionary-key-returning helpers — this file
+ * must not hard-code English presentation text itself. "TAYQAN" is the one
+ * intentional exception, kept untranslated as the brand name (see
+ * tests/i18n-dictionary-parity.test.ts's allowed-identical list for the same
+ * pattern applied to "Quantara").
  */
 
 type BOQSummary = { id: string; title: string; revisionNumber: number };
 
 type RunStatus = "QUEUED" | "RUNNING" | "COMPLETED" | "FAILED" | "CANCELLED";
 type AssignmentStatus = "RUNNING" | "NEEDS_INPUT" | "COMPLETED" | "FAILED" | "CANCELLED";
+
+/** Mirrors the Prisma WorkerRunEventType/WorkerEventType enum values without importing @prisma/client — this file must stay safe to bundle into the client. */
+type RunEventType =
+  | "RUN_ENQUEUED" | "LEASE_ACQUIRED" | "RETRY_SCHEDULED" | "DETERMINISTIC_REVIEW_LINKED"
+  | "AI_PLANNER_SKIPPED" | "AI_PLAN_RECORDED" | "RUN_COMPLETED" | "RUN_FAILED";
+type AssignmentEventType =
+  | "ASSIGNMENT_CREATED" | "INSPECTION_STARTED" | "WORKSPACE_CAPTURED" | "DECISIONS_RECORDED"
+  | "MATERIAL_QUESTIONS_OPENED" | "MATERIAL_QUESTION_ANSWERED" | "REVIEW_COMPLETED"
+  | "REVIEW_NEEDS_INPUT" | "REVIEW_FAILED";
 
 type WorkerRunDTO = {
   id: string;
@@ -27,7 +53,7 @@ type WorkerRunDTO = {
   advisoryPlan: {
     plan: { summary: string; priority: string; actions: Array<{ kind: string; subjectType: string; subjectId: string; rationale: string }>; cautions: string[]; requiresHumanReview: boolean };
   } | null;
-  events: Array<{ eventType: string; createdAt: string }>;
+  events: Array<{ eventType: RunEventType; createdAt: string }>;
   createdAt: string;
 };
 
@@ -68,43 +94,7 @@ type AssignmentDTO = {
   } | null;
   decisions: Decision[];
   materialQuestions: MaterialQuestion[];
-  events: Array<{ eventType: string; createdAt: string }>;
-};
-
-const RUN_STATUS_LABEL: Record<RunStatus, string> = {
-  QUEUED: "TAYQAN is working",
-  RUNNING: "TAYQAN is working",
-  COMPLETED: "TAYQAN completed the run",
-  FAILED: "TAYQAN needs attention",
-  CANCELLED: "Cancelled",
-};
-
-const ASSIGNMENT_STATUS_LABEL: Record<AssignmentStatus, string> = {
-  RUNNING: "TAYQAN is working",
-  NEEDS_INPUT: "TAYQAN needs your decision",
-  COMPLETED: "TAYQAN completed the review",
-  FAILED: "TAYQAN needs attention",
-  CANCELLED: "Cancelled",
-};
-
-const EVENT_LABEL: Record<string, string> = {
-  RUN_ENQUEUED: "TAYQAN was hired",
-  LEASE_ACQUIRED: "TAYQAN started working",
-  RETRY_SCHEDULED: "TAYQAN is retrying",
-  DETERMINISTIC_REVIEW_LINKED: "Review results linked",
-  AI_PLANNER_SKIPPED: "Advisory plan skipped",
-  AI_PLAN_RECORDED: "Advisory plan recorded",
-  RUN_COMPLETED: "TAYQAN finished this run",
-  RUN_FAILED: "TAYQAN's run failed",
-  ASSIGNMENT_CREATED: "TAYQAN hired",
-  INSPECTION_STARTED: "Review started",
-  WORKSPACE_CAPTURED: "BOQ workspace captured",
-  DECISIONS_RECORDED: "Quantity and rate evidence checked",
-  MATERIAL_QUESTIONS_OPENED: "Material questions opened",
-  MATERIAL_QUESTION_ANSWERED: "You answered a question",
-  REVIEW_COMPLETED: "QA review completed",
-  REVIEW_NEEDS_INPUT: "TAYQAN needs your decision",
-  REVIEW_FAILED: "Review could not complete",
+  events: Array<{ eventType: AssignmentEventType; createdAt: string; payload?: unknown }>;
 };
 
 function generateIdempotencyKey(): string {
@@ -125,6 +115,7 @@ export default function TayqanPage(props: { params: Promise<{ projectId: string 
   const [specialInstructions, setSpecialInstructions] = useState("");
   const [hiring, setHiring] = useState(false);
   const [hireError, setHireError] = useState<string | null>(null);
+  const [hireAttempt, setHireAttempt] = useState<HireAttemptKeyState>(null);
 
   const [answeringId, setAnsweringId] = useState<string | null>(null);
   const [answerNote, setAnswerNote] = useState("");
@@ -147,21 +138,29 @@ export default function TayqanPage(props: { params: Promise<{ projectId: string 
     return () => controller.abort();
   }, [loadBoqs]);
 
+  const fetchRunStatus = useCallback(async (boqId: string, signal?: AbortSignal) => {
+    return apiClient.get<WorkerRunDTO | null>(`/api/boqs/${encodeURIComponent(boqId)}/worker/review`, signal);
+  }, []);
+
+  const applyRunStatus = useCallback(async (result: WorkerRunDTO | null, signal?: AbortSignal) => {
+    setRun(result);
+    if (result?.resultAssignment) {
+      const detail = await apiClient.get<AssignmentDTO>(`/api/worker/assignments/${encodeURIComponent(result.resultAssignment.id)}`, signal);
+      setAssignment(detail);
+    } else {
+      setAssignment(null);
+    }
+  }, []);
+
   const loadRunStatus = useCallback(async (boqId: string, signal?: AbortSignal) => {
     try {
-      const result = await apiClient.get<WorkerRunDTO | null>(`/api/boqs/${encodeURIComponent(boqId)}/worker/review`, signal);
-      setRun(result);
-      if (result?.resultAssignment) {
-        const detail = await apiClient.get<AssignmentDTO>(`/api/worker/assignments/${encodeURIComponent(result.resultAssignment.id)}`, signal);
-        setAssignment(detail);
-      } else {
-        setAssignment(null);
-      }
+      const result = await fetchRunStatus(boqId, signal);
+      await applyRunStatus(result, signal);
     } catch (error) {
       if (error instanceof DOMException && error.name === "AbortError") return;
       setLoadError(getApiErrorMessage(error));
     }
-  }, []);
+  }, [fetchRunStatus, applyRunStatus]);
 
   useEffect(() => {
     if (!selectedBoqId) return;
@@ -174,13 +173,17 @@ export default function TayqanPage(props: { params: Promise<{ projectId: string 
     if (!selectedBoqId) return;
     setHiring(true);
     setHireError(null);
+    // Reuse the same key for an uncertain retry on this BOQ; only a genuinely
+    // new BOQ selection (or a previously confirmed outcome) gets a fresh one.
+    const idempotencyKey = nextHireIdempotencyKey(selectedBoqId, hireAttempt, generateIdempotencyKey);
+    setHireAttempt({ boqId: selectedBoqId, key: idempotencyKey });
     try {
       const response = await fetch(`/api/boqs/${encodeURIComponent(selectedBoqId)}/worker/review`, {
         method: "POST",
         credentials: "same-origin",
         headers: {
           "Content-Type": "application/json",
-          "Idempotency-Key": generateIdempotencyKey(),
+          "Idempotency-Key": idempotencyKey,
         },
         body: JSON.stringify({
           assignmentObjective: assignmentObjective.trim() || undefined,
@@ -194,9 +197,26 @@ export default function TayqanPage(props: { params: Promise<{ projectId: string 
           response.status,
         );
       }
-      await loadRunStatus(selectedBoqId);
+      setHireAttempt(null); // definitively observed: the run now exists under this key
+      await applyRunStatus(payload.data);
     } catch (error) {
-      setHireError(getApiErrorMessage(error));
+      // The POST's outcome is uncertain (e.g. the response was lost after the
+      // server had already created the run) — confirm with a read-only
+      // lookup before surfacing an error or letting a retry mint a new key.
+      try {
+        const confirmed = await fetchRunStatus(selectedBoqId);
+        if (confirmed) {
+          setHireAttempt(null);
+          await applyRunStatus(confirmed);
+        } else {
+          setHireError(getApiErrorMessage(error));
+        }
+      } catch {
+        // The confirmation lookup also failed — stay uncertain and keep the
+        // same pending key so the next retry reuses it instead of risking a
+        // duplicate WorkerRun.
+        setHireError(getApiErrorMessage(error));
+      }
     } finally {
       setHiring(false);
     }
@@ -208,7 +228,7 @@ export default function TayqanPage(props: { params: Promise<{ projectId: string 
     try {
       const updated = await apiClient.post<AssignmentDTO>(
         `/api/worker/assignments/${encodeURIComponent(assignment.id)}/questions/${encodeURIComponent(questionId)}/answer`,
-        { answerType, note: answerNote.trim() || "Acknowledged." },
+        { answerType, note: answerNote.trim() || t("tayqan.fallbackAnswerNote") },
       );
       setAssignment(updated);
       setAnsweringId(null);
@@ -221,7 +241,7 @@ export default function TayqanPage(props: { params: Promise<{ projectId: string 
   if (loadError) {
     return (
       <div className="rounded-[32px] border border-slate-800 bg-slate-950 p-8 text-slate-300">
-        <p className="text-lg font-semibold text-white">TAYQAN unavailable</p>
+        <p className="text-lg font-semibold text-white">{t("tayqan.unavailable")}</p>
         <p className="mt-2 text-sm text-rose-300">{loadError}</p>
       </div>
     );
@@ -230,7 +250,7 @@ export default function TayqanPage(props: { params: Promise<{ projectId: string 
   if (boqs === null) {
     return (
       <div className="rounded-[32px] border border-slate-800 bg-slate-950 p-8 text-slate-300">
-        <p className="text-lg font-semibold text-white">Loading TAYQAN…</p>
+        <p className="text-lg font-semibold text-white">{t("tayqan.loading")}</p>
       </div>
     );
   }
@@ -238,20 +258,27 @@ export default function TayqanPage(props: { params: Promise<{ projectId: string 
   if (boqs.length === 0) {
     return (
       <div className="rounded-[32px] border border-slate-800 bg-slate-950 p-8 text-slate-300">
-        <p className="text-lg font-semibold text-white">No BOQ yet</p>
-        <p className="mt-2 text-sm text-slate-400">Create a BOQ for this project before hiring TAYQAN.</p>
+        <p className="text-lg font-semibold text-white">{t("tayqan.noBoqTitle")}</p>
+        <p className="mt-2 text-sm text-slate-400">{t("tayqan.noBoqDescription")}</p>
       </div>
     );
   }
 
   const hasOpenQuestions = assignment?.materialQuestions.some((question) => question.status === "OPEN") ?? false;
+  const presentationState = run
+    ? (assignment ? presentAssignmentStatus(assignment.status, hasOpenQuestions) : presentRunStatus(run.status))
+    : null;
+  const timelineEntries = run
+    ? [...buildRunTimeline(run.events), ...(assignment ? buildAssignmentTimeline(assignment.events) : [])]
+        .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
+    : [];
 
   return (
     <div className="space-y-8">
       <div className="rounded-[32px] border border-cyan-900 bg-cyan-950/10 p-8">
         <p className="text-xs font-semibold uppercase tracking-[0.28em] text-cyan-400">{t("tayqan.eyebrow")}</p>
         <h1 className="mt-2 text-3xl font-semibold text-white">{TAYQAN_WORKER_DEFINITION.name}</h1>
-        <p className="mt-1 text-lg text-cyan-200">{TAYQAN_WORKER_DEFINITION.title}</p>
+        <p className="mt-1 text-lg text-cyan-200">{t(TAYQAN_WORKER_DEFINITION.titleKey as TranslationKey)}</p>
         <p className="mt-3 max-w-2xl text-sm text-slate-400">{t("tayqan.tagline")}</p>
 
         {boqs.length > 1 && (
@@ -260,11 +287,16 @@ export default function TayqanPage(props: { params: Promise<{ projectId: string 
             <select
               id="tayqan-boq-select"
               value={selectedBoqId ?? ""}
-              onChange={(event) => { setSelectedBoqId(event.target.value); setRun(undefined); }}
+              onChange={(event) => {
+                setSelectedBoqId(event.target.value);
+                setRun(undefined);
+                setHireAttempt(null);
+                setHireError(null);
+              }}
               className="mt-1 rounded-2xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-200"
             >
               {boqs.map((boq) => (
-                <option key={boq.id} value={boq.id}>{boq.title} (rev {boq.revisionNumber})</option>
+                <option key={boq.id} value={boq.id}>{boq.title} ({t("tayqan.revisionLabel", { number: boq.revisionNumber })})</option>
               ))}
             </select>
           </div>
@@ -272,14 +304,16 @@ export default function TayqanPage(props: { params: Promise<{ projectId: string 
       </div>
 
       {run === undefined ? (
-        <div className="rounded-[32px] border border-slate-800 bg-slate-950 p-8 text-slate-300">Loading TAYQAN status…</div>
+        <div className="rounded-[32px] border border-slate-800 bg-slate-950 p-8 text-slate-300">{t("tayqan.loading")}</div>
       ) : run === null ? (
         <div className="rounded-[32px] border border-slate-800 bg-slate-950 p-8">
           <p className="text-xs font-semibold uppercase tracking-[0.24em] text-emerald-400">{t("tayqan.available")}</p>
           <h2 className="mt-2 text-xl font-semibold text-white">{t("tayqan.capabilitiesTitle")}</h2>
           <ul className="mt-4 grid gap-2 sm:grid-cols-2">
-            {TAYQAN_WORKER_DEFINITION.capabilities.map((capability) => (
-              <li key={capability} className="rounded-2xl border border-slate-800 bg-slate-900 px-4 py-2 text-sm text-slate-300">{capability}</li>
+            {TAYQAN_WORKER_DEFINITION.capabilityKeys.map((capabilityKey) => (
+              <li key={capabilityKey} className="rounded-2xl border border-slate-800 bg-slate-900 px-4 py-2 text-sm text-slate-300">
+                {t(capabilityTranslationKey(capabilityKey) as TranslationKey)}
+              </li>
             ))}
           </ul>
 
@@ -319,9 +353,11 @@ export default function TayqanPage(props: { params: Promise<{ projectId: string 
       ) : (
         <>
           <div className="rounded-[32px] border border-slate-800 bg-slate-950 p-8">
-            <p className="text-xs font-semibold uppercase tracking-[0.24em] text-cyan-400">
-              {assignment ? ASSIGNMENT_STATUS_LABEL[assignment.status] : RUN_STATUS_LABEL[run.status]}
-            </p>
+            {presentationState && (
+              <p className="text-xs font-semibold uppercase tracking-[0.24em] text-cyan-400">
+                {t(statusTranslationKey(presentationState) as TranslationKey)}
+              </p>
+            )}
             <h2 className="mt-2 text-xl font-semibold text-white">{t("tayqan.assignmentTitle")}</h2>
             {(run.brief.assignmentObjective || run.brief.specialInstructions) && (
               <div className="mt-3 space-y-1 rounded-2xl border border-slate-800 bg-slate-900 p-4 text-xs text-slate-400">
@@ -333,12 +369,12 @@ export default function TayqanPage(props: { params: Promise<{ projectId: string 
 
             {assignment?.workspace && (
               <div className="mt-6 grid gap-3 sm:grid-cols-3 lg:grid-cols-6">
-                <Stat label="Items" value={assignment.workspace.itemCount} />
-                <Stat label="Quantity confirmed" value={assignment.workspace.confirmedQuantityCount} />
-                <Stat label="Rate confirmed" value={assignment.workspace.confirmedRateCount} />
-                <Stat label="Critical issues" value={assignment.workspace.unresolvedCriticalCount} accent={assignment.workspace.unresolvedCriticalCount > 0 ? "text-rose-300" : undefined} />
-                <Stat label="Warnings" value={assignment.workspace.unresolvedWarningCount} accent={assignment.workspace.unresolvedWarningCount > 0 ? "text-amber-300" : undefined} />
-                <Stat label="Revision evidence" value={assignment.workspace.revisionEvidenceCount} />
+                <Stat label={t("tayqan.stats.items")} value={assignment.workspace.itemCount} />
+                <Stat label={t("tayqan.stats.quantityConfirmed")} value={assignment.workspace.confirmedQuantityCount} />
+                <Stat label={t("tayqan.stats.rateConfirmed")} value={assignment.workspace.confirmedRateCount} />
+                <Stat label={t("tayqan.stats.criticalIssues")} value={assignment.workspace.unresolvedCriticalCount} accent={assignment.workspace.unresolvedCriticalCount > 0 ? "text-rose-300" : undefined} />
+                <Stat label={t("tayqan.stats.warnings")} value={assignment.workspace.unresolvedWarningCount} accent={assignment.workspace.unresolvedWarningCount > 0 ? "text-amber-300" : undefined} />
+                <Stat label={t("tayqan.stats.revisionEvidence")} value={assignment.workspace.revisionEvidenceCount} />
               </div>
             )}
           </div>
@@ -428,14 +464,12 @@ export default function TayqanPage(props: { params: Promise<{ projectId: string 
           <div className="rounded-[32px] border border-slate-800 bg-slate-950 p-8">
             <h2 className="text-xl font-semibold text-white">{t("tayqan.timelineTitle")}</h2>
             <ol className="mt-4 space-y-2">
-              {[...run.events, ...(assignment?.events ?? [])]
-                .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
-                .map((event, index) => (
-                  <li key={index} className="flex items-center justify-between rounded-2xl border border-slate-800 bg-slate-900 px-4 py-2 text-xs text-slate-400">
-                    <span className="text-slate-200">{EVENT_LABEL[event.eventType] ?? event.eventType}</span>
-                    <span>{new Date(event.createdAt).toLocaleString()}</span>
-                  </li>
-                ))}
+              {timelineEntries.map((entry, index) => (
+                <li key={index} className="flex items-center justify-between rounded-2xl border border-slate-800 bg-slate-900 px-4 py-2 text-xs text-slate-400">
+                  <span className="text-slate-200">{t(entry.i18nKey as TranslationKey, entry.vars)}</span>
+                  <span>{new Date(entry.createdAt).toLocaleString()}</span>
+                </li>
+              ))}
             </ol>
           </div>
 

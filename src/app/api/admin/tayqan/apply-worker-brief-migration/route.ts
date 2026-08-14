@@ -100,18 +100,21 @@ export async function POST() {
                 AND table_name = 'WorkerRun'
                 AND column_name IN ('assignmentObjective', 'specialInstructions')
             `;
-            const columnNames = new Set(columns.map((column) => column.column_name));
-            if (!columnNames.has("assignmentObjective") || !columnNames.has("specialInstructions")) {
-              throw new AppError(
-                "TAYQAN_MIGRATION_STATE_AMBIGUOUS",
-                "The migration is recorded as cleanly applied, but WorkerRun is missing an expected column. Manual review of the actual database schema is required — no changes were made.",
-                409,
-              );
+            const columnsByName = new Map(columns.map((column) => [column.column_name, column]));
+            for (const columnName of ["assignmentObjective", "specialInstructions"] as const) {
+              const column = columnsByName.get(columnName);
+              if (!column || column.data_type !== "text" || column.is_nullable !== "YES") {
+                throw new AppError(
+                  "TAYQAN_MIGRATION_STATE_AMBIGUOUS",
+                  `The migration is recorded as cleanly applied, but WorkerRun."${columnName}" does not verify as a present, nullable TEXT column. Manual review of the actual database schema is required — no changes were made.`,
+                  409,
+                );
+              }
             }
             return {
               alreadyApplied: true,
               log: [
-                `${MIGRATION_NAME}: already recorded with the expected checksum and a completed, non-rolled-back application; both columns verified present. No database changes were made.`,
+                `${MIGRATION_NAME}: already recorded with the expected checksum and a completed, non-rolled-back application; both columns verified present as nullable TEXT. No database changes were made.`,
               ],
             };
           }

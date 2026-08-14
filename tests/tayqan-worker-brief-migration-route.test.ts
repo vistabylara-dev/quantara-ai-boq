@@ -148,6 +148,25 @@ describe("POST /api/admin/tayqan/apply-worker-brief-migration", () => {
     expect(txMock.$executeRaw).not.toHaveBeenCalled();
   });
 
+  it("blocks with 409 as ambiguous when a cleanly-applied row exists but a column has the wrong type or nullability", async () => {
+    requirePlatformActorMock.mockResolvedValue(OWNER_ACTOR);
+    txMock.$queryRaw
+      .mockResolvedValueOnce([cleanMigrationRow()]) // existingMigrations: cleanly applied
+      .mockResolvedValueOnce([
+        { column_name: "assignmentObjective", data_type: "text", is_nullable: "YES" },
+        { column_name: "specialInstructions", data_type: "character varying", is_nullable: "YES" }, // wrong type
+      ]);
+    txMock.$executeRawUnsafe.mockResolvedValue(undefined);
+
+    const response = await callRoute();
+    const body = await response.json();
+
+    expect(response.status).toBe(409);
+    expect(body).toMatchObject({ ok: false, error: { code: "TAYQAN_MIGRATION_STATE_AMBIGUOUS" } });
+    expect(txMock.$executeRawUnsafe).not.toHaveBeenCalledWith(expect.stringContaining("ALTER TABLE"));
+    expect(txMock.$executeRaw).not.toHaveBeenCalled();
+  });
+
   it("blocks with 409 when an existing migration row has a different checksum", async () => {
     requirePlatformActorMock.mockResolvedValue(OWNER_ACTOR);
     txMock.$queryRaw.mockResolvedValueOnce([cleanMigrationRow({ checksum: "0000000000000000000000000000000000000000000000000000000000000000" })]);

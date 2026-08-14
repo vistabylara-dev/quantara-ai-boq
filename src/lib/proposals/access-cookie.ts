@@ -1,29 +1,10 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
+import { loadProposalAccessSecret } from "@/lib/config/security-secrets";
 
 const ACCESS_GRANT_TTL_MS = 30 * 60 * 1000;
-const DEVELOPMENT_ACCESS_SECRET = "dev-only-proposal-access-secret-not-for-production";
-const MINIMUM_PRODUCTION_SECRET_BYTES = 32;
-
-function secret(): string {
-  const configured = process.env.PROPOSAL_ACCESS_SECRET?.trim();
-
-  if (process.env.NODE_ENV !== "production") {
-    return configured || DEVELOPMENT_ACCESS_SECRET;
-  }
-
-  if (!configured || configured === DEVELOPMENT_ACCESS_SECRET) {
-    throw new Error("PROPOSAL_ACCESS_SECRET must be configured with a private production value.");
-  }
-
-  if (Buffer.byteLength(configured, "utf8") < MINIMUM_PRODUCTION_SECRET_BYTES) {
-    throw new Error(`PROPOSAL_ACCESS_SECRET must be at least ${MINIMUM_PRODUCTION_SECRET_BYTES} bytes in production.`);
-  }
-
-  return configured;
-}
 
 function sign(payload: string): string {
-  return createHmac("sha256", secret()).update(payload).digest("hex");
+  return createHmac("sha256", loadProposalAccessSecret()).update(payload).digest("hex");
 }
 
 /**

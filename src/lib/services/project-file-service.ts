@@ -207,7 +207,7 @@ export async function getProjectFileForStreamingDownload(actor: CurrentActor, fi
  * extraction/review evidence. Direct retrieval and download remain available
  * to authorized users; active project lists hide the archived source. */
 export async function archiveProjectFile(actor: CurrentActor, fileId: string) {
-  requireCapability(actor, "files:manage");
+  requireCapability(actor, "files:archive");
   const result = await prisma.$transaction(async (tx) => {
     const archived = await archiveProjectFileRow(actor.companyId, fileId, actor.userId, tx);
     if (!archived.alreadyArchived) {

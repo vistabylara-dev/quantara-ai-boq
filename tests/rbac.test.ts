@@ -26,6 +26,13 @@ describe("RBAC capability matrix", () => {
     expect(hasCapability(UserRole.QUANTITY_SURVEYOR, "company:manage")).toBe(false);
   });
 
+  it("separates routine file management from destructive archive authority", () => {
+    expect(hasCapability(UserRole.COMPANY_OWNER, "files:archive")).toBe(true);
+    expect(hasCapability(UserRole.ADMINISTRATOR, "files:archive")).toBe(true);
+    expect(hasCapability(UserRole.DESIGNER, "files:manage")).toBe(true);
+    expect(hasCapability(UserRole.DESIGNER, "files:archive")).toBe(false);
+  });
+
   it("throws PermissionDeniedError when requireCapability is not satisfied", () => {
     expect(() => requireCapability(actor(UserRole.DESIGNER), "boq:edit")).toThrow(
       PermissionDeniedError,

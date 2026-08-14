@@ -347,9 +347,11 @@ describe("Drawing upload & intake pipeline (integration, real local Postgres)", 
       await expect(getProjectDrawing(ownerActorA, "00000000-0000-0000-0000-000000000000")).rejects.toThrow(NotFoundError);
     });
 
-    it("rejects archive from a role without the files:manage capability", async () => {
+    it("separates routine drawing management from destructive archive authority", async () => {
       const uploaded = await uploadProjectDrawing(ownerActorA, projectAId, { originalName: "protected.pdf", mimeType: "application/pdf", buffer: pdfBuffer("protected content"), metadata: {} });
-      await expect(archiveProjectDrawing(reviewerActorA, uploaded.drawing.id)).rejects.toThrow(PermissionDeniedError);
+      expect((await listProjectDrawings(ownerActorA, projectAId)).find((drawing) => drawing.id === uploaded.drawing.id)).toMatchObject({ canArchive: true });
+      expect((await listProjectDrawings(designerActorA, projectAId)).find((drawing) => drawing.id === uploaded.drawing.id)).toMatchObject({ canArchive: false });
+      await expect(archiveProjectDrawing(designerActorA, uploaded.drawing.id)).rejects.toThrow(PermissionDeniedError);
     });
 
     it("archives a drawing while retaining its row and source bytes", async () => {

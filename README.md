@@ -13,6 +13,7 @@ This repository is under active development. A passing local build proves code i
 - Tests reset and seed a dedicated database whose name must contain `test` or `ci`.
 - Production proposal links require a private `PROPOSAL_ACCESS_SECRET` of at least 32 bytes.
 - Database migrations and seeds run through explicit commands, not public HTTP routes.
+- The production deploy command runs `prisma migrate deploy` first and stops before publishing code if migration application fails.
 
 ## Architecture
 
@@ -73,6 +74,15 @@ npm run db:migrate -- --name <migration-name>
 
 Never run `db:reset` against retained data. It destroys and recreates the selected database.
 
+For a controlled production release, set the direct origin `DATABASE_URL` and run:
+
+```powershell
+npm run db:migrate:deploy
+npm run deploy
+```
+
+`npm run deploy` repeats the idempotent `prisma migrate deploy` gate before building and publishing the Worker. It never seeds data. There is no application or browser endpoint for applying schema changes; a migration failure must be investigated and resolved by an operator before code deployment continues.
+
 ## Environment and secrets
 
 `.env.example` documents the complete local contract. At minimum, configure:
@@ -85,7 +95,7 @@ Never run `db:reset` against retained data. It destroys and recreates the select
 
 Email defaults to a development adapter that logs rather than sends. Storage defaults to a private local adapter. Stripe, SMTP, Blob, Google Drive, OpenAI, and Arcade credentials are optional feature-specific secrets and must never be committed.
 
-Production startup must fail closed when a required security secret is missing or weak. Provider credentials and production database access belong in the hosting provider's secret store, not `.env` in Git.
+Production readiness fails closed when a required security secret is missing or weak. `/api/ready` validates the proposal-signing secret and the 32-byte integration-credential encryption key before reporting ready, without returning either value or secret name. Provider credentials and production database access belong in the hosting provider's secret store, not `.env` in Git.
 
 ## Quality gates
 

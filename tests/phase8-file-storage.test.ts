@@ -181,7 +181,7 @@ describe("Phase 8 sub-phase 1: file security and storage (integration, real loca
     });
   });
 
-  describe("upload, list, download, delete (service + RBAC + tenant isolation)", () => {
+  describe("upload, list, download, archive (service + RBAC + tenant isolation)", () => {
     describe("slug and UUID project identifiers", () => {
       it("uploads by slug while persisting the canonical project UUID in the row and storage key", async () => {
         const result = await uploadProjectFile(ownerActorA, projectASlug, {
@@ -340,9 +340,9 @@ describe("Phase 8 sub-phase 1: file security and storage (integration, real loca
       expect(await prisma.auditLog.count({ where: { companyId: companyAId, entityId: uploaded.file.id, action: "FILE_ARCHIVED" } })).toBe(1);
     });
 
-    it("rejects archive from a role without the files:manage capability", async () => {
+    it("separates routine file management from destructive archive authority", async () => {
       const uploaded = await uploadProjectFile(ownerActorA, projectAId, { originalName: "protected.pdf", mimeType: "application/pdf", buffer: pdfBuffer("protected content") });
-      await expect(archiveProjectFile(reviewerActorA, uploaded.file.id)).rejects.toThrow(PermissionDeniedError);
+      await expect(archiveProjectFile(designerActorA, uploaded.file.id)).rejects.toThrow(PermissionDeniedError);
     });
   });
 });

@@ -26,6 +26,7 @@ export type Capability =
   | "templates:manage"
   | "proposals:manage"
   | "files:manage"
+  | "files:archive"
   | "review:comment"
   | "documents:generate"
   | "documents:generate:internal"
@@ -59,6 +60,7 @@ const ALL_CAPABILITIES: Capability[] = [
   "templates:manage",
   "proposals:manage",
   "files:manage",
+  "files:archive",
   "review:comment",
   "documents:generate",
   "documents:generate:internal",
@@ -98,6 +100,7 @@ const ROLE_CAPABILITIES: Record<UserRole, Capability[]> = {
     "documents:download",
     "documents:delete",
     "proposals:manage",
+    "files:archive",
     "email-templates:manage",
     "library:manage",
     "imports:manage",

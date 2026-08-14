@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { prisma } from "@/lib/db/prisma";
 import type { CurrentActor } from "@/lib/auth/current-actor";
-import { requireCapability } from "@/lib/auth/rbac";
+import { hasCapability, requireCapability } from "@/lib/auth/rbac";
 import { AppError, NotFoundError } from "@/lib/errors/app-error";
 import { getProjectRecord } from "@/lib/repositories/project-repository";
 import {
@@ -295,7 +295,8 @@ export async function uploadProjectDrawing(actor: CurrentActor, projectId: strin
 export async function listProjectDrawings(actor: CurrentActor, projectId: string) {
   const project = await getProjectRecord(actor.companyId, projectId);
   const rows = await listProjectFiles(actor.companyId, project.id);
-  return rows.filter(isDrawingRecord).map(toDrawingDTO);
+  const canArchive = hasCapability(actor.role, "files:archive");
+  return rows.filter(isDrawingRecord).map((row) => ({ ...toDrawingDTO(row), canArchive }));
 }
 
 async function getOwnDrawingRecord(actor: CurrentActor, fileId: string): Promise<ProjectFileRecord> {
@@ -345,7 +346,7 @@ export async function updateProjectDrawingMetadata(actor: CurrentActor, fileId: 
 }
 
 export async function archiveProjectDrawing(actor: CurrentActor, fileId: string) {
-  requireCapability(actor, "files:manage");
+  requireCapability(actor, "files:archive");
   const row = await getOwnDrawingRecord(actor, fileId);
   const result = await prisma.$transaction(async (tx) => {
     const archived = await archiveProjectFileRow(actor.companyId, fileId, actor.userId, tx);

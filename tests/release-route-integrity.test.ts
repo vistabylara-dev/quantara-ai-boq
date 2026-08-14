@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
@@ -13,7 +13,17 @@ const removedHttpWriters = [
   "src/app/api/admin/system-health/apply-pending-migrations/route.ts",
   "src/app/api/admin/system-health/apply-sales-inquiry-migration/route.ts",
   "src/app/api/admin/system-health/apply-core-flow-1-migration/route.ts",
+  "src/app/api/admin/commerce/stripe/apply-commercial-checkout-migration/route.ts",
+  "src/app/api/admin/system-health/apply-catalogue-reference-disciplines-migration/route.ts",
 ] as const;
+
+function routeFiles(directory: string): string[] {
+  return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
+    const path = join(directory, entry.name);
+    if (entry.isDirectory()) return routeFiles(path);
+    return entry.name === "route.ts" ? [path] : [];
+  });
+}
 
 describe("release route integrity", () => {
   it("does not expose legacy schema or seed writers over ordinary HTTP", () => {
@@ -29,5 +39,17 @@ describe("release route integrity", () => {
 
     expect(packageJson.scripts?.["db:migrate:deploy"]).toBe("prisma migrate deploy");
     expect(packageJson.scripts?.["db:seed"]).toBe("prisma db seed");
+    expect(packageJson.scripts?.deploy).toBe(
+      "npm run db:migrate:deploy && opennextjs-cloudflare build && opennextjs-cloudflare deploy",
+    );
+    expect(packageJson.scripts?.deploy).not.toContain("db:seed");
+  });
+
+  it("contains no DDL or Prisma migration-history writer in an application route", () => {
+    for (const file of routeFiles(join(repoRoot, "src", "app", "api"))) {
+      const source = readFileSync(file, "utf8");
+      expect(source, file).not.toMatch(/\b(?:CREATE|ALTER|DROP)\s+(?:TABLE|INDEX|TYPE|FUNCTION|TRIGGER)\b/i);
+      expect(source, file).not.toMatch(/INSERT\s+INTO\s+"_prisma_migrations"/i);
+    }
   });
 });

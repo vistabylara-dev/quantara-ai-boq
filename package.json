@@ -28,7 +28,7 @@
     "admin:provision-owner": "tsx scripts/provision-platform-owner.ts",
     "storage:verify-blob": "tsx scripts/verify-vercel-blob-storage.ts",
     "preview": "opennextjs-cloudflare build && opennextjs-cloudflare preview",
-    "deploy": "opennextjs-cloudflare build && opennextjs-cloudflare deploy",
+    "deploy": "npm run db:migrate:deploy && opennextjs-cloudflare build && opennextjs-cloudflare deploy",
     "upload": "opennextjs-cloudflare build && opennextjs-cloudflare upload",
     "cf-typegen": "wrangler types --env-interface CloudflareEnv cloudflare-env.d.ts"
   },

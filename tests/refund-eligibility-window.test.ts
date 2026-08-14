@@ -56,8 +56,17 @@ function mockStripeClientWithPaymentAge(input: {
       retrieve: async () => ({
         latest_invoice: {
           id: input.invoiceId,
-          payment_intent: input.paymentIntentId,
           status_transitions: { paid_at: paidAtUnixSeconds },
+          payments: {
+            data: [
+              {
+                object: "invoice_payment",
+                status: "paid",
+                amount_paid: input.amountReceived,
+                payment: { type: "payment_intent", payment_intent: input.paymentIntentId },
+              },
+            ],
+          },
         },
       }),
     },
@@ -231,8 +240,11 @@ describe("Refund eligibility window (integration, real local Postgres, mocked St
         retrieve: async () => ({
           latest_invoice: {
             id: `in_${RUN_ID}_declined`,
-            payment_intent: `pi_${RUN_ID}_declined`,
             status_transitions: { paid_at: null }, // Stripe never sets this for an invoice that hasn't been paid.
+            // A declined attempt never produces a "paid" InvoicePayment entry —
+            // it may not appear in payments.data at all, or appear with a
+            // non-"paid" status. Either way, extraction must find nothing.
+            payments: { data: [] },
           },
         }),
       },
@@ -273,5 +285,99 @@ describe("Refund eligibility window (integration, real local Postgres, mocked St
       expect(eligibility.deadline).not.toBeNull();
       expect(new Date(eligibility.deadline).getTime()).toBeGreaterThan(Date.now()); // still in the future (paid 2 days ago, 7-day window)
     }
+  });
+
+  it("REFUND-24 regression — matches the real live Stripe Invoice Payments response shape for the actual Starter AED 149 transaction", async () => {
+    const { company, user } = await makeCompanyWithSubscription("realshape");
+    const paidAtUnixSeconds = Math.floor(Date.now() / 1000) - 3600; // paid 1 hour ago
+    const stripe = {
+      subscriptions: {
+        retrieve: async () => ({
+          latest_invoice: {
+            id: "in_1U4FtRAcN3e3m43PJtcb3HUM",
+            status: "paid",
+            status_transitions: { paid_at: paidAtUnixSeconds },
+            payments: {
+              data: [
+                {
+                  object: "invoice_payment",
+                  status: "paid",
+                  amount_paid: 14900,
+                  payment: { type: "payment_intent", payment_intent: "pi_3U4FmHAcN3e3m43P04bDeDUW" },
+                },
+              ],
+            },
+          },
+        }),
+      },
+      paymentIntents: {
+        retrieve: async (id: string) => ({
+          id,
+          status: "succeeded",
+          amount_received: 14900,
+          latest_charge: { id: "ch_real_starter", refunded: false },
+        }),
+      },
+    } as unknown as Stripe;
+    const actor = actorFor(user.id, company.id, user.email);
+
+    const eligibility = await getRefundEligibility(actor, stripe);
+    expect(eligibility.eligible).toBe(true);
+    if (eligibility.eligible) {
+      expect(eligibility.successfulPaymentAt).toBe(new Date(paidAtUnixSeconds * 1000).toISOString());
+      expect(eligibility.deadline).toBe(new Date((paidAtUnixSeconds + REFUND_WINDOW_DAYS * 24 * 60 * 60) * 1000).toISOString());
+    }
+  });
+
+  it("REFUND-25 regression — a Stripe retrieval failure surfaces as a real error, never masked as NO_PAYMENT", async () => {
+    const { company, user } = await makeCompanyWithSubscription("retrievalfailure");
+    const failingStripe = {
+      subscriptions: {
+        retrieve: async () => {
+          throw new Error("network error talking to Stripe");
+        },
+      },
+      paymentIntents: { retrieve: async () => ({}) },
+    } as unknown as Stripe;
+    const actor = actorFor(user.id, company.id, user.email);
+
+    // Must throw, not resolve to a fake { eligible: false, reason: "NO_PAYMENT" }.
+    await expect(getRefundEligibility(actor, failingStripe)).rejects.toMatchObject({ code: "STRIPE_SUBSCRIPTION_RETRIEVAL_FAILED" });
+  });
+
+  it("REFUND-24 regression — with multiple invoice payments, selects the actually-paid PaymentIntent-backed entry, never blindly data[0]", async () => {
+    const { company, user } = await makeCompanyWithSubscription("multiplepayments");
+    const paidAtUnixSeconds = Math.floor(Date.now() / 1000) - 3600;
+    const stripe = {
+      subscriptions: {
+        retrieve: async () => ({
+          latest_invoice: {
+            id: `in_${RUN_ID}_multi`,
+            status: "paid",
+            status_transitions: { paid_at: paidAtUnixSeconds },
+            payments: {
+              data: [
+                // First entry: a failed/abandoned attempt — must NOT be selected despite being data[0].
+                { object: "invoice_payment", status: "canceled", amount_paid: 0, payment: { type: "payment_intent", payment_intent: `pi_${RUN_ID}_multi_failed` } },
+                // Second entry: not a PaymentIntent-backed payment at all (e.g. a credit note applied) — must be skipped.
+                { object: "invoice_payment", status: "paid", amount_paid: 14900, payment: { type: "credit_note", payment_intent: null } },
+                // Third entry: the genuinely paid PaymentIntent-backed payment — this is the one that must be selected.
+                { object: "invoice_payment", status: "paid", amount_paid: 14900, payment: { type: "payment_intent", payment_intent: `pi_${RUN_ID}_multi_real` } },
+              ],
+            },
+          },
+        }),
+      },
+      paymentIntents: {
+        retrieve: async (id: string) => {
+          expect(id).toBe(`pi_${RUN_ID}_multi_real`); // proves the correct entry was selected, not data[0]
+          return { id, status: "succeeded", amount_received: 14900, latest_charge: { id: `ch_${RUN_ID}_multi`, refunded: false } };
+        },
+      },
+    } as unknown as Stripe;
+    const actor = actorFor(user.id, company.id, user.email);
+
+    const eligibility = await getRefundEligibility(actor, stripe);
+    expect(eligibility.eligible).toBe(true);
   });
 });

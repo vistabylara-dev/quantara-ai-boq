@@ -56,25 +56,40 @@ async function findRefundableSubscription(companyId: string) {
   });
 }
 
-/**
- * Extracts the PaymentIntent ID from an Invoice defensively — real Stripe
- * API versions have moved payment linkage around before (see
- * extractInvoiceSubscriptionId in stripe-webhook-service.ts for the same
- * class of shift on `.subscription`). Tries the classic scalar field first,
- * then the newer nested `payments` list shape, so this keeps working across
- * either shape without needing to know in advance which one API version
- * 2026-07-29.dahlia actually returns for this account.
- */
-function extractInvoicePaymentIntentId(invoice: Stripe.Invoice): string | null {
-  const legacy = (invoice as unknown as { payment_intent?: string | { id: string } | null }).payment_intent;
-  if (legacy) return typeof legacy === "string" ? legacy : legacy.id;
+type InvoicePaymentLike = {
+  status?: string;
+  payment?: {
+    type?: string;
+    payment_intent?: string | { id: string } | null;
+  } | null;
+};
 
-  const nested = (
-    invoice as unknown as {
-      payments?: { data?: Array<{ payment?: { payment_intent?: string | { id: string } | null } }> };
-    }
-  ).payments?.data?.[0]?.payment?.payment_intent;
-  if (nested) return typeof nested === "string" ? nested : nested.id;
+/**
+ * REFUND-24 — confirmed against this account's real API version
+ * (2026-07-29.dahlia): Invoice no longer carries a `.payment_intent` scalar
+ * at all (matches the same restructuring extractInvoiceSubscriptionId in
+ * stripe-webhook-service.ts already accounts for on `.subscription`).
+ * Payment linkage lives in `invoice.payments.data[]`, an array of
+ * InvoicePayment objects — Stripe supports multiple/partial payments per
+ * invoice, so this never blindly assumes index 0 is the successful one.
+ * Selects the entry that is actually `status: "paid"` AND
+ * `payment.type: "payment_intent"` with a present `payment.payment_intent`
+ * (string ID, or an expanded object — the caller does not need to expand
+ * the PaymentIntent itself; the subsequent stripe.paymentIntents.retrieve
+ * call is the single source of truth for its own status/amount either way).
+ */
+function extractPaidPaymentIntentId(invoice: Stripe.Invoice): string | null {
+  const payments = (invoice as unknown as { payments?: { data?: InvoicePaymentLike[] } }).payments?.data;
+  if (!payments) return null;
+
+  for (const invoicePayment of payments) {
+    if (invoicePayment.status !== "paid") continue;
+    const payment = invoicePayment.payment;
+    if (!payment || payment.type !== "payment_intent") continue;
+    const paymentIntent = payment.payment_intent;
+    if (!paymentIntent) continue;
+    return typeof paymentIntent === "string" ? paymentIntent : paymentIntent.id;
+  }
 
   return null;
 }
@@ -98,8 +113,12 @@ export type EligiblePayment = {
 async function findEligiblePayment(stripe: Stripe, externalSubscriptionId: string): Promise<EligiblePayment> {
   let subscription: Stripe.Subscription;
   try {
+    // Minimal expansion: the PaymentIntent object itself is never needed
+    // here — only its ID, which invoice.payments.data[] carries directly.
+    // stripe.paymentIntents.retrieve() below is the actual source of truth
+    // for the PaymentIntent's own status/amount.
     subscription = await stripe.subscriptions.retrieve(externalSubscriptionId, {
-      expand: ["latest_invoice", "latest_invoice.payments.data.payment.payment_intent"],
+      expand: ["latest_invoice", "latest_invoice.payments"],
     });
   } catch {
     throw new AppError("STRIPE_SUBSCRIPTION_RETRIEVAL_FAILED", "Could not retrieve this subscription from Stripe.", 502);
@@ -110,7 +129,7 @@ async function findEligiblePayment(stripe: Stripe, externalSubscriptionId: strin
     throw new AppError("REFUND_NO_PAYMENT_FOUND", "No payment was found for this subscription.", 409);
   }
 
-  const paymentIntentId = extractInvoicePaymentIntentId(invoice);
+  const paymentIntentId = extractPaidPaymentIntentId(invoice);
   if (!paymentIntentId) {
     throw new AppError("REFUND_NO_PAYMENT_FOUND", "No completed payment was found for this subscription.", 409);
   }
@@ -322,10 +341,23 @@ export async function getRefundEligibility(actor: CurrentActor, overrideClient?:
   try {
     payment = await findEligiblePayment(stripe, subscription.externalSubscriptionId);
   } catch (error) {
-    if (error instanceof AppError && error.code === "REFUND_ALREADY_REFUNDED") {
-      return { eligible: false, deadline: null, reason: "ALREADY_REFUNDED" };
+    /**
+     * REFUND-25 — only a genuine "this payment was never made" condition may
+     * report NO_PAYMENT to the customer. Every other failure (Stripe
+     * unreachable, not configured, an authoritative timestamp Stripe didn't
+     * report, a database error, or any unexpected error) must surface as a
+     * real error instead — telling a customer who genuinely paid that they
+     * "never paid" is a worse failure mode than a visible 502/503.
+     */
+    if (error instanceof AppError) {
+      if (error.code === "REFUND_ALREADY_REFUNDED") {
+        return { eligible: false, deadline: null, reason: "ALREADY_REFUNDED" };
+      }
+      if (error.code === "REFUND_NO_PAYMENT_FOUND") {
+        return { eligible: false, deadline: null, reason: "NO_PAYMENT" };
+      }
     }
-    return { eligible: false, deadline: null, reason: "NO_PAYMENT" };
+    throw error;
   }
 
   const existingNonTerminal = await findNonTerminalRefundRequestForPaymentIntent(payment.paymentIntentId);

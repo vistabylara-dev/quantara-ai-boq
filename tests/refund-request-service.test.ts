@@ -43,8 +43,17 @@ function mockRefundStripeClient(input: {
       retrieve: async () => ({
         latest_invoice: {
           id: input.invoiceId,
-          payment_intent: input.paymentIntentId,
           status_transitions: { paid_at: Math.floor(Date.now() / 1000) - 3600 },
+          payments: {
+            data: [
+              {
+                object: "invoice_payment",
+                status: "paid",
+                amount_paid: input.amountReceived,
+                payment: { type: "payment_intent", payment_intent: input.paymentIntentId },
+              },
+            ],
+          },
         },
       }),
     },

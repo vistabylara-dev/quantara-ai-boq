@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { use } from "react";
 import { apiClient, ApiClientError, getApiErrorMessage, type ApiErrorPayload } from "@/lib/api/client";
+import { TayqanHeroRobot } from "@/components/tayqan/tayqan-hero-robot";
 import { useTranslations } from "@/lib/i18n/locale-provider";
 import type { TranslationKey } from "@/lib/i18n/translate";
 import { nextHireIdempotencyKey, type HireAttemptKeyState } from "@/lib/worker/tayqan-hire-attempt";
@@ -283,32 +284,37 @@ export default function TayqanPage(props: { params: Promise<{ projectId: string 
 
   return (
     <div className="space-y-8">
-      <div className="rounded-[32px] border border-cyan-900 bg-cyan-950/10 p-8">
-        <p className="text-xs font-semibold uppercase tracking-[0.28em] text-cyan-400">{t("tayqan.eyebrow")}</p>
-        <h1 className="mt-2 text-3xl font-semibold text-white">{TAYQAN_WORKER_DEFINITION.name}</h1>
-        <p className="mt-1 text-lg text-cyan-200">{t(TAYQAN_WORKER_DEFINITION.titleKey as TranslationKey)}</p>
-        <p className="mt-3 max-w-2xl text-sm text-slate-400">{t("tayqan.tagline")}</p>
+      <div className="grid gap-6 rounded-[32px] border border-cyan-900 bg-cyan-950/10 p-8 lg:grid-cols-2 lg:items-center lg:gap-10">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.28em] text-cyan-400">{t("tayqan.eyebrow")}</p>
+          <h1 className="mt-2 text-3xl font-semibold text-white">{TAYQAN_WORKER_DEFINITION.name}</h1>
+          <p className="mt-1 text-lg text-cyan-200">{t(TAYQAN_WORKER_DEFINITION.titleKey as TranslationKey)}</p>
+          <p className="mt-3 max-w-2xl text-sm text-slate-400">{t("tayqan.tagline")}</p>
 
-        {boqs.length > 1 && (
-          <div className="mt-6">
-            <label className="block text-xs text-slate-500" htmlFor="tayqan-boq-select">{t("tayqan.selectBoq")}</label>
-            <select
-              id="tayqan-boq-select"
-              value={selectedBoqId ?? ""}
-              onChange={(event) => {
-                setSelectedBoqId(event.target.value);
-                setRun(undefined);
-                setHireAttempt(null);
-                setHireError(null);
-              }}
-              className="mt-1 rounded-2xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-200"
-            >
-              {boqs.map((boq) => (
-                <option key={boq.id} value={boq.id}>{boq.title} ({t("tayqan.revisionLabel", { number: boq.revisionNumber })})</option>
-              ))}
-            </select>
-          </div>
-        )}
+          {boqs.length > 1 && (
+            <div className="mt-6">
+              <label className="block text-xs text-slate-500" htmlFor="tayqan-boq-select">{t("tayqan.selectBoq")}</label>
+              <select
+                id="tayqan-boq-select"
+                value={selectedBoqId ?? ""}
+                onChange={(event) => {
+                  setSelectedBoqId(event.target.value);
+                  setRun(undefined);
+                  setHireAttempt(null);
+                  setHireError(null);
+                }}
+                className="mt-1 rounded-2xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-200"
+              >
+                {boqs.map((boq) => (
+                  <option key={boq.id} value={boq.id}>{boq.title} ({t("tayqan.revisionLabel", { number: boq.revisionNumber })})</option>
+                ))}
+              </select>
+            </div>
+          )}
+        </div>
+
+        {/* TAYQAN remains visible here whether or not it has been hired for this BOQ — the robot is never gated behind hire state. */}
+        <TayqanHeroRobot />
       </div>
 
       {run === undefined ? (

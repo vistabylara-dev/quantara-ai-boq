@@ -81,6 +81,44 @@ type MigrationRow = {
   applied_steps_count: number;
 };
 
+const EXPECTED_DATABASE_NAME = "quantara_staging";
+const EXPECTED_SCHEMA_NAME = "public";
+const EXPECTED_TOTAL_CLEAN_MIGRATIONS = 43;
+
+/**
+ * Already applied outside this recovery route and never touched by it —
+ * RECOVERY_MIGRATIONS above deliberately excludes this name, so the main
+ * loop can never execute or record it. This constant exists only so the
+ * pre-flight and final-verification gates can confirm its state stays
+ * exactly one clean, completed row throughout the recovery.
+ */
+const REFUND_MIGRATION_NAME = "20260814105935_refund_workflow";
+
+/**
+ * Hardcoded and never derived from request input — safe to interpolate as
+ * an identifier. Row counts on these tables must be provably unchanged by
+ * a recovery run that is only supposed to add new tables/columns, never
+ * touch existing customer data.
+ */
+const CORE_DATA_TABLES = [
+  "Company",
+  "User",
+  "Project",
+  "BOQ",
+  "MasterItem",
+  "DocumentTemplate",
+  "GeneratedDocument",
+] as const;
+
+async function coreDataCounts(client: PoolClient): Promise<Record<(typeof CORE_DATA_TABLES)[number], number>> {
+  const counts = {} as Record<(typeof CORE_DATA_TABLES)[number], number>;
+  for (const table of CORE_DATA_TABLES) {
+    const result = await client.query<{ count: string }>(`SELECT COUNT(*)::text AS count FROM "${table}"`);
+    counts[table] = Number(result.rows[0]?.count ?? "0");
+  }
+  return counts;
+}
+
 function databaseUrl(): string {
   const value = process.env.DATABASE_URL ?? "";
   if (!/^postgres(?:ql)?:\/\//.test(value)) {
@@ -272,6 +310,59 @@ export async function POST() {
     transactionOpen = true;
     await client.query(`LOCK TABLE "_prisma_migrations" IN EXCLUSIVE MODE`);
 
+    // Gate 1 — this route must never run against anything but the intended
+    // database/schema, no matter which connection string it was handed.
+    const [identity] = (
+      await client.query<{ current_database: string; current_schema: string }>(
+        `SELECT current_database()::text AS current_database, current_schema()::text AS current_schema`,
+      )
+    ).rows;
+    if (identity?.current_database !== EXPECTED_DATABASE_NAME || identity?.current_schema !== EXPECTED_SCHEMA_NAME) {
+      throw new AppError(
+        "SCHEMA_RECOVERY_WRONG_DATABASE",
+        `This recovery route only runs against database "${EXPECTED_DATABASE_NAME}" schema "${EXPECTED_SCHEMA_NAME}" — connected to database "${identity?.current_database ?? "unknown"}" schema "${identity?.current_schema ?? "unknown"}" instead. No recovery changes were made.`,
+        409,
+      );
+    }
+
+    // Gate 2 — ANY unfinished or rolled-back migration row, target or not,
+    // means the migration history is not in a state this route can safely
+    // reason about. Stop rather than run six more migrations on top of an
+    // already-ambiguous history.
+    const globallyAmbiguous = await client.query<{ migration_name: string }>(
+      `SELECT migration_name::text AS migration_name
+       FROM "_prisma_migrations"
+       WHERE finished_at IS NULL OR rolled_back_at IS NOT NULL
+       ORDER BY started_at ASC
+       LIMIT 1`,
+    );
+    if (globallyAmbiguous.rows.length > 0) {
+      throw new AppError(
+        "SCHEMA_RECOVERY_GLOBAL_MIGRATION_STATE_AMBIGUOUS",
+        `"_prisma_migrations" contains an unfinished or rolled-back row (e.g. ${globallyAmbiguous.rows[0]!.migration_name}) unrelated to this recovery's own six migrations. No recovery changes were made.`,
+        409,
+      );
+    }
+
+    // Gate 3 — the refund workflow migration was applied separately and
+    // must stay exactly as it is: never (re)executed, never modified, and
+    // never allowed to silently drift while this route is trusting the
+    // rest of the migration history.
+    const refundRowsBefore = await migrationRows(client, REFUND_MIGRATION_NAME);
+    if (refundRowsBefore.length !== 1 || !isCleanlyApplied(refundRowsBefore[0]!)) {
+      throw new AppError(
+        "SCHEMA_RECOVERY_REFUND_MIGRATION_STATE_INVALID",
+        `${REFUND_MIGRATION_NAME} must already be recorded as exactly one clean, completed migration row before recovery can proceed (found ${refundRowsBefore.length} row(s)). No recovery changes were made.`,
+        409,
+      );
+    }
+
+    // Gate 4 (capture) — every one of these six migrations is additive
+    // (new tables/columns only); none of them should ever change existing
+    // row counts on core customer-data tables. Captured now, re-checked
+    // for exact equality right before COMMIT below.
+    const coreCountsBefore = await coreDataCounts(client);
+
     const log: string[] = [];
 
     for (const migration of sources) {
@@ -346,6 +437,30 @@ export async function POST() {
       log.push(`${migration.name}: applied from pinned commit and recorded.`);
     }
 
+    // Gate 4 (verify) — re-read the same core tables and require exact
+    // equality. Any drift, in either direction, rolls back everything this
+    // recovery did, not just the migration that happened to run last.
+    const coreCountsAfter = await coreDataCounts(client);
+    const driftedTables = CORE_DATA_TABLES.filter((table) => coreCountsBefore[table] !== coreCountsAfter[table]);
+    if (driftedTables.length > 0) {
+      throw new AppError(
+        "SCHEMA_RECOVERY_CORE_COUNT_DRIFT",
+        `Core table row count(s) changed during recovery: ${driftedTables.join(", ")}. The entire recovery was rolled back.`,
+        500,
+      );
+    }
+
+    // Gate 5 — the refund migration must still be exactly the one clean row
+    // it was before this recovery touched anything.
+    const refundRowsAfter = await migrationRows(client, REFUND_MIGRATION_NAME);
+    if (refundRowsAfter.length !== 1 || !isCleanlyApplied(refundRowsAfter[0]!)) {
+      throw new AppError(
+        "SCHEMA_RECOVERY_REFUND_MIGRATION_STATE_INVALID",
+        `${REFUND_MIGRATION_NAME} no longer verifies as exactly one clean, completed migration row after recovery. The entire recovery was rolled back.`,
+        500,
+      );
+    }
+
     const finalState = await inspectRecoveryState(client);
     const incomplete = finalState.filter(
       (migration) =>
@@ -360,12 +475,43 @@ export async function POST() {
       );
     }
 
+    const finalTotals = (
+      await client.query<{ total: string; unfinished: string }>(
+        `SELECT
+           COUNT(*)::text AS total,
+           COUNT(*) FILTER (WHERE finished_at IS NULL OR rolled_back_at IS NOT NULL)::text AS unfinished
+         FROM "_prisma_migrations"`,
+      )
+    ).rows[0];
+    const migrationsAppliedAfter = Number(finalTotals?.total ?? "0");
+    const unfinishedAfter = Number(finalTotals?.unfinished ?? "0");
+    if (unfinishedAfter !== 0) {
+      throw new AppError(
+        "SCHEMA_RECOVERY_FINAL_UNFINISHED_MIGRATIONS",
+        `Expected 0 unfinished/rolled-back migrations after recovery, found ${unfinishedAfter}. The entire recovery was rolled back.`,
+        500,
+      );
+    }
+    if (migrationsAppliedAfter !== EXPECTED_TOTAL_CLEAN_MIGRATIONS) {
+      throw new AppError(
+        "SCHEMA_RECOVERY_FINAL_MIGRATION_COUNT_MISMATCH",
+        `Expected exactly ${EXPECTED_TOTAL_CLEAN_MIGRATIONS} migration rows after recovery, found ${migrationsAppliedAfter}. The entire recovery was rolled back.`,
+        500,
+      );
+    }
+
     await client.query("COMMIT");
     transactionOpen = false;
 
     return apiSuccess({
       recovered: true,
       pinnedCommit: PINNED_COMMIT,
+      databaseName: identity.current_database,
+      schemaName: identity.current_schema,
+      coreCountsBefore,
+      coreCountsAfter,
+      migrationsAppliedAfter,
+      unfinishedAfter,
       log,
       migrations: finalState,
     });

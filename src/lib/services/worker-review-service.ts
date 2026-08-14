@@ -104,7 +104,7 @@ function assignmentDTO(assignment: WorkerAssignmentRecord) {
   };
 }
 
-async function getAssignmentRecord(
+export async function getWorkerAssignmentRecord(
   companyId: string,
   assignmentId: string,
   db: typeof prisma | Prisma.TransactionClient = prisma,
@@ -118,20 +118,84 @@ async function getAssignmentRecord(
 }
 
 export async function getWorkerAssignmentWorkspace(companyId: string, assignmentId: string) {
-  return assignmentDTO(await getAssignmentRecord(companyId, assignmentId));
+  return assignmentDTO(await getWorkerAssignmentRecord(companyId, assignmentId));
 }
+
+export type ReviewExistingBOQOptions = {
+  assignmentId?: string;
+  expectedBoqVersion?: number;
+  lease?: {
+    workerRunId: string;
+    leaseOwner: string;
+  };
+};
 
 export async function reviewExistingBOQ(
   actor: CurrentActor,
   boqId: string,
   inspectionAsOf = new Date(),
+  options: ReviewExistingBOQOptions = {},
 ) {
   if (Number.isNaN(inspectionAsOf.getTime())) {
     throw new ConflictError("INVALID_INSPECTION_TIME", "A valid deterministic inspection time is required.");
   }
 
-  const assignmentId = randomUUID();
+  const assignmentId = options.assignmentId ?? randomUUID();
+
+  const existingAssignment = await prisma.workerAssignment.findUnique({
+    where: { id: assignmentId },
+    select: { companyId: true, boqId: true, assignmentType: true },
+  });
+  if (existingAssignment) {
+    if (
+      existingAssignment.companyId !== actor.companyId
+      || existingAssignment.boqId !== boqId
+      || existingAssignment.assignmentType !== WorkerAssignmentType.REVIEW_EXISTING_BOQ
+    ) {
+      throw new ConflictError(
+        "WORKER_ASSIGNMENT_ID_CONFLICT",
+        "The requested worker assignment identity belongs to a different governed review.",
+      );
+    }
+    return getWorkerAssignmentWorkspace(actor.companyId, assignmentId);
+  }
+
   await prisma.$transaction(async (tx) => {
+    if (options.lease) {
+      const leaseRows = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+        SELECT "id"
+        FROM "WorkerRun"
+        WHERE "id" = CAST(${options.lease.workerRunId} AS uuid)
+          AND "companyId" = CAST(${actor.companyId} AS uuid)
+          AND "boqId" = CAST(${boqId} AS uuid)
+          AND "status" = 'RUNNING'
+          AND "leaseOwner" = ${options.lease.leaseOwner}
+          AND "leaseExpiresAt" > CURRENT_TIMESTAMP
+        FOR UPDATE
+      `);
+      if (!leaseRows.length) {
+        throw new ConflictError("WORKER_LEASE_LOST", "The durable worker lease is no longer active.");
+      }
+    }
+
+    const assignmentCreatedByAnotherAttempt = await tx.workerAssignment.findUnique({
+      where: { id: assignmentId },
+      select: { companyId: true, boqId: true, assignmentType: true },
+    });
+    if (assignmentCreatedByAnotherAttempt) {
+      if (
+        assignmentCreatedByAnotherAttempt.companyId !== actor.companyId
+        || assignmentCreatedByAnotherAttempt.boqId !== boqId
+        || assignmentCreatedByAnotherAttempt.assignmentType !== WorkerAssignmentType.REVIEW_EXISTING_BOQ
+      ) {
+        throw new ConflictError(
+          "WORKER_ASSIGNMENT_ID_CONFLICT",
+          "The requested worker assignment identity belongs to a different governed review.",
+        );
+      }
+      return;
+    }
+
     const boq = await tx.bOQ.findFirst({
       where: { id: boqId, companyId: actor.companyId },
       include: {
@@ -151,6 +215,12 @@ export async function reviewExistingBOQ(
       },
     });
     if (!boq) throw new NotFoundError("BOQ not found.");
+    if (options.expectedBoqVersion !== undefined && boq.version !== options.expectedBoqVersion) {
+      throw new ConflictError(
+        "BOQ_CHANGED_AFTER_ENQUEUE",
+        "The BOQ changed after this review was queued. Enqueue a new review for the current version.",
+      );
+    }
 
     const revisionSnapshot = await tx.bOQRevisionSnapshot.findFirst({
       where: {

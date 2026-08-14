@@ -116,6 +116,8 @@ describe("GET /api/ready", () => {
     vi.stubEnv("NODE_ENV", "production");
     vi.stubEnv("PROPOSAL_ACCESS_SECRET", "");
     vi.stubEnv("INTEGRATION_CREDENTIALS_ENCRYPTION_KEY", Buffer.alloc(32, 4).toString("base64"));
+    vi.stubEnv("WORKER_RUNNER_SECRET", "production-worker-secret-with-more-than-thirty-two-bytes");
+    vi.stubEnv("WORKER_AI_PLANNER_ENABLED", "false");
 
     const { GET } = await import("../src/app/api/ready/route");
     const response = await GET();
@@ -131,6 +133,8 @@ describe("GET /api/ready", () => {
     vi.stubEnv("NODE_ENV", "production");
     vi.stubEnv("PROPOSAL_ACCESS_SECRET", "production-proposal-secret-with-more-than-thirty-two-bytes");
     vi.stubEnv("INTEGRATION_CREDENTIALS_ENCRYPTION_KEY", Buffer.alloc(32, 4).toString("base64"));
+    vi.stubEnv("WORKER_RUNNER_SECRET", "production-worker-secret-with-more-than-thirty-two-bytes");
+    vi.stubEnv("WORKER_AI_PLANNER_ENABLED", "false");
     queryRawMock.mockResolvedValue([{ "?column?": 1 }]);
 
     const { GET } = await import("../src/app/api/ready/route");
@@ -138,5 +142,39 @@ describe("GET /api/ready", () => {
 
     expect(response.status).toBe(200);
     expect(queryRawMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("fails readiness closed in production when the worker runner secret is missing", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("PROPOSAL_ACCESS_SECRET", "production-proposal-secret-with-more-than-thirty-two-bytes");
+    vi.stubEnv("INTEGRATION_CREDENTIALS_ENCRYPTION_KEY", Buffer.alloc(32, 4).toString("base64"));
+    vi.stubEnv("WORKER_RUNNER_SECRET", "");
+    vi.stubEnv("WORKER_AI_PLANNER_ENABLED", "false");
+
+    const { GET } = await import("../src/app/api/ready/route");
+    const response = await GET();
+
+    expect(response.status).toBe(503);
+    expect(queryRawMock).not.toHaveBeenCalled();
+    const body = (await response.json()) as ApiErrorBody;
+    expect(body.error.code).toBe("SECURITY_CONFIGURATION_UNAVAILABLE");
+    expect(JSON.stringify(body)).not.toContain("WORKER_RUNNER_SECRET");
+  });
+
+  it("fails readiness closed when the bounded AI planner lacks its model", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("PROPOSAL_ACCESS_SECRET", "production-proposal-secret-with-more-than-thirty-two-bytes");
+    vi.stubEnv("INTEGRATION_CREDENTIALS_ENCRYPTION_KEY", Buffer.alloc(32, 4).toString("base64"));
+    vi.stubEnv("WORKER_RUNNER_SECRET", "production-worker-secret-with-more-than-thirty-two-bytes");
+    vi.stubEnv("WORKER_AI_PLANNER_ENABLED", "true");
+    vi.stubEnv("OPENAI_API_KEY", "server-side-test-key");
+    vi.stubEnv("WORKER_AI_MODEL", "");
+
+    const { GET } = await import("../src/app/api/ready/route");
+    const response = await GET();
+
+    expect(response.status).toBe(503);
+    expect(queryRawMock).not.toHaveBeenCalled();
+    expect((await response.json() as ApiErrorBody).error.code).toBe("SECURITY_CONFIGURATION_UNAVAILABLE");
   });
 });

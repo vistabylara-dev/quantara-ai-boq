@@ -12,6 +12,7 @@ This repository is under active development. A passing local build proves code i
 - TypeScript and Next.js build errors are release blockers; the build does not ignore them.
 - Tests reset and seed a dedicated database whose name must contain `test` or `ci`.
 - Production proposal links require a private `PROPOSAL_ACCESS_SECRET` of at least 32 bytes.
+- The private durable-worker drain endpoint requires a separate `WORKER_RUNNER_SECRET` of at least 32 bytes.
 - Database migrations and seeds run through explicit commands, not public HTTP routes.
 - The production deploy command runs `prisma migrate deploy` first and stops before publishing code if migration application fails.
 
@@ -23,6 +24,7 @@ This repository is under active development. A passing local build proves code i
 - Database-backed sessions and server-enforced role checks
 - Immutable BOQ revision snapshots and audit records
 - Background extraction/catalogue job state with idempotency and recovery checks
+- PostgreSQL-backed BOQ review runs with atomic leases, bounded retries, and an immutable execution journal
 - PDF, DOCX, XLSX, and CSV document workflows where supported by the relevant feature
 - OpenNext build target for Cloudflare
 
@@ -91,11 +93,20 @@ npm run deploy
 - `APP_BASE_URL`
 - `DEV_OWNER_EMAIL` and `DEV_OWNER_PASSWORD` before seeding anything non-throwaway
 - `PROPOSAL_ACCESS_SECRET` with at least 32 private random bytes
+- `WORKER_RUNNER_SECRET` with at least 32 private random bytes
 - `INTEGRATION_CREDENTIALS_ENCRYPTION_KEY` before connecting an external provider
 
 Email defaults to a development adapter that logs rather than sends. Storage defaults to a private local adapter. Stripe, SMTP, Blob, Google Drive, OpenAI, and Arcade credentials are optional feature-specific secrets and must never be committed.
 
-Production readiness fails closed when a required security secret is missing or weak. `/api/ready` validates the proposal-signing secret and the 32-byte integration-credential encryption key before reporting ready, without returning either value or secret name. Provider credentials and production database access belong in the hosting provider's secret store, not `.env` in Git.
+Production readiness fails closed when a required security secret is missing or weak. `/api/ready` validates the proposal-signing secret, durable-runner secret, and 32-byte integration-credential encryption key before reporting ready, without returning any value or secret name. Provider credentials and production database access belong in the hosting provider's secret store, not `.env` in Git.
+
+## Durable BOQ review worker
+
+`POST /api/boqs/{boqId}/worker/review` requires an authenticated actor with `verification:manage` and a caller-supplied `Idempotency-Key` header. It records a durable `REVIEW_EXISTING_BOQ` run and returns `202`; it does not depend on request-lifecycle background execution. `GET /api/worker/runs/{runId}` returns only the active company's run, immutable event journal, deterministic assignment link, and optional advisory plan.
+
+A private scheduler or operator drains queued work through `POST /api/internal/worker/drain` with `Authorization: Bearer <WORKER_RUNNER_SECRET>`. The endpoint accepts at most five runs per request. Never place this secret in a browser, public scheduler payload, source file, or log.
+
+The AI planner is disabled unless `WORKER_AI_PLANNER_ENABLED=true`. Enabling it also requires server-only `OPENAI_API_KEY` and `WORKER_AI_MODEL`. Its single structured call receives a bounded context with commercial numeric values removed, and its validated output is stored as immutable advice requiring human review. It cannot change BOQ quantities, rates, provenance, verification, approval, or revision evidence.
 
 ## Quality gates
 
@@ -126,6 +137,7 @@ See [authentication](docs/authentication.md) and [multi-tenancy](docs/multi-tena
 - Drawing extraction creates evidence and review candidates; it does not grant professional approval.
 - Confirming or correcting an extracted entity is separate from importing it into a BOQ.
 - BOQ verification and locking use explicit state transitions and immutable revision evidence.
+- Deterministic worker review remains authoritative; optional AI output is advisory coordination only and never grants professional or commercial approval.
 - Stripe checkout, synchronization, and webhooks remain configuration-gated. Local tests use mocked provider calls and do not prove a live account is ready.
 - Autodesk/AutoCAD support is limited to the explicitly declared beta metadata path; unattended native geometry extraction is not represented as available.
 - Deployments, live provider writes, owner provisioning, and production migrations are deliberate operator actions and are not performed by CI.

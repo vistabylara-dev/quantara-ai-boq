@@ -112,6 +112,30 @@ enum WorkerEventType {
   REVIEW_FAILED
 }
 
+enum WorkerRunStatus {
+  QUEUED
+  RUNNING
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+enum WorkerPlannerMode {
+  DETERMINISTIC_ONLY
+  BOUNDED_AI
+}
+
+enum WorkerRunEventType {
+  RUN_ENQUEUED
+  LEASE_ACQUIRED
+  RETRY_SCHEDULED
+  DETERMINISTIC_REVIEW_LINKED
+  AI_PLANNER_SKIPPED
+  AI_PLAN_RECORDED
+  RUN_COMPLETED
+  RUN_FAILED
+}
+
 enum MarginMode {
   MARKUP
   GROSS_MARGIN
@@ -1574,6 +1598,7 @@ model Company {
   stripeWebhookEvents         StripeWebhookEvent[]
   stripeBillingCustomers      StripeBillingCustomer[]
   workerAssignments           WorkerAssignment[]
+  workerRuns                  WorkerRun[]
 }
 
 model User {
@@ -1630,6 +1655,7 @@ model User {
   integrationEventsActed                 IntegrationEvent[]               @relation("IntegrationEventActor")
   tablePageResolutionsDecided            TablePageResolution[]
   workerAssignmentsRequested             WorkerAssignment[]               @relation("WorkerAssignmentRequestedBy")
+  workerRunsRequested                    WorkerRun[]                      @relation("WorkerRunRequestedBy")
 
   @@index([companyId])
   @@index([role])
@@ -1765,6 +1791,7 @@ model Project {
   inspections               Inspection[]
   projectIntegrations       ProjectIntegration[]
   workerAssignments         WorkerAssignment[]
+  workerRuns                WorkerRun[]
 
   @@unique([companyId, reference])
   @@unique([companyId, slug])
@@ -1803,6 +1830,7 @@ model BOQ {
   emailDispatches        EmailDispatch[]
   itemUsages             CompanyItemUsage[]
   workerAssignments      WorkerAssignment[]
+  workerRuns             WorkerRun[]
 
   @@unique([projectId, revisionNumber])
   @@index([companyId])
@@ -2042,11 +2070,106 @@ model WorkerAssignment {
   decisions             WorkerDecision[]
   materialQuestions     WorkerMaterialQuestion[]
   events                WorkerEvent[]
+  runnerRun             WorkerRun?               @relation("WorkerRunResult")
+  aiPlan                WorkerAIPlan?
 
   @@index([companyId, createdAt])
   @@index([projectId, createdAt])
   @@index([boqId, createdAt])
   @@index([status, createdAt])
+}
+
+/**
+ * Durable serverless queue record. A run is idempotent and links to one immutable V0 assignment.
+ */
+model WorkerRun {
+  id                    String               @id @default(uuid()) @db.Uuid
+  companyId             String               @db.Uuid
+  projectId             String               @db.Uuid
+  boqId                 String               @db.Uuid
+  assignmentType        WorkerAssignmentType
+  idempotencyKey        String
+  status                WorkerRunStatus      @default(QUEUED)
+  plannerMode           WorkerPlannerMode    @default(DETERMINISTIC_ONLY)
+  sourceBoqVersion      Int
+  sourceVerifiedVersion Int?
+  sourceRevisionNumber  Int
+  maximumAttempts       Int                  @default(3)
+  attempts              Int                  @default(0)
+  availableAt           DateTime             @default(now())
+  leaseOwner            String?
+  leaseExpiresAt        DateTime?
+  lastHeartbeatAt       DateTime?
+  requestedByUserId     String               @db.Uuid
+  requestedByName       String
+  resultAssignmentId    String?              @unique @db.Uuid
+  startedAt             DateTime?
+  completedAt           DateTime?
+  failureCode           String?
+  failureMessage        String?
+  createdAt             DateTime             @default(now())
+  updatedAt             DateTime             @updatedAt
+  company               Company              @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  project               Project              @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  boq                   BOQ                  @relation(fields: [boqId], references: [id], onDelete: Restrict)
+  requestedByUser       User                 @relation("WorkerRunRequestedBy", fields: [requestedByUserId], references: [id], onDelete: Restrict)
+  resultAssignment      WorkerAssignment?    @relation("WorkerRunResult", fields: [resultAssignmentId], references: [id], onDelete: Restrict)
+  events                WorkerRunEvent[]
+  aiPlan                WorkerAIPlan?
+
+  @@unique([companyId, assignmentType, idempotencyKey])
+  @@index([status, availableAt])
+  @@index([companyId, createdAt])
+  @@index([projectId, createdAt])
+  @@index([boqId, createdAt])
+  @@index([leaseExpiresAt])
+}
+
+/**
+ * Append-only execution journal for atomic lease, retry, and completion transitions.
+ */
+model WorkerRunEvent {
+  id             String             @id @default(uuid()) @db.Uuid
+  companyId      String             @db.Uuid
+  projectId      String             @db.Uuid
+  boqId          String             @db.Uuid
+  workerRunId    String             @db.Uuid
+  sequenceNumber Int
+  eventType      WorkerRunEventType
+  payloadJson    Json
+  createdAt      DateTime           @default(now())
+  workerRun      WorkerRun          @relation(fields: [workerRunId], references: [id], onDelete: Restrict)
+
+  @@unique([workerRunId, sequenceNumber])
+  @@index([companyId, projectId])
+  @@index([boqId])
+  @@index([eventType, createdAt])
+}
+
+/**
+ * Immutable, advisory-only output from the optional one-call bounded planner.
+ */
+model WorkerAIPlan {
+  id                 String           @id @default(uuid()) @db.Uuid
+  companyId          String           @db.Uuid
+  projectId          String           @db.Uuid
+  boqId              String           @db.Uuid
+  workerRunId        String           @unique @db.Uuid
+  assignmentId       String           @unique @db.Uuid
+  plannerVersion     String
+  provider           String
+  model              String
+  providerResponseId String?
+  contextSha256      String
+  contextSummaryJson Json
+  planJson           Json
+  usageJson          Json?
+  createdAt          DateTime         @default(now())
+  workerRun          WorkerRun        @relation(fields: [workerRunId], references: [id], onDelete: Restrict)
+  assignment         WorkerAssignment @relation(fields: [assignmentId], references: [id], onDelete: Restrict)
+
+  @@index([companyId, projectId])
+  @@index([boqId])
 }
 
 /**

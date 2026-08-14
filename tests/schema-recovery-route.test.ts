@@ -74,7 +74,7 @@ type ScenarioConfig = {
   objectsPresent?: Set<string>;
   coreCountsBefore?: Partial<Record<(typeof CORE_TABLES)[number], number>>;
   coreCountsAfter?: Partial<Record<(typeof CORE_TABLES)[number], number>>;
-  finalTotals?: { total: string; unfinished: string };
+  finalTotals?: { total: string; clean: string; unfinished: string };
 };
 
 function buildMockClient(config: ScenarioConfig) {
@@ -100,7 +100,7 @@ function buildMockClient(config: ScenarioConfig) {
 
     // Final totals: the only query using COUNT(*) FILTER.
     if (sql.includes("COUNT(*) FILTER")) {
-      return { rows: [config.finalTotals ?? { total: "43", unfinished: "0" }] };
+      return { rows: [config.finalTotals ?? { total: "43", clean: "43", unfinished: "0" }] };
     }
 
     // Per-migration-name row lookup — used for both the refund guard and
@@ -265,10 +265,13 @@ describe("POST /api/admin/system-health/schema-recovery — safety gates", () =>
       objectsPresent,
       coreCountsBefore: stableCounts,
       coreCountsAfter: stableCounts,
-      finalTotals: { total: "43", unfinished: "0" },
+      finalTotals: { total: "43", clean: "43", unfinished: "0" },
     });
     expect(success.response.status).toBe(200);
-    expect(success.body).toMatchObject({ ok: true, data: { recovered: true, migrationsAppliedAfter: 43, unfinishedAfter: 0 } });
+    expect(success.body).toMatchObject({
+      ok: true,
+      data: { recovered: true, migrationsAppliedAfter: 43, cleanAfter: 43, unfinishedAfter: 0 },
+    });
     expect(success.client.executedSql).toContain("COMMIT");
 
     const wrongCount = await callPost({
@@ -276,7 +279,7 @@ describe("POST /api/admin/system-health/schema-recovery — safety gates", () =>
       objectsPresent,
       coreCountsBefore: stableCounts,
       coreCountsAfter: stableCounts,
-      finalTotals: { total: "42", unfinished: "0" },
+      finalTotals: { total: "42", clean: "42", unfinished: "0" },
     });
     expect(wrongCount.response.status).toBe(500);
     expect(wrongCount.body).toMatchObject({ ok: false, error: { code: "SCHEMA_RECOVERY_FINAL_MIGRATION_COUNT_MISMATCH" } });
@@ -286,9 +289,35 @@ describe("POST /api/admin/system-health/schema-recovery — safety gates", () =>
       objectsPresent,
       coreCountsBefore: stableCounts,
       coreCountsAfter: stableCounts,
-      finalTotals: { total: "43", unfinished: "1" },
+      finalTotals: { total: "43", clean: "43", unfinished: "1" },
     });
     expect(unfinishedRemains.response.status).toBe(500);
     expect(unfinishedRemains.body).toMatchObject({ ok: false, error: { code: "SCHEMA_RECOVERY_FINAL_UNFINISHED_MIGRATIONS" } });
+  });
+
+  it("blocks and rolls back when total=43 and unfinished=0 but clean=42 (a row with applied_steps_count<=0 that neither definition alone would catch)", async () => {
+    const targetRows = Object.fromEntries(TARGET_MIGRATIONS.map((name) => [name, [cleanRow(name)]]));
+    const objectsPresent = new Set([
+      "TablePageResolution",
+      "ProjectFileArchive", "TechnicalReportRetention",
+      "BOQItemQuantityProvenance", "BOQItemRateProvenance", "BOQRevisionItemEvidence",
+      "WorkerAssignment", "WorkerReviewWorkspace", "WorkerDecision", "WorkerMaterialQuestion", "WorkerEvent",
+      "WorkerRun", "WorkerRunEvent", "WorkerAIPlan",
+      "WorkerRun.assignmentObjective", "WorkerRun.specialInstructions",
+    ]);
+    const stableCounts = { Company: 5, User: 12, Project: 8, BOQ: 20, MasterItem: 100, DocumentTemplate: 3, GeneratedDocument: 40 };
+
+    const { response, body, client } = await callPost({
+      targetRows,
+      objectsPresent,
+      coreCountsBefore: stableCounts,
+      coreCountsAfter: stableCounts,
+      finalTotals: { total: "43", clean: "42", unfinished: "0" },
+    });
+
+    expect(response.status).toBe(500);
+    expect(body).toMatchObject({ ok: false, error: { code: "SCHEMA_RECOVERY_FINAL_MIGRATION_COUNT_MISMATCH" } });
+    expect(client.executedSql).toContain("ROLLBACK");
+    expect(client.executedSql).not.toContain("COMMIT");
   });
 });

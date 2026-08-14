@@ -325,21 +325,23 @@ export async function POST() {
       );
     }
 
-    // Gate 2 — ANY unfinished or rolled-back migration row, target or not,
-    // means the migration history is not in a state this route can safely
-    // reason about. Stop rather than run six more migrations on top of an
-    // already-ambiguous history.
+    // Gate 2 — ANY unfinished, rolled-back, or zero-step migration row,
+    // target or not, means the migration history is not in a state this
+    // route can safely reason about. A row can have finished_at set and
+    // rolled_back_at null while still applied_steps_count <= 0 — that is
+    // not "clean" either, so it must trip this gate too. Stop rather than
+    // run six more migrations on top of an already-ambiguous history.
     const globallyAmbiguous = await client.query<{ migration_name: string }>(
       `SELECT migration_name::text AS migration_name
        FROM "_prisma_migrations"
-       WHERE finished_at IS NULL OR rolled_back_at IS NOT NULL
+       WHERE finished_at IS NULL OR rolled_back_at IS NOT NULL OR applied_steps_count <= 0
        ORDER BY started_at ASC
        LIMIT 1`,
     );
     if (globallyAmbiguous.rows.length > 0) {
       throw new AppError(
         "SCHEMA_RECOVERY_GLOBAL_MIGRATION_STATE_AMBIGUOUS",
-        `"_prisma_migrations" contains an unfinished or rolled-back row (e.g. ${globallyAmbiguous.rows[0]!.migration_name}) unrelated to this recovery's own six migrations. No recovery changes were made.`,
+        `"_prisma_migrations" contains an unfinished, rolled-back, or zero-step row (e.g. ${globallyAmbiguous.rows[0]!.migration_name}) unrelated to this recovery's own six migrations. No recovery changes were made.`,
         409,
       );
     }
@@ -475,15 +477,21 @@ export async function POST() {
       );
     }
 
+    // total = 43 alone does not prove all 43 rows are clean — a row can
+    // have finished_at set and rolled_back_at null while applied_steps_count
+    // <= 0, which is neither "unfinished" under the definition above nor a
+    // genuinely completed migration. clean must independently equal 43.
     const finalTotals = (
-      await client.query<{ total: string; unfinished: string }>(
+      await client.query<{ total: string; clean: string; unfinished: string }>(
         `SELECT
            COUNT(*)::text AS total,
+           COUNT(*) FILTER (WHERE finished_at IS NOT NULL AND rolled_back_at IS NULL AND applied_steps_count > 0)::text AS clean,
            COUNT(*) FILTER (WHERE finished_at IS NULL OR rolled_back_at IS NOT NULL)::text AS unfinished
          FROM "_prisma_migrations"`,
       )
     ).rows[0];
     const migrationsAppliedAfter = Number(finalTotals?.total ?? "0");
+    const cleanAfter = Number(finalTotals?.clean ?? "0");
     const unfinishedAfter = Number(finalTotals?.unfinished ?? "0");
     if (unfinishedAfter !== 0) {
       throw new AppError(
@@ -492,10 +500,10 @@ export async function POST() {
         500,
       );
     }
-    if (migrationsAppliedAfter !== EXPECTED_TOTAL_CLEAN_MIGRATIONS) {
+    if (migrationsAppliedAfter !== EXPECTED_TOTAL_CLEAN_MIGRATIONS || cleanAfter !== EXPECTED_TOTAL_CLEAN_MIGRATIONS) {
       throw new AppError(
         "SCHEMA_RECOVERY_FINAL_MIGRATION_COUNT_MISMATCH",
-        `Expected exactly ${EXPECTED_TOTAL_CLEAN_MIGRATIONS} migration rows after recovery, found ${migrationsAppliedAfter}. The entire recovery was rolled back.`,
+        `Expected exactly ${EXPECTED_TOTAL_CLEAN_MIGRATIONS} total and ${EXPECTED_TOTAL_CLEAN_MIGRATIONS} clean migration rows after recovery, found total=${migrationsAppliedAfter} clean=${cleanAfter}. The entire recovery was rolled back.`,
         500,
       );
     }
@@ -511,6 +519,7 @@ export async function POST() {
       coreCountsBefore,
       coreCountsAfter,
       migrationsAppliedAfter,
+      cleanAfter,
       unfinishedAfter,
       log,
       migrations: finalState,

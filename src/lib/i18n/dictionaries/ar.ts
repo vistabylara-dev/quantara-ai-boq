@@ -2765,6 +2765,10 @@ const ar: Dictionary = {
     roleTitle: "مساعد مساحة كميات ومقايسة بالذكاء الاصطناعي",
     revisionLabel: "المراجعة {number}",
     fallbackAnswerNote: "تم الإقرار.",
+    staleTitle: "راجع TAYQAN إصدارًا سابقًا من جدول الكميات هذا.",
+    staleCurrentLabel: "جدول الكميات الحالي",
+    staleLastReviewedLabel: "آخر مراجعة",
+    reviewUpdatedCta: "مراجعة جدول الكميات المحدث مع TAYQAN",
     stats: {
       items: "البنود",
       quantityConfirmed: "الكمية المؤكدة",

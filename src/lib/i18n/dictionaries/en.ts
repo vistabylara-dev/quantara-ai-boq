@@ -1569,6 +1569,10 @@ const en = {
     roleTitle: "AI Quantity Surveyor & Estimator",
     revisionLabel: "rev {number}",
     fallbackAnswerNote: "Acknowledged.",
+    staleTitle: "TAYQAN reviewed an earlier version of this BOQ.",
+    staleCurrentLabel: "Current BOQ",
+    staleLastReviewedLabel: "Last reviewed",
+    reviewUpdatedCta: "Review Updated BOQ with TAYQAN",
     stats: {
       items: "Items",
       quantityConfirmed: "Quantity confirmed",

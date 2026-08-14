@@ -9,7 +9,9 @@ import { nextHireIdempotencyKey, type HireAttemptKeyState } from "@/lib/worker/t
 import {
   buildAssignmentTimeline,
   buildRunTimeline,
+  canOfferRehire,
   capabilityTranslationKey,
+  isReviewStale,
   presentAssignmentStatus,
   presentRunStatus,
   statusTranslationKey,
@@ -30,7 +32,7 @@ import { TAYQAN_WORKER_DEFINITION } from "@/lib/worker/worker-definitions";
  * pattern applied to "Quantara").
  */
 
-type BOQSummary = { id: string; title: string; revisionNumber: number };
+type BOQSummary = { id: string; title: string; revisionNumber: number; version: number };
 
 type RunStatus = "QUEUED" | "RUNNING" | "COMPLETED" | "FAILED" | "CANCELLED";
 type AssignmentStatus = "RUNNING" | "NEEDS_INPUT" | "COMPLETED" | "FAILED" | "CANCELLED";
@@ -48,6 +50,8 @@ type WorkerRunDTO = {
   id: string;
   status: RunStatus;
   brief: { assignmentObjective: string | null; specialInstructions: string | null };
+  /** The BOQ snapshot this run actually reviewed, captured at hire time — used to detect a same-BOQ rehire opportunity (see isReviewStale). */
+  source: { boqVersion: number; verifiedVersion: number | null; revisionNumber: number };
   failure: { code: string; message: string | null } | null;
   resultAssignment: { id: string; status: AssignmentStatus; inspectionVersion: string; completedAt: string | null } | null;
   advisoryPlan: {
@@ -264,6 +268,7 @@ export default function TayqanPage(props: { params: Promise<{ projectId: string 
     );
   }
 
+  const selectedBoq = boqs.find((boq) => boq.id === selectedBoqId) ?? null;
   const hasOpenQuestions = assignment?.materialQuestions.some((question) => question.status === "OPEN") ?? false;
   const presentationState = run
     ? (assignment ? presentAssignmentStatus(assignment.status, hasOpenQuestions) : presentRunStatus(run.status))
@@ -272,6 +277,9 @@ export default function TayqanPage(props: { params: Promise<{ projectId: string 
     ? [...buildRunTimeline(run.events), ...(assignment ? buildAssignmentTimeline(assignment.events) : [])]
         .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
     : [];
+  const isStale = canOfferRehire(presentationState) && run && selectedBoq
+    ? isReviewStale(run.source, selectedBoq)
+    : false;
 
   return (
     <div className="space-y-8">
@@ -352,6 +360,25 @@ export default function TayqanPage(props: { params: Promise<{ projectId: string 
         </div>
       ) : (
         <>
+          {isStale && selectedBoq && (
+            <div className="rounded-[32px] border border-amber-900 bg-amber-950/10 p-8">
+              <p className="text-sm font-semibold text-amber-200">{t("tayqan.staleTitle")}</p>
+              <div className="mt-3 grid gap-1 text-xs text-slate-400 sm:grid-cols-2">
+                <p><span className="text-slate-500">{t("tayqan.staleCurrentLabel")}: </span>{t("tayqan.revisionLabel", { number: selectedBoq.revisionNumber })}</p>
+                <p><span className="text-slate-500">{t("tayqan.staleLastReviewedLabel")}: </span>{t("tayqan.revisionLabel", { number: run.source.revisionNumber })}</p>
+              </div>
+              {hireError && <p className="mt-3 text-xs text-rose-300">{hireError}</p>}
+              <button
+                type="button"
+                onClick={() => void hireTayqan()}
+                disabled={hiring}
+                className="mt-4 rounded-2xl border border-amber-500 bg-amber-600 px-6 py-3 text-sm font-semibold text-white hover:bg-amber-500 disabled:opacity-50"
+              >
+                {hiring ? t("tayqan.hiring") : t("tayqan.reviewUpdatedCta")}
+              </button>
+            </div>
+          )}
+
           <div className="rounded-[32px] border border-slate-800 bg-slate-950 p-8">
             {presentationState && (
               <p className="text-xs font-semibold uppercase tracking-[0.24em] text-cyan-400">

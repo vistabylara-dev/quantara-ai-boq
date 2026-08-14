@@ -24,8 +24,10 @@ import type { WorkerPlanner } from "../src/lib/worker/openai-worker-planner";
 import {
   buildAssignmentTimeline,
   buildRunTimeline,
+  canOfferRehire,
   capabilityTranslationKey,
   deriveStage,
+  isReviewStale,
   presentAssignmentStatus,
   presentRunStatus,
   statusTranslationKey,
@@ -175,6 +177,27 @@ describe("TAYQAN-1 presentation mapping (pure functions)", () => {
       expect(readDictionaryPath(ar, key)).toBeTruthy();
     }
   });
+
+  it("does not flag staleness when the BOQ version is unchanged since the latest run's source snapshot", () => {
+    expect(isReviewStale({ boqVersion: 3, revisionNumber: 2 }, { version: 3, revisionNumber: 2 })).toBe(false);
+  });
+
+  it("flags staleness once the current BOQ version differs from the latest run's source snapshot (version is the strongest detector, not revisionNumber alone)", () => {
+    expect(isReviewStale({ boqVersion: 3, revisionNumber: 2 }, { version: 4, revisionNumber: 2 })).toBe(true);
+    // Revision number is display-only — a version bump is what actually
+    // signals a governed BOQ mutation happened since the review.
+    expect(isReviewStale({ boqVersion: 3, revisionNumber: 5 }, { version: 3, revisionNumber: 5 })).toBe(false);
+  });
+
+  it("only offers a rehire when the latest run is fully resolved (READY_FOR_REVIEW) — never during an active or unresolved review, never for FAILED/CANCELLED", () => {
+    expect(canOfferRehire("READY_FOR_REVIEW")).toBe(true);
+    expect(canOfferRehire("WORKING")).toBe(false);
+    expect(canOfferRehire("WAITING_FOR_YOU")).toBe(false);
+    expect(canOfferRehire("COMPLETED")).toBe(false);
+    expect(canOfferRehire("NEEDS_ATTENTION")).toBe(false);
+    expect(canOfferRehire("CANCELLED")).toBe(false);
+    expect(canOfferRehire(null)).toBe(false);
+  });
 });
 
 describe("TAYQAN-1 hire idempotency-key state machine (pure function)", () => {
@@ -227,6 +250,7 @@ describe("TAYQAN-1 EN/AR dictionary keys", () => {
     "answerExplain", "needsYourDecision", "findingsTitle", "advisoryTitle",
     "advisoryDisclaimer", "timelineTitle", "completedNote", "loading", "unavailable",
     "noBoqTitle", "noBoqDescription", "roleTitle", "revisionLabel", "fallbackAnswerNote",
+    "staleTitle", "staleCurrentLabel", "staleLastReviewedLabel", "reviewUpdatedCta",
   ] as const;
 
   const TAYQAN_NESTED_KEYS = [
@@ -534,6 +558,54 @@ describe("TAYQAN-1 hire flow and assignment lifecycle (integration, real local P
     const completed = await getWorkerRunForCompany(companyAId, run.id);
     expect(completed.status).toBe(WorkerRunStatus.COMPLETED);
     expect(completed.resultAssignment?.id).toBeTruthy();
+  });
+
+  it("same-BOQ rehire: a version change after a completed review creates a second WorkerRun with a new key, matching the new BOQ version, while the first run stays intact", async () => {
+    const boq = await createBOQ(companyAId, projectAId, "Same-BOQ rehire");
+
+    const firstKey = `worker-tayqan-rehire-first-${RUN_ID}`;
+    const first = await enqueueWorkerReview(actorA(), boq.id, firstKey, DETERMINISTIC_ENV);
+    await drainWorkerRuns({ runnerId: `runner-tayqan-rehire-first-${RUN_ID}`, limit: 1, env: DETERMINISTIC_ENV });
+    const firstCompleted = await getWorkerRunForCompany(companyAId, first.id);
+    expect(firstCompleted.status).toBe(WorkerRunStatus.COMPLETED);
+    expect(firstCompleted.source.boqVersion).toBe(1);
+
+    // Simulate the engineer editing the BOQ after TAYQAN's first review —
+    // exactly the "version" bump a real governed edit already produces.
+    // revisionNumber is left alone: it identifies a formal revision (R01,
+    // R02, ...) which createBOQ's shared counter also allocates sequentially
+    // across this whole test file, and version — not revisionNumber — is
+    // the staleness detector under test here.
+    const revisedBoq = await prisma.bOQ.update({
+      where: { id: boq.id },
+      data: { version: { increment: 1 } },
+    });
+    expect(isReviewStale(
+      { boqVersion: firstCompleted.source.boqVersion, revisionNumber: firstCompleted.source.revisionNumber },
+      { version: revisedBoq.version, revisionNumber: revisedBoq.revisionNumber },
+    )).toBe(true);
+
+    // The UI mints a fresh key for this genuinely new hire (hireAttempt was
+    // cleared when the first hire succeeded) — this reproduces that key here.
+    const secondKey = `worker-tayqan-rehire-second-${RUN_ID}`;
+    expect(secondKey).not.toBe(firstKey);
+    const second = await enqueueWorkerReview(actorA(), boq.id, secondKey, DETERMINISTIC_ENV);
+    expect(second.id).not.toBe(first.id);
+    await drainWorkerRuns({ runnerId: `runner-tayqan-rehire-second-${RUN_ID}`, limit: 1, env: DETERMINISTIC_ENV });
+
+    const secondCompleted = await getWorkerRunForCompany(companyAId, second.id);
+    expect(secondCompleted.status).toBe(WorkerRunStatus.COMPLETED);
+    expect(secondCompleted.source.boqVersion).toBe(revisedBoq.version);
+
+    // Two independent rows now exist for the same BOQ; the first is untouched.
+    expect(await prisma.workerRun.count({ where: { companyId: companyAId, boqId: boq.id } })).toBe(2);
+    const firstStillIntact = await prisma.workerRun.findUniqueOrThrow({ where: { id: first.id } });
+    expect(firstStillIntact.status).toBe(WorkerRunStatus.COMPLETED);
+    expect(firstStillIntact.sourceBoqVersion).toBe(1);
+
+    // The status-lookup endpoint the UI polls now surfaces the newer run.
+    const latest = await getLatestWorkerRunForBoq(companyAId, boq.id, "REVIEW_EXISTING_BOQ");
+    expect(latest?.id).toBe(second.id);
   });
 
   it("still opens material questions and lets the hiring user answer their own question", async () => {

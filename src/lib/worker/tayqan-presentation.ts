@@ -151,3 +151,32 @@ export function buildRunTimeline(
 ): TayqanTimelineEntry[] {
   return events.map((event) => ({ i18nKey: RUN_EVENT_KEYS[event.eventType], createdAt: event.createdAt }));
 }
+
+/**
+ * TAYQAN-1 — same-BOQ rehire: whether the BOQ has changed since the latest
+ * TAYQAN run's own source snapshot (WorkerRun.sourceBoqVersion, captured at
+ * hire time — no new persistence). BOQ version is the strongest change
+ * detector (it increments on every governed mutation); revisionNumber is
+ * carried alongside purely for display. Only meaningful for a COMPLETED
+ * run — callers must not use this to reinterpret FAILED/CANCELLED as "BOQ
+ * changed"; those are a separate retry concept.
+ */
+export type TayqanRunSourceSnapshot = { boqVersion: number; revisionNumber: number };
+export type TayqanCurrentBoq = { version: number; revisionNumber: number };
+
+export function isReviewStale(source: TayqanRunSourceSnapshot, current: TayqanCurrentBoq): boolean {
+  return source.boqVersion !== current.version;
+}
+
+/**
+ * Whether a same-BOQ rehire CTA may ever be offered for the latest run's
+ * presentation state — true only once the review is fully resolved
+ * (READY_FOR_REVIEW: completed, no open questions). This is also what
+ * structurally blocks a concurrent duplicate review: WORKING (queued/
+ * running) and WAITING_FOR_YOU (an open material question) never qualify,
+ * and NEEDS_ATTENTION/CANCELLED are deliberately excluded — those are a
+ * separate retry concept, not "the BOQ changed".
+ */
+export function canOfferRehire(state: TayqanPresentationState | null): boolean {
+  return state === "READY_FOR_REVIEW";
+}

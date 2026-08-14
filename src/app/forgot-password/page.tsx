@@ -31,9 +31,8 @@ export default function ForgotPasswordPage() {
 
         {submitted ? (
           <p className="mt-3 text-sm text-slate-400">
-            If an account exists for that email, a reset link has been created. In this
-            development environment it is printed to the server console instead of sent by
-            email.
+            If an account exists for that email, we sent a password reset link. Check your
+            inbox and spam folder, then follow the secure link to choose a new password.
           </p>
         ) : (
           <form onSubmit={handleSubmit} className="mt-6 space-y-4">

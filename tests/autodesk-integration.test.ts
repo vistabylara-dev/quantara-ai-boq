@@ -58,6 +58,7 @@ import {
   browseAutodeskHubs,
   completeAutodeskConnection,
   createAutodeskOAuthState,
+  getAutodeskRuntimeStatus,
   verifyAutodeskOAuthState,
 } from "@/lib/services/autodesk-integration-service";
 import { generateAutodeskDwgCandidates } from "@/lib/services/autodesk-candidate-service";
@@ -236,6 +237,7 @@ describe("Autodesk read-only cloud integration", () => {
 
     const completion = await completeAutodeskConnection(actor, "authorization-code");
     expect(completion).toBeUndefined();
+    expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(repository.upsertConnectedExternalConnection).toHaveBeenCalledWith(expect.objectContaining({
       companyId: actor.companyId,
       connectedByUserId: actor.userId,
@@ -249,6 +251,35 @@ describe("Autodesk read-only cloud integration", () => {
       }),
     }));
     expect(JSON.stringify(completion)).toBeUndefined();
+  });
+
+  it("reports CONNECTED from token introspection without requiring hub access", async () => {
+    configureConnectedAutodeskCredential();
+    const fetchMock = vi.mocked(fetch);
+
+    fetchMock.mockResolvedValueOnce(json({
+      active: true,
+      scope: "data:read",
+      client_id: "test-autodesk-client",
+      exp: Math.floor(Date.now() / 1000) + 3600,
+    }));
+
+    await expect(getAutodeskRuntimeStatus(actor)).resolves.toMatchObject({
+      connectionStatus: "CONNECTED",
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("reports Autodesk hub provisioning separately from OAuth authorization", async () => {
+    configureConnectedAutodeskCredential();
+
+    vi.mocked(fetch).mockResolvedValueOnce(json({}, 403));
+
+    await expect(browseAutodeskHubs(actor)).rejects.toMatchObject({
+      code: "AUTODESK_HUB_ACCESS_REQUIRED",
+      message: expect.stringContaining("custom integration"),
+    });
   });
 
   it("refreshes an expiring encrypted credential before browsing hubs", async () => {

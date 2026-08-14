@@ -379,6 +379,13 @@ async function throwAutodeskApiError(response: Response, operation: string): Pro
     throw new AppError("AUTODESK_REAUTH_REQUIRED", "Autodesk authorization expired. Please reconnect.", 401);
   }
   if (response.status === 403) {
+    if (operation === "list hubs") {
+      throw new AppError(
+        "AUTODESK_HUB_ACCESS_REQUIRED",
+        "Autodesk sign-in succeeded, but this account has no Autodesk Docs/BIM 360 hub that Quantara can access. Ask an Autodesk account administrator to provision the Quantara APS Client ID as a custom integration, then try again.",
+        403,
+      );
+    }
     throw new AppError("AUTODESK_ACCESS_DENIED", "Autodesk denied access to this cloud resource.", 403);
   }
   if (response.status === 404) {

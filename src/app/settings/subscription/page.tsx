@@ -5,6 +5,7 @@ import { Suspense, useCallback, useEffect, useState } from "react";
 import { apiClient, getApiErrorMessage } from "@/lib/api/client";
 import { formatDate } from "@/lib/formatting/dates";
 import { CheckoutReturnStatus } from "@/components/commercial/checkout-return-status";
+import { RefundRequestPanel } from "@/components/commercial/refund-request-panel";
 import {
   clearPendingPricingIntent,
   normalizePublicPriceCode,
@@ -307,7 +308,11 @@ function SubscriptionSettingsContent() {
                 {busyKey === "manage-billing" ? "Opening…" : "Manage billing"}
               </button>
             </div>
-          ) : (
+          ) : null}
+          {checkoutAvailability.hasExistingSubscription && (
+            <RefundRequestPanel planName={entitlements.planName} hasActiveSubscription />
+          )}
+          {!checkoutAvailability.hasExistingSubscription && (
             <p className="mt-1 text-sm text-slate-400">
               {checkoutAvailability.products.some((product) => product.prices.some((price) => price.available))
                 ? "Real Stripe checkout — you will be redirected to a secure payment page."

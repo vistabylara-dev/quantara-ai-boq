@@ -395,7 +395,7 @@ model CompanySoftwareSubscription {
   startsAt               DateTime?
   expiresAt              DateTime?
   cancelledAt            DateTime?
-  externalSubscriptionId String?                   @unique
+  externalSubscriptionId String?                  @unique
   source                 String                   @default("development")
   createdAt              DateTime                 @default(now())
   updatedAt              DateTime                 @updatedAt
@@ -403,6 +403,7 @@ model CompanySoftwareSubscription {
   softwarePlan           SoftwarePlan             @relation(fields: [softwarePlanId], references: [id], onDelete: Restrict)
   trialUsage             CompanyTrialUsage[]
   trialPremiumUnlocks    TrialPremiumItemUnlock[]
+  refundRequests         RefundRequest[]
 
   @@index([companyId])
   @@index([softwarePlanId])
@@ -444,6 +445,93 @@ model StripeBillingCustomer {
   @@unique([companyId, livemode])
   @@index([companyId])
   @@index([livemode])
+}
+
+enum RefundRequestStatus {
+  REQUESTED
+  APPROVED
+  REJECTED
+  PROCESSING
+  SUCCEEDED
+  FAILED
+}
+
+enum RefundAction {
+  REFUND_ONLY
+  REFUND_AND_CANCEL
+}
+
+/// REFUND-17 — the four launch-approved reasons a refund may bypass the
+/// normal 7-day request window. Every value here still requires the exact
+/// same owner approve/execute review as a normal request — creating an
+/// exception row only ever waives the window check, never the approval
+/// gate.
+enum RefundExceptionCategory {
+  DUPLICATE_CHARGE
+  INCORRECT_BILLING
+  PROVIDER_ERROR
+  LEGAL_REMEDY
+}
+
+/// REFUND-1 — persisted, immutable evidence for one refund request against
+/// one Stripe payment. A customer may only ever CREATE a row here (deriving
+/// every provider ID from their own company's trusted subscription/billing
+/// state — never accepting one from the request body); only a
+/// PLATFORM_OWNER, via refund-execution-service.ts, may transition status
+/// past REQUESTED. Rows are never deleted — status transitions are the only
+/// mutation, preserving a full audit trail.
+model RefundRequest {
+  id                            String                   @id @default(uuid()) @db.Uuid
+  companyId                     String                   @db.Uuid
+  requestedByUserId             String                   @db.Uuid
+  approvedByUserId              String?                  @db.Uuid
+  companySoftwareSubscriptionId String?                  @db.Uuid
+  /// Snapshot of the Stripe subscription ID at request time — kept even if
+  /// the subscription FK is later nulled (e.g. subscription row deleted),
+  /// since this is immutable evidence, not a live reference.
+  externalSubscriptionId        String
+  stripeInvoiceId               String?
+  stripePaymentIntentId         String
+  stripeChargeId                String?
+  stripeRefundId                String?
+  /// Integer minor units, e.g. AED 149.00 is stored as 14900. Never Float.
+  originalAmountMinor           Int
+  requestedAmountMinor          Int
+  currency                      CommerceCurrency         @default(AED)
+  reason                        String
+  /// REFUND-17/18b — authoritative payment timestamp from Stripe's own
+  /// invoice.status_transitions.paid_at, captured at request-creation time —
+  /// never derived from any client-supplied value. The 7-day eligibility
+  /// window is always computed from THIS column, never from createdAt or a
+  /// browser clock.
+  successfulPaymentAt           DateTime
+  /// True only for an owner-created exception request that bypassed the
+  /// normal 7-day window — see createExceptionRefundRequest. Still requires
+  /// the exact same approve/reject review as every other request.
+  isException                   Boolean                  @default(false)
+  exceptionCategory             RefundExceptionCategory?
+  /// Set only once an owner approves — null while REQUESTED/REJECTED.
+  action                        RefundAction?
+  status                        RefundRequestStatus      @default(REQUESTED)
+  rejectionReason               String?
+  /// Safe Stripe failure code/message only — never raw API error payloads.
+  failureCode                   String?
+  failureMessage                String?
+  createdAt                     DateTime                 @default(now())
+  updatedAt                     DateTime                 @updatedAt
+  approvedAt                    DateTime?
+  rejectedAt                    DateTime?
+  completedAt                   DateTime?
+
+  company                     Company                      @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  requestedByUser             User                         @relation("RefundRequestedBy", fields: [requestedByUserId], references: [id], onDelete: Restrict)
+  approvedByUser              User?                        @relation("RefundApprovedBy", fields: [approvedByUserId], references: [id], onDelete: SetNull)
+  companySoftwareSubscription CompanySoftwareSubscription? @relation(fields: [companySoftwareSubscriptionId], references: [id], onDelete: SetNull)
+
+  @@index([companyId])
+  @@index([status])
+  @@index([stripePaymentIntentId])
+  @@index([externalSubscriptionId])
 }
 
 model CompanyTrialUsage {
@@ -1497,6 +1585,7 @@ model Company {
   integrationEvents           IntegrationEvent[]
   stripeWebhookEvents         StripeWebhookEvent[]
   stripeBillingCustomers      StripeBillingCustomer[]
+  refundRequests              RefundRequest[]
 }
 
 model User {
@@ -1537,6 +1626,8 @@ model User {
   createdExtractionJobs                  ExtractionJob[]
   platformAuditLogs                      PlatformAuditLog[]               @relation("PlatformAuditActor")
   commercePriceReviews                   CommercePrice[]                  @relation("CommercePriceReviewer")
+  refundRequestsMade                     RefundRequest[]                  @relation("RefundRequestedBy")
+  refundRequestsApproved                 RefundRequest[]                  @relation("RefundApprovedBy")
   commerceSyncRuns                       CommerceSyncRun[]                @relation("CommerceSyncRunInitiator")
   simulationSession                      PlatformSimulationSession?
   masterCatalogueImportBatches           MasterCatalogueImportBatch[]
@@ -2571,32 +2662,32 @@ enum ProjectFileStatus {
  * handlers). Processed by the queue in src/lib/jobs/*.
  */
 model ExtractionJob {
-  id                 String               @id @default(uuid()) @db.Uuid
-  companyId          String               @db.Uuid
-  projectId          String               @db.Uuid
-  projectFileId      String               @db.Uuid
-  engineType         ExtractionEngineType
-  provider           String               @default("local")
-  status             ExtractionJobStatus  @default(QUEUED)
-  progressPercentage Int                  @default(0)
-  currentStep        String?
-  startedAt          DateTime?
-  completedAt        DateTime?
-  failedAt           DateTime?
-  attempts           Int                  @default(0)
-  maximumAttempts    Int                  @default(3)
-  configurationJson  Json?
-  resultSummaryJson  Json?
-  usageMetadataJson  Json?
-  errorCode          String?
-  errorMessage       String?
-  createdByUserId    String               @db.Uuid
-  createdAt          DateTime             @default(now())
-  updatedAt          DateTime             @updatedAt
-  company            Company              @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  project            Project              @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  projectFile        ProjectFile          @relation(fields: [projectFileId], references: [id], onDelete: Cascade)
-  createdByUser      User                 @relation(fields: [createdByUserId], references: [id], onDelete: Restrict)
+  id                   String                @id @default(uuid()) @db.Uuid
+  companyId            String                @db.Uuid
+  projectId            String                @db.Uuid
+  projectFileId        String                @db.Uuid
+  engineType           ExtractionEngineType
+  provider             String                @default("local")
+  status               ExtractionJobStatus   @default(QUEUED)
+  progressPercentage   Int                   @default(0)
+  currentStep          String?
+  startedAt            DateTime?
+  completedAt          DateTime?
+  failedAt             DateTime?
+  attempts             Int                   @default(0)
+  maximumAttempts      Int                   @default(3)
+  configurationJson    Json?
+  resultSummaryJson    Json?
+  usageMetadataJson    Json?
+  errorCode            String?
+  errorMessage         String?
+  createdByUserId      String                @db.Uuid
+  createdAt            DateTime              @default(now())
+  updatedAt            DateTime              @updatedAt
+  company              Company               @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  project              Project               @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  projectFile          ProjectFile           @relation(fields: [projectFileId], references: [id], onDelete: Cascade)
+  createdByUser        User                  @relation(fields: [createdByUserId], references: [id], onDelete: Restrict)
   tablePageResolutions TablePageResolution[]
 
   @@index([companyId])

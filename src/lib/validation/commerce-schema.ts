@@ -94,3 +94,43 @@ export const commerceCheckoutRequestSchema = z
   );
 
 export type CommerceCheckoutRequestInput = z.output<typeof commerceCheckoutRequestSchema>;
+
+// REFUND-8 — deliberately just `reason`. The customer never supplies an
+// amount, currency, or any Stripe object ID — see refund-request-service.ts.
+export const refundRequestSchema = z
+  .object({
+    reason: z.string().trim().min(1, "A reason is required.").max(2000, "The reason is too long."),
+  })
+  .strict();
+
+export type RefundRequestInput = z.output<typeof refundRequestSchema>;
+
+export const refundRequestIdParamsSchema = z
+  .object({
+    id: z.string().uuid("A valid refund request ID is required."),
+  })
+  .strict();
+
+export const refundApproveRequestSchema = z
+  .object({
+    action: z.enum(["REFUND_ONLY", "REFUND_AND_CANCEL"]),
+  })
+  .strict();
+
+export const refundRejectRequestSchema = z
+  .object({
+    reason: z.string().trim().max(2000).optional(),
+  })
+  .strict();
+
+// REFUND-22 — owner-only, bypasses the normal 7-day window. companyId is a
+// trusted internal ID chosen by the owner from their own admin UI (never
+// derived from any customer-facing input), not an "arbitrary Stripe ID" —
+// it is still never a Stripe object ID.
+export const refundExceptionRequestSchema = z
+  .object({
+    companyId: z.string().uuid("A valid company ID is required."),
+    category: z.enum(["DUPLICATE_CHARGE", "INCORRECT_BILLING", "PROVIDER_ERROR", "LEGAL_REMEDY"]),
+    reason: z.string().trim().min(1, "A reason is required.").max(2000, "The reason is too long."),
+  })
+  .strict();

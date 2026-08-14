@@ -20,7 +20,8 @@ export type PlatformCapability =
   | "platform:manage-roles"
   | "platform:manage-administrators"
   | "platform:high-risk"
-  | "platform:audit:read";
+  | "platform:audit:read"
+  | "platform:refund";
 
 export const PLATFORM_READ_ROLES = [
   PlatformRole.PLATFORM_OWNER,
@@ -43,6 +44,7 @@ const PLATFORM_ROLE_CAPABILITIES: Record<PlatformRole, readonly PlatformCapabili
     "platform:manage-administrators",
     "platform:high-risk",
     "platform:audit:read",
+    "platform:refund",
   ],
   [PlatformRole.PLATFORM_ADMIN]: ["platform:read", "platform:operate"],
   [PlatformRole.PLATFORM_SUPPORT]: ["platform:read"],

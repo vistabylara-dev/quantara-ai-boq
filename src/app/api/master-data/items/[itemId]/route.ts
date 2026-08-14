@@ -1,7 +1,7 @@
 import { PlatformRole } from "@prisma/client";
 import { apiSuccess, handleApiError } from "@/lib/http/api-response";
 import { getCurrentActor } from "@/lib/auth/current-actor";
-import { setActorContext } from "@/lib/auth/request-context";
+import { setActorContext, withActorRequestContext } from "@/lib/auth/request-context";
 import { NotFoundError } from "@/lib/errors/app-error";
 import { getMasterItemViewAccessEffective } from "@/lib/entitlements/effective-entitlement-service";
 import { getMasterItemRecord, getMasterItemCustomerDetail, toMasterItemPreviewDTO } from "@/lib/repositories/master-item-repository";
@@ -27,7 +27,7 @@ type RouteContext = { params: Promise<{ itemId: string }> };
  * layered onto the customer-safe detail; everyone else gets exactly what
  * they got before — full detail if entitled, a locked preview otherwise.
  */
-export async function GET(_request: Request, context: RouteContext) {
+async function GETHandler(_request: Request, context: RouteContext) {
   try {
     const actor = await getCurrentActor();
     setActorContext(actor);
@@ -90,3 +90,5 @@ export async function GET(_request: Request, context: RouteContext) {
     return handleApiError(error);
   }
 }
+
+export const GET = withActorRequestContext(GETHandler);

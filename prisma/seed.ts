@@ -1,15 +1,5 @@
-import {
-  BOQItemStatus,
-  BOQStatus,
-  DocumentTemplateType,
-  MarginMode,
-  Prisma,
-  PrismaClient,
-  ProjectStatus,
-  RateStatus,
-  UserRole,
-  VerificationSeverity,
-} from "@prisma/client";
+import { createDirectPrismaClient } from "../src/lib/db/direct-prisma-client";
+import { BOQItemStatus, BOQStatus, DocumentTemplateType, MarginMode, Prisma, ProjectStatus, RateStatus, UserRole, VerificationSeverity } from "@prisma/client";
 import { demoIndustries } from "../src/config/industries/index";
 import { seedMechanicalDiscipline, seedTaxonomyFoundations } from "./seed-data/master-data";
 import { seedMechanicalPackage, seedSoftwarePlans } from "./seed-data/commercial";
@@ -25,7 +15,7 @@ import {
   type DocumentTemplateStyleConfig,
 } from "../src/lib/documents/template-config";
 
-const prisma = new PrismaClient();
+const prisma = createDirectPrismaClient();
 
 const CREATED_AT = new Date("2026-01-01T08:00:00.000Z");
 const UPDATED_AT = new Date("2026-01-15T12:00:00.000Z");

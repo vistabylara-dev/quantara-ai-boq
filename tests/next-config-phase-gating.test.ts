@@ -53,8 +53,23 @@ describe("next.config.mjs phase gating", () => {
     expect(devConfig).toEqual(buildConfig);
     expect(buildConfig).toMatchObject({
       reactStrictMode: true,
-      serverExternalPackages: ["pdfkit", "pdf-parse", "pdfjs-dist"],
     });
+    expect(buildConfig.serverExternalPackages).toEqual(
+      expect.arrayContaining(["@prisma/client", ".prisma/client", "pdfkit", "pdf-parse", "pdfjs-dist"]),
+    );
+  });
+
+  it("aliases only bare undici imports to the fetch-only shim shipped by @vercel/blob", async () => {
+    const buildConfig = await nextConfigFn(PHASE_PRODUCTION_BUILD);
+    const webpack = buildConfig.webpack as (config: {
+      resolve: { alias: Record<string, string> };
+    }) => { resolve: { alias: Record<string, string> } };
+    const configured = webpack({ resolve: { alias: { preserved: "existing-alias" } } });
+
+    expect(configured.resolve.alias.preserved).toBe("existing-alias");
+    expect(configured.resolve.alias["undici$"]).toMatch(
+      /node_modules[\\/]@vercel[\\/]blob[\\/]dist[\\/]undici-browser\.js$/,
+    );
   });
 
   it("loads the complete handler composition only inside processing command boundaries", async () => {

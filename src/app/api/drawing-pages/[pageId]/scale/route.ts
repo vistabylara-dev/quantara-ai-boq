@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { apiSuccess, handleApiError, parseJsonBody } from "@/lib/http/api-response";
 import { getCurrentActor } from "@/lib/auth/current-actor";
-import { setActorContext } from "@/lib/auth/request-context";
+import { setActorContext, withActorRequestContext } from "@/lib/auth/request-context";
 import { getPageScale, setManualScale } from "@/lib/services/scale-calibration-service";
 import { drawingPageIdParamsSchema } from "@/lib/validation/route-params";
 
@@ -15,7 +15,7 @@ const setScaleBodySchema = z.object({
   realWorldUnit: z.string().trim().min(1).max(20),
 }).strict();
 
-export async function GET(_request: Request, context: RouteContext) {
+async function GETHandler(_request: Request, context: RouteContext) {
   try {
     const actor = await getCurrentActor();
     setActorContext(actor);
@@ -28,7 +28,7 @@ export async function GET(_request: Request, context: RouteContext) {
   }
 }
 
-export async function POST(request: Request, context: RouteContext) {
+async function POSTHandler(request: Request, context: RouteContext) {
   try {
     const actor = await getCurrentActor();
     setActorContext(actor);
@@ -41,3 +41,6 @@ export async function POST(request: Request, context: RouteContext) {
     return handleApiError(error);
   }
 }
+
+export const GET = withActorRequestContext(GETHandler);
+export const POST = withActorRequestContext(POSTHandler);

@@ -1,7 +1,7 @@
+import { createDirectPrismaClient } from "../../src/lib/db/direct-prisma-client";
 import { test, expect } from '@playwright/test';
-import { PrismaClient } from '@prisma/client';
 
-const prisma = new PrismaClient();
+const prisma = createDirectPrismaClient();
 
 test.describe('Authentication and Registration Workflow', () => {
   const timestamp = Date.now();

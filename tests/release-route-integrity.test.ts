@@ -39,8 +39,11 @@ describe("release route integrity", () => {
 
     expect(packageJson.scripts?.["db:migrate:deploy"]).toBe("prisma migrate deploy");
     expect(packageJson.scripts?.["db:seed"]).toBe("prisma db seed");
+    expect(packageJson.scripts?.["build:cloudflare"]).toBe(
+      "opennextjs-cloudflare build && node scripts/ensure-opennext-prisma-workerd.mjs",
+    );
     expect(packageJson.scripts?.deploy).toBe(
-      "npm run db:migrate:deploy && opennextjs-cloudflare build && opennextjs-cloudflare deploy",
+      "npm run db:migrate:deploy && npm run build:cloudflare && opennextjs-cloudflare deploy",
     );
     expect(packageJson.scripts?.deploy).not.toContain("db:seed");
   });

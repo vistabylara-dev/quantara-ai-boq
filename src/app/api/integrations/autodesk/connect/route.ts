@@ -1,7 +1,7 @@
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import { getCurrentActor } from "@/lib/auth/current-actor";
-import { setActorContext } from "@/lib/auth/request-context";
+import { setActorContext, withActorRequestContext } from "@/lib/auth/request-context";
 import { AppError, UnauthorizedError } from "@/lib/errors/app-error";
 import {
   createAutodeskOAuthState,
@@ -12,7 +12,7 @@ import {
 export const dynamic = "force-dynamic";
 
 /** Starts a full-page APS authorization redirect; never exposes OAuth secrets to the browser. */
-export async function GET(request: Request) {
+async function GETHandler(request: Request) {
   try {
     const actor = await getCurrentActor();
     setActorContext(actor);
@@ -39,3 +39,5 @@ export async function GET(request: Request) {
     return NextResponse.redirect(new URL(`/integrations/autodesk/connect?connectError=${code}`, request.url));
   }
 }
+
+export const GET = withActorRequestContext(GETHandler);

@@ -1,4 +1,5 @@
 import { Prisma } from "@prisma/client";
+import { isFinitePrismaDecimal } from "@/lib/validation/prisma-decimal";
 
 export type DecimalInput = Prisma.Decimal | string | number;
 export type MarginModeValue = "MARKUP" | "GROSS_MARGIN";
@@ -26,7 +27,7 @@ function decimal(value: DecimalInput, field: string): Prisma.Decimal {
     throw new BOQCalculationError(`${field} must be a valid decimal value.`, field);
   }
 
-  if (!parsed.isFinite()) {
+  if (!isFinitePrismaDecimal(parsed)) {
     throw new BOQCalculationError(`${field} must be finite.`, field);
   }
 

@@ -1,3 +1,4 @@
+import { createDirectPrismaClient } from "../src/lib/db/direct-prisma-client";
 /**
  * MASTER-BOQ-1A — maps the existing, validated HVAC master-data rows (all
  * currently under the "mechanical" MasterDiscipline) into the new deep
@@ -18,10 +19,9 @@
  *   npx tsx prisma/backfill-master-boq-hierarchy.ts --dry-run
  *   npx tsx prisma/backfill-master-boq-hierarchy.ts
  */
-import { PrismaClient } from "@prisma/client";
 import { createHierarchyNode } from "../src/lib/repositories/master-hierarchy-repository";
 
-const prisma = new PrismaClient();
+const prisma = createDirectPrismaClient();
 const BATCH_SIZE = 200;
 
 const INDUSTRY_CODE = "construction";

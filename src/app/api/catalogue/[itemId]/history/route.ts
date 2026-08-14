@@ -1,6 +1,6 @@
 import { apiSuccess, handleApiError } from "@/lib/http/api-response";
 import { getCurrentActor } from "@/lib/auth/current-actor";
-import { setActorContext } from "@/lib/auth/request-context";
+import { setActorContext, withActorRequestContext } from "@/lib/auth/request-context";
 import { getCatalogueItemHistoryForCompany } from "@/lib/services/catalogue-service";
 import { catalogueItemIdParamsSchema } from "@/lib/validation/route-params";
 
@@ -8,7 +8,7 @@ type RouteContext = {
   params: Promise<{ itemId: string }>;
 };
 
-export async function GET(_request: Request, context: RouteContext) {
+async function GETHandler(_request: Request, context: RouteContext) {
   try {
     const actor = await getCurrentActor();
     setActorContext(actor);
@@ -19,3 +19,5 @@ export async function GET(_request: Request, context: RouteContext) {
     return handleApiError(error);
   }
 }
+
+export const GET = withActorRequestContext(GETHandler);

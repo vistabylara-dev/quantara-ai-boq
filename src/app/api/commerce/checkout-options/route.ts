@@ -1,6 +1,6 @@
 import { apiSuccess, handleApiError } from "@/lib/http/api-response";
 import { getCurrentActor } from "@/lib/auth/current-actor";
-import { setActorContext } from "@/lib/auth/request-context";
+import { setActorContext, withActorRequestContext } from "@/lib/auth/request-context";
 import { getCheckoutAvailability } from "@/lib/services/commerce-checkout-availability-service";
 
 export const dynamic = "force-dynamic";
@@ -13,7 +13,7 @@ export const runtime = "nodejs";
  * status, so the UI can enable a checkout button only when a real payment
  * would actually succeed. Never returns a Stripe price ID.
  */
-export async function GET() {
+async function GETHandler() {
   try {
     const actor = await getCurrentActor();
     setActorContext(actor);
@@ -22,3 +22,5 @@ export async function GET() {
     return handleApiError(error);
   }
 }
+
+export const GET = withActorRequestContext(GETHandler);

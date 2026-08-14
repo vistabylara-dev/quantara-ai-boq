@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { apiSuccess, handleApiError } from "@/lib/http/api-response";
 import { getCurrentActor } from "@/lib/auth/current-actor";
-import { setActorContext } from "@/lib/auth/request-context";
+import { setActorContext, withActorRequestContext } from "@/lib/auth/request-context";
 import { unlinkProjectSource } from "@/lib/services/project-integration-service";
 
 export const dynamic = "force-dynamic";
@@ -13,7 +13,7 @@ const paramsSchema = z.object({
 
 type RouteContext = { params: Promise<{ projectId: string; projectIntegrationId: string }> };
 
-export async function DELETE(_request: Request, context: RouteContext) {
+async function DELETEHandler(_request: Request, context: RouteContext) {
   try {
     const actor = await getCurrentActor();
     setActorContext(actor);
@@ -23,3 +23,5 @@ export async function DELETE(_request: Request, context: RouteContext) {
     return handleApiError(error);
   }
 }
+
+export const DELETE = withActorRequestContext(DELETEHandler);

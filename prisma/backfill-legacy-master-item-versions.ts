@@ -1,3 +1,4 @@
+import { createDirectPrismaClient } from "../src/lib/db/direct-prisma-client";
 /**
  * MASTER-SCALE-1B — the 44 pre-existing MasterItem rows (created before any
  * MasterCatalogueImportBatch/import-service existed, source untraceable —
@@ -14,9 +15,9 @@
  *   npx tsx prisma/backfill-legacy-master-item-versions.ts --dry-run
  *   npx tsx prisma/backfill-legacy-master-item-versions.ts
  */
-import { PrismaClient, PlatformRole, MasterItemVersionStatus } from "@prisma/client";
+import { PlatformRole, MasterItemVersionStatus } from "@prisma/client";
 
-const prisma = new PrismaClient();
+const prisma = createDirectPrismaClient();
 
 async function run() {
   const dryRun = process.argv.includes("--dry-run");

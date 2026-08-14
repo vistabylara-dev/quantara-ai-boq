@@ -1,6 +1,6 @@
 import { apiSuccess, handleApiError } from "@/lib/http/api-response";
 import { getCurrentActor } from "@/lib/auth/current-actor";
-import { setActorContext } from "@/lib/auth/request-context";
+import { setActorContext, withActorRequestContext } from "@/lib/auth/request-context";
 import { installStarterReportTemplatesForCompany } from "@/lib/services/report-template-service";
 
 export const dynamic = "force-dynamic";
@@ -10,7 +10,7 @@ export const dynamic = "force-dynamic";
  * so a customer never needs to prepare or upload a template JSON file themselves. Idempotent —
  * safe to call more than once.
  */
-export async function POST() {
+async function POSTHandler() {
   try {
     const actor = await getCurrentActor();
     setActorContext(actor);
@@ -20,3 +20,5 @@ export async function POST() {
     return handleApiError(error);
   }
 }
+
+export const POST = withActorRequestContext(POSTHandler);

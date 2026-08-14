@@ -1,3 +1,4 @@
+import { createDirectPrismaClient } from "../src/lib/db/direct-prisma-client";
 /**
  * One-off backfill: ensures all 7 standard document templates exist for
  * EVERY company in the database, not just the seeded dev company. Safe to
@@ -5,10 +6,10 @@
  * enforces, so it never duplicates and never touches a company's existing
  * customized templates beyond updating these 7 known codes.
  */
-import { DocumentTemplateType, PrismaClient } from "@prisma/client";
+import { DocumentTemplateType } from "@prisma/client";
 import { DEFAULT_CONTENT_CONFIG, DEFAULT_STYLE_CONFIG } from "../src/lib/documents/template-config";
 
-const prisma = new PrismaClient();
+const prisma = createDirectPrismaClient();
 
 function json(value: unknown) {
   return JSON.parse(JSON.stringify(value));

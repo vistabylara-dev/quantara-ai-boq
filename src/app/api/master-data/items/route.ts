@@ -1,6 +1,6 @@
 import { apiSuccess, handleApiError } from "@/lib/http/api-response";
 import { getCurrentActor } from "@/lib/auth/current-actor";
-import { setActorContext } from "@/lib/auth/request-context";
+import { setActorContext, withActorRequestContext } from "@/lib/auth/request-context";
 import { canUsePremiumItemEffective } from "@/lib/entitlements/effective-entitlement-service";
 import { listMasterItems, toMasterItemPreviewDTO } from "@/lib/repositories/master-item-repository";
 import { prisma } from "@/lib/db/prisma";
@@ -13,7 +13,7 @@ export const dynamic = "force-dynamic";
  * description/package name only) server-side, never sent in full, before
  * the response leaves this route (spec Phase 7 section 7/8).
  */
-export async function GET(request: Request) {
+async function GETHandler(request: Request) {
   try {
     const actor = await getCurrentActor();
     setActorContext(actor);
@@ -46,3 +46,5 @@ export async function GET(request: Request) {
     return handleApiError(error);
   }
 }
+
+export const GET = withActorRequestContext(GETHandler);

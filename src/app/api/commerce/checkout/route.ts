@@ -1,6 +1,6 @@
 import { apiSuccess, handleApiError, parseJsonBody } from "@/lib/http/api-response";
 import { getCurrentActor } from "@/lib/auth/current-actor";
-import { setActorContext } from "@/lib/auth/request-context";
+import { setActorContext, withActorRequestContext } from "@/lib/auth/request-context";
 import { requireCapability } from "@/lib/auth/rbac";
 import { createCommerceCheckoutSession } from "@/lib/services/commerce-checkout-service";
 import { commerceCheckoutRequestSchema } from "@/lib/validation/commerce-schema";
@@ -17,7 +17,7 @@ export const runtime = "nodejs";
  * the development plan-activation routes — billing is a company-owner/
  * administrator action, not a general member action.
  */
-export async function POST(request: Request) {
+async function POSTHandler(request: Request) {
   try {
     const actor = await getCurrentActor();
     setActorContext(actor);
@@ -30,3 +30,5 @@ export async function POST(request: Request) {
     return handleApiError(error);
   }
 }
+
+export const POST = withActorRequestContext(POSTHandler);

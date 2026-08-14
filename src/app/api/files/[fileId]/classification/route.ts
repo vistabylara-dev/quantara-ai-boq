@@ -1,6 +1,6 @@
 import { apiSuccess, handleApiError } from "@/lib/http/api-response";
 import { getCurrentActor } from "@/lib/auth/current-actor";
-import { setActorContext } from "@/lib/auth/request-context";
+import { setActorContext, withActorRequestContext } from "@/lib/auth/request-context";
 import { AppError } from "@/lib/errors/app-error";
 import { updateFileClassification } from "@/lib/services/project-file-service";
 import { projectFileIdParamsSchema } from "@/lib/validation/route-params";
@@ -11,7 +11,7 @@ export const dynamic = "force-dynamic";
 type RouteContext = { params: Promise<{ fileId: string }> };
 
 /** Human confirm-or-change action: omit `classification` in the body (or send an empty body) to confirm the current suggestion as-is, or provide one to reclassify. */
-export async function PUT(request: Request, context: RouteContext) {
+async function PUTHandler(request: Request, context: RouteContext) {
   try {
     const actor = await getCurrentActor();
     setActorContext(actor);
@@ -34,3 +34,5 @@ export async function PUT(request: Request, context: RouteContext) {
     return handleApiError(error);
   }
 }
+
+export const PUT = withActorRequestContext(PUTHandler);

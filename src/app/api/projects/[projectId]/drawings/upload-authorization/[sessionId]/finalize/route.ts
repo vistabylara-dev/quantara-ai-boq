@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { apiSuccess, handleApiError, parseJsonBody } from "@/lib/http/api-response";
 import { getCurrentActor } from "@/lib/auth/current-actor";
-import { setActorContext } from "@/lib/auth/request-context";
+import { setActorContext, withActorRequestContext } from "@/lib/auth/request-context";
 import { finalizeDrawingUpload } from "@/lib/services/drawing-service";
 import { drawingMetadataSchema } from "@/lib/validation/drawing-schema";
 import { projectIdParamsSchema } from "@/lib/validation/boq-route-schemas";
@@ -20,7 +20,7 @@ const finalizeRequestSchema = z.object({ metadata: drawingMetadataSchema.optiona
  * the exact pathname is looked up server-side from the session this
  * sessionId identifies, scoped to the authenticated actor's own company.
  */
-export async function POST(request: Request, context: RouteContext) {
+async function POSTHandler(request: Request, context: RouteContext) {
   try {
     const actor = await getCurrentActor();
     setActorContext(actor);
@@ -32,3 +32,5 @@ export async function POST(request: Request, context: RouteContext) {
     return handleApiError(error);
   }
 }
+
+export const POST = withActorRequestContext(POSTHandler);

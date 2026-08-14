@@ -1,6 +1,6 @@
 import { apiSuccess, handleApiError } from "@/lib/http/api-response";
 import { getCurrentActor } from "@/lib/auth/current-actor";
-import { setActorContext } from "@/lib/auth/request-context";
+import { setActorContext, withActorRequestContext } from "@/lib/auth/request-context";
 import { requireCapability } from "@/lib/auth/rbac";
 import { getBOQRecord, lockBOQ } from "@/lib/repositories/boq-repository";
 import { runBOQVerification } from "@/lib/repositories/verification-repository";
@@ -8,7 +8,7 @@ import { boqIdParamsSchema } from "@/lib/validation/boq-route-schemas";
 
 export const dynamic = "force-dynamic";
 
-export async function POST(_request: Request, context: { params: Promise<{ boqId: string }> }) {
+async function POSTHandler(_request: Request, context: { params: Promise<{ boqId: string }> }) {
   try {
     const actor = await getCurrentActor();
     setActorContext(actor);
@@ -25,3 +25,5 @@ export async function POST(_request: Request, context: { params: Promise<{ boqId
     return handleApiError(error);
   }
 }
+
+export const POST = withActorRequestContext(POSTHandler);

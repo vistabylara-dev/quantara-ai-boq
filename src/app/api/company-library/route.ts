@@ -1,12 +1,12 @@
 import { apiSuccess, handleApiError, parseJsonBody } from "@/lib/http/api-response";
 import { getCurrentActor } from "@/lib/auth/current-actor";
-import { setActorContext } from "@/lib/auth/request-context";
+import { setActorContext, withActorRequestContext } from "@/lib/auth/request-context";
 import { createManualLibraryItem, listLibraryItemsForCompany } from "@/lib/services/company-library-service";
 import { companyLibraryCreateSchema } from "@/lib/validation/phase7-schema";
 
 export const dynamic = "force-dynamic";
 
-export async function GET(request: Request) {
+async function GETHandler(request: Request) {
   try {
     const actor = await getCurrentActor();
     setActorContext(actor);
@@ -26,7 +26,7 @@ export async function GET(request: Request) {
   }
 }
 
-export async function POST(request: Request) {
+async function POSTHandler(request: Request) {
   try {
     const actor = await getCurrentActor();
     setActorContext(actor);
@@ -37,3 +37,6 @@ export async function POST(request: Request) {
     return handleApiError(error);
   }
 }
+
+export const GET = withActorRequestContext(GETHandler);
+export const POST = withActorRequestContext(POSTHandler);

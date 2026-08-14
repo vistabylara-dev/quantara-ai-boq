@@ -3,6 +3,14 @@ import { fileURLToPath } from "node:url";
 import path from "node:path";
 
 const projectRoot = path.dirname(fileURLToPath(import.meta.url));
+const VERCEL_BLOB_FETCH_SHIM = path.join(
+  projectRoot,
+  "node_modules",
+  "@vercel",
+  "blob",
+  "dist",
+  "undici-browser.js",
+);
 
 // CATALOGUE-PROD-ACTIVATE — every data-imports/ subdirectory backing a
 // registered dataset in catalogue-dataset-registry.ts (src/lib/services/
@@ -49,6 +57,20 @@ const PDFJS_WORKER_GLOB = ["./node_modules/pdfjs-dist/legacy/build/pdf.worker.mj
 
 const nextConfig = {
   reactStrictMode: true,
+
+  // CLOUDFLARE-BLOB-FETCH — @vercel/blob imports bare `undici` for Node
+  // runtimes. Bundling that implementation into a Worker also bundles its
+  // llhttp parser, which calls WebAssembly.compile() at module initialization;
+  // workerd rejects runtime WASM code generation. @vercel/blob ships this
+  // fetch-only shim specifically for Webpack/browser-style runtimes, so alias
+  // only the exact bare package import and leave every other dependency alone.
+  webpack(config) {
+    config.resolve.alias = {
+      ...config.resolve.alias,
+      "undici$": VERCEL_BLOB_FETCH_SHIM,
+    };
+    return config;
+  },
 
   // Without this, Next.js walks up from the project directory looking for a
   // workspace root and can misdetect an unrelated lockfile elsewhere on the
@@ -121,7 +143,19 @@ const nextConfig = {
   // breaks its own top-level environment feature-detection ("Object.
   // defineProperty called on non-object") inside Next's RSC/route-handler
   // module wrapping — same class of problem, same fix.
-  serverExternalPackages: ["pdfkit", "pdf-parse", "pdfjs-dist"],
+  // PRISMA-CLOUDFLARE-RUNTIME — OpenNext only preserves a package's
+  // `workerd` export condition when it is explicitly externalized here.
+  // Both entries are required: `@prisma/client` supplies the Workers-aware
+  // runtime and `.prisma/client` is the generated client whose workerd entry
+  // imports the query compiler as a WASM module. Without these declarations,
+  // the Node entry attempts to read the compiler from `/bundle` at runtime.
+  serverExternalPackages: [
+    "@prisma/client",
+    ".prisma/client",
+    "pdfkit",
+    "pdf-parse",
+    "pdfjs-dist",
+  ],
 };
 
 // initOpenNextCloudflareForDev() sets up local Cloudflare binding emulation

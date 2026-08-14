@@ -1,7 +1,7 @@
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import { getCurrentActor } from "@/lib/auth/current-actor";
-import { setActorContext } from "@/lib/auth/request-context";
+import { setActorContext, withActorRequestContext } from "@/lib/auth/request-context";
 import { AppError, UnauthorizedError } from "@/lib/errors/app-error";
 import {
   completeAutodeskConnection,
@@ -12,7 +12,7 @@ import {
 export const dynamic = "force-dynamic";
 
 /** Completes the APS redirect only after validating the signed, tenant-bound state cookie. */
-export async function GET(request: Request) {
+async function GETHandler(request: Request) {
   const url = new URL(request.url);
   const connectPageUrl = new URL("/integrations/autodesk/connect", url.origin);
   const cookieStore = await cookies();
@@ -54,3 +54,5 @@ export async function GET(request: Request) {
     return NextResponse.redirect(connectPageUrl);
   }
 }
+
+export const GET = withActorRequestContext(GETHandler);

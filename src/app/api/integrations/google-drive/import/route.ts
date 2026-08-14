@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { getCurrentActor } from "@/lib/auth/current-actor";
-import { setActorContext } from "@/lib/auth/request-context";
+import { setActorContext, withActorRequestContext } from "@/lib/auth/request-context";
 import { apiSuccess, handleApiError, parseJsonBody } from "@/lib/http/api-response";
 import { importGoogleDriveFile } from "@/lib/services/google-drive-integration-service";
 
@@ -11,7 +11,7 @@ const googleDriveImportSchema = z.object({
   projectId: z.string().trim().min(1).max(200),
 }).strict();
 
-export async function POST(request: Request) {
+async function POSTHandler(request: Request) {
   try {
     const actor = await getCurrentActor();
     setActorContext(actor);
@@ -22,3 +22,5 @@ export async function POST(request: Request) {
     return handleApiError(error);
   }
 }
+
+export const POST = withActorRequestContext(POSTHandler);

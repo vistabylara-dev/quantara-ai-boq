@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { apiSuccess, handleApiError, parseJsonBody } from "@/lib/http/api-response";
 import { getCurrentActor } from "@/lib/auth/current-actor";
-import { setActorContext } from "@/lib/auth/request-context";
+import { setActorContext, withActorRequestContext } from "@/lib/auth/request-context";
 import { requireCapability } from "@/lib/auth/rbac";
 import { setIndustryEnabled } from "@/lib/repositories/industry-repository";
 
@@ -11,7 +11,7 @@ type RouteContext = {
   params: Promise<{ industryId: string }>;
 };
 
-export async function PATCH(request: Request, context: RouteContext) {
+async function PATCHHandler(request: Request, context: RouteContext) {
   try {
     const actor = await getCurrentActor();
     setActorContext(actor);
@@ -38,3 +38,5 @@ export async function PATCH(request: Request, context: RouteContext) {
     return handleApiError(error);
   }
 }
+
+export const PATCH = withActorRequestContext(PATCHHandler);

@@ -1,11 +1,11 @@
 import { apiSuccess, handleApiError } from "@/lib/http/api-response";
 import { getCurrentActor } from "@/lib/auth/current-actor";
-import { setActorContext } from "@/lib/auth/request-context";
+import { setActorContext, withActorRequestContext } from "@/lib/auth/request-context";
 import { searchItems } from "@/lib/services/item-search-service";
 
 export const dynamic = "force-dynamic";
 
-export async function GET(request: Request) {
+async function GETHandler(request: Request) {
   try {
     const actor = await getCurrentActor();
     setActorContext(actor);
@@ -19,3 +19,5 @@ export async function GET(request: Request) {
     return handleApiError(error);
   }
 }
+
+export const GET = withActorRequestContext(GETHandler);

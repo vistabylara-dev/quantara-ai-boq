@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { apiSuccess, handleApiError, parseJsonBody } from "@/lib/http/api-response";
 import { getCurrentActor } from "@/lib/auth/current-actor";
-import { setActorContext } from "@/lib/auth/request-context";
+import { setActorContext, withActorRequestContext } from "@/lib/auth/request-context";
 import { importExtractedEntityToBoq } from "@/lib/services/extraction-to-boq-service";
 import { getProjectRecord } from "@/lib/repositories/project-repository";
 import { projectIdParamsSchema } from "@/lib/validation/boq-route-schemas";
@@ -26,7 +26,7 @@ const bodySchema = z.object({
   quantityCalculationId: z.string().uuid().optional(),
 }).strict();
 
-export async function POST(request: Request, context: RouteContext) {
+async function POSTHandler(request: Request, context: RouteContext) {
   try {
     const actor = await getCurrentActor();
     setActorContext(actor);
@@ -41,3 +41,5 @@ export async function POST(request: Request, context: RouteContext) {
     return handleApiError(error);
   }
 }
+
+export const POST = withActorRequestContext(POSTHandler);

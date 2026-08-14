@@ -1,12 +1,12 @@
 import { apiSuccess, handleApiError } from "@/lib/http/api-response";
 import { getCurrentActor } from "@/lib/auth/current-actor";
-import { setActorContext } from "@/lib/auth/request-context";
+import { setActorContext, withActorRequestContext } from "@/lib/auth/request-context";
 import { getBOQVerification } from "@/lib/repositories/verification-repository";
 import { verificationBOQIdParamsSchema } from "@/lib/validation/route-params";
 
 export const dynamic = "force-dynamic";
 
-export async function GET(_request: Request, context: { params: Promise<{ boqId: string }> }) {
+async function GETHandler(_request: Request, context: { params: Promise<{ boqId: string }> }) {
   try {
     const actor = await getCurrentActor();
     setActorContext(actor);
@@ -18,3 +18,5 @@ export async function GET(_request: Request, context: { params: Promise<{ boqId:
     return handleApiError(error);
   }
 }
+
+export const GET = withActorRequestContext(GETHandler);

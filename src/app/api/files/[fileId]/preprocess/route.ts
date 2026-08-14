@@ -1,6 +1,6 @@
 import { apiSuccess, handleApiError } from "@/lib/http/api-response";
 import { getCurrentActor } from "@/lib/auth/current-actor";
-import { setActorContext } from "@/lib/auth/request-context";
+import { setActorContext, withActorRequestContext } from "@/lib/auth/request-context";
 import { triggerFilePreprocessing } from "@/lib/services/drawing-page-service";
 import { projectFileIdParamsSchema } from "@/lib/validation/route-params";
 
@@ -10,7 +10,7 @@ export const maxDuration = 60;
 
 type RouteContext = { params: Promise<{ fileId: string }> };
 
-export async function POST(_request: Request, context: RouteContext) {
+async function POSTHandler(_request: Request, context: RouteContext) {
   try {
     const actor = await getCurrentActor();
     setActorContext(actor);
@@ -22,3 +22,5 @@ export async function POST(_request: Request, context: RouteContext) {
     return handleApiError(error);
   }
 }
+
+export const POST = withActorRequestContext(POSTHandler);

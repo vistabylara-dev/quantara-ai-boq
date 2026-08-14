@@ -1,9 +1,9 @@
+import { createDirectPrismaClient } from "../../src/lib/db/direct-prisma-client";
 import { test, expect } from '@playwright/test';
-import { PrismaClient } from '@prisma/client';
 import fs from 'fs';
 import path from 'path';
 
-const prisma = new PrismaClient();
+const prisma = createDirectPrismaClient();
 
 test.describe('Workspace and Data Workflows', () => {
   let userEmail: string;

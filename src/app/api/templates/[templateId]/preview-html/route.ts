@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { handleApiError } from "@/lib/http/api-response";
 import { getCurrentActor } from "@/lib/auth/current-actor";
-import { setActorContext } from "@/lib/auth/request-context";
+import { setActorContext, withActorRequestContext } from "@/lib/auth/request-context";
 import { getTemplateForCompany } from "@/lib/services/document-template-service";
 import { buildSampleDocumentData } from "@/lib/documents/sample-document-data";
 import { generateHtml } from "@/lib/documents/generators/html-generator";
@@ -12,7 +12,7 @@ export const dynamic = "force-dynamic";
 type RouteContext = { params: Promise<{ templateId: string }> };
 
 /** Renders the template against hardcoded sample data — used by the template management UI's "Preview" action, where no real project/BOQ is selected. */
-export async function GET(_request: Request, context: RouteContext) {
+async function GETHandler(_request: Request, context: RouteContext) {
   try {
     const actor = await getCurrentActor();
     setActorContext(actor);
@@ -32,3 +32,5 @@ export async function GET(_request: Request, context: RouteContext) {
     return handleApiError(error);
   }
 }
+
+export const GET = withActorRequestContext(GETHandler);

@@ -1,5 +1,5 @@
 import { getCurrentActor } from "@/lib/auth/current-actor";
-import { setActorContext } from "@/lib/auth/request-context";
+import { setActorContext, withActorRequestContext } from "@/lib/auth/request-context";
 import { AppError } from "@/lib/errors/app-error";
 import { apiSuccess, handleApiError } from "@/lib/http/api-response";
 import { browseAutodeskProjects } from "@/lib/services/autodesk-integration-service";
@@ -15,7 +15,7 @@ function requiredOpaqueId(value: string | null, name: string): string {
 }
 
 /** Lists projects beneath one hub. IDs are kept opaque and encoded by the server-side client. */
-export async function GET(request: Request) {
+async function GETHandler(request: Request) {
   try {
     const actor = await getCurrentActor();
     setActorContext(actor);
@@ -25,3 +25,5 @@ export async function GET(request: Request) {
     return handleApiError(error);
   }
 }
+
+export const GET = withActorRequestContext(GETHandler);

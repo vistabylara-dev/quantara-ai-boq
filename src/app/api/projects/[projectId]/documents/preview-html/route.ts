@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { handleApiError } from "@/lib/http/api-response";
 import { getCurrentActor } from "@/lib/auth/current-actor";
-import { setActorContext } from "@/lib/auth/request-context";
+import { setActorContext, withActorRequestContext } from "@/lib/auth/request-context";
 import { getProjectRecord } from "@/lib/repositories/project-repository";
 import { getBOQRecord, toBOQDTO } from "@/lib/repositories/boq-repository";
 import { getTemplate } from "@/lib/repositories/document-template-repository";
@@ -34,7 +34,7 @@ type RouteContext = { params: Promise<{ projectId: string }> };
  * gating (the preview's whole purpose is to let you browse a draft,
  * including one with open issues, before committing to a real "Generate").
  */
-export async function GET(request: Request, context: RouteContext) {
+async function GETHandler(request: Request, context: RouteContext) {
   try {
     const actor = await getCurrentActor();
     setActorContext(actor);
@@ -102,3 +102,5 @@ export async function GET(request: Request, context: RouteContext) {
     return handleApiError(error);
   }
 }
+
+export const GET = withActorRequestContext(GETHandler);

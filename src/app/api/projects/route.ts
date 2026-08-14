@@ -1,6 +1,6 @@
 import { apiSuccess, handleApiError, parseJsonBody } from "@/lib/http/api-response";
 import { getCurrentActor } from "@/lib/auth/current-actor";
-import { setActorContext } from "@/lib/auth/request-context";
+import { setActorContext, withActorRequestContext } from "@/lib/auth/request-context";
 import { listProjects } from "@/lib/repositories/project-repository";
 import { createProjectWithDefaultBoq } from "@/lib/services/project-service";
 import type { ZodSchema } from "zod";
@@ -9,7 +9,7 @@ import {
   type ProjectCreateRequest,
 } from "@/app/api/_shared/project-payload";
 
-export async function GET() {
+async function GETHandler() {
   try {
     const actor = await getCurrentActor();
     setActorContext(actor);
@@ -19,7 +19,7 @@ export async function GET() {
   }
 }
 
-export async function POST(request: Request) {
+async function POSTHandler(request: Request) {
   try {
     const actor = await getCurrentActor();
     setActorContext(actor);
@@ -33,3 +33,6 @@ export async function POST(request: Request) {
     return handleApiError(error);
   }
 }
+
+export const GET = withActorRequestContext(GETHandler);
+export const POST = withActorRequestContext(POSTHandler);

@@ -1,6 +1,6 @@
 import { apiSuccess, handleApiError } from "@/lib/http/api-response";
 import { getCurrentActor } from "@/lib/auth/current-actor";
-import { setActorContext } from "@/lib/auth/request-context";
+import { setActorContext, withActorRequestContext } from "@/lib/auth/request-context";
 import { getCalculation } from "@/lib/services/quantity-calculation-service";
 import { calculationIdParamsSchema } from "@/lib/validation/quantity-calculation-schema";
 
@@ -8,7 +8,7 @@ export const dynamic = "force-dynamic";
 
 type RouteContext = { params: Promise<{ calculationId: string }> };
 
-export async function GET(_request: Request, context: RouteContext) {
+async function GETHandler(_request: Request, context: RouteContext) {
   try {
     const actor = await getCurrentActor();
     setActorContext(actor);
@@ -19,3 +19,5 @@ export async function GET(_request: Request, context: RouteContext) {
     return handleApiError(error);
   }
 }
+
+export const GET = withActorRequestContext(GETHandler);

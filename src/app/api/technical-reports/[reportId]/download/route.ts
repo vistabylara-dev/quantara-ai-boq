@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { handleApiError } from "@/lib/http/api-response";
 import { getCurrentActor } from "@/lib/auth/current-actor";
-import { setActorContext } from "@/lib/auth/request-context";
+import { setActorContext, withActorRequestContext } from "@/lib/auth/request-context";
 import { getReportForDownload } from "@/lib/services/technical-report-service";
 import { technicalReportIdParamsSchema } from "@/lib/validation/route-params";
 
@@ -14,7 +14,7 @@ type RouteContext = { params: Promise<{ reportId: string }> };
  * happen in getReportForDownload before the storage adapter is touched, mirroring
  * /api/documents/[documentId]/download.
  */
-export async function GET(_request: Request, context: RouteContext) {
+async function GETHandler(_request: Request, context: RouteContext) {
   try {
     const actor = await getCurrentActor();
     setActorContext(actor);
@@ -33,3 +33,5 @@ export async function GET(_request: Request, context: RouteContext) {
     return handleApiError(error);
   }
 }
+
+export const GET = withActorRequestContext(GETHandler);

@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { apiSuccess, handleApiError, parseJsonBody } from "@/lib/http/api-response";
 import { getCurrentActor } from "@/lib/auth/current-actor";
-import { setActorContext } from "@/lib/auth/request-context";
+import { setActorContext, withActorRequestContext } from "@/lib/auth/request-context";
 import { rejectExtractedEntity } from "@/lib/services/extracted-entity-service";
 import { entityIdParamsSchema } from "@/lib/validation/route-params";
 
@@ -11,7 +11,7 @@ type RouteContext = { params: Promise<{ entityId: string }> };
 
 const bodySchema = z.object({ reason: z.string().trim().min(1).max(500) }).strict();
 
-export async function POST(request: Request, context: RouteContext) {
+async function POSTHandler(request: Request, context: RouteContext) {
   try {
     const actor = await getCurrentActor();
     setActorContext(actor);
@@ -24,3 +24,5 @@ export async function POST(request: Request, context: RouteContext) {
     return handleApiError(error);
   }
 }
+
+export const POST = withActorRequestContext(POSTHandler);

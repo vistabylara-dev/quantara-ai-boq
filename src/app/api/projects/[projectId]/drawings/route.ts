@@ -1,6 +1,6 @@
 import { apiSuccess, handleApiError } from "@/lib/http/api-response";
 import { getCurrentActor } from "@/lib/auth/current-actor";
-import { setActorContext } from "@/lib/auth/request-context";
+import { setActorContext, withActorRequestContext } from "@/lib/auth/request-context";
 import { AppError } from "@/lib/errors/app-error";
 import { listProjectDrawings, uploadProjectDrawing } from "@/lib/services/drawing-service";
 import { drawingMetadataSchema } from "@/lib/validation/drawing-schema";
@@ -10,7 +10,7 @@ export const dynamic = "force-dynamic";
 
 type RouteContext = { params: Promise<{ projectId: string }> };
 
-export async function GET(_request: Request, context: RouteContext) {
+async function GETHandler(_request: Request, context: RouteContext) {
   try {
     const actor = await getCurrentActor();
     setActorContext(actor);
@@ -24,7 +24,7 @@ export async function GET(_request: Request, context: RouteContext) {
 }
 
 /** Metadata fields ride alongside the file in the same multipart form — one round trip, matching the existing project-files upload route's pattern. */
-export async function POST(request: Request, context: RouteContext) {
+async function POSTHandler(request: Request, context: RouteContext) {
   try {
     const actor = await getCurrentActor();
     setActorContext(actor);
@@ -64,3 +64,6 @@ export async function POST(request: Request, context: RouteContext) {
     return handleApiError(error);
   }
 }
+
+export const GET = withActorRequestContext(GETHandler);
+export const POST = withActorRequestContext(POSTHandler);

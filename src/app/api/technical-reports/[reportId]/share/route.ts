@@ -1,6 +1,6 @@
 import { apiSuccess, handleApiError } from "@/lib/http/api-response";
 import { getCurrentActor } from "@/lib/auth/current-actor";
-import { setActorContext } from "@/lib/auth/request-context";
+import { setActorContext, withActorRequestContext } from "@/lib/auth/request-context";
 import { createTechnicalReportShareLink } from "@/lib/services/technical-report-email-service";
 import { technicalReportIdParamsSchema } from "@/lib/validation/route-params";
 
@@ -11,7 +11,7 @@ type RouteContext = { params: Promise<{ reportId: string }> };
 /** Creates (or rotates) the report's secure client link (30-day expiry). The raw token/secureUrl
  *  is returned only in this response — only its hash is ever persisted, matching the proposal link
  *  pattern. No request body — mirrors /api/proposals/[proposalId]/regenerate-link. */
-export async function POST(_request: Request, context: RouteContext) {
+async function POSTHandler(_request: Request, context: RouteContext) {
   try {
     const actor = await getCurrentActor();
     setActorContext(actor);
@@ -23,3 +23,5 @@ export async function POST(_request: Request, context: RouteContext) {
     return handleApiError(error);
   }
 }
+
+export const POST = withActorRequestContext(POSTHandler);

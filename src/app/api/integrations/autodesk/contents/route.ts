@@ -1,5 +1,5 @@
 import { getCurrentActor } from "@/lib/auth/current-actor";
-import { setActorContext } from "@/lib/auth/request-context";
+import { setActorContext, withActorRequestContext } from "@/lib/auth/request-context";
 import { AppError } from "@/lib/errors/app-error";
 import { apiSuccess, handleApiError } from "@/lib/http/api-response";
 import { browseAutodeskContents } from "@/lib/services/autodesk-integration-service";
@@ -20,7 +20,7 @@ function optionalOpaqueId(value: string | null): string | undefined {
 }
 
 /** Lists top folders when folderId is omitted, otherwise lists that folder's files and subfolders. */
-export async function GET(request: Request) {
+async function GETHandler(request: Request) {
   try {
     const actor = await getCurrentActor();
     setActorContext(actor);
@@ -33,3 +33,5 @@ export async function GET(request: Request) {
     return handleApiError(error);
   }
 }
+
+export const GET = withActorRequestContext(GETHandler);

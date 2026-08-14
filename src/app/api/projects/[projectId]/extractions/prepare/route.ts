@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { apiSuccess, handleApiError, parseJsonBody } from "@/lib/http/api-response";
 import { getCurrentActor } from "@/lib/auth/current-actor";
-import { setActorContext } from "@/lib/auth/request-context";
+import { setActorContext, withActorRequestContext } from "@/lib/auth/request-context";
 import { prepareStructuredSourceCandidates } from "@/lib/services/source-candidate-bridge-service";
 import { projectIdParamsSchema } from "@/lib/validation/boq-route-schemas";
 
@@ -18,7 +18,7 @@ const prepareBodySchema = z.object({
  * existed. Never re-reads/reprocesses the source file — generates NEEDS_REVIEW candidates from
  * already-stored ExtractedTable/Row/Cell rows only. No BOQ mutation, no confirmation.
  */
-export async function POST(request: Request, context: RouteContext) {
+async function POSTHandler(request: Request, context: RouteContext) {
   try {
     const actor = await getCurrentActor();
     setActorContext(actor);
@@ -30,3 +30,5 @@ export async function POST(request: Request, context: RouteContext) {
     return handleApiError(error);
   }
 }
+
+export const POST = withActorRequestContext(POSTHandler);

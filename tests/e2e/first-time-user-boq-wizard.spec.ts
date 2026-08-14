@@ -1,5 +1,5 @@
+import { createDirectPrismaClient } from "../../src/lib/db/direct-prisma-client";
 import { test, expect, type Page } from "@playwright/test";
-import { PrismaClient } from "@prisma/client";
 
 /**
  * Owner acceptance scenario: a first-time professional logs in, opens a
@@ -14,7 +14,7 @@ import { PrismaClient } from "@prisma/client";
  * exercised — every seeded demo project already has a BOQ.
  */
 
-const prisma = new PrismaClient();
+const prisma = createDirectPrismaClient();
 const COMPANY_ID = "00000000-0000-4000-8000-000000000001";
 const CLIENT_ID = "00000000-0000-4000-8000-000000000201";
 

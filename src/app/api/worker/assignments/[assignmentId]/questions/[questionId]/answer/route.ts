@@ -1,6 +1,6 @@
 import { getCurrentActor } from "@/lib/auth/current-actor";
 import { requireCapability } from "@/lib/auth/rbac";
-import { setActorContext } from "@/lib/auth/request-context";
+import { setActorContext, withActorRequestContext } from "@/lib/auth/request-context";
 import { apiSuccess, handleApiError, parseJsonBody } from "@/lib/http/api-response";
 import { answerWorkerMaterialQuestion } from "@/lib/services/worker-review-service";
 import {
@@ -10,7 +10,7 @@ import {
 
 export const dynamic = "force-dynamic";
 
-export async function POST(request: Request, context: {
+async function POSTHandler(request: Request, context: {
   params: Promise<{ assignmentId: string; questionId: string }>;
 }) {
   try {
@@ -24,3 +24,5 @@ export async function POST(request: Request, context: {
     return handleApiError(error);
   }
 }
+
+export const POST = withActorRequestContext(POSTHandler);

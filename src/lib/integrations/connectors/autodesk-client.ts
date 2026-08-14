@@ -54,9 +54,22 @@ function parseAppBaseUrl(value: string): URL | null {
   }
 }
 
+function readAutodeskEnvironment(name: AutodeskEnvironmentName): string | undefined {
+  switch (name) {
+    case "AUTODESK_CLIENT_ID":
+      return process.env.AUTODESK_CLIENT_ID?.trim();
+    case "AUTODESK_CLIENT_SECRET":
+      return process.env.AUTODESK_CLIENT_SECRET?.trim();
+    case "APP_BASE_URL":
+      return process.env.APP_BASE_URL?.trim();
+  }
+}
+
 export function getAutodeskConfigurationStatus(): AutodeskConfigurationStatus {
-  const missingConfiguration = REQUIRED_AUTODESK_ENV.filter((name) => !process.env[name]?.trim());
-  const baseUrl = process.env.APP_BASE_URL?.trim();
+  const missingConfiguration = REQUIRED_AUTODESK_ENV.filter(
+    (name) => !readAutodeskEnvironment(name),
+  );
+  const baseUrl = readAutodeskEnvironment("APP_BASE_URL");
   const parsedBaseUrl = baseUrl ? parseAppBaseUrl(baseUrl) : null;
 
   if (baseUrl && !parsedBaseUrl && !missingConfiguration.includes("APP_BASE_URL")) {
@@ -73,7 +86,7 @@ export function getAutodeskConfigurationStatus(): AutodeskConfigurationStatus {
 }
 
 function requireEnv(name: AutodeskEnvironmentName): string {
-  const value = process.env[name]?.trim();
+  const value = readAutodeskEnvironment(name);
   if (!value) {
     throw new AppError(
       "AUTODESK_NOT_CONFIGURED",

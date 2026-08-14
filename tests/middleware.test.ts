@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { describe, expect, it } from "vitest";
-import { middleware } from "../src/middleware";
+import { config as middlewareConfig, middleware } from "../src/middleware";
 import { SESSION_COOKIE_NAME } from "../src/lib/auth/session-cookie-name";
 
 function requestFor(path: string, cookie?: string): NextRequest {
@@ -44,5 +44,20 @@ describe("edge middleware routing", () => {
     const response = middleware(requestFor("/admin/login", "some-token"));
     expect(response.status).toBe(200);
     expect(response.headers.get("location")).toBeNull();
+  });
+});
+
+describe("edge middleware matcher (Next.js routing config — the middleware() function above is never invoked for an excluded path)", () => {
+  const matcherPattern = new RegExp(middlewareConfig.matcher[0]);
+
+  it("excludes .glb static model assets, same class of exclusion as .png/.jpg", () => {
+    expect(matcherPattern.test("/models/tayqan/tayqan-web.glb")).toBe(false);
+    expect(matcherPattern.test("/logo.png")).toBe(false);
+    expect(matcherPattern.test("/logo.jpg")).toBe(false);
+  });
+
+  it("still matches (does not exclude) an ordinary protected page", () => {
+    expect(matcherPattern.test("/dashboard")).toBe(true);
+    expect(matcherPattern.test("/projects/some-project/tayqan")).toBe(true);
   });
 });

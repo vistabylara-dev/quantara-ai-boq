@@ -35,3 +35,9 @@ artifacts/
 .dev.vars*
 !.dev.vars.example
 .env*
+
+# TAYQAN-2A — the raw Meshy AI source export (~80MB, no web optimization)
+# is a local working copy only, never committed. Only the optimized
+# public/models/tayqan/tayqan-web.glb (the actual deployable asset, ~3.5MB)
+# is tracked.
+public/models/tayqan/tayqan.glb

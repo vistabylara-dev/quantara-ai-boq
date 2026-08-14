@@ -2790,6 +2790,7 @@ const ar: Dictionary = {
     staleCurrentLabel: "جدول الكميات الحالي",
     staleLastReviewedLabel: "آخر مراجعة",
     reviewUpdatedCta: "مراجعة جدول الكميات المحدث مع TAYQAN",
+    companionAriaLabel: "افتح TAYQAN، مساح الكميات الذكي الخاص بك",
     stats: {
       items: "البنود",
       quantityConfirmed: "الكمية المؤكدة",

@@ -63,5 +63,12 @@ export const config = {
   // Every unauthenticated request for a .png/.jpg (the logo, on every
   // public page including /login itself) fell through to the auth check
   // and got redirected to /login instead of serving the image.
-  matcher: ["/((?!_next/static|_next/image|favicon.ico|robots.txt|sitemap.xml|llms.txt|opengraph-image|twitter-image|manifest.webmanifest|.*\\.png|.*\\.jpg).*)"],
+  //
+  // .glb is the same class of bug: public/models/tayqan/tayqan-web.glb is a
+  // static asset (no auth check makes sense for it — it's not user data),
+  // but without this exclusion every request for it — including from a
+  // signed-out visitor on a public marketing page — got redirected to
+  // /login?next=%2Fmodels%2Ftayqan%2Ftayqan-web.glb instead of the model
+  // bytes, so the robot fell back to its no-WebGL placeholder everywhere.
+  matcher: ["/((?!_next/static|_next/image|favicon.ico|robots.txt|sitemap.xml|llms.txt|opengraph-image|twitter-image|manifest.webmanifest|.*\\.png|.*\\.jpg|.*\\.glb).*)"],
 };

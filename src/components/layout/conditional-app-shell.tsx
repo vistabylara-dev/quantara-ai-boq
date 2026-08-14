@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 import { PUBLIC_WEBSITE_PATHS } from "@/lib/public-site/public-route-paths";
 import HelpFeedbackBubble from "@/components/support/help-feedback-bubble";
+import { TayqanGlobalCompanion } from "@/components/tayqan/tayqan-global-companion";
 
 const AppShell = dynamic(() => import("./app-shell"));
 
@@ -43,6 +44,7 @@ export default function ConditionalAppShell({ children }: { children: ReactNode 
       <>
         {children}
         <HelpFeedbackBubble surface="PUBLIC" currentRoute={currentRoute} />
+        <TayqanGlobalCompanion />
       </>
     );
   }
@@ -51,6 +53,7 @@ export default function ConditionalAppShell({ children }: { children: ReactNode 
     <>
       <AppShell>{children}</AppShell>
       <HelpFeedbackBubble surface="SAAS" currentRoute={currentRoute} />
+      <TayqanGlobalCompanion />
     </>
   );
 }

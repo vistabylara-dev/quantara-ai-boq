@@ -38,6 +38,80 @@ enum BOQItemStatus {
   LOCKED
 }
 
+enum WorkerAssignmentType {
+  REVIEW_EXISTING_BOQ
+}
+
+enum WorkerAssignmentStatus {
+  RUNNING
+  NEEDS_INPUT
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+enum WorkerReviewConclusion {
+  CLEAR
+  CLEAR_WITH_OBSERVATIONS
+  NEEDS_INPUT
+}
+
+enum WorkerDecisionOutcome {
+  PASS
+  OBSERVATION
+  NEEDS_INPUT
+}
+
+enum WorkerDecisionSeverity {
+  INFO
+  WARNING
+  MATERIAL
+}
+
+enum WorkerDecisionCode {
+  BOQ_REVIEW_CLEAR
+  BOQ_EMPTY
+  BOQ_VERIFICATION_STALE
+  UNRESOLVED_CRITICAL_EXCEPTION
+  UNRESOLVED_WARNING_EXCEPTION
+  QUANTITY_PROVENANCE_MISSING
+  QUANTITY_PROVENANCE_UNCONFIRMED
+  QUANTITY_PROVENANCE_MISMATCH
+  RATE_PROVENANCE_MISSING
+  RATE_PROVENANCE_UNCONFIRMED
+  RATE_PROVENANCE_MISMATCH
+  RATE_SOURCE_EXPIRED
+  LOCKED_REVISION_SNAPSHOT_MISSING
+  LOCKED_REVISION_EVIDENCE_MISSING
+}
+
+enum WorkerMaterialQuestionType {
+  CONFIRM_EMPTY_BOQ_SCOPE
+  RUN_CURRENT_VERIFICATION
+  RESOLVE_CRITICAL_VERIFICATION_EXCEPTION
+  CONFIRM_QUANTITY_PROVENANCE
+  CONFIRM_RATE_PROVENANCE
+  CONFIRM_EXPIRED_RATE_SOURCE
+  RESTORE_LOCKED_REVISION_EVIDENCE
+}
+
+enum WorkerMaterialQuestionStatus {
+  OPEN
+  ANSWERED
+}
+
+enum WorkerEventType {
+  ASSIGNMENT_CREATED
+  INSPECTION_STARTED
+  WORKSPACE_CAPTURED
+  DECISIONS_RECORDED
+  MATERIAL_QUESTIONS_OPENED
+  MATERIAL_QUESTION_ANSWERED
+  REVIEW_COMPLETED
+  REVIEW_NEEDS_INPUT
+  REVIEW_FAILED
+}
+
 enum MarginMode {
   MARKUP
   GROSS_MARGIN
@@ -1499,6 +1573,7 @@ model Company {
   integrationEvents           IntegrationEvent[]
   stripeWebhookEvents         StripeWebhookEvent[]
   stripeBillingCustomers      StripeBillingCustomer[]
+  workerAssignments           WorkerAssignment[]
 }
 
 model User {
@@ -1554,6 +1629,7 @@ model User {
   synchronizationRunsActed               SynchronizationRun[]             @relation("SynchronizationRunActor")
   integrationEventsActed                 IntegrationEvent[]               @relation("IntegrationEventActor")
   tablePageResolutionsDecided            TablePageResolution[]
+  workerAssignmentsRequested             WorkerAssignment[]               @relation("WorkerAssignmentRequestedBy")
 
   @@index([companyId])
   @@index([role])
@@ -1688,6 +1764,7 @@ model Project {
   quantityCalculations      QuantityCalculation[]
   inspections               Inspection[]
   projectIntegrations       ProjectIntegration[]
+  workerAssignments         WorkerAssignment[]
 
   @@unique([companyId, reference])
   @@unique([companyId, slug])
@@ -1725,6 +1802,7 @@ model BOQ {
   clientProposals        ClientProposal[]
   emailDispatches        EmailDispatch[]
   itemUsages             CompanyItemUsage[]
+  workerAssignments      WorkerAssignment[]
 
   @@unique([projectId, revisionNumber])
   @@index([companyId])
@@ -1929,6 +2007,152 @@ model BOQRevisionItemEvidence {
   @@index([boqItemId])
   @@index([quantityProvenanceId])
   @@index([rateProvenanceId])
+}
+
+/**
+ * Worker V0 is deliberately limited to one read-only assignment type. The
+ * worker records its own coordination state but never receives a relation
+ * that can write BOQ items, provenance, approvals, or source evidence.
+ */
+model WorkerAssignment {
+  id                    String                   @id @default(uuid()) @db.Uuid
+  companyId             String                   @db.Uuid
+  projectId             String                   @db.Uuid
+  boqId                 String                   @db.Uuid
+  assignmentType        WorkerAssignmentType
+  status                WorkerAssignmentStatus   @default(RUNNING)
+  inspectionVersion     String
+  inspectionAsOf        DateTime
+  sourceBoqVersion      Int
+  sourceVerifiedVersion Int?
+  sourceRevisionNumber  Int
+  requestedByUserId     String?                  @db.Uuid
+  requestedByName       String
+  startedAt             DateTime                 @default(now())
+  completedAt           DateTime?
+  failureCode           String?
+  failureMessage        String?
+  createdAt             DateTime                 @default(now())
+  updatedAt             DateTime                 @updatedAt
+  company               Company                  @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  project               Project                  @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  boq                   BOQ                      @relation(fields: [boqId], references: [id], onDelete: Restrict)
+  requestedByUser       User?                    @relation("WorkerAssignmentRequestedBy", fields: [requestedByUserId], references: [id], onDelete: Restrict)
+  workspace             WorkerReviewWorkspace?
+  decisions             WorkerDecision[]
+  materialQuestions     WorkerMaterialQuestion[]
+  events                WorkerEvent[]
+
+  @@index([companyId, createdAt])
+  @@index([projectId, createdAt])
+  @@index([boqId, createdAt])
+  @@index([status, createdAt])
+}
+
+/**
+ * Immutable point-in-time review context. It is evidence of what V0 read, not a commercial source of truth.
+ */
+model WorkerReviewWorkspace {
+  id                      String                 @id @default(uuid()) @db.Uuid
+  companyId               String                 @db.Uuid
+  projectId               String                 @db.Uuid
+  boqId                   String                 @db.Uuid
+  assignmentId            String                 @unique @db.Uuid
+  conclusion              WorkerReviewConclusion
+  sectionCount            Int
+  itemCount               Int
+  activeItemCount         Int
+  confirmedQuantityCount  Int
+  confirmedRateCount      Int
+  unresolvedCriticalCount Int
+  unresolvedWarningCount  Int
+  revisionEvidenceCount   Int
+  summaryJson             Json
+  itemsJson               Json
+  createdAt               DateTime               @default(now())
+  assignment              WorkerAssignment       @relation(fields: [assignmentId], references: [id], onDelete: Restrict)
+
+  @@index([companyId, projectId])
+  @@index([boqId])
+}
+
+/**
+ * Immutable deterministic conclusions, kept separately from the generic audit log.
+ */
+model WorkerDecision {
+  id               String                  @id @default(uuid()) @db.Uuid
+  companyId        String                  @db.Uuid
+  projectId        String                  @db.Uuid
+  boqId            String                  @db.Uuid
+  assignmentId     String                  @db.Uuid
+  sequenceNumber   Int
+  code             WorkerDecisionCode
+  outcome          WorkerDecisionOutcome
+  severity         WorkerDecisionSeverity
+  subjectType      String
+  subjectId        String?                 @db.Uuid
+  summary          String
+  rationaleJson    Json
+  evidenceRefsJson Json
+  createdAt        DateTime                @default(now())
+  assignment       WorkerAssignment        @relation(fields: [assignmentId], references: [id], onDelete: Restrict)
+  materialQuestion WorkerMaterialQuestion?
+
+  @@unique([assignmentId, sequenceNumber])
+  @@index([companyId, projectId])
+  @@index([boqId])
+  @@index([code])
+}
+
+/**
+ * A typed human-coordination question. Answering it never edits the governed BOQ graph.
+ */
+model WorkerMaterialQuestion {
+  id                String                       @id @default(uuid()) @db.Uuid
+  companyId         String                       @db.Uuid
+  projectId         String                       @db.Uuid
+  boqId             String                       @db.Uuid
+  assignmentId      String                       @db.Uuid
+  decisionId        String                       @unique @db.Uuid
+  questionType      WorkerMaterialQuestionType
+  status            WorkerMaterialQuestionStatus @default(OPEN)
+  subjectType       String
+  subjectId         String?                      @db.Uuid
+  prompt            String
+  whyMaterial       String
+  recommendedAction String
+  answeredByUserId  String?                      @db.Uuid
+  answerJson        Json?
+  answeredAt        DateTime?
+  createdAt         DateTime                     @default(now())
+  updatedAt         DateTime                     @updatedAt
+  assignment        WorkerAssignment             @relation(fields: [assignmentId], references: [id], onDelete: Restrict)
+  decision          WorkerDecision               @relation(fields: [decisionId], references: [id], onDelete: Restrict)
+
+  @@index([companyId, projectId])
+  @@index([boqId])
+  @@index([status, createdAt])
+}
+
+/**
+ * Append-only lifecycle journal for a worker assignment.
+ */
+model WorkerEvent {
+  id             String           @id @default(uuid()) @db.Uuid
+  companyId      String           @db.Uuid
+  projectId      String           @db.Uuid
+  boqId          String           @db.Uuid
+  assignmentId   String           @db.Uuid
+  sequenceNumber Int
+  eventType      WorkerEventType
+  payloadJson    Json
+  createdAt      DateTime         @default(now())
+  assignment     WorkerAssignment @relation(fields: [assignmentId], references: [id], onDelete: Restrict)
+
+  @@unique([assignmentId, sequenceNumber])
+  @@index([companyId, projectId])
+  @@index([boqId])
+  @@index([eventType, createdAt])
 }
 
 model BOQItemOption {

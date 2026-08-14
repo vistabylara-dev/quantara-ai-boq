@@ -6,7 +6,7 @@ This repository is under active development. A passing local build proves code i
 
 ## Release contract
 
-- Node.js `24.17.0` and npm `11.13.0` are pinned in `.nvmrc`, `package.json`, and the lockfile.
+- Local development and CI pin Node.js `24.17.0` and npm `11.13.0`; the deploy-time engine contract accepts compatible Node `24.x` and npm `11.x` security releases.
 - PostgreSQL is the system of record through Prisma.
 - `npm ci` is the only supported dependency install for verification and CI.
 - TypeScript and Next.js build errors are release blockers; the build does not ignore them.
@@ -45,7 +45,7 @@ npm --version
 npm ci
 ```
 
-The repository sets `engine-strict=true`, so a mismatched runtime fails instead of silently producing different results.
+The repository sets `engine-strict=true`, so a mismatched major runtime fails instead of silently producing incompatible results. Hosting platforms may select newer compatible Node 24 and npm 11 minor or patch releases.
 
 ## Local setup
 

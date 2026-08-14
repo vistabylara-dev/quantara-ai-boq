@@ -25,7 +25,7 @@ import { prisma } from "../src/lib/db/prisma";
 import { createClient } from "../src/lib/repositories/client-repository";
 import { createProjectWithDefaultBoq } from "../src/lib/services/project-service";
 import {
-  deleteProjectDrawing,
+  archiveProjectDrawing,
   getProjectDrawing,
   listProjectDrawings,
   updateProjectDrawingMetadata,
@@ -133,6 +133,7 @@ describe("Drawing upload & intake pipeline (integration, real local Postgres)", 
   afterAll(async () => {
     for (const companyId of cleanupCompanyIds) {
       await prisma.auditLog.deleteMany({ where: { companyId } });
+      await prisma.projectFileArchive.deleteMany({ where: { companyId } });
       await prisma.projectFile.deleteMany({ where: { companyId } });
       await prisma.bOQItem.deleteMany({ where: { companyId } });
       await prisma.bOQSection.deleteMany({ where: { companyId } });
@@ -333,29 +334,38 @@ describe("Drawing upload & intake pipeline (integration, real local Postgres)", 
       expect(detail.id).toBe(uploaded.drawing.id);
     });
 
-    it("enforces tenant isolation on read, download, update, and delete", async () => {
+    it("enforces tenant isolation on read, download, update, and archive", async () => {
       const uploaded = await uploadProjectDrawing(ownerActorA, projectAId, { originalName: "tenant-isolation.pdf", mimeType: "application/pdf", buffer: pdfBuffer("tenant isolation content"), metadata: {} });
 
       await expect(getProjectDrawing(ownerActorB, uploaded.drawing.id)).rejects.toThrow(NotFoundError);
       await expect(getProjectFileForStreamingDownload(ownerActorB, uploaded.drawing.id)).rejects.toThrow(NotFoundError);
       await expect(updateProjectDrawingMetadata(ownerActorB, uploaded.drawing.id, { discipline: "CIVIL" })).rejects.toThrow(NotFoundError);
-      await expect(deleteProjectDrawing(ownerActorB, uploaded.drawing.id)).rejects.toThrow(NotFoundError);
+      await expect(archiveProjectDrawing(ownerActorB, uploaded.drawing.id)).rejects.toThrow(NotFoundError);
     });
 
     it("denies a guessed/nonexistent drawing ID with the same NotFoundError as a real cross-tenant ID (no existence leak)", async () => {
       await expect(getProjectDrawing(ownerActorA, "00000000-0000-0000-0000-000000000000")).rejects.toThrow(NotFoundError);
     });
 
-    it("rejects delete from a role without the files:manage capability", async () => {
+    it("rejects archive from a role without the files:manage capability", async () => {
       const uploaded = await uploadProjectDrawing(ownerActorA, projectAId, { originalName: "protected.pdf", mimeType: "application/pdf", buffer: pdfBuffer("protected content"), metadata: {} });
-      await expect(deleteProjectDrawing(reviewerActorA, uploaded.drawing.id)).rejects.toThrow(PermissionDeniedError);
+      await expect(archiveProjectDrawing(reviewerActorA, uploaded.drawing.id)).rejects.toThrow(PermissionDeniedError);
     });
 
-    it("deletes a drawing and makes it unreachable afterward", async () => {
-      const uploaded = await uploadProjectDrawing(ownerActorA, projectAId, { originalName: "to-delete.pdf", mimeType: "application/pdf", buffer: pdfBuffer("delete me"), metadata: {} });
-      await deleteProjectDrawing(ownerActorA, uploaded.drawing.id);
-      await expect(getProjectDrawing(ownerActorA, uploaded.drawing.id)).rejects.toThrow(NotFoundError);
-      await expect(getProjectFileForStreamingDownload(ownerActorA, uploaded.drawing.id)).rejects.toThrow(NotFoundError);
+    it("archives a drawing while retaining its row and source bytes", async () => {
+      const sourceBytes = pdfBuffer("retain drawing");
+      const uploaded = await uploadProjectDrawing(ownerActorA, projectAId, { originalName: "to-archive.pdf", mimeType: "application/pdf", buffer: sourceBytes, metadata: {} });
+      const stored = await prisma.projectFile.findUniqueOrThrow({ where: { id: uploaded.drawing.id } });
+
+      const archived = await archiveProjectDrawing(ownerActorA, uploaded.drawing.id);
+
+      expect(archived).toMatchObject({ id: uploaded.drawing.id, status: "ARCHIVED", isArchived: true });
+      expect((await getProjectDrawing(ownerActorA, uploaded.drawing.id)).isArchived).toBe(true);
+      expect((await listProjectDrawings(ownerActorA, projectAId)).some((drawing) => drawing.id === uploaded.drawing.id)).toBe(false);
+      const download = await getProjectFileForStreamingDownload(ownerActorA, uploaded.drawing.id);
+      expect((await readStreamToBuffer(download.body)).equals(sourceBytes)).toBe(true);
+      expect(await localProjectFileStorageAdapter.objectExists(stored.storageKey)).toBe(true);
+      await expect(prisma.projectFile.delete({ where: { id: uploaded.drawing.id } })).rejects.toThrow();
     });
   });
 

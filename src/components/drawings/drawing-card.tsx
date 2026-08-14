@@ -1,4 +1,4 @@
-import { Download, Eye, FileArchive, FileBox, FileImage, FileText, Trash2 } from "lucide-react";
+import { Download, Eye, FileArchive, FileBox, FileImage, FileText } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { formatDate } from "@/lib/formatting/dates";
 import StatusBadge, { formatStatusLabel, type StatusTone } from "@/components/dashboard/status-badge";
@@ -51,11 +51,11 @@ function formatFileSize(bytes: number): string {
 export default function DrawingCard({
   drawing,
   onPreview,
-  onDelete,
+  onArchive,
 }: {
   drawing: DrawingView;
   onPreview: () => void;
-  onDelete: () => void;
+  onArchive: () => void;
 }) {
   const Icon = EXTENSION_ICON[drawing.extension.toLowerCase()] ?? FileText;
 
@@ -130,11 +130,11 @@ export default function DrawingCard({
         </a>
         <button
           type="button"
-          onClick={onDelete}
+          onClick={onArchive}
           className="inline-flex items-center gap-1.5 rounded-xl border border-rose-300 bg-rose-50 px-3 py-1.5 text-xs font-semibold text-rose-700 hover:bg-rose-100 dark:border-rose-900 dark:bg-rose-950/30 dark:text-rose-300 dark:hover:bg-rose-900/40"
         >
-          <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
-          Delete
+          <FileArchive className="h-3.5 w-3.5" aria-hidden="true" />
+          Archive
         </button>
       </div>
     </div>

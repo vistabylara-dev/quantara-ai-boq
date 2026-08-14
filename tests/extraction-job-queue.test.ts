@@ -464,21 +464,26 @@ describe("LocalJobQueue — request-lifecycle-aware scheduling", () => {
     expect(final.status).toBe(ExtractionJobStatus.COMPLETED);
   });
 
-  it("tenant isolation: two companies enqueueing for the same projectFileId+engineType combination never collide (each scoped by its own companyId)", async () => {
-    // projectFileId values are themselves company-scoped UUIDs in real usage, but the queue's
-    // own uniqueness check is explicitly companyId + projectFileId + engineType — verify a
-    // (contrived) shared projectFileId across two different companies still gets two independent
-    // jobs, never treated as "the same active job".
+  it("tenant integrity: another company cannot enqueue or directly create a job for this company's file", async () => {
     const fileA = await makeFile(companyId, projectId, userId);
     const queue = newQueue();
     queue.registerHandler(ExtractionEngineType.DOCUMENT_CLASSIFICATION, async () => ({ status: ExtractionJobStatus.COMPLETED }));
 
-    const jobA = await queue.enqueue({ companyId, projectId, projectFileId: fileA.id, engineType: ExtractionEngineType.DOCUMENT_CLASSIFICATION, createdByUserId: userId });
-    const jobB = await queue.enqueue({ companyId: companyIdB, projectId: projectIdB, projectFileId: fileA.id, engineType: ExtractionEngineType.DOCUMENT_CLASSIFICATION, createdByUserId: userIdB });
-
-    expect(jobA.id).not.toBe(jobB.id);
-    expect(jobA.companyId).toBe(companyId);
-    expect(jobB.companyId).toBe(companyIdB);
+    await expect(
+      queue.enqueue({ companyId: companyIdB, projectId: projectIdB, projectFileId: fileA.id, engineType: ExtractionEngineType.DOCUMENT_CLASSIFICATION, createdByUserId: userIdB }),
+    ).rejects.toThrow(NotFoundError);
+    await expect(
+      prisma.extractionJob.create({
+        data: {
+          companyId: companyIdB,
+          projectId: projectIdB,
+          projectFileId: fileA.id,
+          engineType: ExtractionEngineType.DOCUMENT_CLASSIFICATION,
+          createdByUserId: userIdB,
+        },
+      }),
+    ).rejects.toThrow();
+    expect(await prisma.extractionJob.count({ where: { companyId: companyIdB, projectFileId: fileA.id } })).toBe(0);
   });
 
   it("I. recoverStaleJobs() in production does not call after() and does not throw with no request context", async () => {
@@ -515,12 +520,16 @@ describe("LocalJobQueue — request-lifecycle-aware scheduling", () => {
     });
     await prisma.extractionJob.update({ where: { id: stale.id }, data: { updatedAt: new Date(Date.now() - 10 * 60 * 1000) } });
 
-    // Simulate module-init recovery finding this RUNNING job stale (no request context, non-prod so no after() involved here).
+    // Simulate production module-init recovery: it resets the row but deliberately does not
+    // schedule work without a request lifecycle to keep the invocation alive.
+    setNodeEnv("production");
     await queue.recoverStaleJobs();
     const afterReset = await prisma.extractionJob.findUniqueOrThrow({ where: { id: stale.id } });
     expect(afterReset.status).toBe(ExtractionJobStatus.QUEUED);
+    expect(afterMock).not.toHaveBeenCalled();
 
     // A later real request for the same file+engine must give the recovered job an actual chance to run.
+    setNodeEnv("test");
     const retriggered = await queue.enqueue({ companyId, projectId, projectFileId: file.id, engineType: ExtractionEngineType.FILE_PREPROCESSING, createdByUserId: userId });
     expect(retriggered.id).toBe(stale.id);
 

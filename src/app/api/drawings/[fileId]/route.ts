@@ -1,7 +1,7 @@
 import { apiSuccess, handleApiError } from "@/lib/http/api-response";
 import { getCurrentActor } from "@/lib/auth/current-actor";
 import { setActorContext } from "@/lib/auth/request-context";
-import { deleteProjectDrawing, getProjectDrawing, updateProjectDrawingMetadata } from "@/lib/services/drawing-service";
+import { archiveProjectDrawing, getProjectDrawing, updateProjectDrawingMetadata } from "@/lib/services/drawing-service";
 import { drawingMetadataSchema } from "@/lib/validation/drawing-schema";
 import { projectFileIdParamsSchema } from "@/lib/validation/route-params";
 
@@ -43,8 +43,8 @@ export async function DELETE(_request: Request, context: RouteContext) {
     setActorContext(actor);
     const params = await context.params;
     const { fileId } = projectFileIdParamsSchema.parse(params);
-    await deleteProjectDrawing(actor, fileId);
-    return apiSuccess({ id: fileId });
+    const drawing = await archiveProjectDrawing(actor, fileId);
+    return apiSuccess(drawing);
   } catch (error) {
     return handleApiError(error);
   }

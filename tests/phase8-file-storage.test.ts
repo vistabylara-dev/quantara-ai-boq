@@ -1,10 +1,11 @@
-import { UserRole } from "@prisma/client";
+import { ExtractionEngineType, UserRole } from "@prisma/client";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { prisma } from "../src/lib/db/prisma";
 import { createClient } from "../src/lib/repositories/client-repository";
+import { findOrCreateQueuedExtractionJob } from "../src/lib/repositories/extraction-job-repository";
 import { createProjectWithDefaultBoq } from "../src/lib/services/project-service";
 import {
-  deleteProjectFile,
+  archiveProjectFile,
   getProjectFile,
   getProjectFileForStreamingDownload,
   listProjectFilesForProject,
@@ -95,6 +96,8 @@ describe("Phase 8 sub-phase 1: file security and storage (integration, real loca
 
   afterAll(async () => {
     for (const companyId of cleanupCompanyIds) {
+      await prisma.projectFileArchive.deleteMany({ where: { companyId } });
+      await prisma.extractionJob.deleteMany({ where: { companyId } });
       await prisma.projectFile.deleteMany({ where: { companyId } });
       await prisma.bOQItem.deleteMany({ where: { companyId } });
       await prisma.bOQSection.deleteMany({ where: { companyId } });
@@ -291,24 +294,55 @@ describe("Phase 8 sub-phase 1: file security and storage (integration, real loca
       expect(download.fileName).toBe("readable.pdf");
     });
 
-    it("enforces tenant isolation on read, download, and delete", async () => {
+    it("enforces tenant isolation on read, download, and archive", async () => {
       const uploaded = await uploadProjectFile(ownerActorA, projectAId, { originalName: "tenant-isolation.pdf", mimeType: "application/pdf", buffer: pdfBuffer("tenant isolation content") });
 
       await expect(getProjectFile(ownerActorB, uploaded.file.id)).rejects.toThrow(NotFoundError);
       await expect(getProjectFileForStreamingDownload(ownerActorB, uploaded.file.id)).rejects.toThrow(NotFoundError);
-      await expect(deleteProjectFile(ownerActorB, uploaded.file.id)).rejects.toThrow(NotFoundError);
+      await expect(archiveProjectFile(ownerActorB, uploaded.file.id)).rejects.toThrow(NotFoundError);
     });
 
-    it("deletes a file and makes it unreachable afterward", async () => {
-      const uploaded = await uploadProjectFile(ownerActorA, projectAId, { originalName: "to-delete.pdf", mimeType: "application/pdf", buffer: pdfBuffer("delete me") });
-      await deleteProjectFile(ownerActorA, uploaded.file.id);
-      await expect(getProjectFile(ownerActorA, uploaded.file.id)).rejects.toThrow(NotFoundError);
-      await expect(getProjectFileForStreamingDownload(ownerActorA, uploaded.file.id)).rejects.toThrow(NotFoundError);
+    it("archives a file while retaining its row, bytes, download, and audit evidence", async () => {
+      const sourceBytes = pdfBuffer("retain me");
+      const uploaded = await uploadProjectFile(ownerActorA, projectAId, { originalName: "to-archive.pdf", mimeType: "application/pdf", buffer: sourceBytes });
+      const stored = await prisma.projectFile.findUniqueOrThrow({ where: { id: uploaded.file.id } });
+
+      const archived = await archiveProjectFile(ownerActorA, uploaded.file.id);
+
+      expect(archived).toMatchObject({ id: uploaded.file.id, status: "ARCHIVED", isArchived: true });
+      expect(archived.archivedAt).not.toBeNull();
+      expect((await getProjectFile(ownerActorA, uploaded.file.id)).isArchived).toBe(true);
+      expect((await listProjectFilesForProject(ownerActorA, projectAId)).some((file) => file.id === uploaded.file.id)).toBe(false);
+      const download = await getProjectFileForStreamingDownload(ownerActorA, uploaded.file.id);
+      expect((await readStreamToBuffer(download.body)).equals(sourceBytes)).toBe(true);
+      expect(await localProjectFileStorageAdapter.objectExists(stored.storageKey)).toBe(true);
+      expect(await prisma.projectFileArchive.findUnique({ where: { projectFileId: uploaded.file.id } })).toMatchObject({
+        companyId: companyAId,
+        archivedByUserId: ownerActorA.userId,
+      });
+      await expect(findOrCreateQueuedExtractionJob({
+        companyId: companyAId,
+        projectId: projectAId,
+        projectFileId: uploaded.file.id,
+        engineType: ExtractionEngineType.TABLE_EXTRACTION,
+        createdByUserId: ownerActorA.userId,
+      })).rejects.toMatchObject({ code: "FILE_ARCHIVED" });
+      await expect(prisma.extractionJob.create({
+        data: {
+          companyId: companyAId,
+          projectId: projectAId,
+          projectFileId: uploaded.file.id,
+          engineType: ExtractionEngineType.TABLE_EXTRACTION,
+          createdByUserId: ownerActorA.userId,
+        },
+      })).rejects.toThrow();
+      await expect(prisma.projectFile.delete({ where: { id: uploaded.file.id } })).rejects.toThrow();
+      expect(await prisma.auditLog.count({ where: { companyId: companyAId, entityId: uploaded.file.id, action: "FILE_ARCHIVED" } })).toBe(1);
     });
 
-    it("rejects delete from a role without the files:manage capability", async () => {
+    it("rejects archive from a role without the files:manage capability", async () => {
       const uploaded = await uploadProjectFile(ownerActorA, projectAId, { originalName: "protected.pdf", mimeType: "application/pdf", buffer: pdfBuffer("protected content") });
-      await expect(deleteProjectFile(reviewerActorA, uploaded.file.id)).rejects.toThrow(PermissionDeniedError);
+      await expect(archiveProjectFile(reviewerActorA, uploaded.file.id)).rejects.toThrow(PermissionDeniedError);
     });
   });
 });

@@ -1473,6 +1473,8 @@ model Company {
   importJobs                  ImportJob[]
   importRows                  ImportRow[]
   projectFiles                ProjectFile[]
+  projectFileArchives        ProjectFileArchive[]
+  technicalReportRetentions TechnicalReportRetention[]
   projectFileUploadSessions   ProjectFileUploadSession[]
   extractionJobs              ExtractionJob[]
   tablePageResolutions        TablePageResolution[]
@@ -1532,6 +1534,7 @@ model User {
   copiedBoqItems                         BOQItem[]                        @relation("BoqItemCopiedByUser")
   lockedBOQs                             BOQ[]                            @relation("BOQLockedByUser")
   uploadedProjectFiles                   ProjectFile[]                    @relation("ProjectFileUploadedByUser")
+  projectFileArchivesCreated            ProjectFileArchive[]             @relation("ProjectFileArchivedByUser")
   classificationConfirmedFiles           ProjectFile[]                    @relation("ProjectFileClassificationConfirmedByUser")
   projectFileUploadSessions              ProjectFileUploadSession[]
   createdExtractionJobs                  ExtractionJob[]
@@ -2128,8 +2131,8 @@ model GeneratedDocument {
   completedAt            DateTime?
   failedAt               DateTime?
   company                Company                  @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  project                Project                  @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  boq                    BOQ                      @relation(fields: [boqId], references: [id], onDelete: Cascade)
+  project                Project                  @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  boq                    BOQ                      @relation(fields: [boqId], references: [id], onDelete: Restrict)
   template               DocumentTemplate         @relation(fields: [templateId], references: [id], onDelete: Restrict)
   templateVersion        DocumentTemplateVersion? @relation(fields: [templateVersionId], references: [id], onDelete: SetNull)
   generatedByUser        User?                    @relation(fields: [generatedByUserId], references: [id], onDelete: SetNull)
@@ -2237,9 +2240,10 @@ model GeneratedTechnicalReport {
   updatedAt            DateTime                        @updatedAt
   completedAt          DateTime?
   company              Company                         @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  project              Project                         @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  project              Project                         @relation(fields: [projectId], references: [id], onDelete: Restrict)
   template             TechnicalReportTemplate         @relation(fields: [templateId], references: [id], onDelete: Restrict)
   templateVersion      TechnicalReportTemplateVersion? @relation(fields: [templateVersionId], references: [id], onDelete: SetNull)
+  retention            TechnicalReportRetention?
   generatedByUser      User?                           @relation(fields: [generatedByUserId], references: [id], onDelete: SetNull)
   emailDispatches      EmailDispatch[]
   clientProposals      ClientProposal[]
@@ -2250,6 +2254,22 @@ model GeneratedTechnicalReport {
   @@index([templateVersionId])
   @@index([status])
   @@index([createdAt])
+}
+
+/// A completed technical report is retained as governed output. The child
+/// retention row makes deletion fail at the database boundary, even if a
+/// caller bypasses the service-layer status check.
+model TechnicalReportRetention {
+  id                         String                   @id @default(uuid()) @db.Uuid
+  companyId                  String                   @db.Uuid
+  generatedTechnicalReportId String                   @unique @db.Uuid
+  reason                     String                   @default("COMPLETED")
+  protectedAt                DateTime                 @default(now())
+  company                    Company                  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  generatedTechnicalReport   GeneratedTechnicalReport @relation(fields: [generatedTechnicalReportId], references: [id], onDelete: Restrict)
+
+  @@index([companyId])
+  @@index([protectedAt])
 }
 
 /// Email service 1B follow-up — which send flow a template is meant for. Existing rows (all
@@ -2350,9 +2370,9 @@ model ClientProposal {
   createdAt           DateTime                  @default(now())
   updatedAt           DateTime                  @updatedAt
   company             Company                   @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  project             Project                   @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  boq                 BOQ?                      @relation(fields: [boqId], references: [id], onDelete: Cascade)
-  technicalReport     GeneratedTechnicalReport? @relation(fields: [technicalReportId], references: [id], onDelete: Cascade)
+  project             Project                   @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  boq                 BOQ?                      @relation(fields: [boqId], references: [id], onDelete: Restrict)
+  technicalReport     GeneratedTechnicalReport? @relation(fields: [technicalReportId], references: [id], onDelete: Restrict)
   client              Client                    @relation(fields: [clientId], references: [id], onDelete: Restrict)
   createdByUser       User?                     @relation(fields: [createdByUserId], references: [id], onDelete: SetNull)
   documents           ClientProposalDocument[]
@@ -2375,8 +2395,8 @@ model ClientProposalDocument {
   generatedDocumentId String            @db.Uuid
   createdAt           DateTime          @default(now())
   company             Company           @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  clientProposal      ClientProposal    @relation(fields: [clientProposalId], references: [id], onDelete: Cascade)
-  generatedDocument   GeneratedDocument @relation(fields: [generatedDocumentId], references: [id], onDelete: Cascade)
+  clientProposal      ClientProposal    @relation(fields: [clientProposalId], references: [id], onDelete: Restrict)
+  generatedDocument   GeneratedDocument @relation(fields: [generatedDocumentId], references: [id], onDelete: Restrict)
 
   @@unique([clientProposalId, generatedDocumentId])
   @@index([companyId])
@@ -2397,7 +2417,7 @@ model ClientProposalEvent {
   metadataJson     Json?
   createdAt        DateTime                @default(now())
   company          Company                 @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  clientProposal   ClientProposal          @relation(fields: [clientProposalId], references: [id], onDelete: Cascade)
+  clientProposal   ClientProposal          @relation(fields: [clientProposalId], references: [id], onDelete: Restrict)
   actorUser        User?                   @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
 
   @@index([companyId])
@@ -2443,7 +2463,7 @@ model EmailDispatch {
   project                    Project                   @relation(fields: [projectId], references: [id], onDelete: Cascade)
   boq                        BOQ?                      @relation(fields: [boqId], references: [id], onDelete: SetNull)
   clientProposal             ClientProposal?           @relation(fields: [clientProposalId], references: [id], onDelete: SetNull)
-  generatedTechnicalReport   GeneratedTechnicalReport? @relation(fields: [generatedTechnicalReportId], references: [id], onDelete: SetNull)
+  generatedTechnicalReport   GeneratedTechnicalReport? @relation(fields: [generatedTechnicalReportId], references: [id], onDelete: Restrict)
   emailTemplate              EmailTemplate?            @relation(fields: [emailTemplateId], references: [id], onDelete: SetNull)
   emailTemplateVersion       EmailTemplateVersion?     @relation(fields: [emailTemplateVersionId], references: [id], onDelete: SetNull)
   createdByUser              User?                     @relation(fields: [createdByUserId], references: [id], onDelete: SetNull)
@@ -2496,7 +2516,7 @@ model ProjectFile {
   createdAt                       DateTime                  @default(now())
   updatedAt                       DateTime                  @updatedAt
   company                         Company                   @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  project                         Project                   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  project                         Project                   @relation(fields: [projectId], references: [id], onDelete: Restrict)
   uploadedByUser                  User                      @relation("ProjectFileUploadedByUser", fields: [uploadedByUserId], references: [id], onDelete: Restrict)
   classificationConfirmedByUser   User?                     @relation("ProjectFileClassificationConfirmedByUser", fields: [classificationConfirmedByUserId], references: [id], onDelete: SetNull)
   extractionJobs                  ExtractionJob[]
@@ -2504,6 +2524,7 @@ model ProjectFile {
   tablePageResolutions            TablePageResolution[]
   drawingPages                    DrawingPage[]
   extractedEntities               ExtractedEntity[]
+  archiveRecord                   ProjectFileArchive?
 
   @@index([companyId])
   @@index([projectId])
@@ -2511,6 +2532,24 @@ model ProjectFile {
   @@index([classification])
   @@index([companyId, checksum])
 }
+model ProjectFileArchive {
+  id               String      @id @default(uuid()) @db.Uuid
+  companyId        String      @db.Uuid
+  projectFileId    String      @unique @db.Uuid
+  archivedByUserId String?     @db.Uuid
+  archivedAt       DateTime    @default(now())
+  company          Company     @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  projectFile      ProjectFile @relation(fields: [projectFileId], references: [id], onDelete: Restrict)
+  archivedByUser   User?       @relation("ProjectFileArchivedByUser", fields: [archivedByUserId], references: [id], onDelete: SetNull)
+
+  @@index([companyId])
+  @@index([archivedAt])
+}
+
+/// Archival is terminal for an uploaded source: its database row, storage
+/// key, original bytes, and downstream reviewed evidence remain addressable.
+/// The archive child row prevents later hard deletion at the FK boundary.
+
 
 enum ProjectFileClassification {
   ARCHITECTURAL_PLAN
@@ -2595,7 +2634,7 @@ model ExtractionJob {
   updatedAt          DateTime             @updatedAt
   company            Company              @relation(fields: [companyId], references: [id], onDelete: Cascade)
   project            Project              @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  projectFile        ProjectFile          @relation(fields: [projectFileId], references: [id], onDelete: Cascade)
+  projectFile        ProjectFile          @relation(fields: [projectFileId], references: [id], onDelete: Restrict)
   createdByUser      User                 @relation(fields: [createdByUserId], references: [id], onDelete: Restrict)
   tablePageResolutions TablePageResolution[]
 
@@ -2667,7 +2706,7 @@ model TablePageResolution {
   updatedAt       DateTime                    @updatedAt
   company         Company                     @relation(fields: [companyId], references: [id], onDelete: Cascade)
   project         Project                     @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  projectFile     ProjectFile                 @relation(fields: [projectFileId], references: [id], onDelete: Cascade)
+  projectFile     ProjectFile                 @relation(fields: [projectFileId], references: [id], onDelete: Restrict)
   extractionJob   ExtractionJob?              @relation(fields: [extractionJobId], references: [id], onDelete: SetNull)
   decidedByUser   User?                       @relation(fields: [decidedByUserId], references: [id], onDelete: SetNull)
 
@@ -2700,7 +2739,7 @@ model ExtractedTable {
   createdAt            DateTime             @default(now())
   updatedAt            DateTime             @updatedAt
   company              Company              @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  projectFile          ProjectFile          @relation(fields: [projectFileId], references: [id], onDelete: Cascade)
+  projectFile          ProjectFile          @relation(fields: [projectFileId], references: [id], onDelete: Restrict)
   rows                 ExtractedTableRow[]
 
   @@index([companyId])
@@ -2808,7 +2847,7 @@ model DrawingPage {
   createdAt            DateTime                  @default(now())
   updatedAt            DateTime                  @updatedAt
   company              Company                   @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  projectFile          ProjectFile               @relation(fields: [projectFileId], references: [id], onDelete: Cascade)
+  projectFile          ProjectFile               @relation(fields: [projectFileId], references: [id], onDelete: Restrict)
   layers               DrawingLayer[]
   scaleCalibrations    DrawingScaleCalibration[]
 
@@ -2904,7 +2943,7 @@ model ExtractedEntity {
   updatedAt                   DateTime              @updatedAt
   company                     Company               @relation(fields: [companyId], references: [id], onDelete: Cascade)
   project                     Project               @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  projectFile                 ProjectFile           @relation(fields: [projectFileId], references: [id], onDelete: Cascade)
+  projectFile                 ProjectFile           @relation(fields: [projectFileId], references: [id], onDelete: Restrict)
   quantityCalculations        QuantityCalculation[]
 
   @@index([companyId])

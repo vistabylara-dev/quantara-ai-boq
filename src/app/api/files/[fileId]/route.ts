@@ -1,7 +1,7 @@
 import { apiSuccess, handleApiError } from "@/lib/http/api-response";
 import { getCurrentActor } from "@/lib/auth/current-actor";
 import { setActorContext } from "@/lib/auth/request-context";
-import { deleteProjectFile, getProjectFile } from "@/lib/services/project-file-service";
+import { archiveProjectFile, getProjectFile } from "@/lib/services/project-file-service";
 import { projectFileIdParamsSchema } from "@/lib/validation/route-params";
 
 export const dynamic = "force-dynamic";
@@ -27,8 +27,8 @@ export async function DELETE(_request: Request, context: RouteContext) {
     setActorContext(actor);
     const params = await context.params;
     const { fileId } = projectFileIdParamsSchema.parse(params);
-    await deleteProjectFile(actor, fileId);
-    return apiSuccess({ deleted: true });
+    const file = await archiveProjectFile(actor, fileId);
+    return apiSuccess(file);
   } catch (error) {
     return handleApiError(error);
   }

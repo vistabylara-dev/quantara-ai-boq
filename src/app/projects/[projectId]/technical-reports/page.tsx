@@ -30,6 +30,8 @@ type GeneratedTechnicalReportView = {
   errorMessage: string | null;
   createdAt: string;
   completedAt: string | null;
+  retentionLocked: boolean;
+  canDelete: boolean;
 };
 
 const REPORT_STATUS_LABEL_KEYS = {
@@ -224,14 +226,20 @@ export default function ProjectTechnicalReportsPage(props: PageProps) {
                         >
                           {t("proposals.open")}
                         </Link>
-                        <button
-                          type="button"
-                          onClick={() => void deleteReport(report.id)}
-                          disabled={deletingId === report.id}
-                          className="rounded-xl border border-rose-900 bg-rose-950/30 px-3 py-1.5 text-xs font-semibold text-rose-300 hover:bg-rose-900/40 disabled:cursor-not-allowed disabled:opacity-50"
-                        >
-                          {deletingId === report.id ? t("technicalReports.deleting") : t("common.delete")}
-                        </button>
+                        {report.canDelete ? (
+                          <button
+                            type="button"
+                            onClick={() => void deleteReport(report.id)}
+                            disabled={deletingId === report.id}
+                            className="rounded-xl border border-rose-900 bg-rose-950/30 px-3 py-1.5 text-xs font-semibold text-rose-300 hover:bg-rose-900/40 disabled:cursor-not-allowed disabled:opacity-50"
+                          >
+                            {deletingId === report.id ? t("technicalReports.deleting") : t("common.delete")}
+                          </button>
+                        ) : (
+                          <span className="rounded-xl border border-emerald-900 bg-emerald-950/30 px-3 py-1.5 text-xs font-semibold text-emerald-300">
+                            Retained evidence
+                          </span>
+                        )}
                       </div>
                     </td>
                   </tr>

@@ -235,6 +235,8 @@ describe("Phase 8 sub-phase 4: structured table and schedule extraction", () => 
 
     afterAll(async () => {
       for (const id of cleanupCompanyIds) {
+        await prisma.quantityCalculation.deleteMany({ where: { companyId: id } });
+        await prisma.extractedEntity.deleteMany({ where: { companyId: id } });
         await prisma.extractedTableCell.deleteMany({ where: { companyId: id } });
         await prisma.extractedTableRow.deleteMany({ where: { companyId: id } });
         await prisma.extractedTable.deleteMany({ where: { companyId: id } });

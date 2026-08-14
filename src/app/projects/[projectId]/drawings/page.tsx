@@ -224,8 +224,8 @@ export default function ProjectDrawingsPage(props: { params: Promise<{ projectId
     setUploadError(null);
   }
 
-  async function handleDelete(drawingId: string) {
-    if (!window.confirm("Delete this drawing? This cannot be undone.")) return;
+  async function handleArchive(drawingId: string) {
+    if (!window.confirm("Archive this drawing? It will leave the active list, while its source file and review evidence are retained.")) return;
     setActionError(null);
     try {
       await apiClient.delete(`/api/drawings/${drawingId}`);
@@ -438,7 +438,7 @@ export default function ProjectDrawingsPage(props: { params: Promise<{ projectId
         </div>
       </div>
 
-      {/* 8-9-10. Recent drawings, status, preview/download/delete */}
+      {/* 8-9-10. Recent drawings, status, preview/download/archive */}
       <div className={panel}>
         <SectionHeader title="Recent drawings" description="Uploaded drawings for this project, newest first." />
         {actionError && <p className="mt-3 text-sm text-[#D84A4A] dark:text-rose-300">{actionError}</p>}
@@ -475,7 +475,7 @@ export default function ProjectDrawingsPage(props: { params: Promise<{ projectId
         ) : (
           <div className="mt-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
             {drawings.map((drawing) => (
-              <DrawingCard key={drawing.id} drawing={drawing} onPreview={() => setPreviewDrawing(drawing)} onDelete={() => void handleDelete(drawing.id)} />
+              <DrawingCard key={drawing.id} drawing={drawing} onPreview={() => setPreviewDrawing(drawing)} onArchive={() => void handleArchive(drawing.id)} />
             ))}
           </div>
         )}

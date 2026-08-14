@@ -1,11 +1,12 @@
 import { createHash } from "node:crypto";
+import { prisma } from "@/lib/db/prisma";
 import type { CurrentActor } from "@/lib/auth/current-actor";
 import { requireCapability } from "@/lib/auth/rbac";
 import { AppError, NotFoundError } from "@/lib/errors/app-error";
 import { getProjectRecord } from "@/lib/repositories/project-repository";
 import {
+  archiveProjectFileRow,
   createProjectFile,
-  deleteProjectFileRow,
   findDuplicateByChecksum,
   findProjectFileRecord,
   getProjectFileRecord,
@@ -343,19 +344,28 @@ export async function updateProjectDrawingMetadata(actor: CurrentActor, fileId: 
   return toDrawingDTO(updated);
 }
 
-export async function deleteProjectDrawing(actor: CurrentActor, fileId: string) {
+export async function archiveProjectDrawing(actor: CurrentActor, fileId: string) {
   requireCapability(actor, "files:manage");
   const row = await getOwnDrawingRecord(actor, fileId);
-
-  await deleteProjectFileRow(actor.companyId, fileId);
-  await getDrawingStorageAdapter().deleteObject(row.storageKey);
-
-  await createAuditLog(actor.companyId, {
-    entityType: "ProjectFile",
-    entityId: fileId,
-    action: "DRAWING_DELETED",
-    payload: { projectId: row.projectId, originalName: row.originalName },
+  const result = await prisma.$transaction(async (tx) => {
+    const archived = await archiveProjectFileRow(actor.companyId, fileId, actor.userId, tx);
+    if (!archived.alreadyArchived) {
+      await createAuditLog(actor.companyId, {
+        entityType: "ProjectFile",
+        entityId: fileId,
+        action: "DRAWING_ARCHIVED",
+        payload: {
+          projectId: row.projectId,
+          originalName: row.originalName,
+          storageKeyRetained: true,
+          bytesRetained: true,
+        },
+        actorName: actor.fullName,
+      }, tx);
+    }
+    return archived;
   });
+  return toDrawingDTO(result.record);
 }
 
 // ---------------------------------------------------------------------------

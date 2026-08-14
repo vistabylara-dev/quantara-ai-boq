@@ -109,7 +109,15 @@ export async function generateReportDocument(actor: CurrentActor, reportId: stri
     );
   }
 
+
   const record = await getGeneratedTechnicalReportRecord(actor.companyId, reportId);
+  if (record.status === "COMPLETED") {
+    throw new AppError(
+      "TECHNICAL_REPORT_IMMUTABLE",
+      "Completed technical reports are immutable. Create a new report revision instead.",
+      409,
+    );
+  }
   const project = await getProjectRecord(actor.companyId, record.projectId);
   const company = await prisma.company.findUniqueOrThrow({ where: { id: actor.companyId } });
 

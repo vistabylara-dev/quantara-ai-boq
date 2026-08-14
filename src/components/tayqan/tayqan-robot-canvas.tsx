@@ -51,6 +51,11 @@ export default function TayqanRobotCanvas({ compact = false, cameraDistance = 3.
           camera={{ position: [0, -0.05, cameraDistance], fov }}
           gl={{ antialias: true, alpha: true, powerPreference: "low-power" }}
           shadows={false}
+          style={{ background: "transparent" }}
+          // Three's default clear alpha is 1 even with gl.alpha:true — without
+          // this the canvas paints an opaque fill instead of a transparent
+          // cutout around the model.
+          onCreated={({ gl }) => gl.setClearAlpha(0)}
         >
           <ambientLight intensity={0.75} />
           <directionalLight position={[2, 3, 2]} intensity={1.1} />

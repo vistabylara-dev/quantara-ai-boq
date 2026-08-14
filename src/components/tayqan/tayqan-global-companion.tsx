@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useTranslations } from "@/lib/i18n/locale-provider";
 import { TayqanFallback } from "./tayqan-fallback";
+import { TayqanSpeechBubble } from "./tayqan-speech-bubble";
 
 const TayqanRobotCanvas = dynamic(() => import("./tayqan-robot-canvas"), {
   ssr: false,
@@ -22,7 +23,11 @@ const DEDICATED_TAYQAN_PAGE = /^\/projects\/[^/]+\/tayqan(\/|$)/;
  *
  * Positioned at the opposite fixed corner from HelpFeedbackBubble
  * (bottom-end) to avoid overlapping it; safe-area aware so it never sits
- * under a notch/home-indicator.
+ * under a notch/home-indicator. Deliberately no background card/border
+ * around the robot itself — a transparent Canvas (see tayqan-robot-canvas)
+ * inside a plain, unstyled link is what gives the "floating cutout" feel;
+ * only the drop-shadow class here is for legibility against light and dark
+ * pages, not a panel.
  */
 export function TayqanGlobalCompanion() {
   const pathname = usePathname() ?? "/";
@@ -41,8 +46,9 @@ export function TayqanGlobalCompanion() {
       <Link
         href="/projects"
         aria-label={t("tayqan.companionAriaLabel")}
-        className="block h-[130px] w-[90px] overflow-hidden rounded-[1.75rem] border border-cyan-800/70 bg-slate-950/70 shadow-lg backdrop-blur transition-transform hover:scale-105 sm:h-[210px] sm:w-[150px]"
+        className="group relative block h-[130px] w-[90px] drop-shadow-[0_6px_16px_rgba(0,0,0,0.45)] transition-transform hover:scale-105 sm:h-[210px] sm:w-[150px]"
       >
+        <TayqanSpeechBubble message={t("tayqan.hoverMessage")} placement="above" />
         <TayqanRobotCanvas compact cameraDistance={4.4} fov={30} scale={1.05} />
       </Link>
     </div>

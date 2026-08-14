@@ -2791,6 +2791,7 @@ const ar: Dictionary = {
     staleLastReviewedLabel: "آخر مراجعة",
     reviewUpdatedCta: "مراجعة جدول الكميات المحدث مع TAYQAN",
     companionAriaLabel: "افتح TAYQAN، مساح الكميات الذكي الخاص بك",
+    hoverMessage: "وظّفني — سأُنجز لك كامل أعمال الـ BOQ.",
     stats: {
       items: "البنود",
       quantityConfirmed: "الكمية المؤكدة",

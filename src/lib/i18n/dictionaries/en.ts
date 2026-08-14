@@ -1595,6 +1595,7 @@ const en = {
     staleLastReviewedLabel: "Last reviewed",
     reviewUpdatedCta: "Review Updated BOQ with TAYQAN",
     companionAriaLabel: "Open TAYQAN, your AI quantity surveyor",
+    hoverMessage: "Hire me — I'll finish the full BOQ work for you.",
     stats: {
       items: "Items",
       quantityConfirmed: "Quantity confirmed",

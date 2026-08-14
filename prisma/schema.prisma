@@ -395,7 +395,7 @@ model CompanySoftwareSubscription {
   startsAt               DateTime?
   expiresAt              DateTime?
   cancelledAt            DateTime?
-  externalSubscriptionId String?                   @unique
+  externalSubscriptionId String?                  @unique
   source                 String                   @default("development")
   createdAt              DateTime                 @default(now())
   updatedAt              DateTime                 @updatedAt
@@ -1473,8 +1473,8 @@ model Company {
   importJobs                  ImportJob[]
   importRows                  ImportRow[]
   projectFiles                ProjectFile[]
-  projectFileArchives        ProjectFileArchive[]
-  technicalReportRetentions TechnicalReportRetention[]
+  projectFileArchives         ProjectFileArchive[]
+  technicalReportRetentions   TechnicalReportRetention[]
   projectFileUploadSessions   ProjectFileUploadSession[]
   extractionJobs              ExtractionJob[]
   tablePageResolutions        TablePageResolution[]
@@ -1534,7 +1534,7 @@ model User {
   copiedBoqItems                         BOQItem[]                        @relation("BoqItemCopiedByUser")
   lockedBOQs                             BOQ[]                            @relation("BOQLockedByUser")
   uploadedProjectFiles                   ProjectFile[]                    @relation("ProjectFileUploadedByUser")
-  projectFileArchivesCreated            ProjectFileArchive[]             @relation("ProjectFileArchivedByUser")
+  projectFileArchivesCreated             ProjectFileArchive[]             @relation("ProjectFileArchivedByUser")
   classificationConfirmedFiles           ProjectFile[]                    @relation("ProjectFileClassificationConfirmedByUser")
   projectFileUploadSessions              ProjectFileUploadSession[]
   createdExtractionJobs                  ExtractionJob[]
@@ -1753,63 +1753,65 @@ model BOQSection {
 }
 
 model BOQItem {
-  id                         String                  @id @default(uuid()) @db.Uuid
-  companyId                  String                  @db.Uuid
-  sectionId                  String                  @db.Uuid
+  id                         String                     @id @default(uuid()) @db.Uuid
+  companyId                  String                     @db.Uuid
+  sectionId                  String                     @db.Uuid
   itemNumber                 Int
   itemCode                   String
   category                   String
   description                String
-  specification              String                  @default("")
-  quantity                   Decimal                 @db.Decimal(18, 4)
+  specification              String                     @default("")
+  quantity                   Decimal                    @db.Decimal(18, 4)
   unit                       String
-  unitCost                   Decimal                 @default(0) @db.Decimal(18, 4)
-  freightCost                Decimal                 @default(0) @db.Decimal(18, 4)
-  installationCost           Decimal                 @default(0) @db.Decimal(18, 4)
-  additionalCost             Decimal                 @default(0) @db.Decimal(18, 4)
-  landedCost                 Decimal                 @default(0) @db.Decimal(18, 4)
-  marginMode                 MarginMode              @default(MARKUP)
-  marginPercentage           Decimal                 @default(0) @db.Decimal(7, 4)
-  sellingRate                Decimal                 @default(0) @db.Decimal(18, 4)
-  totalAmount                Decimal                 @default(0) @db.Decimal(20, 4)
-  wastagePercentage          Decimal                 @default(0) @db.Decimal(7, 4)
-  taxApplicable              Boolean                 @default(true)
-  sourceReference            String                  @default("")
-  roomOrZone                 String                  @default("")
-  drawingReference           String                  @default("")
-  confidenceScore            Decimal                 @default(100) @db.Decimal(7, 4)
-  status                     BOQItemStatus           @default(DRAFT)
-  notes                      String                  @default("")
+  unitCost                   Decimal                    @default(0) @db.Decimal(18, 4)
+  freightCost                Decimal                    @default(0) @db.Decimal(18, 4)
+  installationCost           Decimal                    @default(0) @db.Decimal(18, 4)
+  additionalCost             Decimal                    @default(0) @db.Decimal(18, 4)
+  landedCost                 Decimal                    @default(0) @db.Decimal(18, 4)
+  marginMode                 MarginMode                 @default(MARKUP)
+  marginPercentage           Decimal                    @default(0) @db.Decimal(7, 4)
+  sellingRate                Decimal                    @default(0) @db.Decimal(18, 4)
+  totalAmount                Decimal                    @default(0) @db.Decimal(20, 4)
+  wastagePercentage          Decimal                    @default(0) @db.Decimal(7, 4)
+  taxApplicable              Boolean                    @default(true)
+  sourceReference            String                     @default("")
+  roomOrZone                 String                     @default("")
+  drawingReference           String                     @default("")
+  confidenceScore            Decimal                    @default(100) @db.Decimal(7, 4)
+  status                     BOQItemStatus              @default(DRAFT)
+  notes                      String                     @default("")
   pricingMetadataJson        Json?
   sortOrder                  Int
-  sourceType                 BoqItemSourceType       @default(MANUAL)
-  sourceMasterItemId         String?                 @db.Uuid
-  sourceCompanyLibraryItemId String?                 @db.Uuid
-  sourceCatalogueItemId      String?                 @db.Uuid
-  sourcePreviousBoqItemId    String?                 @db.Uuid
+  sourceType                 BoqItemSourceType          @default(MANUAL)
+  sourceMasterItemId         String?                    @db.Uuid
+  sourceCompanyLibraryItemId String?                    @db.Uuid
+  sourceCatalogueItemId      String?                    @db.Uuid
+  sourcePreviousBoqItemId    String?                    @db.Uuid
   copiedAt                   DateTime?
-  copiedByUserId             String?                 @db.Uuid
+  copiedByUserId             String?                    @db.Uuid
   /// MASTER-BOQ-1A BOQ snapshot behavior: the exact master item version used
   /// when this line was added/last resolved from the master catalogue, plus
   /// a point-in-time snapshot of classification/attributes/region that don't
   /// otherwise have a dedicated column here. Editing this line never mutates
   /// the master item; a later master-item edit never mutates this line.
-  sourceMasterItemVersionId  String?                 @db.Uuid
+  sourceMasterItemVersionId  String?                    @db.Uuid
   masterItemSnapshotJson     Json?
-  createdAt                  DateTime                @default(now())
-  updatedAt                  DateTime                @updatedAt
-  company                    Company                 @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  section                    BOQSection              @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  createdAt                  DateTime                   @default(now())
+  updatedAt                  DateTime                   @updatedAt
+  company                    Company                    @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  section                    BOQSection                 @relation(fields: [sectionId], references: [id], onDelete: Cascade)
   options                    BOQItemOption[]
   verificationExceptions     VerificationException[]
-  sourceMasterItem           MasterItem?             @relation(fields: [sourceMasterItemId], references: [id], onDelete: SetNull)
-  sourceMasterItemVersion    MasterItemVersion?      @relation(fields: [sourceMasterItemVersionId], references: [id], onDelete: SetNull)
-  sourceCompanyLibraryItem   CompanyLibraryItem?     @relation(fields: [sourceCompanyLibraryItemId], references: [id], onDelete: SetNull)
-  sourceCatalogueItem        RateCatalogueItem?      @relation(fields: [sourceCatalogueItemId], references: [id], onDelete: SetNull)
-  sourcePreviousBoqItem      BOQItem?                @relation("BoqItemSourceChain", fields: [sourcePreviousBoqItemId], references: [id], onDelete: SetNull)
-  copiedIntoItems            BOQItem[]               @relation("BoqItemSourceChain")
-  copiedByUser               User?                   @relation("BoqItemCopiedByUser", fields: [copiedByUserId], references: [id], onDelete: SetNull)
+  sourceMasterItem           MasterItem?                @relation(fields: [sourceMasterItemId], references: [id], onDelete: SetNull)
+  sourceMasterItemVersion    MasterItemVersion?         @relation(fields: [sourceMasterItemVersionId], references: [id], onDelete: SetNull)
+  sourceCompanyLibraryItem   CompanyLibraryItem?        @relation(fields: [sourceCompanyLibraryItemId], references: [id], onDelete: SetNull)
+  sourceCatalogueItem        RateCatalogueItem?         @relation(fields: [sourceCatalogueItemId], references: [id], onDelete: SetNull)
+  sourcePreviousBoqItem      BOQItem?                   @relation("BoqItemSourceChain", fields: [sourcePreviousBoqItemId], references: [id], onDelete: SetNull)
+  copiedIntoItems            BOQItem[]                  @relation("BoqItemSourceChain")
+  copiedByUser               User?                      @relation("BoqItemCopiedByUser", fields: [copiedByUserId], references: [id], onDelete: SetNull)
   itemUsages                 CompanyItemUsage[]
+  quantityProvenance         BOQItemQuantityProvenance?
+  rateProvenance             BOQItemRateProvenance?
 
   @@index([companyId])
   @@index([sectionId])
@@ -1819,6 +1821,114 @@ model BOQItem {
   @@index([sourceMasterItemId])
   @@index([sourceMasterItemVersionId])
   @@index([sourceCompanyLibraryItemId])
+}
+
+enum QuantityProvenanceSource {
+  MANUAL_CONFIRMED
+  CONFIRMED_CALCULATION
+  REVIEWED_EXTRACTION
+  COPIED
+  LEGACY_UNVERIFIED
+}
+
+enum RateProvenanceSource {
+  MANUAL_CONFIRMED
+  MIXED_CONFIRMED
+  RATE_CATALOGUE
+  COMPANY_LIBRARY
+  PREVIOUS_BOQ
+  IMPORT
+  MASTER_ITEM
+  COPIED
+  LEGACY_UNVERIFIED
+}
+
+/**
+ * Relational quantity lineage for the current editable BOQ item. The source
+ * ids are deliberately scalar in Prisma because the database migration owns
+ * the cross-model tenant/project checks; the BOQ item relation is exposed for
+ * integrity-gate reads.
+ */
+model BOQItemQuantityProvenance {
+  id                                String                   @id @default(uuid()) @db.Uuid
+  companyId                         String                   @db.Uuid
+  projectId                         String                   @db.Uuid
+  boqItemId                         String                   @unique @db.Uuid
+  sourceType                        QuantityProvenanceSource
+  extractedEntityId                 String?                  @db.Uuid
+  quantityCalculationId             String?                  @db.Uuid
+  projectFileId                     String?                  @db.Uuid
+  sourceBoqItemQuantityProvenanceId String?                  @db.Uuid
+  quantitySnapshot                  Decimal                  @db.Decimal(18, 6)
+  unitSnapshot                      String
+  confirmedByUserId                 String?                  @db.Uuid
+  confirmedByName                   String
+  confirmedAt                       DateTime?
+  createdAt                         DateTime                 @default(now())
+  updatedAt                         DateTime                 @updatedAt
+  boqItem                           BOQItem                  @relation(fields: [boqItemId], references: [id], onDelete: Cascade)
+
+  @@index([companyId, projectId])
+  @@index([extractedEntityId])
+  @@index([quantityCalculationId])
+  @@index([projectFileId])
+  @@index([sourceBoqItemQuantityProvenanceId])
+}
+
+/**
+ * Separate, point-in-time commercial lineage for the current BOQ item.
+ */
+model BOQItemRateProvenance {
+  id                            String               @id @default(uuid()) @db.Uuid
+  companyId                     String               @db.Uuid
+  projectId                     String               @db.Uuid
+  boqItemId                     String               @unique @db.Uuid
+  sourceType                    RateProvenanceSource
+  rateCatalogueItemId           String?              @db.Uuid
+  sourceBoqItemRateProvenanceId String?              @db.Uuid
+  unitCostSnapshot              Decimal              @db.Decimal(18, 4)
+  freightCostSnapshot           Decimal              @db.Decimal(18, 4)
+  installationCostSnapshot      Decimal              @db.Decimal(18, 4)
+  additionalCostSnapshot        Decimal              @db.Decimal(18, 4)
+  marginModeSnapshot            MarginMode
+  marginPercentageSnapshot      Decimal              @db.Decimal(7, 4)
+  currencySnapshot              String               @default("AED")
+  sourceEffectiveDate           DateTime?
+  sourceExpiryDate              DateTime?
+  confirmedByUserId             String?              @db.Uuid
+  confirmedByName               String
+  confirmedAt                   DateTime?
+  createdAt                     DateTime             @default(now())
+  updatedAt                     DateTime             @updatedAt
+  boqItem                       BOQItem              @relation(fields: [boqItemId], references: [id], onDelete: Cascade)
+
+  @@index([companyId, projectId])
+  @@index([rateCatalogueItemId])
+  @@index([sourceBoqItemRateProvenanceId])
+}
+
+/**
+ * Immutable relational evidence frozen when a verified BOQ revision locks.
+ */
+model BOQRevisionItemEvidence {
+  id                    String   @id @default(uuid()) @db.Uuid
+  companyId             String   @db.Uuid
+  projectId             String   @db.Uuid
+  boqRevisionSnapshotId String   @db.Uuid
+  boqItemId             String   @db.Uuid
+  quantityProvenanceId  String   @db.Uuid
+  rateProvenanceId      String   @db.Uuid
+  itemCodeSnapshot      String
+  quantitySnapshot      Decimal  @db.Decimal(18, 6)
+  unitSnapshot          String
+  unitCostSnapshot      Decimal  @db.Decimal(18, 4)
+  createdAt             DateTime @default(now())
+
+  @@unique([boqRevisionSnapshotId, boqItemId])
+  @@index([companyId, projectId])
+  @@index([boqItemId])
+  @@index([quantityProvenanceId])
+  @@index([rateProvenanceId])
 }
 
 model BOQItemOption {
@@ -2532,6 +2642,7 @@ model ProjectFile {
   @@index([classification])
   @@index([companyId, checksum])
 }
+
 model ProjectFileArchive {
   id               String      @id @default(uuid()) @db.Uuid
   companyId        String      @db.Uuid
@@ -2549,7 +2660,6 @@ model ProjectFileArchive {
 /// Archival is terminal for an uploaded source: its database row, storage
 /// key, original bytes, and downstream reviewed evidence remain addressable.
 /// The archive child row prevents later hard deletion at the FK boundary.
-
 
 enum ProjectFileClassification {
   ARCHITECTURAL_PLAN
@@ -2610,32 +2720,32 @@ enum ProjectFileStatus {
  * handlers). Processed by the queue in src/lib/jobs/*.
  */
 model ExtractionJob {
-  id                 String               @id @default(uuid()) @db.Uuid
-  companyId          String               @db.Uuid
-  projectId          String               @db.Uuid
-  projectFileId      String               @db.Uuid
-  engineType         ExtractionEngineType
-  provider           String               @default("local")
-  status             ExtractionJobStatus  @default(QUEUED)
-  progressPercentage Int                  @default(0)
-  currentStep        String?
-  startedAt          DateTime?
-  completedAt        DateTime?
-  failedAt           DateTime?
-  attempts           Int                  @default(0)
-  maximumAttempts    Int                  @default(3)
-  configurationJson  Json?
-  resultSummaryJson  Json?
-  usageMetadataJson  Json?
-  errorCode          String?
-  errorMessage       String?
-  createdByUserId    String               @db.Uuid
-  createdAt          DateTime             @default(now())
-  updatedAt          DateTime             @updatedAt
-  company            Company              @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  project            Project              @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  projectFile        ProjectFile          @relation(fields: [projectFileId], references: [id], onDelete: Restrict)
-  createdByUser      User                 @relation(fields: [createdByUserId], references: [id], onDelete: Restrict)
+  id                   String                @id @default(uuid()) @db.Uuid
+  companyId            String                @db.Uuid
+  projectId            String                @db.Uuid
+  projectFileId        String                @db.Uuid
+  engineType           ExtractionEngineType
+  provider             String                @default("local")
+  status               ExtractionJobStatus   @default(QUEUED)
+  progressPercentage   Int                   @default(0)
+  currentStep          String?
+  startedAt            DateTime?
+  completedAt          DateTime?
+  failedAt             DateTime?
+  attempts             Int                   @default(0)
+  maximumAttempts      Int                   @default(3)
+  configurationJson    Json?
+  resultSummaryJson    Json?
+  usageMetadataJson    Json?
+  errorCode            String?
+  errorMessage         String?
+  createdByUserId      String                @db.Uuid
+  createdAt            DateTime              @default(now())
+  updatedAt            DateTime              @updatedAt
+  company              Company               @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  project              Project               @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  projectFile          ProjectFile           @relation(fields: [projectFileId], references: [id], onDelete: Restrict)
+  createdByUser        User                  @relation(fields: [createdByUserId], references: [id], onDelete: Restrict)
   tablePageResolutions TablePageResolution[]
 
   @@index([companyId])

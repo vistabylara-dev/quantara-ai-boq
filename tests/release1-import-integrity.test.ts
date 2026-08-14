@@ -245,10 +245,10 @@ describe("Release 1 entity-to-BOQ import integrity", () => {
     auditFailure.failImportAudit = false;
     if (!companyId) return;
     await prisma.auditLog.deleteMany({ where: { companyId } });
+    await prisma.bOQItem.deleteMany({ where: { companyId } });
     await prisma.quantityCalculation.deleteMany({ where: { companyId } });
     await prisma.extractedEntity.deleteMany({ where: { companyId } });
     await prisma.projectFile.deleteMany({ where: { companyId } });
-    await prisma.bOQItem.deleteMany({ where: { companyId } });
     await prisma.bOQSection.deleteMany({ where: { companyId } });
     await prisma.bOQ.deleteMany({ where: { companyId } });
     await prisma.project.deleteMany({ where: { companyId } });

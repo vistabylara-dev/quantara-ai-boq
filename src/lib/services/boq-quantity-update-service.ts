@@ -4,6 +4,7 @@ import { AppError } from "@/lib/errors/app-error";
 import { assertValidCalculatedResult } from "@/lib/calculations/quantity-domain-validator";
 import { getBOQItemRecord, updateBOQItem } from "@/lib/repositories/boq-repository";
 import { getQuantityCalculationRecord } from "@/lib/repositories/quantity-calculation-repository";
+import { prisma } from "@/lib/db/prisma";
 
 /**
  * Guided BOQ measurement workflow (Release 1), spec section 7 — a calculated
@@ -88,6 +89,16 @@ export async function confirmCalculatedQuantityForItem(actor: CurrentActor, item
 
   const previousQuantity = item.quantity.toNumber();
   const proposedQuantity = calculation.resultValue.toNumber();
+  const extractedEntity = calculation.extractedEntityId
+    ? await prisma.extractedEntity.findFirst({
+        where: {
+          id: calculation.extractedEntityId,
+          companyId: actor.companyId,
+          projectId: calculation.projectId,
+        },
+        select: { id: true, projectFileId: true },
+      })
+    : null;
 
   return updateBOQItem(
     actor.companyId,
@@ -98,6 +109,12 @@ export async function confirmCalculatedQuantityForItem(actor: CurrentActor, item
     },
     {
       expectedCurrent: { field: "quantity", value: previousQuantity },
+      integrityActor: { userId: actor.userId, name: actor.fullName },
+      quantityCalculationProvenance: {
+        quantityCalculationId: calculation.id,
+        extractedEntityId: extractedEntity?.id,
+        projectFileId: extractedEntity?.projectFileId,
+      },
       additionalAudit: {
         action: "BOQ_QUANTITY_UPDATED_FROM_CALCULATION",
         payload: {

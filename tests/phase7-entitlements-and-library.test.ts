@@ -33,6 +33,7 @@ import { searchItems } from "../src/lib/services/item-search-service";
 import { createImportJob, executeImportJob, updateImportMapping, validateImportJob, actOnImportRows } from "../src/lib/services/import-service";
 import { AppError, NotFoundError, PermissionDeniedError } from "../src/lib/errors/app-error";
 import type { CurrentActor } from "../src/lib/auth/current-actor";
+import { preserveIssuedEvidenceDuringCleanup } from "./helpers/preserve-issued-evidence";
 
 const RUN_ID = Date.now();
 const userIdByCompany = new Map<string, string>();
@@ -108,6 +109,10 @@ describe("Phase 7: commercial entitlements + industry data platform (integration
   });
 
   afterAll(async () => {
+    if (await preserveIssuedEvidenceDuringCleanup(cleanupCompanyIds)) {
+      await prisma.$disconnect();
+      return;
+    }
     for (const companyId of cleanupCompanyIds) {
       await prisma.importRow.deleteMany({ where: { companyId } });
       await prisma.importJob.deleteMany({ where: { companyId } });

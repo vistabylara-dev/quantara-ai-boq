@@ -1,9 +1,8 @@
-import type { Prisma } from "@prisma/client";
+import { RateProvenanceSource, type Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db/prisma";
 import type { CurrentActor } from "@/lib/auth/current-actor";
 import { requireCapability } from "@/lib/auth/rbac";
 import { AppError, NotFoundError } from "@/lib/errors/app-error";
-import { createAuditLog } from "@/lib/repositories/audit-repository";
 import { getCatalogueItemById } from "@/lib/repositories/rate-catalogue-repository";
 import { updateBOQItem, type BOQItemWriteInput } from "@/lib/repositories/boq-repository";
 import type { BOQItemPricingMetadata } from "@/types/boq";
@@ -92,19 +91,25 @@ export async function applyCatalogueRateToBOQItem(actor: CurrentActor, input: Ap
   };
   patch.pricingMetadataJson = pricingMetadata as unknown as Prisma.InputJsonValue;
 
-  const boq = await updateBOQItem(actor.companyId, input.boqItemId, patch);
-
-  await createAuditLog(actor.companyId, {
-    entityType: "BOQItem",
-    entityId: input.boqItemId,
-    action: "CATALOGUE_RATE_APPLIED",
-    payload: {
-      catalogueItemId: catalogueItem.id,
-      itemCode: catalogueItem.itemCode,
-      applyMode: input.applyMode,
-      catalogueStatus: catalogueItem.status,
+  return updateBOQItem(actor.companyId, input.boqItemId, patch, {
+    integrityActor: { userId: actor.userId, name: actor.fullName },
+    rateProvenance: {
+      sourceType: input.applyMode === "REPLACE_COMMERCIAL_FIELDS"
+        ? RateProvenanceSource.RATE_CATALOGUE
+        : RateProvenanceSource.MIXED_CONFIRMED,
+      rateCatalogueItemId: catalogueItem.id,
+      currency: catalogueItem.currency,
+      effectiveDate: new Date(catalogueItem.effectiveDate),
+      expiryDate: catalogueItem.expiryDate ? new Date(catalogueItem.expiryDate) : null,
+    },
+    additionalAudit: {
+      action: "CATALOGUE_RATE_APPLIED",
+      payload: {
+        catalogueItemId: catalogueItem.id,
+        itemCode: catalogueItem.itemCode,
+        applyMode: input.applyMode,
+        catalogueStatus: catalogueItem.status,
+      },
     },
   });
-
-  return boq;
 }

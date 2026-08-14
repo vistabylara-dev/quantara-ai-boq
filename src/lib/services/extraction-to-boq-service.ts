@@ -11,6 +11,7 @@ import {
   prepareBOQItemCreation,
 } from "@/lib/repositories/boq-repository";
 import { createAuditLog } from "@/lib/repositories/audit-repository";
+import { recordReviewedExtractionQuantity } from "@/lib/services/estimate-integrity-service";
 
 export type ImportEntityToBoqInput = {
   sectionId: string;
@@ -150,7 +151,17 @@ export async function importExtractedEntityToBoq(
       );
     }
 
-    const item = await createPreparedBOQItem(actor.companyId, preparedItem, tx);
+    const integrityActor = { userId: actor.userId, name: actor.fullName };
+    const item = await createPreparedBOQItem(actor.companyId, preparedItem, tx, undefined, integrityActor);
+    await recordReviewedExtractionQuantity(tx, {
+      companyId: actor.companyId,
+      projectId: canonicalProjectId,
+      item,
+      extractedEntityId: entity.id,
+      projectFileId: entity.projectFileId,
+      quantityCalculationId: input.quantityCalculationId,
+      actor: integrityActor,
+    });
     await createAuditLog(actor.companyId, {
       entityType: "BOQItem",
       entityId: item.id,

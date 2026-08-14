@@ -22,6 +22,7 @@ import { localDocumentStorageAdapter } from "../src/lib/storage/local-document-s
 import { NotFoundError, PermissionDeniedError } from "../src/lib/errors/app-error";
 import type { CurrentActor } from "../src/lib/auth/current-actor";
 import { grantUnlimitedPlanForTests } from "./helpers/grant-unlimited-plan";
+import { preserveIssuedEvidenceDuringCleanup } from "./helpers/preserve-issued-evidence";
 
 const RUN_ID = Date.now();
 const userIdByCompany = new Map<string, string>();
@@ -137,6 +138,10 @@ describe("document generation service (integration, real local Postgres)", () =>
   afterAll(async () => {
     for (const key of cleanupStorageKeys) {
       await localDocumentStorageAdapter.deleteObject(key).catch(() => undefined);
+    }
+    if (await preserveIssuedEvidenceDuringCleanup([companyAId, companyBId])) {
+      await prisma.$disconnect();
+      return;
     }
     await prisma.generatedDocument.deleteMany({ where: { companyId: { in: [companyAId, companyBId] } } });
     await prisma.documentTemplate.deleteMany({ where: { companyId: { in: [companyAId, companyBId] } } });
@@ -303,18 +308,7 @@ describe("document generation service (integration, real local Postgres)", () =>
         }),
       ).rejects.toMatchObject({ code: "COMPANY_PROFILE_INCOMPLETE" });
 
-      await prisma.generatedDocument.deleteMany({ where: { companyId: incompleteCompany.id } });
-      await prisma.documentTemplate.deleteMany({ where: { companyId: incompleteCompany.id } });
-      await prisma.verificationException.deleteMany({ where: { companyId: incompleteCompany.id } });
-      await prisma.auditLog.deleteMany({ where: { companyId: incompleteCompany.id } });
-      await prisma.bOQRevisionSnapshot.deleteMany({ where: { companyId: incompleteCompany.id } });
-      await prisma.bOQItem.deleteMany({ where: { companyId: incompleteCompany.id } });
-      await prisma.bOQSection.deleteMany({ where: { companyId: incompleteCompany.id } });
-      await prisma.bOQ.deleteMany({ where: { companyId: incompleteCompany.id } });
-      await prisma.project.deleteMany({ where: { companyId: incompleteCompany.id } });
-      await prisma.client.deleteMany({ where: { companyId: incompleteCompany.id } });
-      await prisma.companyIndustryEngine.deleteMany({ where: { companyId: incompleteCompany.id } });
-      await prisma.company.delete({ where: { id: incompleteCompany.id } });
+      expect(await prisma.bOQRevisionItemEvidence.count({ where: { companyId: incompleteCompany.id } })).toBeGreaterThan(0);
     });
   });
 

@@ -23,7 +23,9 @@ export async function PUT(request: Request, context: RouteContext) {
     const params = await context.params;
     const { itemId } = itemIdParamsSchema.parse(params);
     const input = await parseJsonBody(request, itemUpdateRouteSchema);
-    const data = await updateBOQItem(actor.companyId, itemId, input);
+    const data = await updateBOQItem(actor.companyId, itemId, input, {
+      integrityActor: { userId: actor.userId, name: actor.fullName },
+    });
     return apiSuccess(data);
   } catch (error) {
     return handleApiError(error);

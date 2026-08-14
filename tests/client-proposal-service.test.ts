@@ -32,6 +32,7 @@ import { NotFoundError, PermissionDeniedError } from "../src/lib/errors/app-erro
 import { localDocumentStorageAdapter } from "../src/lib/storage/local-document-storage-adapter";
 import type { CurrentActor } from "../src/lib/auth/current-actor";
 import { grantUnlimitedPlanForTests } from "./helpers/grant-unlimited-plan";
+import { preserveIssuedEvidenceDuringCleanup } from "./helpers/preserve-issued-evidence";
 
 const RUN_ID = Date.now();
 const userIdByCompany = new Map<string, string>();
@@ -197,6 +198,10 @@ describe("client proposal + email delivery (integration, real local Postgres)", 
   afterAll(async () => {
     for (const key of cleanupStorageKeys) {
       await localDocumentStorageAdapter.deleteObject(key).catch(() => undefined);
+    }
+    if (await preserveIssuedEvidenceDuringCleanup([companyAId, companyBId])) {
+      await prisma.$disconnect();
+      return;
     }
     const companyIds = [companyAId, companyBId];
     await prisma.emailDispatch.deleteMany({ where: { companyId: { in: companyIds } } });

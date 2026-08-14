@@ -18,6 +18,7 @@ import { runVerification } from "../src/lib/verification/run-verification";
 import { ConflictError, NotFoundError, PermissionDeniedError, AppError } from "../src/lib/errors/app-error";
 import type { CurrentActor } from "../src/lib/auth/current-actor";
 import { grantUnlimitedPlanForTests } from "./helpers/grant-unlimited-plan";
+import { preserveIssuedEvidenceDuringCleanup } from "./helpers/preserve-issued-evidence";
 
 const RUN_ID = Date.now();
 
@@ -51,6 +52,10 @@ describe("supplier and catalogue services (integration, real local Postgres)", (
   });
 
   afterAll(async () => {
+    if (await preserveIssuedEvidenceDuringCleanup([companyAId, companyBId])) {
+      await prisma.$disconnect();
+      return;
+    }
     await prisma.rateCataloguePriceHistory.deleteMany({ where: { companyId: { in: [companyAId, companyBId] } } });
     await prisma.rateCatalogueItem.deleteMany({ where: { companyId: { in: [companyAId, companyBId] } } });
     await prisma.supplier.deleteMany({ where: { companyId: { in: [companyAId, companyBId] } } });
@@ -272,6 +277,10 @@ describe("supplier and catalogue services (integration, real local Postgres)", (
       expect(updatedItem.totalAmount).toBe(624 * 42);
       expect(updatedItem.pricingMetadata?.commercialSource).toBe("catalogue");
       expect(updatedItem.pricingMetadata?.catalogueItemId).toBe(catalogueItem.id);
+      const rateProvenance = await prisma.bOQItemRateProvenance.findUniqueOrThrow({ where: { boqItemId } });
+      expect(rateProvenance.sourceType).toBe("RATE_CATALOGUE");
+      expect(rateProvenance.rateCatalogueItemId).toBe(catalogueItem.id);
+      expect(rateProvenance.unitCostSnapshot.toNumber()).toBe(500);
 
       const auditRows = await prisma.auditLog.findMany({
         where: { companyId: companyAId, entityId: boqItemId, action: "CATALOGUE_RATE_APPLIED" },
@@ -326,6 +335,7 @@ describe("supplier and catalogue services (integration, real local Postgres)", (
 
       // Manually change unitCost -- should be recorded as an override.
       await updateBOQItem(companyAId, boqItemId, { unitCost: "999" });
+      expect((await prisma.bOQItemRateProvenance.findUniqueOrThrow({ where: { boqItemId } })).sourceType).toBe("MANUAL_CONFIRMED");
 
       // Reapplying without confirmation should be rejected.
       await expect(

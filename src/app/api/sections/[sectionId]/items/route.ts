@@ -21,7 +21,9 @@ export async function POST(request: Request, context: { params: Promise<{ sectio
     const params = await context.params;
     const { sectionId } = sectionIdParamsSchema.parse(params);
     const input = await parseJsonBody(request, itemCreateRouteSchema) as BOQItemWriteInput;
-    const data = await createBOQItem(actor.companyId, sectionId, input);
+    const data = await createBOQItem(actor.companyId, sectionId, input, undefined, {
+      integrityActor: { userId: actor.userId, name: actor.fullName },
+    });
     return apiSuccess(data, 201);
   } catch (error) {
     return handleApiError(error);

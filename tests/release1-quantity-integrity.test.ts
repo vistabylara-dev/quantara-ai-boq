@@ -282,12 +282,12 @@ describe("Release 1 quantity integrity - persistence and atomic audit", () => {
   afterAll(async () => {
     if (!companyId) return;
     await prisma.auditLog.deleteMany({ where: { companyId } });
+    await prisma.bOQItem.deleteMany({ where: { companyId } });
     await prisma.quantityCalculation.deleteMany({ where: { companyId } });
     await prisma.extractedEntity.deleteMany({ where: { companyId } });
     await prisma.projectFile.deleteMany({ where: { companyId } });
     await prisma.verificationException.deleteMany({ where: { companyId } });
     await prisma.bOQRevisionSnapshot.deleteMany({ where: { companyId } });
-    await prisma.bOQItem.deleteMany({ where: { companyId } });
     await prisma.bOQSection.deleteMany({ where: { companyId } });
     await prisma.bOQ.deleteMany({ where: { companyId } });
     await prisma.project.deleteMany({ where: { companyId } });

@@ -1,8 +1,10 @@
 import {
+  BoqItemSourceType,
   BOQItemStatus,
   BOQStatus,
   MarginMode,
   Prisma,
+  RateProvenanceSource,
   VerificationSeverity,
 } from "@prisma/client";
 import { prisma } from "@/lib/db/prisma";
@@ -12,6 +14,17 @@ import { calculateBOQItem, calculateBOQTotals } from "@/lib/calculations/boq-cal
 import { createAuditLog } from "@/lib/repositories/audit-repository";
 import { getProjectRecord } from "@/lib/repositories/project-repository";
 import type { BOQ, BOQItem, BOQItemPricingMetadata, BOQSection } from "@/types/boq";
+import {
+  confirmManualQuantityProvenance,
+  confirmManualRateProvenance,
+  copyItemProvenance,
+  freezeRevisionItemEvidence,
+  initializeManualItemProvenance,
+  recordConfirmedCalculationQuantity,
+  recordReviewedExtractionQuantity,
+  recordRateProvenance,
+  type IntegrityActor,
+} from "@/lib/services/estimate-integrity-service";
 
 const boqInclude = {
   project: {
@@ -25,7 +38,12 @@ const boqInclude = {
     include: {
       items: {
         orderBy: { sortOrder: "asc" },
-        include: { options: { orderBy: { createdAt: "asc" } }, sourceMasterItem: { select: { isPremium: true } } },
+        include: {
+          options: { orderBy: { createdAt: "asc" } },
+          sourceMasterItem: { select: { isPremium: true } },
+          quantityProvenance: true,
+          rateProvenance: true,
+        },
       },
     },
   },
@@ -98,6 +116,16 @@ export function toBOQDTO(boq: BOQRecord): BOQ & { databaseId: string; taxRate: n
         notes: item.notes,
         pricingMetadata: (item.pricingMetadataJson as BOQItemPricingMetadata | null) ?? null,
         isPremiumSource: item.sourceMasterItem?.isPremium ?? false,
+        integrity: {
+          quantity: {
+            sourceType: item.quantityProvenance?.sourceType ?? null,
+            confirmed: Boolean(item.quantityProvenance?.confirmedAt) && item.quantityProvenance?.sourceType !== "LEGACY_UNVERIFIED",
+          },
+          rate: {
+            sourceType: item.rateProvenance?.sourceType ?? null,
+            confirmed: Boolean(item.rateProvenance?.confirmedAt) && item.rateProvenance?.sourceType !== "LEGACY_UNVERIFIED",
+          },
+        },
         options: item.options.map((option) => ({
           id: option.id,
           label: option.label,
@@ -268,6 +296,7 @@ async function syncSectionItems(
   tx: Prisma.TransactionClient,
   companyId: string,
   boqId: string,
+  projectId: string,
   sectionId: string,
   incomingItems: BOQItem[],
   currentItems: BOQRecord["sections"][number]["items"],
@@ -317,7 +346,21 @@ async function syncSectionItems(
     };
 
     if (current) {
-      await tx.bOQItem.update({ where: { id: current.id, companyId }, data });
+      const quantityChanged = !current.quantity.equals(data.quantity) || current.unit !== data.unit;
+      const rateChanged =
+        !current.unitCost.equals(data.unitCost) ||
+        !current.freightCost.equals(data.freightCost) ||
+        !current.installationCost.equals(data.installationCost) ||
+        !current.additionalCost.equals(data.additionalCost) ||
+        current.marginMode !== data.marginMode ||
+        !current.marginPercentage.equals(data.marginPercentage);
+      const updatedItem = await tx.bOQItem.update({ where: { id: current.id, companyId }, data });
+      if (quantityChanged) {
+        await confirmManualQuantityProvenance(tx, companyId, projectId, updatedItem);
+      }
+      if (rateChanged) {
+        await confirmManualRateProvenance(tx, companyId, projectId, updatedItem);
+      }
       await createAuditLog(companyId, {
         entityType: "BOQItem",
         entityId: current.id,
@@ -343,6 +386,7 @@ async function syncSectionItems(
           },
         },
       });
+      await initializeManualItemProvenance(tx, companyId, projectId, created);
       await createAuditLog(companyId, {
         entityType: "BOQItem",
         entityId: created.id,
@@ -406,7 +450,7 @@ export async function updateBOQ(companyId: string, boqId: string, input: BOQDocu
         });
         sectionId = createdSection.id;
       }
-      await syncSectionItems(tx, companyId, current.id, sectionId, section.items, existingSection?.items ?? []);
+      await syncSectionItems(tx, companyId, current.id, current.projectId, sectionId, section.items, existingSection?.items ?? []);
     }
   });
   return getBOQ(companyId, current.id);
@@ -520,6 +564,9 @@ export async function createBOQRevision(companyId: string, boqId: string, actorN
                 status: BOQItemStatus.DRAFT,
                 notes: item.notes,
                 sortOrder: item.sortOrder,
+                sourceType: BoqItemSourceType.PREVIOUS_BOQ,
+                sourcePreviousBoqItemId: item.id,
+                copiedAt: new Date(),
                 options: {
                   create: item.options.map((option) => ({
                     companyId,
@@ -536,6 +583,24 @@ export async function createBOQRevision(companyId: string, boqId: string, actorN
         },
       },
     });
+    const copiedItems = await tx.bOQItem.findMany({
+      where: {
+        companyId,
+        section: { boqId: created.id },
+        sourcePreviousBoqItemId: { not: null },
+      },
+    });
+    for (const item of copiedItems) {
+      if (!item.sourcePreviousBoqItemId) continue;
+      await copyItemProvenance(tx, {
+        companyId,
+        projectId: source.projectId,
+        sourceItemId: item.sourcePreviousBoqItemId,
+        item,
+        rateSourceType: RateProvenanceSource.PREVIOUS_BOQ,
+        actor: { name: actorName },
+      });
+    }
     await tx.project.update({
       where: { id: source.projectId, companyId },
       data: { currentRevisionNumber: revisionNumber },
@@ -604,6 +669,31 @@ export async function lockBOQ(companyId: string, boqId: string, actorName = "Dev
       if (item.totalAmount.toNumber() < 0) {
         hasInvalidTotals = true;
       }
+      const quantityProvenance = item.quantityProvenance;
+      const rateProvenance = item.rateProvenance;
+      const quantityTraceable =
+        quantityProvenance &&
+        quantityProvenance.sourceType !== "LEGACY_UNVERIFIED" &&
+        quantityProvenance.confirmedAt !== null &&
+        quantityProvenance.quantitySnapshot.equals(item.quantity) &&
+        quantityProvenance.unitSnapshot === item.unit;
+      const rateTraceable =
+        rateProvenance &&
+        rateProvenance.sourceType !== "LEGACY_UNVERIFIED" &&
+        rateProvenance.confirmedAt !== null &&
+        rateProvenance.unitCostSnapshot.equals(item.unitCost) &&
+        rateProvenance.freightCostSnapshot.equals(item.freightCost) &&
+        rateProvenance.installationCostSnapshot.equals(item.installationCost) &&
+        rateProvenance.additionalCostSnapshot.equals(item.additionalCost) &&
+        rateProvenance.marginModeSnapshot === item.marginMode &&
+        rateProvenance.marginPercentageSnapshot.equals(item.marginPercentage);
+      if (!quantityTraceable || !rateTraceable) {
+        throw new AppError(
+          "ESTIMATE_INTEGRITY_REQUIRED",
+          `${displayId} needs confirmed quantity and rate provenance before this BOQ can be locked.`,
+          400,
+        );
+      }
     }
 
     if (hasInvalidTotals || current.taxRate.toNumber() < 0 || current.discountPercentage.toNumber() < 0) {
@@ -616,7 +706,7 @@ export async function lockBOQ(companyId: string, boqId: string, actorName = "Dev
       throw new AppError("BOQ_LOCK_BLOCKED", `BOQ cannot be locked while ${unresolvedCriticals.length} critical verification exception(s) remain unresolved.`, 400);
     }
 
-    await tx.bOQRevisionSnapshot.create({
+    const revisionSnapshot = await tx.bOQRevisionSnapshot.create({
       data: {
         companyId,
         projectId: current.projectId,
@@ -625,6 +715,12 @@ export async function lockBOQ(companyId: string, boqId: string, actorName = "Dev
         snapshotJson: snapshotValue(current),
         createdByName: actorName,
       },
+    });
+    await freezeRevisionItemEvidence(tx, {
+      companyId,
+      projectId: current.projectId,
+      snapshotId: revisionSnapshot.id,
+      items: allItems,
     });
     const lockedAt = new Date();
     const updated = await tx.bOQ.updateMany({
@@ -814,6 +910,20 @@ export type BOQItemMutationContext = {
     action: string;
     payload?: Prisma.InputJsonValue;
   };
+  integrityActor?: IntegrityActor;
+  quantityCalculationProvenance?: {
+    quantityCalculationId: string;
+    extractedEntityId?: string;
+    projectFileId?: string;
+  };
+  rateProvenance?: {
+    sourceType: RateProvenanceSource;
+    rateCatalogueItemId?: string | null;
+    sourceBoqItemRateProvenanceId?: string | null;
+    currency?: string;
+    effectiveDate?: Date | null;
+    expiryDate?: Date | null;
+  };
 };
 
 export type BOQItemLifecycleMutationContext = {
@@ -822,6 +932,8 @@ export type BOQItemLifecycleMutationContext = {
     action: string;
     payload?: Prisma.InputJsonValue;
   };
+  integrityActor?: IntegrityActor;
+  initialRateSource?: RateProvenanceSource;
 };
 
 /**
@@ -876,6 +988,8 @@ export async function createPreparedBOQItem(
   prepared: PreparedBOQItemCreation,
   tx: Prisma.TransactionClient,
   additionalAudit?: BOQItemLifecycleMutationContext["additionalAudit"],
+  integrityActor?: IntegrityActor,
+  initialRateSource?: RateProvenanceSource,
 ) {
   const { section, input, marginMode, amounts } = prepared;
   await claimEditableBOQ(tx, companyId, section.boqId, section.boq.version);
@@ -921,6 +1035,14 @@ export async function createPreparedBOQItem(
     },
     include: { options: true },
   });
+  await initializeManualItemProvenance(
+    tx,
+    companyId,
+    section.boq.projectId,
+    item,
+    integrityActor,
+    initialRateSource,
+  );
   await createAuditLog(companyId, {
     entityType: "BOQItem",
     entityId: item.id,
@@ -981,8 +1103,8 @@ export async function createBOQItem(
     mutationContext?.expectedBoqVersion,
   );
   const created = externalTx
-    ? await createPreparedBOQItem(companyId, prepared, externalTx, mutationContext?.additionalAudit)
-    : await prisma.$transaction((tx) => createPreparedBOQItem(companyId, prepared, tx, mutationContext?.additionalAudit));
+    ? await createPreparedBOQItem(companyId, prepared, externalTx, mutationContext?.additionalAudit, mutationContext?.integrityActor, mutationContext?.initialRateSource)
+    : await prisma.$transaction((tx) => createPreparedBOQItem(companyId, prepared, tx, mutationContext?.additionalAudit, mutationContext?.integrityActor, mutationContext?.initialRateSource));
   // When called with an externally-managed transaction, the caller reads the
   // final BOQ state itself after that transaction commits — reading it here
   // via the top-level `prisma` client would see pre-commit state.
@@ -1042,6 +1164,16 @@ export async function updateBOQItem(
     marginMode,
     marginPercentage,
   });
+  const quantityEvidenceChanged =
+    (input.quantity !== undefined && !new Prisma.Decimal(input.quantity).equals(current.quantity)) ||
+    (input.unit !== undefined && input.unit !== current.unit);
+  const rateEvidenceChanged =
+    (input.unitCost !== undefined && !new Prisma.Decimal(input.unitCost).equals(current.unitCost)) ||
+    (input.freightCost !== undefined && !new Prisma.Decimal(input.freightCost).equals(current.freightCost)) ||
+    (input.installationCost !== undefined && !new Prisma.Decimal(input.installationCost).equals(current.installationCost)) ||
+    (input.additionalCost !== undefined && !new Prisma.Decimal(input.additionalCost).equals(current.additionalCost)) ||
+    (input.marginMode !== undefined && input.marginMode !== current.marginMode) ||
+    (input.marginPercentage !== undefined && !new Prisma.Decimal(input.marginPercentage).equals(current.marginPercentage));
 
   // If this item was previously priced from the catalogue and a normal edit
   // (not an explicit pricingMetadataJson write from the apply-rate service)
@@ -1067,7 +1199,7 @@ export async function updateBOQItem(
 
   await prisma.$transaction(async (tx) => {
     await claimEditableBOQ(tx, companyId, current.section.boqId, current.section.boq.version);
-    await tx.bOQItem.update({
+    const updatedItem = await tx.bOQItem.update({
       where: { id: current.id, companyId },
       data: {
         ...(input.itemNumber !== undefined ? { itemNumber: input.itemNumber } : {}),
@@ -1115,6 +1247,53 @@ export async function updateBOQItem(
           : {}),
       },
     });
+    if (mutationContext?.quantityCalculationProvenance) {
+      const provenance = mutationContext.quantityCalculationProvenance;
+      if (provenance.extractedEntityId && provenance.projectFileId) {
+        await recordReviewedExtractionQuantity(tx, {
+          companyId,
+          projectId: current.section.boq.projectId,
+          item: updatedItem,
+          extractedEntityId: provenance.extractedEntityId,
+          projectFileId: provenance.projectFileId,
+          quantityCalculationId: provenance.quantityCalculationId,
+          actor: mutationContext.integrityActor ?? { name: "Authorized BOQ editor" },
+        });
+      } else {
+        await recordConfirmedCalculationQuantity(tx, {
+          companyId,
+          projectId: current.section.boq.projectId,
+          item: updatedItem,
+          quantityCalculationId: provenance.quantityCalculationId,
+          actor: mutationContext.integrityActor ?? { name: "Authorized BOQ editor" },
+        });
+      }
+    } else if (quantityEvidenceChanged) {
+      await confirmManualQuantityProvenance(
+        tx,
+        companyId,
+        current.section.boq.projectId,
+        updatedItem,
+        mutationContext?.integrityActor,
+      );
+    }
+    if (mutationContext?.rateProvenance) {
+      await recordRateProvenance(tx, {
+        companyId,
+        projectId: current.section.boq.projectId,
+        item: updatedItem,
+        ...mutationContext.rateProvenance,
+        actor: mutationContext.integrityActor ?? { name: "Authorized BOQ editor" },
+      });
+    } else if (rateEvidenceChanged) {
+      await confirmManualRateProvenance(
+        tx,
+        companyId,
+        current.section.boq.projectId,
+        updatedItem,
+        mutationContext?.integrityActor,
+      );
+    }
     await createAuditLog(companyId, {
       entityType: "BOQItem",
       entityId: current.id,
@@ -1141,6 +1320,39 @@ export async function updateBOQItem(
         },
       }, tx);
     }
+  });
+  return getBOQ(companyId, current.section.boqId);
+}
+
+/**
+ * Explicit professional acknowledgement for migrated/manual items whose
+ * values are already correct. This is the non-destructive path out of
+ * LEGACY_UNVERIFIED; locking never promotes legacy rows implicitly.
+ */
+export async function confirmBOQItemIntegrity(
+  companyId: string,
+  itemId: string,
+  actor: IntegrityActor,
+) {
+  const current = await getItemRecord(companyId, itemId);
+  assertBOQEditable(current.section.boq, "confirm integrity for");
+  await prisma.$transaction(async (tx) => {
+    await claimEditableBOQ(tx, companyId, current.section.boqId, current.section.boq.version);
+    await confirmManualQuantityProvenance(tx, companyId, current.section.boq.projectId, current, actor);
+    await confirmManualRateProvenance(tx, companyId, current.section.boq.projectId, current, actor);
+    await createAuditLog(companyId, {
+      entityType: "BOQItem",
+      entityId: current.id,
+      action: "ITEM_INTEGRITY_CONFIRMED",
+      actorName: actor.name,
+      payload: {
+        boqId: current.section.boqId,
+        itemCode: current.itemCode,
+        quantity: current.quantity.toString(),
+        unit: current.unit,
+        unitCost: current.unitCost.toString(),
+      },
+    }, tx);
   });
   return getBOQ(companyId, current.section.boqId);
 }
@@ -1217,6 +1429,9 @@ export async function duplicateBOQItem(companyId: string, itemId: string) {
         status: BOQItemStatus.DRAFT,
         notes: item.notes,
         sortOrder: (last?.sortOrder ?? item.sortOrder) + 1,
+        sourceType: BoqItemSourceType.PREVIOUS_BOQ,
+        sourcePreviousBoqItemId: item.id,
+        copiedAt: new Date(),
         options: {
           create: item.options.map((option) => ({
             companyId,
@@ -1228,6 +1443,13 @@ export async function duplicateBOQItem(companyId: string, itemId: string) {
           })),
         },
       },
+    });
+    await copyItemProvenance(tx, {
+      companyId,
+      projectId: item.section.boq.projectId,
+      sourceItemId: item.id,
+      item: duplicate,
+      actor: { name: "Authorized BOQ editor" },
     });
     await createAuditLog(companyId, {
       entityType: "BOQItem",

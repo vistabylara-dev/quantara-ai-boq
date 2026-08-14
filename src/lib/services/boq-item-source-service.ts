@@ -1,4 +1,4 @@
-import { BoqItemSourceType, MarginMode } from "@prisma/client";
+import { BoqItemSourceType, MarginMode, RateProvenanceSource } from "@prisma/client";
 import { prisma } from "@/lib/db/prisma";
 import { requireCapability } from "@/lib/auth/rbac";
 import type { CurrentActor } from "@/lib/auth/current-actor";
@@ -6,6 +6,7 @@ import { AppError, NotFoundError } from "@/lib/errors/app-error";
 import { createBOQItem, getBOQ, getBOQRecord } from "@/lib/repositories/boq-repository";
 import { getMasterItemRecord } from "@/lib/repositories/master-item-repository";
 import { getLibraryItemRecord, recordItemUsage } from "@/lib/repositories/company-library-repository";
+import { recordRateProvenance } from "@/lib/services/estimate-integrity-service";
 
 type ResolvedDefaults = {
   itemCode: string;
@@ -19,6 +20,9 @@ type ResolvedDefaults = {
   /** MASTER-BOQ-1A BOQ snapshot behavior — only ever populated for MASTER_ITEM sources. */
   masterItemVersionId?: string | null;
   masterItemSnapshotJson?: unknown;
+  rateCurrency?: string;
+  rateEffectiveDate?: Date | null;
+  rateExpiryDate?: Date | null;
 };
 
 const EMPTY_DEFAULTS: ResolvedDefaults = {
@@ -136,6 +140,9 @@ async function resolveCatalogueItemDefaults(companyId: string, rateCatalogueItem
     unitCost: item.landedCost.toNumber(),
     marginMode: item.marginMode,
     marginPercentage: item.defaultMargin.toNumber(),
+    rateCurrency: item.currency,
+    rateEffectiveDate: item.effectiveDate,
+    rateExpiryDate: item.expiryDate,
   };
 }
 
@@ -214,7 +221,7 @@ export async function addBoqItemFromSource(actor: CurrentActor, boqId: string, i
       drawingReference: input.drawingReference,
       roomOrZone: input.roomOrZone,
       sortOrder: input.sortOrder,
-    }, tx);
+    }, tx, { integrityActor: { userId: actor.userId, name: actor.fullName } });
 
     const item = await tx.bOQItem.update({
       where: { id: result.item.id, companyId: actor.companyId },
@@ -229,6 +236,42 @@ export async function addBoqItemFromSource(actor: CurrentActor, boqId: string, i
         copiedAt: new Date(),
         copiedByUserId: actor.userId,
       },
+    });
+
+    let rateSourceType: RateProvenanceSource = RateProvenanceSource.MANUAL_CONFIRMED;
+    let sourceBoqItemRateProvenanceId: string | null = null;
+    const hasCommercialOverride =
+      input.overrides?.unitCost !== undefined ||
+      input.overrides?.marginMode !== undefined ||
+      input.overrides?.marginPercentage !== undefined;
+    if (input.sourceType === BoqItemSourceType.RATE_CATALOGUE) {
+      rateSourceType = RateProvenanceSource.RATE_CATALOGUE;
+    } else if (input.sourceType === BoqItemSourceType.COMPANY_LIBRARY) {
+      rateSourceType = RateProvenanceSource.COMPANY_LIBRARY;
+    } else if (input.sourceType === BoqItemSourceType.PREVIOUS_BOQ && input.sourceId) {
+      rateSourceType = RateProvenanceSource.PREVIOUS_BOQ;
+      const sourceRate = await tx.bOQItemRateProvenance.findUnique({ where: { boqItemId: input.sourceId } });
+      if (!sourceRate) throw new AppError("SOURCE_RATE_PROVENANCE_REQUIRED", "The source BOQ item has no rate provenance.", 409);
+      sourceBoqItemRateProvenanceId = sourceRate.id;
+    } else if (input.sourceType === BoqItemSourceType.IMPORT) {
+      rateSourceType = RateProvenanceSource.IMPORT;
+    } else if (input.sourceType === BoqItemSourceType.MASTER_ITEM) {
+      rateSourceType = RateProvenanceSource.MASTER_ITEM;
+    }
+    if (hasCommercialOverride && input.sourceType !== BoqItemSourceType.MANUAL) {
+      rateSourceType = RateProvenanceSource.MIXED_CONFIRMED;
+    }
+    await recordRateProvenance(tx, {
+      companyId: actor.companyId,
+      projectId: boqRecord.projectId,
+      item,
+      sourceType: rateSourceType,
+      rateCatalogueItemId: input.sourceType === BoqItemSourceType.RATE_CATALOGUE ? input.sourceId : null,
+      sourceBoqItemRateProvenanceId,
+      currency: merged.rateCurrency,
+      effectiveDate: merged.rateEffectiveDate,
+      expiryDate: merged.rateExpiryDate,
+      actor: { userId: actor.userId, name: actor.fullName },
     });
 
     if (input.sourceType === BoqItemSourceType.COMPANY_LIBRARY && input.sourceId) {

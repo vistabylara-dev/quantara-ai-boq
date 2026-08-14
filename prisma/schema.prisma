@@ -204,7 +204,7 @@ enum TechnicalReportStatus {
   COMPLETED
 }
 
-/// PROPOSAL-SOURCE-TYPE-RECOVERY — a proposal's immutable source is exactly one of these two kinds.
+/// PROPOSAL-SOURCE-TYPE-RECOVERY ΓÇö a proposal's immutable source is exactly one of these two kinds.
 /// Enforced by a CHECK constraint in the migration (never both boqId and technicalReportId set).
 enum ClientProposalSourceType {
   BOQ_REVISION
@@ -272,7 +272,7 @@ enum PlanType {
 }
 
 /**
- * Shared by both CompanySoftwareSubscription and CompanyPackageSubscription — identical lifecycle.
+ * Shared by both CompanySoftwareSubscription and CompanyPackageSubscription ΓÇö identical lifecycle.
  */
 enum SubscriptionStatus {
   TRIAL
@@ -303,16 +303,16 @@ enum MasterItemStatus {
   ARCHIVED
 }
 
-/// MASTER-BOQ-1A — arbitrary-depth classification tree (Industry -> Discipline
+/// MASTER-BOQ-1A ΓÇö arbitrary-depth classification tree (Industry -> Discipline
 /// -> System -> Category -> Subcategory -> Item Family). A single
 /// self-referential node model is used instead of one table per level so the
 /// hierarchy can grow (new industries/disciplines) without further migrations.
-/// MASTER-SCALE-1A — extended with SUBSYSTEM (between System and Category)
+/// MASTER-SCALE-1A ΓÇö extended with SUBSYSTEM (between System and Category)
 /// and ITEM_TYPE (between Item Family and Variant) so the deep example in
 /// the addendum (Mechanical -> HVAC -> Fans -> Axial Fans -> Smoke Extract
 /// Fan -> High-Temperature Rated -> ...) is representable without another
 /// migration. Existing rows (all currently INDUSTRY/DISCIPLINE/SYSTEM/
-/// CATEGORY from the HVAC backfill) are unaffected — enum values are
+/// CATEGORY from the HVAC backfill) are unaffected ΓÇö enum values are
 /// additive.
 enum MasterHierarchyNodeType {
   INDUSTRY
@@ -325,7 +325,7 @@ enum MasterHierarchyNodeType {
   ITEM_TYPE
 }
 
-/// Workflow state of one MasterItemVersion — separate from MasterItem.status
+/// Workflow state of one MasterItemVersion ΓÇö separate from MasterItem.status
 /// (which is the item's overall lifecycle: DRAFT/ACTIVE/DEPRECATED/ARCHIVED).
 enum MasterItemVersionStatus {
   DRAFT
@@ -335,11 +335,11 @@ enum MasterItemVersionStatus {
   RETIRED
 }
 
-/// MASTER-SCALE-1A — added SMM7/CESMM/NRM/UNIFORMAT_II (Uniformat II is
+/// MASTER-SCALE-1A ΓÇö added SMM7/CESMM/NRM/UNIFORMAT_II (Uniformat II is
 /// tracked separately from the original UniFormat entry rather than
 /// replacing it, since they are distinct systems) and OTHER as an escape
 /// hatch for a national/regional classification system that doesn't yet
-/// warrant its own enum value — the free-text `code`/`label` columns on
+/// warrant its own enum value ΓÇö the free-text `code`/`label` columns on
 /// MasterItemClassification carry the actual system-specific value.
 enum MasterClassificationSystem {
   MASTERFORMAT_2020
@@ -380,7 +380,7 @@ enum MasterAttributeVerificationState {
   NEEDS_REVIEW
 }
 
-/// Deliberately small and not yet populated for any item — the contract for
+/// Deliberately small and not yet populated for any item ΓÇö the contract for
 /// future assemblies/methodology (accessories, materials, labor, testing,
 /// commissioning, substitution) without building those engines yet.
 enum MasterItemRelationType {
@@ -502,7 +502,7 @@ model CompanySoftwareSubscription {
   softwarePlan           SoftwarePlan             @relation(fields: [softwarePlanId], references: [id], onDelete: Restrict)
   trialUsage             CompanyTrialUsage[]
   trialPremiumUnlocks    TrialPremiumItemUnlock[]
-
+  refundRequests         RefundRequest[]
   @@index([companyId])
   @@index([softwarePlanId])
   @@index([status])
@@ -543,6 +543,81 @@ model StripeBillingCustomer {
   @@unique([companyId, livemode])
   @@index([companyId])
   @@index([livemode])
+}
+
+enum RefundRequestStatus {
+  REQUESTED
+  APPROVED
+  REJECTED
+  PROCESSING
+  SUCCEEDED
+  FAILED
+}
+
+enum RefundAction {
+  REFUND_ONLY
+  REFUND_AND_CANCEL
+}
+
+enum RefundExceptionCategory {
+  DUPLICATE_CHARGE
+  INCORRECT_BILLING
+  PROVIDER_ERROR
+  LEGAL_REMEDY
+}
+
+model RefundRequest {
+  id                            String                   @id @default(uuid()) @db.Uuid
+  companyId                     String                   @db.Uuid
+  requestedByUserId             String                   @db.Uuid
+  approvedByUserId              String?                  @db.Uuid
+  companySoftwareSubscriptionId String?                  @db.Uuid
+  /// Snapshot of the Stripe subscription ID at request time ΓÇö kept even if
+  /// the subscription FK is later nulled (e.g. subscription row deleted),
+  /// since this is immutable evidence, not a live reference.
+  externalSubscriptionId        String
+  stripeInvoiceId               String?
+  stripePaymentIntentId         String
+  stripeChargeId                String?
+  stripeRefundId                String?
+  /// Integer minor units, e.g. AED 149.00 is stored as 14900. Never Float.
+  originalAmountMinor           Int
+  requestedAmountMinor          Int
+  currency                      CommerceCurrency         @default(AED)
+  reason                        String
+  /// REFUND-17/18b ΓÇö authoritative payment timestamp from Stripe's own
+  /// invoice.status_transitions.paid_at, captured at request-creation time ΓÇö
+  /// never derived from any client-supplied value. The 7-day eligibility
+  /// window is always computed from THIS column, never from createdAt or a
+  /// browser clock.
+  successfulPaymentAt           DateTime
+  /// True only for an owner-created exception request that bypassed the
+  /// normal 7-day window ΓÇö see createExceptionRefundRequest. Still requires
+  /// the exact same approve/reject review as every other request.
+  isException                   Boolean                  @default(false)
+  exceptionCategory             RefundExceptionCategory?
+  /// Set only once an owner approves ΓÇö null while REQUESTED/REJECTED.
+  action                        RefundAction?
+  status                        RefundRequestStatus      @default(REQUESTED)
+  rejectionReason               String?
+  /// Safe Stripe failure code/message only ΓÇö never raw API error payloads.
+  failureCode                   String?
+  failureMessage                String?
+  createdAt                     DateTime                 @default(now())
+  updatedAt                     DateTime                 @updatedAt
+  approvedAt                    DateTime?
+  rejectedAt                    DateTime?
+  completedAt                   DateTime?
+
+  company                     Company                      @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  requestedByUser             User                         @relation("RefundRequestedBy", fields: [requestedByUserId], references: [id], onDelete: Restrict)
+  approvedByUser              User?                        @relation("RefundApprovedBy", fields: [approvedByUserId], references: [id], onDelete: SetNull)
+  companySoftwareSubscription CompanySoftwareSubscription? @relation(fields: [companySoftwareSubscriptionId], references: [id], onDelete: SetNull)
+
+  @@index([companyId])
+  @@index([status])
+  @@index([stripePaymentIntentId])
+  @@index([externalSubscriptionId])
 }
 
 model CompanyTrialUsage {
@@ -596,7 +671,7 @@ enum SimulationMode {
 
 /**
  * A platform owner's ephemeral "customer simulation" context (ADMIN-CONTROL-1
- * section 3). One row per user, upserted in place — never versioned history,
+ * section 3). One row per user, upserted in place ΓÇö never versioned history,
  * never a real subscription. Reading this and reflecting it back in
  * getEffectiveEntitlements() is the *only* thing that changes owner-visible
  * entitlement behavior during simulation; no CompanySoftwareSubscription row
@@ -622,7 +697,7 @@ enum MasterCatalogueImportStatus {
 
 /**
  * A platform-owner-only bulk import batch into the tenant-less
- * MasterItem/MasterDiscipline catalogue (ADMIN-CONTROL-1 section 5) —
+ * MasterItem/MasterDiscipline catalogue (ADMIN-CONTROL-1 section 5) ΓÇö
  * deliberately separate from ImportJob/ImportRow, which are company-scoped
  * and belong to a different tenancy model entirely. Row-level detail is
  * kept as a bounded JSON report rather than a separate row table, since
@@ -657,7 +732,7 @@ model MasterCatalogueImportBatch {
   @@index([checksum])
 }
 
-/// CATALOGUE-PROD-ACTIVATE — workflow state of one registered-dataset
+/// CATALOGUE-PROD-ACTIVATE ΓÇö workflow state of one registered-dataset
 /// production activation. Mirrors the task's required state machine exactly
 /// so a stalled/interrupted job's state is always self-explanatory from the
 /// row alone, without needing to read application code to know what a given
@@ -677,11 +752,11 @@ enum MasterCatalogueImportJobStatus {
   ROLLED_BACK
 }
 
-/// CATALOGUE-PROD-ACTIVATE — a resumable, checkpointed activation of one
+/// CATALOGUE-PROD-ACTIVATE ΓÇö a resumable, checkpointed activation of one
 /// registered dataset (see catalogue-dataset-registry.ts), replacing the
 /// fragile "hold one browser request open for the whole file" execution
 /// model MasterCatalogueImportBatch was built for. One row per dataset
-/// activation attempt (not per file) — currentRowCursor is a single
+/// activation attempt (not per file) ΓÇö currentRowCursor is a single
 /// logical offset into the dataset's ordered file list, so resuming after
 /// an interruption never needs to know which physical file it was mid-way
 /// through; the engine re-derives that from the cursor and the registry's
@@ -694,12 +769,12 @@ model MasterCatalogueImportJob {
   disciplineId           String                         @db.Uuid
   /// Companion MasterCatalogueImportBatch row created when execution starts,
   /// purely so MasterItem.sourceBatchId (and the existing admin batch-history
-  /// view) stays meaningful for items imported through this resumable path —
+  /// view) stays meaningful for items imported through this resumable path ΓÇö
   /// without adding a second, parallel provenance FK on MasterItem itself.
   legacyBatchId          String?                        @db.Uuid
   status                 MasterCatalogueImportJobStatus @default(REGISTERED)
   /// Combined sha256 of every registered source file's own checksum, joined
-  /// in manifest order — changes if the registry's file list, order, or any
+  /// in manifest order ΓÇö changes if the registry's file list, order, or any
   /// single file's content changes, which is exactly the signal used to
   /// reject an execution whose dry run no longer matches its source.
   sourceChecksum         String
@@ -826,7 +901,7 @@ model MasterItem {
   status                     MasterItemStatus                  @default(ACTIVE)
   isPremium                  Boolean                           @default(true)
   sourceBatchId              String?                           @db.Uuid
-  /// MASTER-BOQ-1A — deepest known node in the new deep hierarchy (usually
+  /// MASTER-BOQ-1A ΓÇö deepest known node in the new deep hierarchy (usually
   /// Item Family, but Subcategory or Category if a family hasn't been
   /// defined yet, e.g. for the existing HVAC data). Nullable and additive:
   /// existing rows keep working through disciplineId/categoryId unchanged.
@@ -903,7 +978,7 @@ model TechnicalFieldDefinition {
   @@index([categoryId])
 }
 
-/// MASTER-BOQ-1A — generic self-referential classification tree node.
+/// MASTER-BOQ-1A ΓÇö generic self-referential classification tree node.
 /// Industry -> Discipline -> System -> Category -> Subcategory -> Item Family
 /// all live here as MasterHierarchyNodeType-tagged rows instead of one table
 /// per level, so a new industry/discipline never needs a migration. Cycle
@@ -932,7 +1007,7 @@ model MasterHierarchyNode {
   @@index([isActive])
 }
 
-/// Published master items are never destructively overwritten — a BOQ line
+/// Published master items are never destructively overwritten ΓÇö a BOQ line
 /// snapshots the exact version it used (see BOQItem.sourceMasterItemVersionId
 /// below), and later edits to the master item never retroactively change a
 /// locked historical BOQ.
@@ -976,8 +1051,8 @@ model MasterItemVersion {
 }
 
 /// The leaf level below Master Item in the hierarchy example ("10,000 CFM
-/// Chilled-Water Double-Skin Variant"). Kept minimal — identity + status
-/// only — since assemblies/full variant configuration are out of scope for
+/// Chilled-Water Double-Skin Variant"). Kept minimal ΓÇö identity + status
+/// only ΓÇö since assemblies/full variant configuration are out of scope for
 /// this phase.
 model MasterItemVariant {
   id              String                     @id @default(uuid()) @db.Uuid
@@ -999,7 +1074,7 @@ model MasterItemVariant {
 /// The "Attribute Value" half of the definition+value pattern (definitions
 /// live on the existing TechnicalFieldDefinition model above). Typed columns
 /// rather than a single JSON blob so searchable/filterable values stay
-/// queryable. Exactly one of masterItemId/variantId is expected to be set —
+/// queryable. Exactly one of masterItemId/variantId is expected to be set ΓÇö
 /// enforced in master-attribute-service.ts, not at the DB level.
 model MasterItemAttributeValue {
   id                  String                           @id @default(uuid()) @db.Uuid
@@ -1053,7 +1128,7 @@ model MasterItemRegionalApplicability {
   masterItemId             String            @db.Uuid
   scope                    MasterRegionScope
   /// Empty string (not null) for scope-only rows (UAE/GCC/INTERNATIONAL) so
-  /// the compound unique constraint below has a well-defined value —
+  /// the compound unique constraint below has a well-defined value ΓÇö
   /// Prisma's generated compound-unique lookup type does not accept null.
   countryCode              String            @default("")
   effectiveFrom            DateTime?
@@ -1067,7 +1142,7 @@ model MasterItemRegionalApplicability {
   @@index([masterItemId])
 }
 
-/// The clean data contract for future drawing/BIM matching — not the
+/// The clean data contract for future drawing/BIM matching ΓÇö not the
 /// matching logic itself. One profile per item.
 model MasterItemDrawingProfile {
   id                 String                @id @default(uuid()) @db.Uuid
@@ -1085,7 +1160,7 @@ model MasterItemDrawingProfile {
   masterItem         MasterItem            @relation(fields: [masterItemId], references: [id], onDelete: Cascade)
 }
 
-/// Deliberately empty of data for now — the smallest expandable contract for
+/// Deliberately empty of data for now ΓÇö the smallest expandable contract for
 /// future assemblies/methodology (required/optional accessories, materials,
 /// labor, testing, commissioning, substitution).
 model MasterItemRelation {
@@ -1104,13 +1179,13 @@ model MasterItemRelation {
   @@index([toItemId])
 }
 
-/// MASTER-SCALE-1A — the four-tier separation the addendum requires:
+/// MASTER-SCALE-1A ΓÇö the four-tier separation the addendum requires:
 /// generic master family/variant (MasterItem/MasterItemVersion, already
 /// built) is kept fully independent of Manufacturer -> ProductSeries ->
 /// ProductModel -> ProductCertification. The Master BOQ stays usable with
 /// zero manufacturer data (every FK below is nullable/optional from the
 /// MasterItem side); manufacturer data is additive enrichment, never a
-/// prerequisite. No commercial/manufacturer records are seeded — these
+/// prerequisite. No commercial/manufacturer records are seeded ΓÇö these
 /// tables are empty until a real, permitted dataset is imported.
 enum ManufacturerStatus {
   ACTIVE
@@ -1139,7 +1214,7 @@ model ProductSeries {
   manufacturerId  String               @db.Uuid
   seriesName      String
   /// The generic item family (MasterHierarchyNode, typically ITEM_FAMILY or
-  /// ITEM_TYPE) this series belongs to — nullable so a series can exist
+  /// ITEM_TYPE) this series belongs to ΓÇö nullable so a series can exist
   /// before it has been mapped to the generic taxonomy.
   hierarchyNodeId String?              @db.Uuid
   effectiveFrom   DateTime?
@@ -1160,7 +1235,7 @@ model ProductModel {
   modelCode                 String
   productSeriesId           String                           @db.Uuid
   /// The generic technical variant (a specific MasterItemVersion) this
-  /// manufacturer model corresponds to — nullable, since a model can be
+  /// manufacturer model corresponds to ΓÇö nullable, since a model can be
   /// catalogued before it has been matched to a generic variant.
   masterItemVersionId       String?                          @db.Uuid
   region                    MasterRegionScope?
@@ -1209,7 +1284,7 @@ enum StandardApplicabilityType {
 }
 
 /// A code/testing/regulatory body (BS, IEC, NFPA, UAE Civil Defense, DEWA,
-/// ...) — a lean lookup table rather than a hardcoded enum, since the list
+/// ...) ΓÇö a lean lookup table rather than a hardcoded enum, since the list
 /// is genuinely open-ended per country/region and must be extensible
 /// without a migration (spec: "Other country-specific authorities must be
 /// extensible").
@@ -1225,7 +1300,7 @@ model StandardAuthority {
 
 /// Links a master item to a standard/authority it must (or should) comply
 /// with. Never asserts approval without a source (spec: "Do not state that
-/// a product is approved unless supporting data exists") — sourceDocumentReference
+/// a product is approved unless supporting data exists") ΓÇö sourceDocumentReference
 /// and verificationState are required fields precisely so an unverified
 /// claim is visibly distinguishable from a sourced, verified one.
 model MasterItemStandardApplicability {
@@ -1247,7 +1322,7 @@ model MasterItemStandardApplicability {
   // region is deliberately not part of this key: Prisma's generated
   // compound-unique lookup type does not accept null for a nullable field
   // (same issue hit and fixed in MASTER-BOQ-1A's MasterItemRegionalApplicability)
-  // — (item, authority, clause) is a sufficiently unique key in practice.
+  // ΓÇö (item, authority, clause) is a sufficiently unique key in practice.
   @@unique([masterItemId, standardAuthorityId, clauseReference])
   @@index([masterItemId])
   @@index([standardAuthorityId])
@@ -1274,7 +1349,7 @@ model IndustryDataPackage {
   items            IndustryDataPackageItem[]
   subscriptions    CompanyPackageSubscription[]
   libraryItems     CompanyLibraryItem[]
-  /// STRIPE-1B — the CommerceProduct(s) (if any) that sell access to this
+  /// STRIPE-1B ΓÇö the CommerceProduct(s) (if any) that sell access to this
   /// package through the new catalogue. Nullable/empty is normal and
   /// expected for any package not yet productized.
   commerceProducts CommerceProduct[]
@@ -1529,7 +1604,7 @@ model Company {
   defaultExclusions           String?
   defaultValidityDays         Int                           @default(30)
   trialTermsAcceptedAt        DateTime?
-  /// ADMIN-CONTROL-1 section 6 — marks a company as sandbox/demo data, never a paying customer.
+  /// ADMIN-CONTROL-1 section 6 ΓÇö marks a company as sandbox/demo data, never a paying customer.
   /// Additive-only: every existing query is unaffected unless it explicitly filters on this.
   isTestCompany               Boolean                       @default(false)
   primaryIndustry             String?
@@ -1598,6 +1673,7 @@ model Company {
   integrationEvents           IntegrationEvent[]
   stripeWebhookEvents         StripeWebhookEvent[]
   stripeBillingCustomers      StripeBillingCustomer[]
+  refundRequests              RefundRequest[]
   workerAssignments           WorkerAssignment[]
   workerRuns                  WorkerRun[]
 }
@@ -1641,6 +1717,8 @@ model User {
   createdExtractionJobs                  ExtractionJob[]
   platformAuditLogs                      PlatformAuditLog[]               @relation("PlatformAuditActor")
   commercePriceReviews                   CommercePrice[]                  @relation("CommercePriceReviewer")
+  refundRequestsMade                     RefundRequest[]                  @relation("RefundRequestedBy")
+  refundRequestsApproved                 RefundRequest[]                  @relation("RefundApprovedBy")
   commerceSyncRuns                       CommerceSyncRun[]                @relation("CommerceSyncRunInitiator")
   simulationSession                      PlatformSimulationSession?
   masterCatalogueImportBatches           MasterCatalogueImportBatch[]
@@ -2492,11 +2570,11 @@ model PlatformAuditLog {
   @@index([createdAt])
 }
 
-/// TEMPLATE-LINK-1 — the DRAFT->REVIEW->APPROVED->PUBLISHED->RETIRED lifecycle
+/// TEMPLATE-LINK-1 ΓÇö the DRAFT->REVIEW->APPROVED->PUBLISHED->RETIRED lifecycle
 /// shared by all three template-version tables below (mirrors
 /// MasterItemVersionStatus, which established this exact pattern for the
 /// master catalogue). A template row's PUBLISHED version is never
-/// destructively overwritten by a later edit — publishing a new version
+/// destructively overwritten by a later edit ΓÇö publishing a new version
 /// retires the previous one instead, and every already-generated document /
 /// sent email / locked BOQ keeps pointing at the exact version it used.
 enum TemplateVersionStatus {
@@ -2536,7 +2614,7 @@ model DocumentTemplate {
 
 /// A pinned, immutable snapshot of one DocumentTemplate's style/content
 /// config at a point in time. GeneratedDocument.templateVersionId locks each
-/// rendered output to the exact version that produced it — editing/publishing
+/// rendered output to the exact version that produced it ΓÇö editing/publishing
 /// a new version afterward never changes an already-generated document.
 model DocumentTemplateVersion {
   id                 String                @id @default(uuid()) @db.Uuid
@@ -2566,7 +2644,7 @@ model GeneratedDocument {
   projectId              String                   @db.Uuid
   boqId                  String                   @db.Uuid
   templateId             String                   @db.Uuid
-  /// TEMPLATE-LINK-1 — nullable so pre-existing rows (generated before
+  /// TEMPLATE-LINK-1 ΓÇö nullable so pre-existing rows (generated before
   /// versioning existed) remain valid; backfilled to each row's template's
   /// version 1. Every new generation sets this to the exact PUBLISHED
   /// version resolved at generation time.
@@ -2606,11 +2684,11 @@ model GeneratedDocument {
   @@index([createdAt])
 }
 
-/// A reusable, section-based report template (e.g. an FM/technical condition-report standard) —
+/// A reusable, section-based report template (e.g. an FM/technical condition-report standard) ΓÇö
 /// standalone from BOQ/GeneratedDocument on purpose, since a technical report is not necessarily
 /// generated from a priced BOQ. `sectionsJson` holds the full structured content (front matter +
 /// ordered sections of heading/paragraph/table/callout blocks, matching the JSON shape produced by
-/// the template-import tooling) — the same shape `GeneratedTechnicalReport.sectionsSnapshotJson`
+/// the template-import tooling) ΓÇö the same shape `GeneratedTechnicalReport.sectionsSnapshotJson`
 /// copies at creation time so a later template edit never silently changes an in-flight report.
 model TechnicalReportTemplate {
   id               String                           @id @default(uuid()) @db.Uuid
@@ -2634,7 +2712,7 @@ model TechnicalReportTemplate {
 }
 
 /// A pinned, immutable snapshot of one TechnicalReportTemplate's sectionsJson
-/// at a point in time — GeneratedTechnicalReport already snapshots sections
+/// at a point in time ΓÇö GeneratedTechnicalReport already snapshots sections
 /// at creation (sectionsSnapshotJson) independent of this, but templateVersionId
 /// additionally records which governed version that snapshot came from, so
 /// the admin Template Centre can show real usage/version history.
@@ -2663,14 +2741,14 @@ model TechnicalReportTemplateVersion {
 /// `placeholdersJson` is the list of distinct bracketed placeholder strings found in the template
 /// snapshot at creation time (e.g. "[Insert project or property name]"); `fieldValuesJson` maps
 /// each of those placeholder strings to the value a user has typed in. Generation performs a
-/// literal substitution pass over the section snapshot using that map — no inference, no invented
+/// literal substitution pass over the section snapshot using that map ΓÇö no inference, no invented
 /// values, matching the rest of this codebase's no-fake-AI discipline.
 model GeneratedTechnicalReport {
   id                   String                          @id @default(uuid()) @db.Uuid
   companyId            String                          @db.Uuid
   projectId            String                          @db.Uuid
   templateId           String                          @db.Uuid
-  /// TEMPLATE-LINK-1 — nullable for the same pre-versioning-backfill reason as
+  /// TEMPLATE-LINK-1 ΓÇö nullable for the same pre-versioning-backfill reason as
   /// GeneratedDocument.templateVersionId.
   templateVersionId    String?                         @db.Uuid
   name                 String
@@ -2687,7 +2765,7 @@ model GeneratedTechnicalReport {
   generatedByUserId    String?                         @db.Uuid
   generatedByName      String
   errorMessage         String?
-  /// Client-facing secure link (email service 1B) — same generate-raw/store-hash-only pattern as
+  /// Client-facing secure link (email service 1B) ΓÇö same generate-raw/store-hash-only pattern as
   /// ClientProposal.tokenHash (see auth/tokens.ts + proposals/proposal-token.ts). Nullable: most
   /// reports are never shared via link (attachment-only email is equally valid). Rotating the link
   /// (creating a new one) simply overwrites this hash; the previous raw token stops resolving.
@@ -2730,11 +2808,11 @@ model TechnicalReportRetention {
   @@index([protectedAt])
 }
 
-/// Email service 1B follow-up — which send flow a template is meant for. Existing rows (all
+/// Email service 1B follow-up ΓÇö which send flow a template is meant for. Existing rows (all
 /// created before this column existed, i.e. the BOQ proposal templates) backfill to BOQ, matching
 /// what they actually are; new templates must pick one explicitly at creation. Send pickers filter
 /// by this so a company can never accidentally pick a BOQ template for a technical report or vice
-/// versa — the actual "safe user journey" this was added for.
+/// versa ΓÇö the actual "safe user journey" this was added for.
 enum EmailTemplateCategory {
   BOQ
   TECHNICAL_REPORT
@@ -2766,7 +2844,7 @@ model EmailTemplate {
 
 /// A pinned, immutable snapshot of one EmailTemplate's subject/body at a
 /// point in time. EmailDispatch.emailTemplateVersionId locks every sent (or
-/// test-sent) email's audit record to the exact version that generated it —
+/// test-sent) email's audit record to the exact version that generated it ΓÇö
 /// editing the template afterward never rewrites delivery history.
 model EmailTemplateVersion {
   id              String                @id @default(uuid()) @db.Uuid
@@ -2795,7 +2873,7 @@ model ClientProposal {
   id                  String                    @id @default(uuid()) @db.Uuid
   companyId           String                    @db.Uuid
   projectId           String                    @db.Uuid
-  /// PROPOSAL-SOURCE-TYPE-RECOVERY — discriminates which of the two nullable source
+  /// PROPOSAL-SOURCE-TYPE-RECOVERY ΓÇö discriminates which of the two nullable source
   /// references below is populated. Defaults to BOQ_REVISION so every pre-existing row
   /// (all of which have a non-null boqId) backfills correctly with zero data loss.
   sourceType          ClientProposalSourceType  @default(BOQ_REVISION)
@@ -2803,7 +2881,7 @@ model ClientProposal {
   revisionNumber      Int?
   /// Set only when sourceType = TECHNICAL_REPORT_REVISION. GeneratedTechnicalReport combines
   /// content and generated artifact in one immutable-once-COMPLETED row, so unlike BOQ this
-  /// needs no separate documentId — the report record itself is the source and the document.
+  /// needs no separate documentId ΓÇö the report record itself is the source and the document.
   technicalReportId   String?                   @db.Uuid
   clientId            String                    @db.Uuid
   createdByUserId     String?                   @db.Uuid
@@ -2889,11 +2967,11 @@ model EmailDispatch {
   projectId                  String                    @db.Uuid
   boqId                      String?                   @db.Uuid
   clientProposalId           String?                   @db.Uuid
-  /// Email service 1B — additive nullable link so a technical-report send is logged/audited through
+  /// Email service 1B ΓÇö additive nullable link so a technical-report send is logged/audited through
   /// the exact same dispatch table as proposal emails, without touching any existing BOQ/proposal row.
   generatedTechnicalReportId String?                   @db.Uuid
   emailTemplateId            String?                   @db.Uuid
-  /// TEMPLATE-LINK-1 — nullable for the same pre-versioning-backfill reason
+  /// TEMPLATE-LINK-1 ΓÇö nullable for the same pre-versioning-backfill reason
   /// as GeneratedDocument.templateVersionId; every new send sets this to the
   /// exact PUBLISHED version resolveTemplate() returned.
   emailTemplateVersionId     String?                   @db.Uuid
@@ -2935,7 +3013,7 @@ model EmailDispatch {
 }
 
 /**
- * Phase 8 — an uploaded source file (drawing, schedule, photo, spreadsheet,
+ * Phase 8 ΓÇö an uploaded source file (drawing, schedule, photo, spreadsheet,
  * report, etc.) awaiting or undergoing AI-assisted extraction/inspection
  * processing. Distinct from GeneratedDocument, which is an already-rendered
  * *output* of the platform (a BOQ export). The original upload is never
@@ -3060,7 +3138,7 @@ enum ProjectFileStatus {
 }
 
 /**
- * Phase 8 — a single unit of background processing work against a
+ * Phase 8 ΓÇö a single unit of background processing work against a
  * ProjectFile (classification, extraction, detection, etc.). Always
  * created before any large/slow processing starts; API route handlers only
  * ever enqueue a job and return, never run the work inline (spec section 1
@@ -3133,7 +3211,7 @@ enum ExtractionJobStatus {
   CANCELLED
 }
 
-/// CANVA-HUMAN-JOURNEY-FINAL — the human's workflow decision about a page
+/// CANVA-HUMAN-JOURNEY-FINAL ΓÇö the human's workflow decision about a page
 /// whose table could not be safely reconstructed by any of the three
 /// deterministic extraction fallbacks, kept separate from parser evidence
 /// (ExtractedTable/ExtractedEntity rows for that page, if any, are never
@@ -3146,7 +3224,7 @@ enum TablePageResolutionDecision {
 }
 
 /// One row per (projectFileId, pageNumber) that ever needed professional
-/// review — created lazily the first time a decision is recorded, not
+/// review ΓÇö created lazily the first time a decision is recorded, not
 /// pre-created for every page. Never a substitute for real extraction
 /// evidence; this only tracks what the human decided to do about a page
 /// the deterministic pipeline couldn't safely resolve on its own.
@@ -3175,11 +3253,11 @@ model TablePageResolution {
 }
 
 /**
- * Phase 8 section 11 — a table/schedule extracted from a source file (CSV,
+ * Phase 8 section 11 ΓÇö a table/schedule extracted from a source file (CSV,
  * XLSX, or a text-based PDF). `drawingPageId` is included per the spec's
  * field list for a future sub-phase (drawing viewer) that introduces the
  * DrawingPage model; it is a plain nullable id column with no FK constraint
- * yet — the constraint is added once DrawingPage exists, in that sub-phase's
+ * yet ΓÇö the constraint is added once DrawingPage exists, in that sub-phase's
  * own migration, rather than guessing at that model's shape now.
  */
 model ExtractedTable {
@@ -3210,7 +3288,7 @@ model ExtractedTable {
  * A parent row carries the columns shared across a merged/grouped range
  * (e.g. "Element: Foundations", "Concrete: 53 m3" spanning several source
  * rows); its child rows carry only the columns that vary per source row
- * (e.g. reinforcement diameter + quantity) — never a copy of the parent's
+ * (e.g. reinforcement diameter + quantity) ΓÇö never a copy of the parent's
  * quantity columns, so summing children never double-counts the parent
  * value (spec section 12).
  */
@@ -3280,7 +3358,7 @@ enum ExtractedTableStatus {
 }
 
 /**
- * Phase 8 section 7/16 — one viewable/rasterized page of a drawing file (a PDF page, or the single implicit page of a standalone image).
+ * Phase 8 section 7/16 ΓÇö one viewable/rasterized page of a drawing file (a PDF page, or the single implicit page of a standalone image).
  */
 model DrawingPage {
   id                   String                    @id @default(uuid()) @db.Uuid
@@ -3333,7 +3411,7 @@ model DrawingLayer {
 }
 
 /**
- * Phase 8 section 15 — spatial quantities are blocked without a verified calibration per page; a detected scale is only ever a suggestion, never auto-trusted.
+ * Phase 8 section 15 ΓÇö spatial quantities are blocked without a verified calibration per page; a detected scale is only ever a suggestion, never auto-trusted.
  */
 model DrawingScaleCalibration {
   id                 String               @id @default(uuid()) @db.Uuid
@@ -3367,7 +3445,7 @@ enum ScaleCalibrationType {
 }
 
 /**
- * Phase 8 section 17 — a detected/manually-entered spatial or schedule item awaiting human verification. Covers rooms, furniture, MEP equipment, and more via entityType; never auto-trusted.
+ * Phase 8 section 17 ΓÇö a detected/manually-entered spatial or schedule item awaiting human verification. Covers rooms, furniture, MEP equipment, and more via entityType; never auto-trusted.
  */
 model ExtractedEntity {
   id                          String                @id @default(uuid()) @db.Uuid
@@ -3463,7 +3541,7 @@ enum ExtractedEntityStatus {
 }
 
 /**
- * Phase 8 section 18 — a room boundary, detected or manually entered.
+ * Phase 8 section 18 ΓÇö a room boundary, detected or manually entered.
  */
 model DetectedRoom {
   id                   String                @id @default(uuid()) @db.Uuid
@@ -3494,7 +3572,7 @@ model DetectedRoom {
 }
 
 /**
- * Phase 8 section 20 — configurable MEP symbol recognition. No automatic matching engine exists yet; this is the schema + company-mapping layer only.
+ * Phase 8 section 20 ΓÇö configurable MEP symbol recognition. No automatic matching engine exists yet; this is the schema + company-mapping layer only.
  */
 model SymbolDefinition {
   id                  String                 @id @default(uuid()) @db.Uuid
@@ -3534,7 +3612,7 @@ model CompanySymbolMapping {
 }
 
 /**
- * Phase 8 sections 22-24 — deterministic quantity calculation from a confirmed extracted entity. Formulas are always visible; no confidence threshold may auto-lock or auto-issue a BOQ.
+ * Phase 8 sections 22-24 ΓÇö deterministic quantity calculation from a confirmed extracted entity. Formulas are always visible; no confidence threshold may auto-lock or auto-issue a BOQ.
  */
 model QuantityCalculation {
   id                  String                  @id @default(uuid()) @db.Uuid
@@ -3591,7 +3669,7 @@ enum QuantityCalculationType {
 }
 
 /**
- * Phase 8 section 29 — the inspection record itself.
+ * Phase 8 section 29 ΓÇö the inspection record itself.
  */
 model Inspection {
   id                 String               @id @default(uuid()) @db.Uuid
@@ -3868,7 +3946,7 @@ enum CorrectiveActionType {
 }
 
 /**
- * Phase 8 section 39 — links a confirmed finding + confirmed corrective action to a real BOQItem; never auto-created without both being confirmed.
+ * Phase 8 section 39 ΓÇö links a confirmed finding + confirmed corrective action to a real BOQItem; never auto-created without both being confirmed.
  */
 model FindingBoqLink {
   id                  String            @id @default(uuid()) @db.Uuid
@@ -3889,11 +3967,11 @@ model FindingBoqLink {
   @@index([boqId])
 }
 
-/// INTEGRATIONS-1A — AEC applications and connected data hub foundation.
+/// INTEGRATIONS-1A ΓÇö AEC applications and connected data hub foundation.
 /// Deliberately four new, standalone tables with no columns added to any
 /// existing model (MasterItem/BOQItem lesson from MASTER-BOQ-1A: adding
 /// columns to hot, already-queried tables breaks every unscoped query
-/// against them the moment the code deploy lands ahead of the migration —
+/// against them the moment the code deploy lands ahead of the migration ΓÇö
 /// entirely new tables carry no such risk, since nothing pre-existing ever
 /// queries them). No OAuth, sync, or live connector exists yet in this
 /// phase; these are the identity/connection/link/audit records that 1B+
@@ -3908,7 +3986,7 @@ enum IntegrationConnectionType {
   COMING_SOON
 }
 
-/// Matches the provider card statuses required by the spec — deliberately
+/// Matches the provider card statuses required by the spec ΓÇö deliberately
 /// distinct from ExternalConnectionStatus below (a provider's *general
 /// availability* vs. one company's *specific connection health*).
 enum IntegrationProviderStatus {
@@ -3943,7 +4021,7 @@ enum SynchronizationRunResult {
 }
 
 /// Registry row per provider (e.g. "autodesk", "revit", "procore",
-/// "microsoft-365") — id is the same stable string key the code-side
+/// "microsoft-365") ΓÇö id is the same stable string key the code-side
 /// provider registry (src/lib/integrations/provider-registry.ts) uses, so
 /// ExternalConnection can reference a real row without a separate mapping
 /// table. Seeded from that registry; the registry (not this table) is the
@@ -3970,7 +4048,7 @@ model IntegrationProvider {
 }
 
 /// One company's connection to one provider. Credentials are never stored
-/// here directly — encryptedCredentialsRef is an opaque pointer into a
+/// here directly ΓÇö encryptedCredentialsRef is an opaque pointer into a
 /// dedicated encrypted secret store (see docs/authentication.md-style
 /// design note in the credential-encryption service added alongside the
 /// first real connector in 1B); this table only ever holds the reference,
@@ -4031,7 +4109,7 @@ model ProjectIntegration {
   @@index([externalConnectionId])
 }
 
-/// One audit row per synchronization attempt — never overwritten, so sync
+/// One audit row per synchronization attempt ΓÇö never overwritten, so sync
 /// history is always inspectable (spec: "safe error code/message, audit
 /// actor").
 model SynchronizationRun {
@@ -4073,13 +4151,13 @@ enum IntegrationEventType {
   SYNC_FAILED
 }
 
-/// INTEGRATIONS-1A completion pass — safe, customer-visible operational
+/// INTEGRATIONS-1A completion pass ΓÇö safe, customer-visible operational
 /// history ("Connected -> project linked -> synchronization started -> ...")
 /// distinct from the app-wide PlatformAuditLog (that log is platform-owner-
 /// only and covers admin actions across every feature; this one is scoped
 /// to a single company's integrations and is meant to be shown directly to
 /// that company's own users). `summary` and `metadataJson` must never
-/// contain a token, secret, authorization code, or raw provider payload —
+/// contain a token, secret, authorization code, or raw provider payload ΓÇö
 /// enforced by convention at the one write site (integration-event-service.ts),
 /// not by the schema.
 model IntegrationEvent {
@@ -4106,18 +4184,18 @@ model IntegrationEvent {
 }
 
 // ---------------------------------------------------------------------------
-// STRIPE-1B — internal commerce product catalogue
+// STRIPE-1B ΓÇö internal commerce product catalogue
 // ---------------------------------------------------------------------------
 // The authoritative, server-controlled product/price/entitlement catalogue a
 // later Stripe integration phase will synchronize against and sell. No
-// payment provider is wired to any of this yet — CommercePrice.amountMinor is
+// payment provider is wired to any of this yet ΓÇö CommercePrice.amountMinor is
 // deliberately an integer minor-unit amount (matching Stripe's own price
 // representation) rather than Decimal, specifically so the eventual Stripe
 // sync never has to translate between two different money representations.
 // Deliberately separate from SoftwarePlan/IndustryDataPackage (STRIPE-1A's
 // audit found those built for an earlier dev-only-activation phase, USD-
 // denominated, with none of the approved AED product codes) rather than
-// repurposing them — this catalogue can be seeded and inspected today with
+// repurposing them ΓÇö this catalogue can be seeded and inspected today with
 // zero risk to the existing trial/subscription paths those models serve.
 
 enum CommerceProductType {
@@ -4130,7 +4208,7 @@ enum CommerceProductType {
 }
 
 /// How a customer is expected to acquire this product. DIRECT is the only
-/// mode any future checkout phase may treat as "add to cart and pay" — every
+/// mode any future checkout phase may treat as "add to cart and pay" ΓÇö every
 /// other mode must route to a human process (contact-sales / quotation),
 /// never a live price the customer can self-checkout with.
 enum CommercePurchaseMode {
@@ -4166,7 +4244,7 @@ model CommerceProduct {
   isPublic            Boolean                   @default(true)
   sortOrder           Int                       @default(0)
   /// Set only for type: INDUSTRY_ACCESS, and only when a real backing
-  /// IndustryDataPackage exists — never set on a product for a dataset that
+  /// IndustryDataPackage exists ΓÇö never set on a product for a dataset that
   /// doesn't exist yet (the seed script enforces this; see its "skipped"
   /// count for industries with no backing package).
   industryPackageId   String?                   @db.Uuid
@@ -4186,7 +4264,7 @@ model CommerceProduct {
 
 /// Prices are treated as append-only once a product has ever been used
 /// commercially (no later phase in this codebase may destructively edit a
-/// price's amount/currency/interval after the fact) — a price change is
+/// price's amount/currency/interval after the fact) ΓÇö a price change is
 /// always a new CommercePrice row with a new code, with the old row's
 /// isActive flipped to false, never an in-place mutation. Nothing enforces
 /// that immutability at the database level in this phase (no purchase can
@@ -4196,24 +4274,24 @@ model CommercePrice {
   id               String                    @id @default(uuid()) @db.Uuid
   productId        String                    @db.Uuid
   code             String                    @unique
-  /// Integer minor units — e.g. AED 149.00 is stored as 14900. Never Float.
+  /// Integer minor units ΓÇö e.g. AED 149.00 is stored as 14900. Never Float.
   amountMinor      Int
   currency         CommerceCurrency          @default(AED)
   billingInterval  CommerceBillingInterval
   /// True when amountMinor is an indicative "starting from" price rather
   /// than an exact purchasable amount (e.g. api_access_monthly_from_aed_499,
-  /// white_label_from_aed_5000) — the UI must render "from AED X" and must
+  /// white_label_from_aed_5000) ΓÇö the UI must render "from AED X" and must
   /// never present this as a fixed-price direct-checkout amount.
   isFromPrice      Boolean                   @default(false)
   isActive         Boolean                   @default(true)
   validFrom        DateTime                  @default(now())
   validUntil       DateTime?
-  /// STRIPE-1C — commercial review gate. Defaults to REQUIRES_REVIEW for
+  /// STRIPE-1C ΓÇö commercial review gate. Defaults to REQUIRES_REVIEW for
   /// every price, including ones that already existed before this column
-  /// was added — never silently APPROVED. Only a small, explicitly
+  /// was added ΓÇö never silently APPROVED. Only a small, explicitly
   /// identified set of anchor prices (matching an independently confirmed
   /// commercial source) are promoted to APPROVED, and only via a one-time,
-  /// reviewed data step — never as a migration column default.
+  /// reviewed data step ΓÇö never as a migration column default.
   reviewStatus     CommercePriceReviewStatus @default(REQUIRES_REVIEW)
   reviewedByUserId String?                   @db.Uuid
   reviewedAt       DateTime?
@@ -4230,7 +4308,7 @@ model CommercePrice {
   @@index([reviewStatus])
 }
 
-/// STRIPE-1C — commercial review gate for a CommercePrice. A price may only
+/// STRIPE-1C ΓÇö commercial review gate for a CommercePrice. A price may only
 /// synchronize to Stripe as an active, purchasable Price once APPROVED.
 enum CommercePriceReviewStatus {
   DRAFT
@@ -4239,7 +4317,7 @@ enum CommercePriceReviewStatus {
   RETIRED
 }
 
-/// The typed commercial grant a product confers. One row per product — kept
+/// The typed commercial grant a product confers. One row per product ΓÇö kept
 /// 1:1 rather than versioned in this phase (no purchase can consume one yet,
 /// so there is nothing to keep historically pinned to an old version). Every
 /// field here is a real, named column rather than JSON specifically so a
@@ -4255,7 +4333,7 @@ model EntitlementTemplate {
   maxBoqGenerationsPerMonth       Int?
   maxTechnicalReportsPerMonth     Int?
   maxWatermarkFreeExportsPerMonth Int?
-  /// JSON string array, e.g. ["PDF", "DOCX"] — matches this codebase's
+  /// JSON string array, e.g. ["PDF", "DOCX"] ΓÇö matches this codebase's
   /// existing convention of *Json fields for list-shaped data (see
   /// MasterItem.defaultTagsJson/searchKeywordsJson) rather than a native
   /// Postgres array, for consistency.
@@ -4263,14 +4341,14 @@ model EntitlementTemplate {
   removesWatermark                Boolean         @default(false)
   allowsCompanyBranding           Boolean         @default(false)
   /// STRIPE-1A found assertFeatureAccess("api-access") already exists but is
-  /// dead code with zero call sites — this field records the *commercial
+  /// dead code with zero call sites ΓÇö this field records the *commercial
   /// grant*, not enforcement; the admin UI must say so truthfully (a static
   /// per-field enforcement-status map lives in entitlement-template-service.ts,
   /// not the schema, since it's a fact about the app's current code, not data).
   allowsApiAccess                 Boolean         @default(false)
   allowsWhiteLabel                Boolean         @default(false)
   /// JSON string array of IndustryDataPackage.key values this product
-  /// grants access to — deliberately separate from CommerceProduct's own
+  /// grants access to ΓÇö deliberately separate from CommerceProduct's own
   /// single industryPackageId, since an ADD_ON or SUBSCRIPTION product's
   /// entitlement template can grant more than one package.
   industryPackageKeysJson         Json?
@@ -4306,10 +4384,10 @@ model SalesInquiry {
 }
 
 // ---------------------------------------------------------------------------
-// STRIPE-1C — Stripe test-mode product/price synchronization
+// STRIPE-1C ΓÇö Stripe test-mode product/price synchronization
 // ---------------------------------------------------------------------------
 // Quantara's CommerceProduct/CommercePrice remain the sole source of truth for
-// amount, currency, interval, and commercial approval — these two models only
+// amount, currency, interval, and commercial approval ΓÇö these two models only
 // record which payment-provider objects a given internal record has been
 // synchronized to, and a history of synchronization runs. No payment
 // collection, checkout, customer, subscription, order, invoice, or webhook
@@ -4331,7 +4409,7 @@ enum CommerceProviderObjectType {
   PRICE
 }
 
-/// Per-mapping sync health, independent of CommerceSyncRun history — this is
+/// Per-mapping sync health, independent of CommerceSyncRun history ΓÇö this is
 /// "what is true right now for this one object", not a log entry.
 enum CommerceProviderSyncStatus {
   SYNCED
@@ -4342,11 +4420,11 @@ enum CommerceProviderSyncStatus {
 
 /// Records that a specific internal CommerceProduct or CommercePrice has been
 /// synchronized to a specific provider object. One row per internal object per
-/// provider per environment — never a full copy of the provider's response
+/// provider per environment ΓÇö never a full copy of the provider's response
 /// (see providerActive/lastErrorCode below; nothing sensitive or bulky is
 /// stored here). True uniqueness (no duplicate mapping for the same internal
 /// product/price, and no duplicate mapping for the same provider object) is
-/// enforced via partial unique indexes in the migration — Postgres allows
+/// enforced via partial unique indexes in the migration ΓÇö Postgres allows
 /// multiple NULLs through a plain unique index, which is wrong here since
 /// commercePriceId/providerPriceId are only meaningful for PRICE-type rows.
 model CommerceProviderMapping {
@@ -4392,7 +4470,7 @@ enum CommerceSyncRunStatus {
 }
 
 /// One row per synchronization attempt (dry run, execution, or verification
-/// pass) — an audit-friendly summary only. Never stores raw Stripe request/
+/// pass) ΓÇö an audit-friendly summary only. Never stores raw Stripe request/
 /// response bodies; only safe aggregate counts and a safe error code.
 model CommerceSyncRun {
   id                   String                      @id @default(uuid()) @db.Uuid
@@ -4402,7 +4480,7 @@ model CommerceSyncRun {
   status               CommerceSyncRunStatus       @default(PLANNED)
   initiatedByUserId    String?                     @db.Uuid
   dryRun               Boolean
-  /// Hash of the eligible catalogue slice at plan time — execution is
+  /// Hash of the eligible catalogue slice at plan time ΓÇö execution is
   /// rejected if the live catalogue no longer matches this fingerprint,
   /// forcing a fresh dry run instead of acting on a stale plan.
   catalogueFingerprint String
@@ -4426,10 +4504,10 @@ model CommerceSyncRun {
 }
 
 // ---------------------------------------------------------------------------
-// CORE-FLOW-1 — direct-to-Blob large drawing upload
+// CORE-FLOW-1 ΓÇö direct-to-Blob large drawing upload
 // ---------------------------------------------------------------------------
 // Short-lived, single-use binding between an authorized upload target (one
-// exact Blob pathname, generated server-side — never client-supplied) and
+// exact Blob pathname, generated server-side ΓÇö never client-supplied) and
 // the ProjectFile it will become once finalized. The browser never talks to
 // this app for the file bytes themselves; it PUTs directly to private Vercel
 // Blob using a scoped client token, then calls the finalize route with this
@@ -4448,9 +4526,9 @@ model ProjectFileUploadSession {
   companyId        String                         @db.Uuid
   projectId        String                         @db.Uuid
   actorUserId      String                         @db.Uuid
-  /// Pre-generated — becomes ProjectFile.id on successful finalize.
+  /// Pre-generated ΓÇö becomes ProjectFile.id on successful finalize.
   fileId           String                         @db.Uuid
-  /// Server-generated, e.g. companies/{companyId}/projects/{projectId}/drawings/{fileId}/{safeFileName} — the only pathname this session's token is valid for.
+  /// Server-generated, e.g. companies/{companyId}/projects/{projectId}/drawings/{fileId}/{safeFileName} ΓÇö the only pathname this session's token is valid for.
   storageKey       String                         @unique
   originalName     String
   declaredMimeType String

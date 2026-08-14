@@ -159,7 +159,7 @@ function extractInvoiceSubscriptionId(invoice: Stripe.Invoice): string | null {
   return typeof subscription === "string" ? subscription : subscription.id;
 }
 
-/** Which Stripe subscription ID this event is about, if any — used to fetch the CURRENT state before touching the database. Returns null for event types with no associated subscription (e.g. checkout.session.completed). */
+/** Which Stripe subscription ID this event is about, if any — used to fetch the CURRENT state before touching the database. Returns null for event types with no associated subscription (e.g. checkout.session.completed, charge.refunded). */
 function extractRelevantSubscriptionId(event: Stripe.Event): string | null {
   switch (event.type) {
     case "customer.subscription.created":
@@ -171,6 +171,25 @@ function extractRelevantSubscriptionId(event: Stripe.Event): string | null {
       return extractInvoiceSubscriptionId(event.data.object as Stripe.Invoice);
     default:
       return null;
+  }
+}
+
+/**
+ * Re-fetches the current Charge from Stripe by ID rather than trusting the
+ * event payload — same "never trust the snapshot for state-determining
+ * fields" posture as fetchCurrentSubscription above, applied to the refund
+ * lifecycle.
+ */
+async function fetchCurrentCharge(stripe: Stripe, chargeId: string): Promise<Stripe.Charge> {
+  try {
+    return await stripe.charges.retrieve(chargeId, undefined, { timeout: 8_000, maxNetworkRetries: 1 });
+  } catch (error) {
+    console.error("[stripe-webhook] Failed to retrieve current charge state for", chargeId, error);
+    throw new AppError(
+      "STRIPE_SUBSCRIPTION_RETRIEVAL_FAILED",
+      "Could not retrieve the current charge state from Stripe. This event was not recorded; Stripe should retry delivery.",
+      502,
+    );
   }
 }
 
@@ -335,6 +354,37 @@ async function applyCurrentSubscriptionState(tx: TxClient, subscription: Stripe.
   }
 }
 
+/**
+ * REFUND-14 — audited against the events real Stripe API versions in this
+ * class have exposed for a Charge's refund lifecycle: `charge.refunded` is
+ * the long-established, stable event fired whenever a charge's refund
+ * status changes (covers both full and partial refunds; a Charge is
+ * "refunded" once its total refunded amount reaches the charge amount).
+ * Deliberately the ONLY refund-lifecycle event handled for this launch —
+ * the newer, more granular `refund.created`/`refund.updated` events are not
+ * added here because their exact availability/shape under the pinned
+ * STRIPE_API_VERSION has not been independently confirmed against this
+ * account, and this codebase's established policy (see
+ * assertWebhookApiVersionMatches above) is to fail safely rather than guess
+ * at an unconfirmed event shape. `charge.refunded` alone is sufficient to
+ * reconcile the one refund flow this codebase creates (executeApprovedRefund
+ * in refund-execution-service.ts always refunds the full requested amount
+ * of a single charge).
+ */
+async function applyChargeRefundState(tx: TxClient, charge: Stripe.Charge): Promise<void> {
+  const request = await tx.refundRequest.findFirst({ where: { stripeChargeId: charge.id } });
+  if (!request) return; // Not a refund this app initiated — nothing to reconcile.
+  if (request.status === "SUCCEEDED" || request.status === "FAILED") return; // Already resolved.
+
+  if (!charge.refunded) return; // Partial/in-progress — leave PROCESSING/APPROVED as-is.
+
+  const latestRefundId = charge.refunds?.data?.[0]?.id ?? request.stripeRefundId ?? null;
+  await tx.refundRequest.update({
+    where: { id: request.id },
+    data: { status: "SUCCEEDED", stripeRefundId: latestRefundId, completedAt: new Date(), failureCode: null, failureMessage: null },
+  });
+}
+
 export type StripeWebhookProcessResult =
   | { outcome: "duplicate" }
   | { outcome: "processed"; eventType: string }
@@ -347,6 +397,7 @@ const HANDLED_EVENT_TYPES = new Set<string>([
   "customer.subscription.deleted",
   "invoice.payment_succeeded",
   "invoice.payment_failed",
+  "charge.refunded",
 ]);
 
 export async function processStripeWebhookEvent(event: Stripe.Event, overrideClient?: Stripe): Promise<StripeWebhookProcessResult> {
@@ -383,7 +434,8 @@ export async function processStripeWebhookEvent(event: Stripe.Event, overrideCli
   }
 
   const subscriptionId = extractRelevantSubscriptionId(event);
-  const stripe = subscriptionId ? resolveWebhookStripeClient(overrideClient) : null;
+  const chargeId = event.type === "charge.refunded" ? (event.data.object as Stripe.Charge).id : null;
+  const stripe = subscriptionId || chargeId ? resolveWebhookStripeClient(overrideClient) : null;
 
   /**
    * STRIPE-COMMERCIAL-17 — the advisory lock is acquired FIRST, inside the
@@ -407,6 +459,7 @@ export async function processStripeWebhookEvent(event: Stripe.Event, overrideCli
         }
 
         const currentSubscription = subscriptionId ? await fetchCurrentSubscription(stripe!, subscriptionId) : null;
+        const currentCharge = chargeId ? await fetchCurrentCharge(stripe!, chargeId) : null;
 
         const companyId = currentSubscription
           ? await resolveCompanyIdForCustomer(tx, extractStripeCustomerId(currentSubscription.customer))
@@ -425,8 +478,10 @@ export async function processStripeWebhookEvent(event: Stripe.Event, overrideCli
           // state change arrives via the current-subscription-state path below.
         } else if (currentSubscription) {
           await applyCurrentSubscriptionState(tx, currentSubscription);
+        } else if (currentCharge) {
+          await applyChargeRefundState(tx, currentCharge);
         }
-        // else: a subscription/invoice event whose subscription could not be
+        // else: a subscription/invoice/charge event whose object could not be
         // retrieved from Stripe — ledger-only, no state mutation attempted.
 
         return { outcome: "processed" as const, eventType: event.type };

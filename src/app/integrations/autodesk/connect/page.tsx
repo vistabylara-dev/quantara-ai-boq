@@ -162,7 +162,14 @@ function AutodeskConnectPageContent() {
     const controller = new AbortController();
     void loadStatus(controller.signal);
     const queryError = new URLSearchParams(window.location.search).get("connectError");
-    if (queryError) setConnectError(t("integrations.autodesk.connectionError"));
+    if (queryError) {
+      const safeCode = /^[A-Z0-9_]{1,64}$/.test(queryError) ? queryError : null;
+      setConnectError(
+        safeCode
+          ? `${t("integrations.autodesk.connectionError")} (${safeCode})`
+          : t("integrations.autodesk.connectionError"),
+      );
+    }
     return () => controller.abort();
   }, [loadStatus, t]);
 

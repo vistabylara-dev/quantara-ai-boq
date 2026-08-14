@@ -15,7 +15,6 @@ import {
   listAutodeskProjects,
   listAutodeskTopFolders,
   refreshAutodeskAccessToken,
-  verifyAutodeskAccess,
   type AutodeskConfigurationStatus,
   type AutodeskContentEntry,
   type AutodeskHub,
@@ -174,7 +173,7 @@ export async function completeAutodeskConnection(actor: CurrentActor, code: stri
       403,
     );
   }
-  await verifyAutodeskAccess(token.access_token);
+  // Token exchange + introspection above prove OAuth authorization. Hub access is a separate Autodesk account-provisioning boundary and must not invalidate a valid connection.
 
   await upsertConnectedExternalConnection({
     companyId: actor.companyId,
@@ -282,7 +281,7 @@ export async function getAutodeskRuntimeStatus(actor: CurrentActor): Promise<Aut
 
   try {
     const { accessToken } = await getValidAutodeskAccessToken(actor);
-    await verifyAutodeskAccess(accessToken);
+    await getVerifiedAutodeskReadScope(accessToken);
     return { ...configuration, connectionStatus: "CONNECTED" };
   } catch (error) {
     const requiresReauth = error instanceof AppError && [

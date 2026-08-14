@@ -5,7 +5,7 @@ import { appBaseUrl } from "@/lib/auth/dev-mailer";
 import { hashPassword, verifyPassword } from "@/lib/auth/password";
 import { createSession, destroyCurrentSession } from "@/lib/auth/session";
 import { generateRawToken, hashToken } from "@/lib/auth/tokens";
-import { buildPasswordResetEmail, buildVerificationEmail, buildAdminApprovalRequestEmail, buildAccountApprovedEmail } from "@/lib/email/auth-email-templates";
+import { buildPasswordResetEmail, buildVerificationEmail, buildAccountApprovedEmail } from "@/lib/email/auth-email-templates";
 import { getEmailProvider } from "@/lib/email/get-email-provider";
 import { createCompany } from "@/lib/repositories/company-repository";
 import { findUserByEmail, findUserById } from "@/lib/repositories/user-repository";
@@ -43,7 +43,7 @@ export async function registerCompanyOwner(input: RegisterInput) {
 
   const passwordHash = await hashPassword(input.password);
 
-  const { user, company } = await prisma.$transaction(async (tx) => {
+  const { user } = await prisma.$transaction(async (tx) => {
     const company = await createCompany(
       {
         legalName: input.companyName,
@@ -63,7 +63,7 @@ export async function registerCompanyOwner(input: RegisterInput) {
         role: UserRole.COMPANY_OWNER,
         jobTitle: input.role, // role maps to jobTitle in our UI
         marketingConsent: input.consent,
-        isActive: false, // Wait for admin approval
+        isActive: true, // Self-service SaaS; login still requires emailVerifiedAt.
       },
     });
 
@@ -81,15 +81,11 @@ export async function registerCompanyOwner(input: RegisterInput) {
       });
     }
 
-    return { company, user: createdUser };
+    return { user: createdUser };
   });
 
   await issueEmailVerificationToken(user.id, user.email);
 
-  const adminEmail = process.env.DEV_OWNER_EMAIL || "admin@quantara.ai";
-  const adminUrl = `${appBaseUrl()}/admin/users/${user.id}`;
-  const approvalEmail = buildAdminApprovalRequestEmail(adminUrl, company.legalName, user.fullName);
-  await sendAuthEmail({ to: adminEmail, subject: approvalEmail.subject, html: approvalEmail.html, text: approvalEmail.text });
 
   return { userId: user.id, companyId: user.companyId, email: user.email };
 }

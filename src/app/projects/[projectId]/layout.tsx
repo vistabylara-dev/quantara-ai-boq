@@ -48,6 +48,12 @@ export default async function ProjectLayout({ children, params }: ProjectLayoutP
               Verification
             </Link>
             <Link
+              href={`${basePath}/tayqan`}
+              className="rounded-full border border-cyan-800 bg-cyan-950/40 px-4 py-2 text-sm text-cyan-200 transition hover:bg-cyan-900/50"
+            >
+              AI Workers · TAYQAN
+            </Link>
+            <Link
               href={`${basePath}/documents`}
               className="rounded-full border border-slate-800 bg-slate-900 px-4 py-2 text-sm text-slate-200 transition hover:bg-slate-800"
             >

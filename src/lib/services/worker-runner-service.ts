@@ -97,6 +97,10 @@ function runDTO(run: WorkerRunWithRelations) {
       startedAt: run.startedAt?.toISOString() ?? null,
       completedAt: run.completedAt?.toISOString() ?? null,
     },
+    brief: {
+      assignmentObjective: run.assignmentObjective,
+      specialInstructions: run.specialInstructions,
+    },
     failure: run.failureCode
       ? { code: run.failureCode, message: run.failureMessage }
       : null,
@@ -146,6 +150,26 @@ export async function getWorkerRunForCompany(companyId: string, runId: string) {
   return runDTO(await getRunRecord(companyId, runId));
 }
 
+/**
+ * TAYQAN-1 — lets the hire screen ask "has TAYQAN already been hired for
+ * this BOQ, and what's the current state" without the caller needing to
+ * already know a runId. Company- and BOQ-scoped like every other worker
+ * read here; returns the most recently created run for this exact
+ * assignment type, or null if TAYQAN has never been hired for this BOQ.
+ */
+export async function getLatestWorkerRunForBoq(
+  companyId: string,
+  boqId: string,
+  assignmentType: WorkerAssignmentType,
+) {
+  const run = await prisma.workerRun.findFirst({
+    where: { companyId, boqId, assignmentType },
+    orderBy: { createdAt: "desc" },
+    include: workerRunInclude,
+  });
+  return run ? runDTO(run) : null;
+}
+
 async function appendRunEvent(
   tx: Prisma.TransactionClient,
   run: RunIdentity,
@@ -183,11 +207,17 @@ async function appendRunEventOnce(
   if (!exists) await appendRunEvent(tx, run, eventType, payloadJson);
 }
 
+export type WorkerHireBrief = {
+  assignmentObjective?: string;
+  specialInstructions?: string;
+};
+
 export async function enqueueWorkerReview(
   actor: CurrentActor,
   boqId: string,
   idempotencyKeyInput: string,
   env: NodeJS.ProcessEnv = process.env,
+  brief: WorkerHireBrief = {},
 ) {
   const idempotencyKey = workerRunIdempotencyKeySchema.parse(idempotencyKeyInput);
   const plannerConfig = loadWorkerAIPlannerConfig(env);
@@ -232,6 +262,8 @@ export async function enqueueWorkerReview(
           maximumAttempts: DEFAULT_MAXIMUM_ATTEMPTS,
           requestedByUserId: actor.userId,
           requestedByName: actor.fullName,
+          assignmentObjective: brief.assignmentObjective || null,
+          specialInstructions: brief.specialInstructions || null,
         },
       });
       await appendRunEvent(tx, created, WorkerRunEventType.RUN_ENQUEUED, {

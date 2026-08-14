@@ -163,6 +163,10 @@ describe("Autodesk read-only cloud integration", () => {
     vi.stubEnv("AUTODESK_CLIENT_ID", "test-autodesk-client");
     vi.stubEnv("AUTODESK_CLIENT_SECRET", "test-autodesk-secret");
     vi.stubEnv("APP_BASE_URL", "https://quantara.vistabylara.com");
+    vi.stubEnv(
+      "INTEGRATION_CREDENTIALS_ENCRYPTION_KEY",
+      "BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc=",
+    );
     vi.stubEnv("NODE_ENV", "test");
     vi.stubEnv("VERCEL_ENV", "development");
     vi.stubGlobal("fetch", vi.fn());
@@ -188,6 +192,22 @@ describe("Autodesk read-only cloud integration", () => {
     expect(url.searchParams.get("scope")).toBe("data:read");
     expect(url.searchParams.get("state")).toBe("opaque-state");
     expect(url.searchParams.has("data:write")).toBe(false);
+  });
+
+  it("starts Autodesk browser authorization before the provider client secret is needed", () => {
+    vi.stubEnv("AUTODESK_CLIENT_SECRET", "");
+
+    const { state } = createAutodeskOAuthState(actor);
+    const url = new URL(buildAutodeskAuthorizationUrl(state));
+
+    expect(url.origin + url.pathname).toBe(
+      "https://developer.api.autodesk.com/authentication/v2/authorize",
+    );
+    expect(url.searchParams.get("client_id")).toBe("test-autodesk-client");
+    expect(url.searchParams.get("redirect_uri")).toBe(
+      "https://quantara.vistabylara.com/api/integrations/autodesk/callback",
+    );
+    expect(url.searchParams.get("scope")).toBe("data:read");
   });
 
   it("rejects malformed or mismatched signed OAuth state", () => {

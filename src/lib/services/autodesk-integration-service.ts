@@ -1,5 +1,6 @@
 import { createHmac, randomBytes, timingSafeEqual } from "crypto";
 import type { CurrentActor } from "@/lib/auth/current-actor";
+import { loadIntegrationCredentialsEncryptionKey } from "@/lib/config/security-secrets";
 import { requireCapability } from "@/lib/auth/rbac";
 import { AppError, NotFoundError } from "@/lib/errors/app-error";
 import type { StoredOAuthCredentials } from "@/lib/integrations/credential-encryption";
@@ -7,7 +8,6 @@ import {
   AUTODESK_READ_SCOPE,
   buildAutodeskAuthorizationUrl,
   exchangeAutodeskAuthorizationCode,
-  getAutodeskClientSecret,
   getAutodeskConfigurationStatus,
   getVerifiedAutodeskReadScope,
   listAutodeskFolderContents,
@@ -67,12 +67,16 @@ function tokenResponseToStoredCredentials(
   };
 }
 
-function stateSigningSecret(): string {
-  const configuration = getAutodeskConfigurationStatus();
-  if (!configuration.configured) {
-    throw new AppError("AUTODESK_NOT_CONFIGURED", "Autodesk connection needs administrator configuration.", 503);
-  }
-  return getAutodeskClientSecret();
+const AUTODESK_OAUTH_STATE_KEY_CONTEXT = "quantara:autodesk-oauth-state:v1";
+
+function stateSigningSecret(): Buffer {
+  // OAuth state protects Quantara's own browser round-trip.
+  // It must not depend on the Autodesk provider Client Secret.
+  // Derive a purpose-specific HMAC key from Quantara's existing
+  // server-only integration credential encryption root key.
+  return createHmac("sha256", loadIntegrationCredentialsEncryptionKey())
+    .update(AUTODESK_OAUTH_STATE_KEY_CONTEXT)
+    .digest();
 }
 
 function signOAuthStatePayload(encodedPayload: string): string {

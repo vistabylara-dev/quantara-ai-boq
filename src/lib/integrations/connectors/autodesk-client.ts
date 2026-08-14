@@ -106,15 +106,20 @@ export function getAutodeskClientId(): string {
 }
 
 export function getAutodeskCallbackUri(): string {
-  const status = getAutodeskConfigurationStatus();
-  if (!status.configured || !status.redirectUri) {
+  // The browser authorization request does not require the provider
+  // Client Secret. APS needs the secret later during the token exchange.
+  const baseUrl = readAutodeskEnvironment("APP_BASE_URL");
+  const parsedBaseUrl = baseUrl ? parseAppBaseUrl(baseUrl) : null;
+
+  if (!parsedBaseUrl) {
     throw new AppError(
       "AUTODESK_NOT_CONFIGURED",
       "Autodesk connection needs administrator configuration.",
       503,
     );
   }
-  return status.redirectUri;
+
+  return new URL("/api/integrations/autodesk/callback", parsedBaseUrl).toString();
 }
 
 export function buildAutodeskAuthorizationUrl(state: string): string {

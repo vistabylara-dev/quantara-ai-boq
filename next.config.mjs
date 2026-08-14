@@ -90,6 +90,12 @@ const nextConfig = {
   // (both real, per-dataset disk reads) — see master-catalogue-import-job-
   // service.ts and industry-package-activation-service.ts.
   outputFileTracingIncludes: {
+    // PRISMA-VERCEL-WASM — Prisma engineType="client" loads this generated
+    // query compiler from disk at runtime. Because .prisma/client is
+    // externalized below, Vercel's static tracer does not discover the fs
+    // read automatically, causing ENOENT in /var/task. Trace the exact
+    // generated WASM into every server function bundle.
+    "/*": ["./node_modules/.prisma/client/query_compiler_bg.wasm"],
     "/api/admin/master-catalogue/datasets/[datasetId]/dry-run": CATALOGUE_DATASET_CSV_GLOBS,
     "/api/admin/master-catalogue/datasets/[datasetId]/execute": CATALOGUE_DATASET_CSV_GLOBS,
     "/api/admin/master-catalogue/datasets/[datasetId]/readiness": CATALOGUE_DATASET_CSV_GLOBS,

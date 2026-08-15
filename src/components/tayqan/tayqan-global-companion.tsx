@@ -5,6 +5,7 @@ import dynamic from "next/dynamic";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { useTranslations } from "@/lib/i18n/locale-provider";
+import { apiClient } from "@/lib/api/client";
 import { TayqanFallback } from "./tayqan-fallback";
 
 const TayqanRobotCanvas = dynamic(() => import("./tayqan-robot-canvas"), {
@@ -13,6 +14,19 @@ const TayqanRobotCanvas = dynamic(() => import("./tayqan-robot-canvas"), {
 });
 
 const DEDICATED_TAYQAN_PAGE = /^\/projects\/[^/]+\/tayqan(\/|$)/;
+
+type CompanionPlatformRole =
+  | "PLATFORM_OWNER"
+  | "PLATFORM_ADMIN"
+  | "PLATFORM_SUPPORT";
+
+type CompanionSession = {
+  authenticated: boolean;
+  user?: {
+    platformRole:
+      CompanionPlatformRole | null;
+  };
+};
 
 function containsPoint(rect: DOMRect, x: number, y: number): boolean {
   return x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom;
@@ -42,6 +56,29 @@ export function TayqanGlobalCompanion() {
   const pathname = usePathname() ?? "/";
   const t = useTranslations();
 
+  const adminRoute =
+    pathname === "/admin"
+    || pathname.startsWith("/admin/");
+
+  const adminLoginRoute =
+    pathname === "/admin/login";
+
+  const [
+    platformRole,
+    setPlatformRole,
+  ] = useState<CompanionPlatformRole | null>(
+    null,
+  );
+
+  const internalAdminAccess =
+    platformRole === "PLATFORM_OWNER"
+    || platformRole === "PLATFORM_ADMIN";
+
+  const companionHref =
+    internalAdminAccess
+      ? "/projects?tayqan=admin"
+      : "/projects?tayqan=assign";
+
   const robotRef = useRef<HTMLDivElement>(null);
   const bubbleRef = useRef<HTMLAnchorElement>(null);
   const hideTimerRef = useRef<number | null>(null);
@@ -50,6 +87,43 @@ export function TayqanGlobalCompanion() {
   const [bubbleVisible, setBubbleVisible] = useState(false);
 
   const dedicatedPage = DEDICATED_TAYQAN_PAGE.test(pathname);
+
+  useEffect(() => {
+    if (
+      !adminRoute
+      || adminLoginRoute
+    ) {
+      setPlatformRole(null);
+      return;
+    }
+
+    let active = true;
+
+    void apiClient
+      .get<CompanionSession>(
+        "/api/auth/session",
+      )
+      .then((session) => {
+        if (!active) return;
+
+        setPlatformRole(
+          session.user?.platformRole
+          ?? null,
+        );
+      })
+      .catch(() => {
+        if (active) {
+          setPlatformRole(null);
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [
+    adminRoute,
+    adminLoginRoute,
+  ]);
 
   const setVisible = (visible: boolean) => {
     visibleRef.current = visible;
@@ -112,7 +186,12 @@ export function TayqanGlobalCompanion() {
     };
   }, [dedicatedPage]);
 
-  if (DEDICATED_TAYQAN_PAGE.test(pathname)) return null;
+  if (
+    adminLoginRoute
+    || DEDICATED_TAYQAN_PAGE.test(pathname)
+  ) {
+    return null;
+  }
 
   return (
     <div
@@ -124,11 +203,15 @@ export function TayqanGlobalCompanion() {
     >
       <Link
         ref={bubbleRef}
-        href="/projects"
+        href={companionHref}
         tabIndex={bubbleVisible ? 0 : -1}
         onFocus={() => setVisible(true)}
         onBlur={() => setVisible(false)}
-        aria-label={t("tayqan.companionAriaLabel")}
+        aria-label={t(
+          internalAdminAccess
+            ? "tayqan.adminCompanionAriaLabel"
+            : "tayqan.companionAriaLabel",
+        )}
         className={[
           "absolute bottom-full start-0 mb-2 w-[220px]",
           "rounded-2xl border border-cyan-700/60 bg-slate-950/95",
@@ -140,11 +223,19 @@ export function TayqanGlobalCompanion() {
         ].join(" ")}
       >
         <span className="block font-medium">
-          {t("tayqan.hoverMessage")}
+          {t(
+            internalAdminAccess
+              ? "tayqan.adminHoverMessage"
+              : "tayqan.hoverMessage",
+          )}
         </span>
 
         <span className="mt-1 inline-flex font-semibold text-cyan-300">
-          {t("tayqan.companionAriaLabel")} →
+          {t(
+            internalAdminAccess
+              ? "tayqan.adminAccessBadge"
+              : "tayqan.companionAriaLabel",
+          )} →
         </span>
       </Link>
 

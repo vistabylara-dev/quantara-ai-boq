@@ -1,5 +1,6 @@
 import {
   ExtractedEntityStatus,
+  PlatformRole,
   Prisma,
   ProjectFileStatus,
   TayqanHirePlan,
@@ -13,6 +14,7 @@ import type { CurrentActor } from "@/lib/auth/current-actor";
 import { prisma } from "@/lib/db/prisma";
 import { AppError, ConflictError, NotFoundError } from "@/lib/errors/app-error";
 import { getProjectRecord } from "@/lib/repositories/project-repository";
+import { getTayqanMaxDistinctProjects } from "@/lib/tayqan/tayqan-commerce";
 
 export type TayqanQuestionOption = {
   value: string;
@@ -216,6 +218,65 @@ export type TayqanProjectSnapshot = {
 
 const ACTIVE_HIRE_STATUSES = [TayqanHireStatus.ACTIVE] as const;
 
+export const TAYQAN_INTERNAL_ADMIN_PRICE_CODE =
+  "tayqan_internal_admin";
+
+export type TayqanAccessMode =
+  | "PAID"
+  | "INTERNAL_ADMIN";
+
+export type TayqanProjectQuota = {
+  maxProjects: number | null;
+  usedProjects: number;
+  remainingProjects: number | null;
+  currentProjectAssigned: boolean;
+  canAssignCurrentProject: boolean;
+};
+
+export function isTayqanInternalAdminRole(
+  role: PlatformRole | null,
+): boolean {
+  return (
+    role === PlatformRole.PLATFORM_OWNER
+    || role === PlatformRole.PLATFORM_ADMIN
+  );
+}
+
+export function deriveTayqanProjectQuota(
+  maxProjects: number | null,
+  assignedProjectIds: readonly string[],
+  currentProjectId: string,
+): TayqanProjectQuota {
+  const assigned =
+    new Set(assignedProjectIds);
+
+  const usedProjects =
+    assigned.size;
+
+  const currentProjectAssigned =
+    assigned.has(currentProjectId);
+
+  const remainingProjects =
+    maxProjects === null
+      ? null
+      : Math.max(
+          0,
+          maxProjects - usedProjects,
+        );
+
+  return {
+    maxProjects,
+    usedProjects,
+    remainingProjects,
+    currentProjectAssigned,
+
+    canAssignCurrentProject:
+      currentProjectAssigned
+      || maxProjects === null
+      || usedProjects < maxProjects,
+  };
+}
+
 function serializeSnapshot(snapshot: TayqanProjectSnapshot): Prisma.InputJsonObject {
   return JSON.parse(JSON.stringify(snapshot)) as Prisma.InputJsonObject;
 }
@@ -332,6 +393,9 @@ export async function getActiveTayqanEntitlement(
     where: {
       companyId,
       status: { in: [...ACTIVE_HIRE_STATUSES] },
+      priceCode: {
+        not: TAYQAN_INTERNAL_ADMIN_PRICE_CODE,
+      },
       OR: [{ expiresAt: null }, { expiresAt: { gt: now } }],
     },
     orderBy: [{ expiresAt: "desc" }, { createdAt: "desc" }],
@@ -353,6 +417,203 @@ export async function assertActiveTayqanEntitlement(
   return entitlement;
 }
 
+async function actorHasInternalTayqanAccess(
+  actor: CurrentActor,
+): Promise<boolean> {
+  const user =
+    await prisma.user.findFirst({
+      where: {
+        id: actor.userId,
+        companyId: actor.companyId,
+        isActive: true,
+      },
+
+      select: {
+        platformRole: true,
+        emailVerifiedAt: true,
+      },
+    });
+
+  return Boolean(
+    user?.emailVerifiedAt
+    && isTayqanInternalAdminRole(
+      user.platformRole,
+    ),
+  );
+}
+
+async function getOrCreateTayqanInternalAdminEntitlement(
+  actor: CurrentActor,
+  now = new Date(),
+): Promise<TayqanHireEntitlement | null> {
+  if (
+    !await actorHasInternalTayqanAccess(
+      actor,
+    )
+  ) {
+    return null;
+  }
+
+  const lockKey =
+    `tayqan-internal-admin:${actor.userId}`;
+
+  return prisma.$transaction(
+    async (tx) => {
+      await tx.$queryRaw`
+        SELECT pg_advisory_xact_lock(
+          hashtext(${lockKey})
+        )
+      `;
+
+      const existing =
+        await tx.tayqanHireEntitlement
+          .findFirst({
+            where: {
+              companyId: actor.companyId,
+              purchasedByUserId:
+                actor.userId,
+
+              priceCode:
+                TAYQAN_INTERNAL_ADMIN_PRICE_CODE,
+
+              status:
+                TayqanHireStatus.ACTIVE,
+            },
+
+            orderBy: {
+              createdAt: "desc",
+            },
+          });
+
+      if (existing) {
+        return existing;
+      }
+
+      return tx.tayqanHireEntitlement
+        .create({
+          data: {
+            companyId:
+              actor.companyId,
+
+            purchasedByUserId:
+              actor.userId,
+
+            /*
+             * Existing enum only. This is NOT a
+             * CommercePrice and never enters Stripe.
+             * AccessMode remains INTERNAL_ADMIN.
+             */
+            plan:
+              TayqanHirePlan.MONTHLY,
+
+            status:
+              TayqanHireStatus.ACTIVE,
+
+            priceCode:
+              TAYQAN_INTERNAL_ADMIN_PRICE_CODE,
+
+            startsAt: now,
+            expiresAt: null,
+          },
+        });
+    },
+  );
+}
+
+export async function getTayqanAccess(
+  actor: CurrentActor,
+  now = new Date(),
+): Promise<{
+  entitlement: TayqanHireEntitlement;
+  accessMode: TayqanAccessMode;
+} | null> {
+  const internal =
+    await getOrCreateTayqanInternalAdminEntitlement(
+      actor,
+      now,
+    );
+
+  if (internal) {
+    return {
+      entitlement: internal,
+      accessMode: "INTERNAL_ADMIN",
+    };
+  }
+
+  const paid =
+    await getActiveTayqanEntitlement(
+      actor.companyId,
+      now,
+    );
+
+  return paid
+    ? {
+        entitlement: paid,
+        accessMode: "PAID",
+      }
+    : null;
+}
+
+export async function assertTayqanAccessEntitlement(
+  actor: CurrentActor,
+  now = new Date(),
+): Promise<TayqanHireEntitlement> {
+  const access =
+    await getTayqanAccess(
+      actor,
+      now,
+    );
+
+  if (!access) {
+    throw new AppError(
+      "TAYQAN_HIRE_REQUIRED",
+      "An active TAYQAN hire is required before TAYQAN can work.",
+      402,
+    );
+  }
+
+  return access.entitlement;
+}
+
+async function getTayqanProjectQuota(
+  entitlement: TayqanHireEntitlement,
+  currentProjectId: string,
+): Promise<TayqanProjectQuota> {
+  const sessions =
+    await prisma.tayqanIntakeSession
+      .findMany({
+        where: {
+          companyId:
+            entitlement.companyId,
+
+          hireEntitlementId:
+            entitlement.id,
+        },
+
+        select: {
+          projectId: true,
+        },
+      });
+
+  const maxProjects =
+    entitlement.priceCode
+      === TAYQAN_INTERNAL_ADMIN_PRICE_CODE
+      ? null
+      : getTayqanMaxDistinctProjects(
+          entitlement.plan,
+        );
+
+  return deriveTayqanProjectQuota(
+    maxProjects,
+
+    sessions.map(
+      (session) =>
+        session.projectId,
+    ),
+
+    currentProjectId,
+  );
+}
 export async function buildTayqanProjectSnapshot(
   actor: CurrentActor,
   projectIdentifier: string,
@@ -836,46 +1097,170 @@ async function ensureIntakeSession(
   entitlement: TayqanHireEntitlement,
   preferredBoqId?: string | null,
 ): Promise<TayqanIntakeSession> {
-  const existing = await prisma.tayqanIntakeSession.findFirst({
-    where: {
-      companyId: actor.companyId,
-      projectId: snapshot.project.id,
-      hireEntitlementId: entitlement.id,
-      status: {
-        notIn: [TayqanIntakeStatus.CANCELLED, TayqanIntakeStatus.COMPLETED],
-      },
-    },
-    orderBy: { createdAt: "desc" },
-  });
-  if (existing) return existing;
+  const lockKey =
+    `tayqan-entitlement:${entitlement.id}`;
 
-  let boqId: string | null = null;
-  if (preferredBoqId) {
-    const boq = snapshot.boqs.find((candidate) => candidate.id === preferredBoqId);
-    if (boq) boqId = boq.id;
+  const result =
+    await prisma.$transaction(
+      async (tx) => {
+        /*
+         * Serialize assignment for ONE entitlement.
+         * This closes the race where two tabs could
+         * both observe 1/2 then create projects 2 & 3.
+         */
+        await tx.$queryRaw`
+          SELECT pg_advisory_xact_lock(
+            hashtext(${lockKey})
+          )
+        `;
+
+        const existing =
+          await tx.tayqanIntakeSession
+            .findFirst({
+              where: {
+                companyId:
+                  actor.companyId,
+
+                projectId:
+                  snapshot.project.id,
+
+                hireEntitlementId:
+                  entitlement.id,
+
+                status: {
+                  notIn: [
+                    TayqanIntakeStatus.CANCELLED,
+                    TayqanIntakeStatus.COMPLETED,
+                  ],
+                },
+              },
+
+              orderBy: {
+                createdAt: "desc",
+              },
+            });
+
+        if (existing) {
+          return {
+            session: existing,
+            created: false,
+          };
+        }
+
+        const assigned =
+          await tx.tayqanIntakeSession
+            .findMany({
+              where: {
+                companyId:
+                  actor.companyId,
+
+                hireEntitlementId:
+                  entitlement.id,
+              },
+
+              select: {
+                projectId: true,
+              },
+            });
+
+        const maxProjects =
+          entitlement.priceCode
+            === TAYQAN_INTERNAL_ADMIN_PRICE_CODE
+            ? null
+            : getTayqanMaxDistinctProjects(
+                entitlement.plan,
+              );
+
+        const quota =
+          deriveTayqanProjectQuota(
+            maxProjects,
+
+            assigned.map(
+              (session) =>
+                session.projectId,
+            ),
+
+            snapshot.project.id,
+          );
+
+        if (
+          !quota.canAssignCurrentProject
+        ) {
+          throw new AppError(
+            "TAYQAN_PROJECT_LIMIT_REACHED",
+            `TAYQAN Day Hire covers up to ${quota.maxProjects} distinct projects. Continue one of the already assigned projects or start another hire.`,
+            409,
+          );
+        }
+
+        let boqId:
+          string | null = null;
+
+        if (preferredBoqId) {
+          const boq =
+            snapshot.boqs.find(
+              (candidate) =>
+                candidate.id
+                === preferredBoqId,
+            );
+
+          if (boq) {
+            boqId = boq.id;
+          }
+        }
+
+        const created =
+          await tx.tayqanIntakeSession
+            .create({
+              data: {
+                companyId:
+                  actor.companyId,
+
+                projectId:
+                  snapshot.project.id,
+
+                boqId,
+
+                hireEntitlementId:
+                  entitlement.id,
+
+                createdByUserId:
+                  actor.userId,
+
+                status:
+                  TayqanIntakeStatus.COLLECTING,
+
+                projectSnapshotJson:
+                  serializeSnapshot(
+                    snapshot,
+                  ),
+              },
+            });
+
+        return {
+          session: created,
+          created: true,
+        };
+      },
+    );
+
+  if (result.created) {
+    const openingKey =
+      "tayqan.hire.intakeOpening";
+
+    await persistTayqanMessage(
+      actor.companyId,
+      result.session.id,
+      TayqanIntakeMessageRole.TAYQAN,
+      openingKey,
+      {
+        kind: "STATUS",
+        i18nKey: openingKey,
+      },
+    );
   }
 
-  const created = await prisma.tayqanIntakeSession.create({
-    data: {
-      companyId: actor.companyId,
-      projectId: snapshot.project.id,
-      boqId,
-      hireEntitlementId: entitlement.id,
-      createdByUserId: actor.userId,
-      status: TayqanIntakeStatus.COLLECTING,
-      projectSnapshotJson: serializeSnapshot(snapshot),
-    },
-  });
-
-  const openingKey = "tayqan.hire.intakeOpening";
-  await persistTayqanMessage(
-    actor.companyId,
-    created.id,
-    TayqanIntakeMessageRole.TAYQAN,
-    openingKey,
-    { kind: "STATUS", i18nKey: openingKey },
-  );
-  return created;
+  return result.session;
 }
 
 function messageDTO(message: {
@@ -930,10 +1315,14 @@ export async function getTayqanWorkspaceState(
   preferredBoqId?: string | null,
 ) {
   const snapshot = await buildTayqanProjectSnapshot(actor, projectIdentifier);
-  const entitlement = await getActiveTayqanEntitlement(actor.companyId);
 
-  if (!entitlement) {
+  const access =
+    await getTayqanAccess(actor);
+
+  if (!access) {
     return {
+      accessMode: null,
+      projectQuota: null,
       entitlement: null,
       session: null,
       messages: [],
@@ -942,7 +1331,48 @@ export async function getTayqanWorkspaceState(
     };
   }
 
-  let session = await ensureIntakeSession(actor, snapshot, entitlement, preferredBoqId);
+  const {
+    entitlement,
+    accessMode,
+  } = access;
+
+  let projectQuota =
+    await getTayqanProjectQuota(
+      entitlement,
+      snapshot.project.id,
+    );
+
+  /*
+   * Do not create an intake session for a forbidden
+   * third Day-Hire project. UI can display quota state.
+   */
+  if (
+    !projectQuota.canAssignCurrentProject
+  ) {
+    return {
+      accessMode,
+      projectQuota,
+      entitlement:
+        entitlementDTO(entitlement),
+      session: null,
+      messages: [],
+      question: null,
+      snapshot,
+    };
+  }
+
+  let session = await ensureIntakeSession(
+    actor,
+    snapshot,
+    entitlement,
+    preferredBoqId,
+  );
+
+  projectQuota =
+    await getTayqanProjectQuota(
+      entitlement,
+      snapshot.project.id,
+    );
   const nextSnapshotJson = serializeSnapshot(snapshot);
   if (JSON.stringify(session.projectSnapshotJson ?? null) !== JSON.stringify(nextSnapshotJson)) {
     session = await prisma.tayqanIntakeSession.update({
@@ -957,6 +1387,8 @@ export async function getTayqanWorkspaceState(
   });
 
   return {
+    accessMode,
+    projectQuota,
     entitlement: entitlementDTO(entitlement),
     session: sessionDTO(recalculated.session),
     messages: messages.map(messageDTO),
@@ -977,7 +1409,7 @@ export async function answerTayqanIntakeQuestion(
   projectIdentifier: string,
   input: { sessionId: string; questionKey: string; answer: string },
 ) {
-  const entitlement = await assertActiveTayqanEntitlement(actor.companyId);
+  const entitlement = await assertTayqanAccessEntitlement(actor);
   const snapshot = await buildTayqanProjectSnapshot(actor, projectIdentifier);
   let session = await prisma.tayqanIntakeSession.findFirst({
     where: {
@@ -1134,7 +1566,7 @@ export async function assertPaidTayqanReviewAccess(
   actor: CurrentActor,
   boqId: string,
 ): Promise<TayqanIntakeSession> {
-  const entitlement = await assertActiveTayqanEntitlement(actor.companyId);
+  const entitlement = await assertTayqanAccessEntitlement(actor);
   const boq = await prisma.bOQ.findFirst({
     where: { id: boqId, companyId: actor.companyId },
     select: { id: true, projectId: true },
@@ -1154,7 +1586,7 @@ export async function assertPaidTayqanReviewAccess(
   if (!session) {
     throw new AppError(
       "TAYQAN_INTAKE_REQUIRED",
-      "Complete the paid TAYQAN intake before starting a worker review.",
+      "Complete the TAYQAN intake before starting a worker review.",
       409,
     );
   }

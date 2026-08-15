@@ -224,10 +224,16 @@ export default function MarketplacePage() {
                         ? " · recurring monthly"
                         : " · one-time hire"}
                     </p>
+
+                    {product.code === "tayqan_day" && (
+                      <p className="mt-2 text-xs font-semibold text-cyan-300">
+                        Up to 2 distinct projects per 24-hour hire
+                      </p>
+                    )}
                   </div>
 
                   <Link
-                    href="/projects"
+                    href="/projects?tayqan=assign"
                     className="mt-5 rounded-xl border border-cyan-600 bg-cyan-600 px-4 py-3 text-center text-sm font-bold text-white transition-colors hover:bg-cyan-500"
                   >
                     Choose project & hire

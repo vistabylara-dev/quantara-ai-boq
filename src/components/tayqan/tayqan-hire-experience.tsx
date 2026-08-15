@@ -16,6 +16,19 @@ import {
 import { TayqanWorkOrderPanel, type TayqanWorkOrderState } from "@/components/tayqan/tayqan-work-order-panel";
 
 type HireState = {
+  accessMode:
+    | "PAID"
+    | "INTERNAL_ADMIN"
+    | null;
+
+  projectQuota: {
+    maxProjects: number | null;
+    usedProjects: number;
+    remainingProjects: number | null;
+    currentProjectAssigned: boolean;
+    canAssignCurrentProject: boolean;
+  } | null;
+
   entitlement: {
     id: string;
     plan: "DAY" | "WEEK" | "MONTHLY";
@@ -753,6 +766,19 @@ export function TayqanHireExperience({
                 <p className="mt-2 text-sm text-slate-400">
                   {t(durationKey as TranslationKey)} · {t(billingKey as TranslationKey)}
                 </p>
+
+                {plan.maxDistinctProjects !== null && (
+                  <p className="mt-2 text-xs font-semibold text-cyan-300">
+                    {t(
+                      "tayqan.hire.dayProjectAllowance",
+                      {
+                        count:
+                          plan.maxDistinctProjects,
+                      },
+                    )}
+                  </p>
+                )}
+
                 <button
                   type="button"
                   disabled={checkoutPrice !== null}
@@ -767,6 +793,77 @@ export function TayqanHireExperience({
             );
           })}
         </div>
+      </div>
+    );
+  }
+
+  const internalAdminAccess =
+    state.accessMode ===
+    "INTERNAL_ADMIN";
+
+  const limitedQuota =
+    state.projectQuota
+    && state.projectQuota.maxProjects
+      !== null
+      ? state.projectQuota
+      : null;
+
+  if (
+    limitedQuota
+    && !limitedQuota
+      .canAssignCurrentProject
+  ) {
+    return (
+      <div className="space-y-5 rounded-[32px] border border-amber-700 bg-slate-950 p-6 sm:p-8">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.24em] text-amber-400">
+            {t(
+              "tayqan.hire.projectLimitReachedTitle",
+            )}
+          </p>
+
+          <h2 className="mt-2 text-2xl font-semibold text-white">
+            {t(
+              "tayqan.hire.projectLimitReachedTitle",
+            )}
+          </h2>
+
+          <p className="mt-3 max-w-3xl text-sm text-slate-300">
+            {t(
+              "tayqan.hire.projectLimitReachedDescription",
+              {
+                max:
+                  limitedQuota.maxProjects ?? 0,
+                used:
+                  limitedQuota.usedProjects,
+              },
+            )}
+          </p>
+        </div>
+
+        <div className="rounded-2xl border border-amber-900 bg-amber-950/20 px-4 py-3 text-sm text-amber-100">
+          {t(
+            "tayqan.hire.projectUsage",
+            {
+              used:
+                limitedQuota.usedProjects,
+              max:
+                limitedQuota.maxProjects ?? 0,
+              remaining:
+                limitedQuota.remainingProjects
+                ?? 0,
+            },
+          )}
+        </div>
+
+        <Link
+          href="/projects?tayqan=assign"
+          className="inline-flex rounded-2xl border border-cyan-600 bg-cyan-600 px-5 py-3 text-sm font-semibold text-white hover:bg-cyan-500"
+        >
+          {t(
+            "tayqan.hire.chooseAssignedProject",
+          )}
+        </Link>
       </div>
     );
   }
@@ -799,10 +896,19 @@ export function TayqanHireExperience({
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.24em] text-emerald-400">
-            {t("tayqan.hire.activeEyebrow")}
+            {t(
+              internalAdminAccess
+                ? "tayqan.hire.internalAdminEyebrow"
+                : "tayqan.hire.activeEyebrow",
+            )}
           </p>
+
           <h2 className="mt-2 text-2xl font-semibold text-white">
-            {t("tayqan.hire.activeTitle")}
+            {t(
+              internalAdminAccess
+                ? "tayqan.hire.internalAdminTitle"
+                : "tayqan.hire.activeTitle",
+            )}
           </h2>
         </div>
         {state.entitlement.expiresAt && (
@@ -812,6 +918,33 @@ export function TayqanHireExperience({
           </div>
         )}
       </div>
+
+      {internalAdminAccess && (
+        <div className="rounded-2xl border border-emerald-800 bg-emerald-950/20 px-4 py-3 text-sm font-medium text-emerald-100">
+          {t(
+            "tayqan.hire.internalAdminAccess",
+          )}
+        </div>
+      )}
+
+      {!internalAdminAccess
+        && limitedQuota
+        && (
+          <div className="rounded-2xl border border-cyan-900 bg-cyan-950/20 px-4 py-3 text-sm text-cyan-100">
+            {t(
+              "tayqan.hire.projectUsage",
+              {
+                used:
+                  limitedQuota.usedProjects,
+                max:
+                  limitedQuota.maxProjects ?? 0,
+                remaining:
+                  limitedQuota.remainingProjects
+                  ?? 0,
+              },
+            )}
+          </div>
+        )}
 
       {error && <p className="text-sm text-rose-300">{error}</p>}
 

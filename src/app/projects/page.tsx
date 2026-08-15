@@ -5,8 +5,35 @@ import { useCallback, useEffect, useState } from "react";
 import type { Project } from "@/types/project";
 import { formatDate } from "@/lib/formatting/dates";
 import { apiClient, getApiErrorMessage } from "@/lib/api/client";
+import { useTranslations } from "@/lib/i18n/locale-provider";
+
+type PlatformRole =
+  | "PLATFORM_OWNER"
+  | "PLATFORM_ADMIN"
+  | "PLATFORM_SUPPORT";
+
+type SessionData = {
+  authenticated: boolean;
+  user?: {
+    platformRole: PlatformRole | null;
+  };
+};
 
 export default function ProjectsPage() {
+  const t = useTranslations();
+
+  const [
+    tayqanAssignmentMode,
+    setTayqanAssignmentMode,
+  ] = useState(false);
+
+  const [
+    platformRole,
+    setPlatformRole,
+  ] = useState<PlatformRole | null>(
+    null,
+  );
+
   const [projects, setProjects] = useState<Project[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -30,13 +57,84 @@ export default function ProjectsPage() {
     return () => controller.abort();
   }, [loadProjects]);
 
+  useEffect(() => {
+    const mode =
+      new URLSearchParams(
+        window.location.search,
+      ).get("tayqan");
+
+    const assigning =
+      mode === "assign"
+      || mode === "admin";
+
+    setTayqanAssignmentMode(
+      assigning,
+    );
+
+    if (!assigning) {
+      setPlatformRole(null);
+      return;
+    }
+
+    const controller =
+      new AbortController();
+
+    void apiClient
+      .get<SessionData>(
+        "/api/auth/session",
+        controller.signal,
+      )
+      .then((session) => {
+        setPlatformRole(
+          session.user?.platformRole
+          ?? null,
+        );
+      })
+      .catch((sessionError) => {
+        if (
+          sessionError instanceof DOMException
+          && sessionError.name === "AbortError"
+        ) {
+          return;
+        }
+
+        setPlatformRole(null);
+      });
+
+    return () =>
+      controller.abort();
+  }, []);
+
+  const internalAdminAccess =
+    platformRole === "PLATFORM_OWNER"
+    || platformRole === "PLATFORM_ADMIN";
+
   return (
     <div className="min-h-screen bg-[#07111F] text-white">
       <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
         <div className="mb-6 flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
           <div>
-            <p className="text-sm uppercase tracking-[0.3em] text-slate-500">Projects</p>
-            <h1 className="mt-2 text-3xl font-semibold text-white">Project workspace list</h1>
+            <p className="text-sm uppercase tracking-[0.3em] text-slate-500">
+              {tayqanAssignmentMode
+                ? t("tayqan.projectPickerEyebrow")
+                : "Projects"}
+            </p>
+
+            <h1 className="mt-2 text-3xl font-semibold text-white">
+              {tayqanAssignmentMode
+                ? t("tayqan.projectPickerTitle")
+                : "Project workspace list"}
+            </h1>
+
+            {tayqanAssignmentMode && (
+              <p className="mt-2 max-w-3xl text-sm text-slate-400">
+                {t(
+                  internalAdminAccess
+                    ? "tayqan.projectPickerAdminDescription"
+                    : "tayqan.projectPickerCustomerDescription",
+                )}
+              </p>
+            )}
           </div>
           <Link
             href="/projects/new"
@@ -86,12 +184,25 @@ export default function ProjectsPage() {
                     <td className="px-6 py-4 text-slate-300">{project.status}</td>
                     <td className="px-6 py-4 text-slate-300">{formatDate(project.updatedAt)}</td>
                     <td className="px-6 py-4">
-                      <Link
-                        href={`/projects/${project.id}`}
-                        className="inline-flex rounded-2xl border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-200 hover:bg-slate-800"
-                      >
-                        Open
-                      </Link>
+                      <div className="flex flex-wrap gap-2">
+                        <Link
+                          href={`/projects/${project.id}`}
+                          className="inline-flex rounded-2xl border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-200 hover:bg-slate-800"
+                        >
+                          Open
+                        </Link>
+
+                        {tayqanAssignmentMode && (
+                          <Link
+                            href={`/projects/${project.id}/tayqan`}
+                            className="inline-flex rounded-2xl border border-cyan-500 bg-cyan-600 px-3 py-2 text-sm font-semibold text-white hover:bg-cyan-500"
+                          >
+                            {t(
+                              "tayqan.assignProjectCta",
+                            )}
+                          </Link>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))}

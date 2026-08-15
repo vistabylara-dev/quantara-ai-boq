@@ -5,6 +5,10 @@ import { setActorContext, withActorRequestContext } from "@/lib/auth/request-con
 import { AppError } from "@/lib/errors/app-error";
 import { apiSuccess, handleApiError } from "@/lib/http/api-response";
 import { enqueueWorkerReview, getLatestWorkerRunForBoq } from "@/lib/services/worker-runner-service";
+import {
+  assertPaidTayqanReviewAccess,
+  markPaidTayqanReviewStarted,
+} from "@/lib/services/tayqan-hire-service";
 import { boqIdParamsSchema } from "@/lib/validation/boq-route-schemas";
 import { workerHireBriefSchema } from "@/lib/validation/worker-route-schemas";
 
@@ -35,7 +39,10 @@ async function POSTHandler(request: Request, context: { params: Promise<{ boqId:
       brief = workerHireBriefSchema.parse(parsedJson);
     }
 
-    return apiSuccess(await enqueueWorkerReview(actor, boqId, idempotencyKey, process.env, brief), 202);
+    const tayqanSession = await assertPaidTayqanReviewAccess(actor, boqId);
+    const run = await enqueueWorkerReview(actor, boqId, idempotencyKey, process.env, brief);
+    await markPaidTayqanReviewStarted(tayqanSession.id, run.id);
+    return apiSuccess(run, 202);
   } catch (error) {
     return handleApiError(error);
   }

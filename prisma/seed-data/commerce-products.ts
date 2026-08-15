@@ -149,6 +149,63 @@ const CATALOGUE_PRODUCTS: ProductSpec[] = [
     },
   },
   {
+    code: "tayqan_day",
+    type: "ONE_TIME",
+    name: "TAYQAN — Day Hire",
+    shortDescription: "Hire TAYQAN, your AI Quantity Surveyor, for 24 hours.",
+    description: "A one-time 24-hour TAYQAN hire for project inspection, governed quantity-surveying work, BOQ preparation or review, and human-ready acceptance output.",
+    purchaseMode: "DIRECT",
+    sortOrder: 31,
+    prices: [
+      {
+        code: "tayqan_day_299",
+        amountMinor: 29900,
+        billingInterval: "ONE_TIME",
+      },
+    ],
+    entitlement: {
+      entitlementDurationDays: 1,
+    },
+  },
+  {
+    code: "tayqan_week",
+    type: "ONE_TIME",
+    name: "TAYQAN — Week Hire",
+    shortDescription: "Hire TAYQAN for seven days of continuous QS work.",
+    description: "A one-time 7-day TAYQAN hire for multi-day project inspection, quantity work, BOQ preparation or review, governed rate preparation when requested, and resumable work orders.",
+    purchaseMode: "DIRECT",
+    sortOrder: 32,
+    prices: [
+      {
+        code: "tayqan_week_999",
+        amountMinor: 99900,
+        billingInterval: "ONE_TIME",
+      },
+    ],
+    entitlement: {
+      entitlementDurationDays: 7,
+    },
+  },
+  {
+    code: "tayqan_monthly",
+    type: "SUBSCRIPTION",
+    name: "TAYQAN — Digital QS",
+    shortDescription: "Your monthly AI Quantity Surveyor.",
+    description: "A recurring monthly TAYQAN hire for companies that need a persistent Digital QS across project workflows while keeping final professional acceptance under human control.",
+    purchaseMode: "DIRECT",
+    sortOrder: 33,
+    prices: [
+      {
+        code: "tayqan_monthly_2499",
+        amountMinor: 249900,
+        billingInterval: "MONTH",
+      },
+    ],
+    entitlement: {
+      entitlementDurationDays: 30,
+    },
+  },
+  {
     code: "boq_single_export",
     type: "ONE_TIME",
     name: "Single BOQ Export",

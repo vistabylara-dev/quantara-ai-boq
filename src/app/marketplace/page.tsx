@@ -20,8 +20,36 @@ type PackageListing = {
   hasAccess: boolean;
 };
 
+type PublicCommercePrice = {
+  code: string;
+  amountMinor: number;
+  currency: string;
+  billingInterval: "ONE_TIME" | "MONTH" | "YEAR";
+  isFromPrice: boolean;
+};
+
+type PublicCommerceProduct = {
+  code: string;
+  type: string;
+  name: string;
+  shortDescription: string;
+  description: string;
+  purchaseMode: string;
+  prices: PublicCommercePrice[];
+};
+
+const TAYQAN_PRODUCT_CODES = new Set([
+  "tayqan_day",
+  "tayqan_week",
+  "tayqan_monthly",
+]);
+
 export default function MarketplacePage() {
   const [packages, setPackages] = useState<PackageListing[]>([]);
+
+  const [tayqanCommerceProducts, setTayqanCommerceProducts] =
+    useState<PublicCommerceProduct[]>([]);
+
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [busyKey, setBusyKey] = useState<string | null>(null);
@@ -32,8 +60,40 @@ export default function MarketplacePage() {
     setIsLoading(true);
     setLoadError(null);
     try {
-      const data = await apiClient.get<PackageListing[]>("/api/data-packages", signal);
+      const data =
+        await apiClient.get<PackageListing[]>(
+          "/api/data-packages",
+          signal,
+        );
+
       setPackages(data);
+
+      // TAYQAN is a normal public CommerceProduct.
+      // Failure of the commerce catalogue must never
+      // break the existing Industry Library marketplace.
+      try {
+        const commerce =
+          await apiClient.get<PublicCommerceProduct[]>(
+            "/api/commerce/products",
+            signal,
+          );
+
+        setTayqanCommerceProducts(
+          commerce.filter((product) =>
+            TAYQAN_PRODUCT_CODES.has(product.code),
+          ),
+        );
+      }
+      catch (commerceError) {
+        if (
+          commerceError instanceof DOMException
+          && commerceError.name === "AbortError"
+        ) {
+          return;
+        }
+
+        setTayqanCommerceProducts([]);
+      }
     } catch (error) {
       if (error instanceof DOMException && error.name === "AbortError") return;
       setLoadError(getApiErrorMessage(error));
@@ -95,6 +155,89 @@ export default function MarketplacePage() {
           </div>
         )}
       </div>
+
+      {tayqanCommerceProducts.length > 0 && (
+        <section className="rounded-[32px] border border-cyan-900 bg-slate-950 p-6 sm:p-8">
+          <div className="mb-6">
+            <p className="text-xs font-semibold uppercase tracking-[0.28em] text-cyan-400">
+              AI Workforce
+            </p>
+
+            <h2 className="mt-2 text-2xl font-semibold text-white">
+              Hire TAYQAN — AI Quantity Surveyor
+            </h2>
+
+            <p className="mt-2 max-w-3xl text-sm text-slate-400">
+              Choose a hire package, then select the project where TAYQAN should work.
+              Payment uses Quantara&apos;s approved commerce and Stripe infrastructure.
+            </p>
+          </div>
+
+          <div className="grid gap-4 lg:grid-cols-3">
+            {tayqanCommerceProducts.map((product) => {
+              const price = product.prices[0];
+
+              if (!price) return null;
+
+              const badge =
+                product.code === "tayqan_week"
+                  ? "Most Popular"
+                  : product.code === "tayqan_monthly"
+                    ? "Digital QS"
+                    : null;
+
+              const duration =
+                product.code === "tayqan_day"
+                  ? "24 hours"
+                  : product.code === "tayqan_week"
+                    ? "7 days"
+                    : "Monthly";
+
+              return (
+                <div
+                  key={product.code}
+                  className="relative flex flex-col rounded-[28px] border border-cyan-900/70 bg-cyan-950/10 p-5"
+                >
+                  {badge && (
+                    <span className="mb-3 w-fit rounded-full border border-cyan-700 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.18em] text-cyan-300">
+                      {badge}
+                    </span>
+                  )}
+
+                  <h3 className="text-lg font-bold text-white">
+                    {product.name}
+                  </h3>
+
+                  <p className="mt-2 flex-grow text-sm text-slate-400">
+                    {product.shortDescription}
+                  </p>
+
+                  <div className="mt-5 border-t border-slate-800 pt-4">
+                    <p className="text-2xl font-semibold text-white">
+                      {price.currency}{" "}
+                      {(price.amountMinor / 100).toLocaleString("en-AE")}
+                    </p>
+
+                    <p className="mt-1 text-xs text-slate-500">
+                      {duration}
+                      {price.billingInterval === "MONTH"
+                        ? " · recurring monthly"
+                        : " · one-time hire"}
+                    </p>
+                  </div>
+
+                  <Link
+                    href="/projects"
+                    className="mt-5 rounded-xl border border-cyan-600 bg-cyan-600 px-4 py-3 text-center text-sm font-bold text-white transition-colors hover:bg-cyan-500"
+                  >
+                    Choose project & hire
+                  </Link>
+                </div>
+              );
+            })}
+          </div>
+        </section>
+      )}
 
       <div className="grid gap-6 sm:grid-cols-2 xl:grid-cols-3">
         {CATALOGUE_LIBRARIES.map((lib) => {

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { use } from "react";
 import { apiClient, ApiClientError, getApiErrorMessage, type ApiErrorPayload } from "@/lib/api/client";
 import { TayqanHeroRobot } from "@/components/tayqan/tayqan-hero-robot";
+import { TayqanHireExperience } from "@/components/tayqan/tayqan-hire-experience";
 import { useTranslations } from "@/lib/i18n/locale-provider";
 import type { TranslationKey } from "@/lib/i18n/translate";
 import { nextHireIdempotencyKey, type HireAttemptKeyState } from "@/lib/worker/tayqan-hire-attempt";
@@ -11,7 +12,6 @@ import {
   buildAssignmentTimeline,
   buildRunTimeline,
   canOfferRehire,
-  capabilityTranslationKey,
   isReviewStale,
   presentAssignmentStatus,
   presentRunStatus,
@@ -116,8 +116,8 @@ export default function TayqanPage(props: { params: Promise<{ projectId: string 
   const [assignment, setAssignment] = useState<AssignmentDTO | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
 
-  const [assignmentObjective, setAssignmentObjective] = useState("");
-  const [specialInstructions, setSpecialInstructions] = useState("");
+  const [assignmentObjective] = useState("");
+  const [specialInstructions] = useState("");
   const [hiring, setHiring] = useState(false);
   const [hireError, setHireError] = useState<string | null>(null);
   const [hireAttempt, setHireAttempt] = useState<HireAttemptKeyState>(null);
@@ -130,7 +130,13 @@ export default function TayqanPage(props: { params: Promise<{ projectId: string 
     try {
       const result = await apiClient.get<BOQSummary[]>(`/api/projects/${encodeURIComponent(projectId)}/boqs`, signal);
       setBoqs(result);
-      if (result.length > 0) setSelectedBoqId((current) => current ?? result[0].id);
+      if (result.length > 0) {
+        setSelectedBoqId((current) => current ?? result[0].id);
+      } else {
+        setSelectedBoqId(null);
+        setRun(null);
+        setAssignment(null);
+      }
     } catch (error) {
       if (error instanceof DOMException && error.name === "AbortError") return;
       setLoadError(getApiErrorMessage(error));
@@ -260,15 +266,6 @@ export default function TayqanPage(props: { params: Promise<{ projectId: string 
     );
   }
 
-  if (boqs.length === 0) {
-    return (
-      <div className="rounded-[32px] border border-slate-800 bg-slate-950 p-8 text-slate-300">
-        <p className="text-lg font-semibold text-white">{t("tayqan.noBoqTitle")}</p>
-        <p className="mt-2 text-sm text-slate-400">{t("tayqan.noBoqDescription")}</p>
-      </div>
-    );
-  }
-
   const selectedBoq = boqs.find((boq) => boq.id === selectedBoqId) ?? null;
   const hasOpenQuestions = assignment?.materialQuestions.some((question) => question.status === "OPEN") ?? false;
   const presentationState = run
@@ -320,50 +317,13 @@ export default function TayqanPage(props: { params: Promise<{ projectId: string 
       {run === undefined ? (
         <div className="rounded-[32px] border border-slate-800 bg-slate-950 p-8 text-slate-300">{t("tayqan.loading")}</div>
       ) : run === null ? (
-        <div className="rounded-[32px] border border-slate-800 bg-slate-950 p-8">
-          <p className="text-xs font-semibold uppercase tracking-[0.24em] text-emerald-400">{t("tayqan.available")}</p>
-          <h2 className="mt-2 text-xl font-semibold text-white">{t("tayqan.capabilitiesTitle")}</h2>
-          <ul className="mt-4 grid gap-2 sm:grid-cols-2">
-            {TAYQAN_WORKER_DEFINITION.capabilityKeys.map((capabilityKey) => (
-              <li key={capabilityKey} className="rounded-2xl border border-slate-800 bg-slate-900 px-4 py-2 text-sm text-slate-300">
-                {t(capabilityTranslationKey(capabilityKey) as TranslationKey)}
-              </li>
-            ))}
-          </ul>
-
-          <div className="mt-8 space-y-3">
-            <h3 className="text-sm font-semibold text-white">{t("tayqan.briefTitle")}</h3>
-            <label className="block text-xs text-slate-500" htmlFor="tayqan-objective">{t("tayqan.objectiveLabel")}</label>
-            <textarea
-              id="tayqan-objective"
-              value={assignmentObjective}
-              onChange={(event) => setAssignmentObjective(event.target.value)}
-              placeholder={t("tayqan.objectivePlaceholder")}
-              rows={2}
-              maxLength={2000}
-              className="w-full rounded-2xl border border-slate-700 bg-slate-950 px-4 py-2 text-sm text-slate-200 placeholder:text-slate-600"
-            />
-            <label className="block text-xs text-slate-500" htmlFor="tayqan-instructions">{t("tayqan.instructionsLabel")}</label>
-            <textarea
-              id="tayqan-instructions"
-              value={specialInstructions}
-              onChange={(event) => setSpecialInstructions(event.target.value)}
-              placeholder={t("tayqan.instructionsPlaceholder")}
-              rows={2}
-              maxLength={2000}
-              className="w-full rounded-2xl border border-slate-700 bg-slate-950 px-4 py-2 text-sm text-slate-200 placeholder:text-slate-600"
-            />
-            {hireError && <p className="text-xs text-rose-300">{hireError}</p>}
-            <button
-              type="button"
-              onClick={() => void hireTayqan()}
-              disabled={hiring}
-              className="rounded-2xl border border-cyan-500 bg-cyan-600 px-6 py-3 text-sm font-semibold text-white hover:bg-cyan-500 disabled:opacity-50"
-            >
-              {hiring ? t("tayqan.hiring") : t("tayqan.hireCta")}
-            </button>
-          </div>
-        </div>
+        <TayqanHireExperience
+          projectId={projectId}
+          selectedBoqId={selectedBoqId}
+          onWorkerStarted={() =>
+            selectedBoqId ? loadRunStatus(selectedBoqId) : undefined
+          }
+        />
       ) : (
         <>
           {isStale && selectedBoq && (

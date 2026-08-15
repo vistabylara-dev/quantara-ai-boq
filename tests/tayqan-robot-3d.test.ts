@@ -93,7 +93,15 @@ describe("TAYQAN-2A global companion — mounted once from the shared layout, no
     expect(pattern.test("/dashboard")).toBe(false);
     expect(pattern.test("/")).toBe(false);
     // Confirms the check actually gates rendering, not just an unused constant.
-    expect(source).toContain("if (DEDICATED_TAYQAN_PAGE.test(pathname)) return null;");
+    expect(source).toContain(
+      "DEDICATED_TAYQAN_PAGE.test(pathname)",
+    );
+    expect(source).toContain(
+      "adminLoginRoute",
+    );
+    expect(source).toContain(
+      "return null;",
+    );
   });
 
   it("does not visually overlap HelpFeedbackBubble — opposite fixed corner (insetInlineStart vs. that component's end-anchored button)", () => {
@@ -166,9 +174,41 @@ describe("TAYQAN global workspace hover bubble", () => {
       "tayqan-global-companion.tsx",
     );
 
-    expect(source).toContain('href="/projects"');
-    expect(source).toContain('t("tayqan.hoverMessage")');
-    expect(source).toContain('t("tayqan.companionAriaLabel")');
+    expect(source).toContain(
+      '"/projects?tayqan=assign"',
+    );
+
+    expect(source).toContain(
+      '"/projects?tayqan=admin"',
+    );
+
+    expect(source).toContain(
+      '"/api/auth/session"',
+    );
+
+    expect(source).toContain(
+      '"PLATFORM_OWNER"',
+    );
+
+    expect(source).toContain(
+      '"PLATFORM_ADMIN"',
+    );
+
+    expect(source).toContain(
+      '"PLATFORM_SUPPORT"',
+    );
+
+    expect(source).toContain(
+      "internalAdminAccess",
+    );
+
+    expect(source).toContain(
+      "adminLoginRoute",
+    );
+
+    expect(source).toContain(
+      '"tayqan.hoverMessage"',
+    );
 
     expect(source).not.toContain('"/pricing"');
     expect(source).not.toContain('"/settings/subscription"');

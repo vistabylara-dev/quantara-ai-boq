@@ -11,6 +11,7 @@ export const TAYQAN_HIRE_PLANS = [
     billingInterval: "ONE_TIME",
     checkoutMode: "payment",
     durationHours: 24,
+    maxDistinctProjects: 2,
     badge: null,
   },
   {
@@ -23,6 +24,7 @@ export const TAYQAN_HIRE_PLANS = [
     billingInterval: "ONE_TIME",
     checkoutMode: "payment",
     durationHours: 24 * 7,
+    maxDistinctProjects: null,
     badge: "MOST_POPULAR",
   },
   {
@@ -35,6 +37,7 @@ export const TAYQAN_HIRE_PLANS = [
     billingInterval: "MONTH",
     checkoutMode: "subscription",
     durationHours: null,
+    maxDistinctProjects: null,
     badge: "DIGITAL_QS",
   },
 ] as const;
@@ -49,6 +52,20 @@ export function getTayqanPlanByPriceCode(priceCode: string) {
   return BY_PRICE.get(priceCode as TayqanPriceCode) ?? null;
 }
 
+export function getTayqanMaxDistinctProjects(
+  plan: string,
+): number | null {
+  const configured =
+    TAYQAN_HIRE_PLANS.find(
+      (candidate) =>
+        candidate.plan === plan,
+    );
+
+  return (
+    configured?.maxDistinctProjects
+    ?? null
+  );
+}
 export function isTayqanProductCode(productCode: string): boolean {
   return PRODUCT_CODES.has(productCode as (typeof TAYQAN_HIRE_PLANS)[number]["productCode"]);
 }

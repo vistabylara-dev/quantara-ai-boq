@@ -1595,11 +1595,61 @@ const en = {
     staleLastReviewedLabel: "Last reviewed",
     reviewUpdatedCta: "Review Updated BOQ with TAYQAN",
     companionAriaLabel: "Open TAYQAN, your AI quantity surveyor",
-    hoverMessage: "Hire me — I'll finish the full BOQ work for you.",
+    hoverMessage: "Choose a project and assign me the BOQ work.",
+
+    adminCompanionAriaLabel:
+      "Open TAYQAN with internal admin access",
+
+    adminHoverMessage:
+      "TAYQAN is available to you internally at no charge — choose the project and assign the work.",
+
+    adminAccessBadge:
+      "Internal Admin Access · Free",
+
+    projectPickerEyebrow:
+      "Assign project to TAYQAN",
+
+    projectPickerTitle:
+      "Choose the project TAYQAN should work on",
+
+    projectPickerCustomerDescription:
+      "Select a project to assign to TAYQAN. Day Hire covers up to 2 distinct projects during the 24-hour hire.",
+
+    projectPickerAdminDescription:
+      "Internal Platform Owner/Admin access is available at no charge. No checkout or customer Day-Hire project limit applies.",
+
+    assignProjectCta:
+      "Assign to TAYQAN",
+
     hire: {
       pricingEyebrow: "Hire your AI quantity surveyor",
       pricingTitle: "Hire TAYQAN",
       pricingDescription: "Choose how long you want TAYQAN working with your company. TAYQAN hire is separate from your Quantara software subscription.",
+
+      dayProjectAllowance:
+        "Up to {count} projects",
+
+      internalAdminEyebrow:
+        "Internal admin access",
+
+      internalAdminTitle:
+        "TAYQAN is available at no charge",
+
+      internalAdminAccess:
+        "Verified Platform Owner/Admin internal access — no checkout and no customer project quota.",
+
+      projectUsage:
+        "Day Hire project allowance: {used} of {max} assigned · {remaining} remaining.",
+
+      projectLimitReachedTitle:
+        "Day Hire project limit reached",
+
+      projectLimitReachedDescription:
+        "This 24-hour hire covers up to {max} distinct projects. You have already assigned {used}. Continue one of those projects or begin another hire after the current hire ends.",
+
+      chooseAssignedProject:
+        "Choose an assigned project",
+
       dayDuration: "24 hours",
       weekDuration: "7 days",
       monthDuration: "30 days",

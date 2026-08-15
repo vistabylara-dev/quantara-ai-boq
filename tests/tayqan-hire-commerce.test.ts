@@ -405,7 +405,11 @@ describe("TAYQAN Commerce catalogue and Marketplace", () => {
     );
 
     expect(marketplace).toContain(
-      'href="/projects"',
+      'href="/projects?tayqan=assign"',
+    );
+
+    expect(marketplace).toContain(
+      "Up to 2 distinct projects per 24-hour hire",
     );
 
     expect(marketplace).not.toContain(
@@ -414,6 +418,58 @@ describe("TAYQAN Commerce catalogue and Marketplace", () => {
 
     expect(marketplace).not.toContain(
       "stripe.prices.create",
+    );
+  });
+
+  it("shows explicit TAYQAN project assignment, admin-free access, and Day quota state in the UI", () => {
+    const projects = read(
+      "src",
+      "app",
+      "projects",
+      "page.tsx",
+    );
+
+    const hireUi = read(
+      "src",
+      "components",
+      "tayqan",
+      "tayqan-hire-experience.tsx",
+    );
+
+    expect(projects).toContain(
+      "tayqanAssignmentMode",
+    );
+
+    expect(projects).toContain(
+      `href={\`/projects/\${project.id}/tayqan\`}`,
+    );
+
+    expect(projects).toContain(
+      '"tayqan.assignProjectCta"',
+    );
+
+    expect(hireUi).toContain(
+      'state.accessMode ===',
+    );
+
+    expect(hireUi).toContain(
+      '"INTERNAL_ADMIN"',
+    );
+
+    expect(hireUi).toContain(
+      "state.projectQuota",
+    );
+
+    expect(hireUi).toContain(
+      '"tayqan.hire.projectUsage"',
+    );
+
+    expect(hireUi).toContain(
+      '"tayqan.hire.projectLimitReachedTitle"',
+    );
+
+    expect(hireUi).toContain(
+      "plan.maxDistinctProjects",
     );
   });
 });

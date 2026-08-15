@@ -23,7 +23,7 @@ import {
 } from "@/lib/services/extracted-entity-service";
 import { importExtractedEntityToBoq } from "@/lib/services/extraction-to-boq-service";
 import {
-  assertActiveTayqanEntitlement,
+  assertTayqanAccessEntitlement,
   getTayqanIntakeConversationContext,
 } from "@/lib/services/tayqan-hire-service";
 import {
@@ -458,7 +458,7 @@ async function loadOrder(companyId: string, orderId: string) {
 }
 
 async function getSessionForWork(actor: CurrentActor, projectId: string, sessionId: string) {
-  const entitlement = await assertActiveTayqanEntitlement(actor.companyId);
+  const entitlement = await assertTayqanAccessEntitlement(actor);
   const project = await getProjectRecord(actor.companyId, projectId);
   const session = await prisma.tayqanIntakeSession.findFirst({
     where: {
@@ -1455,7 +1455,7 @@ async function advanceValidation(actor: CurrentActor, _projectSlug: string, orde
 }
 
 export async function advanceTayqanWorkOrder(actor: CurrentActor, projectIdentifier: string, orderId: string) {
-  await assertActiveTayqanEntitlement(actor.companyId);
+  await assertTayqanAccessEntitlement(actor);
   const project = await getProjectRecord(actor.companyId, projectIdentifier);
   let order = await loadOrder(actor.companyId, orderId);
   if (order.projectId !== project.id) throw new AppError("TAYQAN_WORK_PROJECT_MISMATCH", "This TAYQAN work order belongs to another project.", 403);
@@ -1515,7 +1515,7 @@ export async function answerTayqanWorkOrderBlocker(
     qaAnswerType?: "ACKNOWLEDGED" | "WILL_CORRECT_SOURCE" | "EXPLAINED_WITH_NOTE";
   },
 ) {
-  await assertActiveTayqanEntitlement(actor.companyId);
+  await assertTayqanAccessEntitlement(actor);
   const project = await getProjectRecord(actor.companyId, projectIdentifier);
   let order = await loadOrder(actor.companyId, input.workOrderId);
   if (order.projectId !== project.id) throw new AppError("TAYQAN_WORK_PROJECT_MISMATCH", "This work order belongs to another project.", 403);

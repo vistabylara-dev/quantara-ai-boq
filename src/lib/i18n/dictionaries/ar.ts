@@ -2791,11 +2791,61 @@ const ar: Dictionary = {
     staleLastReviewedLabel: "آخر مراجعة",
     reviewUpdatedCta: "مراجعة جدول الكميات المحدث مع TAYQAN",
     companionAriaLabel: "افتح TAYQAN، مساح الكميات الذكي الخاص بك",
-    hoverMessage: "وظّفني — سأُنجز لك كامل أعمال الـ BOQ.",
+    hoverMessage: "اختر مشروعًا وأسند إليّ أعمال جدول الكميات.",
+
+    adminCompanionAriaLabel:
+      "افتح TAYQAN بصلاحية الوصول الإداري الداخلي",
+
+    adminHoverMessage:
+      "TAYQAN متاح لك داخليًا دون رسوم — اختر المشروع وأسند إليه العمل.",
+
+    adminAccessBadge:
+      "وصول إداري داخلي · مجاني",
+
+    projectPickerEyebrow:
+      "إسناد مشروع إلى TAYQAN",
+
+    projectPickerTitle:
+      "اختر المشروع الذي سيعمل عليه TAYQAN",
+
+    projectPickerCustomerDescription:
+      "اختر مشروعًا لإسناده إلى TAYQAN. تغطي باقة اليوم ما يصل إلى مشروعين مختلفين خلال مدة التوظيف البالغة 24 ساعة.",
+
+    projectPickerAdminDescription:
+      "الوصول الداخلي لمالك المنصة أو مسؤول المنصة متاح دون رسوم، ولا توجد عملية دفع أو حدود مشاريع باقة اليوم الخاصة بالعملاء.",
+
+    assignProjectCta:
+      "إسناد إلى TAYQAN",
+
     hire: {
       pricingEyebrow: "وظّف مسّاح الكميات بالذكاء الاصطناعي",
       pricingTitle: "وظّف TAYQAN",
       pricingDescription: "اختر مدة عمل TAYQAN مع شركتك. توظيف TAYQAN مستقل عن اشتراك برنامج Quantara.",
+
+      dayProjectAllowance:
+        "حتى {count} مشاريع",
+
+      internalAdminEyebrow:
+        "وصول إداري داخلي",
+
+      internalAdminTitle:
+        "TAYQAN متاح دون رسوم",
+
+      internalAdminAccess:
+        "وصول داخلي موثّق لمالك المنصة أو مسؤول المنصة — دون دفع ودون حد مشاريع باقة العميل.",
+
+      projectUsage:
+        "استخدام باقة اليوم: تم إسناد {used} من أصل {max} مشروع · المتبقي {remaining}.",
+
+      projectLimitReachedTitle:
+        "تم بلوغ حد مشاريع باقة اليوم",
+
+      projectLimitReachedDescription:
+        "تغطي هذه الباقة لمدة 24 ساعة ما يصل إلى {max} مشاريع مختلفة. تم بالفعل إسناد {used}. تابع أحد المشاريع المسندة أو ابدأ توظيفًا جديدًا بعد انتهاء التوظيف الحالي.",
+
+      chooseAssignedProject:
+        "اختر مشروعًا مسندًا",
+
       dayDuration: "24 ساعة",
       weekDuration: "7 أيام",
       monthDuration: "30 يومًا",

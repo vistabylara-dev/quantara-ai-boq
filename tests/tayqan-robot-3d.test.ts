@@ -144,7 +144,7 @@ describe("TAYQAN-2A scope — no changes outside the 3D visual foundation", () =
   });
 });
 
-describe("TAYQAN global commercial hover bubble", () => {
+describe("TAYQAN global workspace hover bubble", () => {
   it("keeps the robot click-through while exposing only the visible bubble as interactive", () => {
     const source = readSource(
       "src",
@@ -155,11 +155,10 @@ describe("TAYQAN global commercial hover bubble", () => {
 
     expect(source).toContain("pointer-events-none fixed");
     expect(source).toContain("pointer-events-auto scale-100 opacity-100");
-    expect(source).toContain("window.addEventListener(\"pointermove\"");
-    expect(source).toContain("event.pointerType !== \"mouse\"");
+    expect(source).toContain('window.addEventListener("pointermove"');
   });
 
-  it("routes public visitors to pricing and authenticated SaaS users to the real subscription/Stripe surface", () => {
+  it("routes the TAYQAN bubble to the user project workspace", () => {
     const source = readSource(
       "src",
       "components",
@@ -167,14 +166,17 @@ describe("TAYQAN global commercial hover bubble", () => {
       "tayqan-global-companion.tsx",
     );
 
-    expect(source).toContain('surface === "PUBLIC"');
-    expect(source).toContain('"/pricing"');
-    expect(source).toContain('"/settings/subscription"');
+    expect(source).toContain('href="/projects"');
     expect(source).toContain('t("tayqan.hoverMessage")');
-    expect(source).toContain('t("navigation.upgrade")');
+    expect(source).toContain('t("tayqan.companionAriaLabel")');
+
+    expect(source).not.toContain('"/pricing"');
+    expect(source).not.toContain('"/settings/subscription"');
+    expect(source).not.toContain('surface === "PUBLIC"');
+    expect(source).not.toContain('/api/commerce/checkout');
   });
 
-  it("the shared shell explicitly identifies PUBLIC and SAAS companion surfaces", () => {
+  it("mounts the same TAYQAN companion across the shared shell", () => {
     const source = readSource(
       "src",
       "components",
@@ -182,12 +184,9 @@ describe("TAYQAN global commercial hover bubble", () => {
       "conditional-app-shell.tsx",
     );
 
-    expect(source).toContain(
-      '<TayqanGlobalCompanion surface="PUBLIC" />',
-    );
+    const mounts = source.match(/<TayqanGlobalCompanion \/>/g) ?? [];
 
-    expect(source).toContain(
-      '<TayqanGlobalCompanion surface="SAAS" />',
-    );
+    expect(mounts).toHaveLength(2);
+    expect(source).not.toContain("TayqanGlobalCompanion surface=");
   });
 });

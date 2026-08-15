@@ -14,10 +14,6 @@ const TayqanRobotCanvas = dynamic(() => import("./tayqan-robot-canvas"), {
 
 const DEDICATED_TAYQAN_PAGE = /^\/projects\/[^/]+\/tayqan(\/|$)/;
 
-type TayqanGlobalCompanionProps = {
-  surface: "PUBLIC" | "SAAS";
-};
-
 function containsPoint(rect: DOMRect, x: number, y: number): boolean {
   return x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom;
 }
@@ -36,16 +32,13 @@ function containsPoint(rect: DOMRect, x: number, y: number): boolean {
  *
  * - The speech bubble becomes interactive only while visible.
  *
- * - PUBLIC surfaces route to the existing public pricing page.
+ * - The visible bubble routes to the user project workspace.
  *
- * - Authenticated SAAS surfaces route to the existing subscription page,
- *   which owns the trusted Quantara -> Stripe checkout flow.
+ * - TAYQAN-specific commercial checkout belongs inside the TAYQAN hire workflow.
  *
- * No Stripe API call is made from this component.
+ * No Stripe or general SaaS pricing route is owned by this component.
  */
-export function TayqanGlobalCompanion({
-  surface,
-}: TayqanGlobalCompanionProps) {
+export function TayqanGlobalCompanion() {
   const pathname = usePathname() ?? "/";
   const t = useTranslations();
 
@@ -121,11 +114,6 @@ export function TayqanGlobalCompanion({
 
   if (DEDICATED_TAYQAN_PAGE.test(pathname)) return null;
 
-  const commercialHref =
-    surface === "PUBLIC"
-      ? "/pricing"
-      : "/settings/subscription";
-
   return (
     <div
       className="pointer-events-none fixed z-20 h-[130px] w-[90px] drop-shadow-[0_6px_16px_rgba(0,0,0,0.45)] sm:h-[210px] sm:w-[150px]"
@@ -136,11 +124,11 @@ export function TayqanGlobalCompanion({
     >
       <Link
         ref={bubbleRef}
-        href={commercialHref}
+        href="/projects"
         tabIndex={bubbleVisible ? 0 : -1}
         onFocus={() => setVisible(true)}
         onBlur={() => setVisible(false)}
-        aria-label={`${t("tayqan.hoverMessage")} — ${t("navigation.upgrade")}`}
+        aria-label={t("tayqan.companionAriaLabel")}
         className={[
           "absolute bottom-full start-0 mb-2 w-[220px]",
           "rounded-2xl border border-cyan-700/60 bg-slate-950/95",
@@ -156,7 +144,7 @@ export function TayqanGlobalCompanion({
         </span>
 
         <span className="mt-1 inline-flex font-semibold text-cyan-300">
-          {t("navigation.upgrade")} →
+          {t("tayqan.companionAriaLabel")} →
         </span>
       </Link>
 

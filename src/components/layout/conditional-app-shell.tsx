@@ -51,7 +51,7 @@ export default function ConditionalAppShell({
           surface="PUBLIC"
           currentRoute={currentRoute}
         />
-        <TayqanGlobalCompanion surface="PUBLIC" />
+        <TayqanGlobalCompanion />
       </>
     );
   }
@@ -63,7 +63,7 @@ export default function ConditionalAppShell({
         surface="SAAS"
         currentRoute={currentRoute}
       />
-      <TayqanGlobalCompanion surface="SAAS" />
+      <TayqanGlobalCompanion />
     </>
   );
 }

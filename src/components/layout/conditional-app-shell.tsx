@@ -28,10 +28,14 @@ const PUBLIC_SHELL_ROUTES = new Set<string>([
  * (sidebar, top nav, application links). Everything else keeps AppShell
  * unchanged.
  */
-export default function ConditionalAppShell({ children }: { children: ReactNode }) {
+export default function ConditionalAppShell({
+  children,
+}: {
+  children: ReactNode;
+}) {
   const pathname = usePathname();
   const currentRoute = pathname || "/";
-  
+
   if (
     pathname?.startsWith("/proposal") ||
     pathname?.startsWith("/technical-report")
@@ -43,8 +47,11 @@ export default function ConditionalAppShell({ children }: { children: ReactNode 
     return (
       <>
         {children}
-        <HelpFeedbackBubble surface="PUBLIC" currentRoute={currentRoute} />
-        <TayqanGlobalCompanion />
+        <HelpFeedbackBubble
+          surface="PUBLIC"
+          currentRoute={currentRoute}
+        />
+        <TayqanGlobalCompanion surface="PUBLIC" />
       </>
     );
   }
@@ -52,8 +59,11 @@ export default function ConditionalAppShell({ children }: { children: ReactNode 
   return (
     <>
       <AppShell>{children}</AppShell>
-      <HelpFeedbackBubble surface="SAAS" currentRoute={currentRoute} />
-      <TayqanGlobalCompanion />
+      <HelpFeedbackBubble
+        surface="SAAS"
+        currentRoute={currentRoute}
+      />
+      <TayqanGlobalCompanion surface="SAAS" />
     </>
   );
 }

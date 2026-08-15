@@ -459,7 +459,7 @@ async function getOrCreateTayqanInternalAdminEntitlement(
 
   return prisma.$transaction(
     async (tx) => {
-      await tx.$queryRaw`
+      await tx.$executeRaw`
         SELECT pg_advisory_xact_lock(
           hashtext(${lockKey})
         )
@@ -1108,7 +1108,7 @@ async function ensureIntakeSession(
          * This closes the race where two tabs could
          * both observe 1/2 then create projects 2 & 3.
          */
-        await tx.$queryRaw`
+        await tx.$executeRaw`
           SELECT pg_advisory_xact_lock(
             hashtext(${lockKey})
           )

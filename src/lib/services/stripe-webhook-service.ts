@@ -14,6 +14,10 @@ import { mapStripeSubscriptionStatusToQuantara } from "@/lib/payments/stripe-sub
 import { findMappingByProviderPriceId } from "@/lib/repositories/commerce-provider-mapping-repository";
 import { recordStripeWebhookEvent } from "@/lib/repositories/stripe-billing-repository";
 import { resolveSoftwarePlanForCommerceProductCode } from "@/lib/entitlements/commerce-plan-mapping";
+import {
+  applyTayqanCheckoutSession,
+  applyTayqanMonthlySubscriptionIfPresent,
+} from "@/lib/services/tayqan-stripe-fulfillment-service";
 
 /**
  * STRIPE-COMMERCIAL-3 — webhook processing. Stripe is the source of truth
@@ -392,6 +396,8 @@ export type StripeWebhookProcessResult =
 
 const HANDLED_EVENT_TYPES = new Set<string>([
   "checkout.session.completed",
+  "checkout.session.async_payment_succeeded",
+  "checkout.session.async_payment_failed",
   "customer.subscription.created",
   "customer.subscription.updated",
   "customer.subscription.deleted",
@@ -472,12 +478,27 @@ export async function processStripeWebhookEvent(event: Stripe.Event, overrideCli
           companyId,
         });
 
-        if (event.type === "checkout.session.completed") {
-          // Intentionally a no-op beyond the ledger insert above — entitlement
-          // is never activated from checkout completion. The authoritative
-          // state change arrives via the current-subscription-state path below.
+        if (
+          event.type === "checkout.session.completed" ||
+          event.type === "checkout.session.async_payment_succeeded" ||
+          event.type === "checkout.session.async_payment_failed"
+        ) {
+          // General Quantara checkout remains ledger-only here. The TAYQAN
+          // helper acts only when quantara_product_family=tayqan and never
+          // trusts a browser success URL.
+          await applyTayqanCheckoutSession(
+            tx,
+            event.data.object as Stripe.Checkout.Session,
+            event.type,
+          );
         } else if (currentSubscription) {
-          await applyCurrentSubscriptionState(tx, currentSubscription);
+          const handledByTayqan = await applyTayqanMonthlySubscriptionIfPresent(
+            tx,
+            currentSubscription,
+          );
+          if (!handledByTayqan) {
+            await applyCurrentSubscriptionState(tx, currentSubscription);
+          }
         } else if (currentCharge) {
           await applyChargeRefundState(tx, currentCharge);
         }

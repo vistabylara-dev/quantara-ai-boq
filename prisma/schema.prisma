@@ -4556,3 +4556,176 @@ model ProjectFileUploadSession {
   @@index([expiresAt])
   @@index([status])
 }
+
+
+// ---------------------------------------------------------------------------
+// TAYQAN-HIRE-1 — paid worker access + project-scoped intake conversation.
+// Additive models only. Deliberately separate from CompanySoftwareSubscription
+// so a company can hold Professional/Business and a TAYQAN hire simultaneously.
+// ---------------------------------------------------------------------------
+
+enum TayqanHirePlan {
+  DAY
+  WEEK
+  MONTHLY
+}
+
+enum TayqanHireStatus {
+  PENDING
+  ACTIVE
+  EXPIRED
+  CANCELLED
+  PAYMENT_FAILED
+}
+
+enum TayqanIntakeStatus {
+  COLLECTING
+  NEEDS_INPUT
+  READY
+  WORK_STARTED
+  COMPLETED
+  CANCELLED
+}
+
+enum TayqanIntakeMessageRole {
+  TAYQAN
+  USER
+  SYSTEM
+}
+
+model TayqanHireEntitlement {
+  id                      String           @id @default(uuid()) @db.Uuid
+  companyId               String           @db.Uuid
+  purchasedByUserId       String?          @db.Uuid
+  plan                    TayqanHirePlan
+  status                  TayqanHireStatus @default(PENDING)
+  priceCode               String
+  startsAt                DateTime?
+  expiresAt               DateTime?
+  stripeCheckoutSessionId String?          @unique
+  stripePaymentIntentId   String?          @unique
+  stripeSubscriptionId    String?          @unique
+  createdAt               DateTime         @default(now())
+  updatedAt               DateTime         @updatedAt
+
+  @@index([companyId])
+  @@index([companyId, status])
+  @@index([expiresAt])
+  @@index([purchasedByUserId])
+}
+
+model TayqanIntakeSession {
+  id                        String             @id @default(uuid()) @db.Uuid
+  companyId                 String             @db.Uuid
+  projectId                 String             @db.Uuid
+  boqId                     String?            @db.Uuid
+  hireEntitlementId         String             @db.Uuid
+  createdByUserId           String             @db.Uuid
+  status                    TayqanIntakeStatus @default(COLLECTING)
+  desiredDeliverable        String?
+  measurementStandard       String?
+  includeRates              Boolean?
+  pricingBasis              String?
+  exclusions                String?
+  deadlineText              String?
+  specialInstructions       String?
+  authoritativeSourcePolicy String?
+  projectSnapshotJson       Json?
+  workerRunId               String?            @unique @db.Uuid
+  createdAt                 DateTime           @default(now())
+  updatedAt                 DateTime           @updatedAt
+  completedAt               DateTime?
+
+  @@index([companyId])
+  @@index([companyId, projectId])
+  @@index([hireEntitlementId])
+  @@index([status])
+}
+
+model TayqanIntakeMessage {
+  id                 String                  @id @default(uuid()) @db.Uuid
+  companyId          String                  @db.Uuid
+  sessionId          String                  @db.Uuid
+  role               TayqanIntakeMessageRole
+  message            String
+  structuredDataJson Json?
+  createdAt          DateTime                @default(now())
+
+  @@index([companyId])
+  @@index([companyId, sessionId, createdAt])
+}
+
+// ---------------------------------------------------------------------------
+// TAYQAN COMPLETE WORKFLOW — resumable paid employee work order.
+// One work order per intake. This is the durable orchestration state that
+// prevents refresh/retry from recreating files, extraction jobs, or BOQs.
+// ---------------------------------------------------------------------------
+
+enum TayqanWorkStatus {
+  RUNNING
+  NEEDS_INPUT
+  READY_FOR_ACCEPTANCE
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+enum TayqanWorkStage {
+  SOURCE_DISCOVERY
+  SOURCE_PROCESSING
+  EVIDENCE_REVIEW
+  QUANTITY_PREPARATION
+  RATE_PREPARATION
+  BOQ_ASSEMBLY
+  VALIDATION
+  READY_FOR_ACCEPTANCE
+}
+
+model TayqanWorkOrder {
+  id                        String           @id @default(uuid()) @db.Uuid
+  companyId                 String           @db.Uuid
+  projectId                 String           @db.Uuid
+  boqId                     String?          @db.Uuid
+  intakeSessionId           String           @unique @db.Uuid
+  hireEntitlementId         String           @db.Uuid
+  createdByUserId           String           @db.Uuid
+  status                    TayqanWorkStatus @default(RUNNING)
+  stage                     TayqanWorkStage  @default(SOURCE_DISCOVERY)
+  desiredDeliverable        String
+  includeRates              Boolean          @default(false)
+  pricingBasis              String?
+  authoritativeSourcePolicy String?
+  startIdempotencyKey       String
+  progressJson              Json?
+  blockerCode               String?
+  blockerMessage            String?
+  blockerJson               Json?
+  qaWorkerRunId             String?          @unique @db.Uuid
+  startedAt                 DateTime         @default(now())
+  lastAdvancedAt            DateTime         @default(now())
+  completedAt               DateTime?
+  createdAt                 DateTime         @default(now())
+  updatedAt                 DateTime         @updatedAt
+  events                    TayqanWorkEvent[]
+
+  @@index([companyId])
+  @@index([companyId, projectId])
+  @@index([companyId, status])
+  @@index([stage])
+  @@index([hireEntitlementId])
+}
+
+model TayqanWorkEvent {
+  id          String          @id @default(uuid()) @db.Uuid
+  companyId   String          @db.Uuid
+  workOrderId String          @db.Uuid
+  stage       TayqanWorkStage
+  eventType   String
+  payloadJson Json?
+  createdAt   DateTime        @default(now())
+  workOrder   TayqanWorkOrder @relation(fields: [workOrderId], references: [id], onDelete: Cascade)
+
+  @@index([companyId])
+  @@index([workOrderId, createdAt])
+  @@index([stage])
+}

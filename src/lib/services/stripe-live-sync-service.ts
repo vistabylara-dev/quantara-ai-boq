@@ -22,6 +22,7 @@ import type { PlatformRequestMetadata } from "@/lib/repositories/platform-admin-
 import { classifyPriceEligibility, computeCatalogueFingerprint, type PriceBlockedReason } from "@/lib/services/stripe-sync-service";
 import type { CommerceProductRecord } from "@/lib/repositories/commerce-product-repository";
 import type Stripe from "stripe";
+import { isTayqanOneTimeProductCode } from "@/lib/tayqan/tayqan-commerce";
 
 /**
  * STRIPE-COMMERCIAL-4 — live-mode counterpart of stripe-sync-service.ts.
@@ -79,9 +80,20 @@ export function classifyLiveCheckoutEligibility(
   price: CommerceProductRecord["prices"][number],
 ): { eligible: boolean; reason?: LivePriceBlockedReason } {
   if (!product.isPublic) return { eligible: false, reason: "PRODUCT_NOT_PUBLIC" };
+  if (price.isFromPrice) return { eligible: false, reason: "INDICATIVE_FROM_PRICE" };
+
+  // TAYQAN-HIRE-1: Day/Week are the only live one-time products with a
+  // verified fulfillment path. Every unrelated ONE_TIME catalogue product
+  // remains blocked exactly as before.
+  if (isTayqanOneTimeProductCode(product.code)) {
+    if (product.type !== "ONE_TIME" || price.billingInterval !== "ONE_TIME") {
+      return { eligible: false, reason: "UNSUPPORTED_LIVE_INTERVAL" };
+    }
+    return classifyPriceEligibility(product, price);
+  }
+
   if (product.type !== "SUBSCRIPTION") return { eligible: false, reason: "PRODUCT_NOT_SUBSCRIPTION" };
   if (price.billingInterval === "ONE_TIME") return { eligible: false, reason: "UNSUPPORTED_LIVE_INTERVAL" };
-  if (price.isFromPrice) return { eligible: false, reason: "INDICATIVE_FROM_PRICE" };
   return classifyPriceEligibility(product, price);
 }
 

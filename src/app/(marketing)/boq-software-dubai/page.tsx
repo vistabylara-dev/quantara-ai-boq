@@ -63,7 +63,8 @@ export default function Page() {
       { href: "/boq-software", label: "BOQ Software", description: "Learn about structured BOQ management." },
       { href: "/boq-management", label: "BOQ Management", description: "Controlling project records and templates." },
       { href: "/ai-boq-software", label: "AI BOQ Software", description: "AI-assisted document extraction workflows." }
-    ]
+    ],
+    showBuyerJourney: true
   };
 
   return <SeoLandingPage content={content} currentPath="/boq-software-dubai" />;

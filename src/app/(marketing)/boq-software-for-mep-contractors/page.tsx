@@ -110,6 +110,7 @@ export default function Page() {
     "label": "Features"
   }
 ],
+    showBuyerJourney: true,
     path: "/boq-software-for-mep-contractors"
   };
 

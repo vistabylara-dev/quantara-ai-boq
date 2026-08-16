@@ -108,6 +108,7 @@ export default function Page() {
     "label": "Features"
   }
 ],
+    showBuyerJourney: true,
     path: "/mep-estimating-software-uae"
   };
 

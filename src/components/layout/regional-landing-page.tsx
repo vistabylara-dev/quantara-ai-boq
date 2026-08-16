@@ -3,6 +3,7 @@ import Link from "next/link";
 import { ArrowRight, CheckCircle2, AlertTriangle, MapPin } from "lucide-react";
 import PublicJsonLd from "@/components/seo/public-json-ld";
 import PublicBreadcrumb from "@/components/ui/public-breadcrumb";
+import PublicBuyerJourney from "@/components/marketing/public-buyer-journey";
 import {
   buildPublicPageGraph,
   inferPublicPathFromSchema,
@@ -40,6 +41,7 @@ export interface RegionalLandingPageContent {
   limitations: string[];
   faqs: RegionalFAQ[];
   relatedPages: { label: string; href: string }[];
+  showBuyerJourney?: boolean;
   /** @deprecated Kept only to infer the route while callers migrate to `path`. */
   schema?: Record<string, unknown>;
 }
@@ -128,6 +130,15 @@ export default async function RegionalLandingPage({ content: sourceContent }: { 
             </div>
           </div>
         </section>
+
+        {content.showBuyerJourney && (
+          <div className="mb-16 px-4 md:px-8">
+            <PublicBuyerJourney
+              locale={locale}
+              startAccountLabel={t("publicContent.cta.startAccountSetup")}
+            />
+          </div>
+        )}
 
         <section className="mb-16 px-4 md:px-8">
           <h2 className="text-2xl font-bold text-slate-900 mb-8 pb-4 border-b border-slate-100">{t("publicLanding.capabilitiesScope")}</h2>

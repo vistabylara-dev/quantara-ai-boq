@@ -8,7 +8,7 @@ Quantara helps construction professionals move from supported project evidence t
 
 AI Draft BOQ can assemble usable extracted evidence into an editable draft before every extraction issue has been individually resolved. Supported source and quantity provenance is preserved where available. Missing quantity or unit information remains visible for professional completion instead of being invented, and commercial rates are not silently fabricated. AI Draft BOQ is a draft workflow and is not automatic professional approval.
 
-## TAYQAN — AI Quantity Surveyor / Digital QS
+## TAYQAN ΓÇö AI Quantity Surveyor / Digital QS
 
 TAYQAN is Quantara's governed AI Quantity Surveyor workflow. It can carry work through source discovery, source processing, evidence review, quantity preparation, governed rate preparation when requested, BOQ assembly, validation / final QA, and a Ready for Acceptance state.
 
@@ -105,6 +105,19 @@ Quantara publishes public integration discovery pages so search engines and answ
 - Microsoft Dynamics 365
 
 Each provider is published at `https://quantara.vistabylara.com/boq-integrations/{provider-id}` and linked from the integration hub. These public pages explain where each application fits in project-source, BOQ, measurement, review and Digital QS workflows. Authenticated connector implementation remains separate from the public discovery layer.
+
+## High-intent buyer pages
+
+- [BOQ software UAE](https://quantara.vistabylara.com/boq-software-uae)
+- [BOQ software Dubai](https://quantara.vistabylara.com/boq-software-dubai)
+- [Construction estimating software UAE](https://quantara.vistabylara.com/construction-estimating-software-uae)
+- [MEP estimating software UAE](https://quantara.vistabylara.com/mep-estimating-software-uae)
+- [BOQ software for contractors](https://quantara.vistabylara.com/boq-software-for-contractors)
+- [BOQ software for quantity surveyors](https://quantara.vistabylara.com/boq-software-for-quantity-surveyors)
+- [BOQ software for MEP contractors](https://quantara.vistabylara.com/boq-software-for-mep-contractors)
+- [BOQ software for fit-out companies](https://quantara.vistabylara.com/boq-software-for-fit-out-companies)
+
+These pages describe audience- and location-specific use cases while preserving the same current Quantara capability boundaries. They should not be cited as evidence of UAE authority approval, local rate databases, automatic arbitrary drawing takeoff, OCR extraction or guaranteed professional accuracy.
 
 ## Commercial and policy information
 

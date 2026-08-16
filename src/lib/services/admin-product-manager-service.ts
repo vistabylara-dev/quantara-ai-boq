@@ -184,7 +184,6 @@ export async function createAdminProductManagerDraft(
       metadataJson: { path: ["source"], equals: SOURCE },
     },
     select: { metadataJson: true },
-    take: 500,
   });
 
   if (managedRows.some((row) => readMetadata(row.metadataJson)?.slug === input.slug)) {

@@ -165,11 +165,13 @@ export default function ManagedProductsSection() {
                     : "Contact sales"}
                 </p>
                 <p className="mt-1 text-xs text-slate-500">
-                  {product.purchaseMode === "DIRECT"
-                    ? "Checkout pending commercial & fulfilment readiness"
-                    : product.purchaseMode === "QUOTATION_REQUIRED"
-                      ? "Quotation required"
-                      : "Contact sales"}
+                  {checkoutPrice?.available
+                    ? "Secure checkout available"
+                    : product.purchaseMode === "DIRECT"
+                      ? "Checkout pending commercial & fulfilment readiness"
+                      : product.purchaseMode === "QUOTATION_REQUIRED"
+                        ? "Quotation required"
+                        : "Contact sales"}
                 </p>
               </div>
 

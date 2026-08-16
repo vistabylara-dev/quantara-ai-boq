@@ -128,7 +128,6 @@ export async function getPublishedManagedProductBySlug(slug: string) {
     where: publishedWhere,
     include: publicInclude,
     orderBy: [{ createdAt: "desc" }],
-    take: 200,
   });
 
   for (const row of rows) {

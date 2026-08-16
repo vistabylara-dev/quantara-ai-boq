@@ -1,14 +1,10 @@
 import Link from "next/link";
-import type { Metadata } from "next";
+import { createPublicPageMetadata } from "@/lib/public-site/search-registry";
 import { listPublishedManagedProducts } from "@/lib/services/managed-product-public-service";
 
 export const dynamic = "force-dynamic";
 
-export const metadata: Metadata = {
-  title: "Quantara Products & Digital Construction Tools",
-  description:
-    "Explore published Quantara products, subscriptions, digital construction tools and professional offers.",
-};
+export const metadata = createPublicPageMetadata("/products");
 
 function priceLabel(product: Awaited<ReturnType<typeof listPublishedManagedProducts>>[number]) {
   const price = product.prices[0];

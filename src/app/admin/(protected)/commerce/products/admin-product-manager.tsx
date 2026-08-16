@@ -86,7 +86,7 @@ const initialForm: FormState = {
   description: "",
   priceAed: "",
   billingInterval: "ONE_TIME",
-  purchaseMode: "DIRECT",
+  purchaseMode: "CONTACT_SALES",
   marketplaceEnabled: true,
   fulfillmentMode: "LISTING_ONLY",
   softwarePlanType: "PRO",
@@ -182,13 +182,52 @@ export default function AdminProductManager() {
   }
 
   function updateName(value: string) {
+    setForm((current) => {
+      const previousGeneratedCode = normalizeCode(current.name);
+      const previousGeneratedSlug = normalizeSlug(current.name);
+      const previousGeneratedMetaTitle = current.name.slice(0, 70);
+      const previousGeneratedMerchantTitle = current.name.slice(0, 150);
+
+      return {
+        ...current,
+        name: value,
+        code:
+          !current.code || current.code === previousGeneratedCode
+            ? normalizeCode(value)
+            : current.code,
+        slug:
+          !current.slug || current.slug === previousGeneratedSlug
+            ? normalizeSlug(value)
+            : current.slug,
+        metaTitle:
+          !current.metaTitle ||
+          current.metaTitle === previousGeneratedMetaTitle
+            ? value.slice(0, 70)
+            : current.metaTitle,
+        merchantTitle:
+          !current.merchantTitle ||
+          current.merchantTitle === previousGeneratedMerchantTitle
+            ? value.slice(0, 150)
+            : current.merchantTitle,
+      };
+    });
+  }
+
+  function updateFulfillmentMode(
+    value: FormState["fulfillmentMode"],
+  ) {
     setForm((current) => ({
       ...current,
-      name: value,
-      code: current.code || normalizeCode(value),
-      slug: current.slug || normalizeSlug(value),
-      metaTitle: current.metaTitle || value.slice(0, 70),
-      merchantTitle: current.merchantTitle || value.slice(0, 150),
+      fulfillmentMode: value,
+      ...(value === "SOFTWARE_SUBSCRIPTION"
+        ? {
+            purchaseMode: "DIRECT" as const,
+            billingInterval:
+              current.billingInterval === "ONE_TIME"
+                ? ("MONTH" as const)
+                : current.billingInterval,
+          }
+        : {}),
     }));
   }
 
@@ -430,8 +469,7 @@ export default function AdminProductManager() {
               <select
                 value={form.fulfillmentMode}
                 onChange={(e) =>
-                  update(
-                    "fulfillmentMode",
+                  updateFulfillmentMode(
                     e.target.value as FormState["fulfillmentMode"],
                   )
                 }
@@ -619,10 +657,22 @@ export default function AdminProductManager() {
                     <p className="mt-3 text-sm font-semibold">{formatPrice(product)}</p>
 
                     <div className="mt-3 grid grid-cols-2 gap-2 text-xs text-[#536078] dark:text-[#B8C4D8]">
-                      <MiniReadiness ready={product.marketplaceEnabled} label="Marketplace" />
-                      <MiniReadiness ready={product.merchant.enabled} label="Merchant data" />
-                      <MiniReadiness ready={activePrice?.reviewStatus === "APPROVED"} label="Price approved" />
-                      <MiniReadiness ready={product.isPublic && product.isActive} label="Published" />
+                      <MiniReadiness
+                        ready={product.publicationState === "PUBLISHED"}
+                        label="Marketplace published"
+                      />
+                      <MiniReadiness
+                        ready={product.merchant.enabled}
+                        label="Merchant data"
+                      />
+                      <MiniReadiness
+                        ready={activePrice?.reviewStatus === "APPROVED"}
+                        label="Price approved"
+                      />
+                      <MiniReadiness
+                        ready={product.checkoutState === "READY"}
+                        label="Checkout ready"
+                      />
                     </div>
 
                     <div className="mt-3 rounded-xl bg-[#EEF3F8] p-3 text-xs dark:bg-[#111D33]">

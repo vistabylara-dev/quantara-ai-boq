@@ -131,6 +131,7 @@ export default function AdminProductManager() {
   const [search, setSearch] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [busyProductId, setBusyProductId] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -200,6 +201,32 @@ export default function AdminProductManager() {
       ),
     );
   }, [products, search]);
+
+  async function setPublication(product: ManagedProduct, action: "PUBLISH" | "UNPUBLISH") {
+    if (busyProductId) return;
+
+    setBusyProductId(product.id);
+    setError(null);
+    setMessage(null);
+
+    try {
+      const updated = await apiClient.patch<ManagedProduct>(
+        `/api/admin/commerce/product-manager/${product.id}`,
+        { action },
+      );
+
+      setMessage(
+        action === "PUBLISH"
+          ? `${updated.name} is now published to Marketplace and its public SEO page. Stripe was not changed.`
+          : `${updated.name} was removed from Marketplace. Stripe was not changed.`,
+      );
+      await load();
+    } catch (publicationError) {
+      setError(getApiErrorMessage(publicationError));
+    } finally {
+      setBusyProductId(null);
+    }
+  }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -417,6 +444,28 @@ export default function AdminProductManager() {
 
                     <div className="mt-3 rounded-xl bg-[#EEF3F8] p-3 text-xs dark:bg-[#111D33]">
                       Fulfilment adapter: <strong>{product.fulfillmentAdapter}</strong>
+                    </div>
+
+                    <div className="mt-3 flex gap-2">
+                      <button
+                        type="button"
+                        disabled={busyProductId === product.id}
+                        onClick={() =>
+                          void setPublication(
+                            product,
+                            product.publicationState === "PUBLISHED"
+                              ? "UNPUBLISH"
+                              : "PUBLISH",
+                          )
+                        }
+                        className="flex-1 rounded-xl border border-[#D9E2EC] bg-white px-3 py-2.5 text-xs font-semibold text-[#0B1630] hover:bg-[#EEF3F8] disabled:opacity-50 dark:border-[#1E2A42] dark:bg-[#0B1426] dark:text-white dark:hover:bg-[#111D33]"
+                      >
+                        {busyProductId === product.id
+                          ? "Updating…"
+                          : product.publicationState === "PUBLISHED"
+                            ? "Unpublish"
+                            : "Publish to Marketplace"}
+                      </button>
                     </div>
                   </article>
                 );

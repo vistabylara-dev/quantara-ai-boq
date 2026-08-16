@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { apiClient, getApiErrorMessage } from "@/lib/api/client";
 import { CATALOGUE_LIBRARIES } from "@/config/libraries";
+import ManagedProductsSection from "./managed-products-section";
 
 type PackageListing = {
   id: string;
@@ -244,6 +245,8 @@ export default function MarketplacePage() {
           </div>
         </section>
       )}
+
+      <ManagedProductsSection />
 
       <div className="grid gap-6 sm:grid-cols-2 xl:grid-cols-3">
         {CATALOGUE_LIBRARIES.map((lib) => {

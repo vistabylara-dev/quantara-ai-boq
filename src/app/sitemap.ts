@@ -23,5 +23,12 @@ export default function sitemap(): MetadataRoute.Sitemap {
     priority: 0.75,
   }));
 
-  return [...registeredPages, ...integrationPages];
+  const managedProductsIndex = {
+    url: `${PUBLIC_SITE_ORIGIN}/products`,
+    lastModified: new Date(PUBLIC_CONTENT_REVIEW_DATE),
+    changeFrequency: "weekly" as const,
+    priority: 0.75,
+  };
+
+  return [...registeredPages, ...integrationPages, managedProductsIndex];
 }

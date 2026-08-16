@@ -282,3 +282,150 @@ export async function createAdminProductManagerDraft(
 
   return toDTO(row);
 }
+
+async function getManagedProductOrThrow(productId: string) {
+  const row = await prisma.commerceProduct.findUnique({
+    where: { id: productId },
+    include: {
+      prices: {
+        orderBy: { createdAt: "asc" },
+        select: {
+          id: true,
+          code: true,
+          amountMinor: true,
+          currency: true,
+          billingInterval: true,
+          isActive: true,
+          reviewStatus: true,
+        },
+      },
+    },
+  });
+
+  if (!row) throw new NotFoundError("Product Manager product not found.");
+
+  const metadata = readMetadata(row.metadataJson);
+  if (!metadata) {
+    throw new ConflictError(
+      "PRODUCT_MANAGER_OWNERSHIP_REQUIRED",
+      "This product is not managed by Product Manager and cannot be changed here.",
+    );
+  }
+
+  return { row, metadata };
+}
+
+export async function publishAdminProductManagerProduct(
+  actor: PlatformActor,
+  productId: string,
+  requestMetadata: PlatformRequestMetadata,
+) {
+  requirePlatformCapability(actor, "platform:operate");
+
+  const { row, metadata } = await getManagedProductOrThrow(productId);
+
+  if (!metadata.marketplace.enabled) {
+    throw new ConflictError(
+      "MARKETPLACE_CHANNEL_DISABLED",
+      "Enable the Marketplace sales channel before publishing this product.",
+    );
+  }
+
+  if (metadata.publicationState === "PUBLISHED") {
+    return toDTO(row);
+  }
+
+  const nextMetadata: ManagedMetadata = {
+    ...metadata,
+    publicationState: "PUBLISHED",
+  };
+
+  await prisma.$transaction(async (tx) => {
+    await tx.commerceProduct.update({
+      where: { id: row.id },
+      data: {
+        // Marketplace publication is deliberately NOT Stripe readiness.
+        // Existing public-commerce and live-sync flows remain unable to
+        // pick this product up until a later guarded checkout phase.
+        isActive: false,
+        isPublic: false,
+        metadataJson: nextMetadata as unknown as Prisma.InputJsonValue,
+      },
+    });
+
+    await tx.platformAuditLog.create({
+      data: {
+        actorUserId: actor.userId,
+        actorPlatformRole: actor.platformRole,
+        action: "commerce_product_manager.publish_marketplace",
+        targetType: "CommerceProduct",
+        targetId: row.id,
+        requestMetadataJson: requestMetadataJson(requestMetadata),
+        beforeJson: {
+          publicationState: metadata.publicationState,
+          isActive: row.isActive,
+          isPublic: row.isPublic,
+        },
+        afterJson: {
+          publicationState: "PUBLISHED",
+          isActive: false,
+          isPublic: false,
+          stripeChanged: false,
+        },
+      },
+    });
+  });
+
+  const updated = await getManagedProductOrThrow(productId);
+  return toDTO(updated.row);
+}
+
+export async function unpublishAdminProductManagerProduct(
+  actor: PlatformActor,
+  productId: string,
+  requestMetadata: PlatformRequestMetadata,
+) {
+  requirePlatformCapability(actor, "platform:operate");
+
+  const { row, metadata } = await getManagedProductOrThrow(productId);
+
+  const nextMetadata: ManagedMetadata = {
+    ...metadata,
+    publicationState: "DRAFT",
+  };
+
+  await prisma.$transaction(async (tx) => {
+    await tx.commerceProduct.update({
+      where: { id: row.id },
+      data: {
+        isActive: false,
+        isPublic: false,
+        metadataJson: nextMetadata as unknown as Prisma.InputJsonValue,
+      },
+    });
+
+    await tx.platformAuditLog.create({
+      data: {
+        actorUserId: actor.userId,
+        actorPlatformRole: actor.platformRole,
+        action: "commerce_product_manager.unpublish_marketplace",
+        targetType: "CommerceProduct",
+        targetId: row.id,
+        requestMetadataJson: requestMetadataJson(requestMetadata),
+        beforeJson: {
+          publicationState: metadata.publicationState,
+          isActive: row.isActive,
+          isPublic: row.isPublic,
+        },
+        afterJson: {
+          publicationState: "DRAFT",
+          isActive: false,
+          isPublic: false,
+          stripeChanged: false,
+        },
+      },
+    });
+  });
+
+  return toDTO((await getManagedProductOrThrow(productId)).row);
+}

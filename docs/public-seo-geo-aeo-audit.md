@@ -1,6 +1,6 @@
 # Quantara public SEO, GEO and AEO audit
 
-Reviewed: 2026-08-09
+Reviewed: 2026-08-16
 Scope: website-only public search pages. Authenticated Quantara product routes, the in-app Guide, PR #19 runtime work, public proposal tokens and public technical-report tokens are outside this report.
 
 ## Product truth used by this audit
@@ -13,9 +13,9 @@ The metadata values below are now centralized in `src/lib/public-site/search-reg
 
 ## Route accounting and index policy
 
-- Static marketing pages on disk: 63.
-- Registered public content pages: 62. `/register` is intentionally a separate utility page.
-- Indexable registry pages and sitemap URLs: 58.
+- Static marketing pages on disk: 64.
+- Registered public content pages: 63. `/register` is intentionally a separate utility page.
+- Indexable registry pages and sitemap URLs: 59.
 - Noindex thin legal placeholders: `/acceptable-use`, `/cookie-policy`, `/data-processing`, `/subprocessors`.
 - Noindex auth utilities, excluded from the sitemap: `/login`, `/register`, `/forgot-password`, `/reset-password`, `/verify-email`.
 - `/industries/[industryId]` is not a public search template. Its ten configured IDs are behind the application access boundary, have no sitemap entries and are excluded from the metadata completion report.
@@ -40,6 +40,7 @@ The metadata values below are now centralized in `src/lib/public-site/search-reg
 | `/pdf-boq-extraction` | Commercial | Text-PDF BOQ extraction | tables, review, scanned limitations | PDF BOQ Extraction for Text-Based Files \| Quantara | Implemented | See how Quantara captures supported information from text-based PDF BOQs for review, plus the limits for complex and scanned files. | Implemented | AI-Assisted PDF BOQ Extraction with Structured Human Review | `https://quantara.vistabylara.com/pdf-boq-extraction` | Index | PDF/OCR and core cluster | WebPage, BreadcrumbList, visible FAQPage | Must state text-based support and scanned-page limitation together | High |
 | `/scanned-pdf-boq` | Informational | Scanned PDF status | detection, OCR, manual review | Scanned PDF BOQ Detection and OCR Status \| Quantara | Implemented | Quantara detects image-only PDF pages but does not currently perform OCR text extraction. Learn the manual review path and limitations. | Implemented | Scanned & Image-Only PDF BOQ Handling | `https://quantara.vistabylara.com/scanned-pdf-boq` | Index | PDF/OCR cluster | WebPage, BreadcrumbList, visible FAQPage | Answer “does Quantara OCR scans?” immediately: no | High |
 | `/quantity-surveying-software` | Commercial | QS BOQ workflow software | dimensions, calculations, revisions | Quantity Surveying BOQ Workflow Software \| Quantara | Implemented | Support reviewed BOQ records, dimensions, visible calculations, revisions and outputs without replacing a quantity surveyor's judgement. | Implemented | Quantity Surveying Software for Structured BOQ Review and Project Control | `https://quantara.vistabylara.com/quantity-surveying-software` | Index | Audience, core and measurement pages | WebPage, BreadcrumbList, visible FAQPage | Professional judgement limitation travels with the claim | High |
+| `/tayqan-ai-quantity-surveyor` | Commercial | AI Quantity Surveyor / Digital QS | TAYQAN, BOQ preparation, human acceptance, pricing | TAYQAN AI Quantity Surveyor for BOQ Work \| Quantara | Implemented | Hire TAYQAN, Quantara's governed Digital QS, for source review, quantity preparation, BOQ assembly and QA with final human acceptance. | Implemented | Hire TAYQAN — Quantara's AI Quantity Surveyor | `https://quantara.vistabylara.com/tayqan-ai-quantity-surveyor` | Index | Homepage, Features, Pricing, public navigation | WebPage, BreadcrumbList, visible FAQPage | Owns AI Quantity Surveyor hire intent; direct answers cover workflow, price, limitations and professional acceptance | High |
 | `/boq-document-generation` | Commercial | BOQ document generation | reviewed data, outputs, approval | BOQ Document Generation from Reviewed Data \| Quantara | Implemented | Generate supported BOQ documents and project outputs from reviewed records while keeping professional approval outside the software. | Implemented | BOQ Document Generation from Structured, Reviewed Project Data | `https://quantara.vistabylara.com/boq-document-generation` | Index | Core and BOQ management | WebPage, BreadcrumbList, visible FAQPage | Avoid implying all output types or professional approval | Medium |
 | `/resources` | Informational | BOQ resource hub | extraction, review, formulas, comparisons | BOQ Resources and Construction Workflow Guides | Implemented | Explore practical BOQ definitions, document-extraction guidance, review checklists, measurement formulas and workflow comparisons. | Implemented | BOQ Resources & Knowledge Base | `https://quantara.vistabylara.com/resources` | Index | Links to every education/PDF guide | CollectionPage or WebPage recommended | Hub summary is answer-first enough; no FAQ needed | Low |
 | `/what-is-a-boq` | Informational | Bill of Quantities definition | contents, users, tendering | What Is a BOQ? Bill of Quantities Explained | Implemented | Learn what a Bill of Quantities contains, who prepares and reviews it, and how it supports tendering, pricing and project control. | Implemented | What Is a BOQ? A Practical Guide to Bills of Quantities | `https://quantara.vistabylara.com/what-is-a-boq` | Index | BOQ fundamentals and software | WebPage, TechArticle, BreadcrumbList, visible FAQPage | Dedicated direct answer and one visible breadcrumb are present | Low |

@@ -1,7 +1,7 @@
 # Quantara public search intent map
 
-Reviewed: 2026-08-09
-Scope: the 58 indexable website routes in `src/lib/public-site/search-registry.ts`. Auth, account recovery, thin legal placeholders, token-sharing pages and authenticated SaaS routes are intentionally excluded.
+Reviewed: 2026-08-16
+Scope: the 59 indexable website routes in `src/lib/public-site/search-registry.ts`. Auth, account recovery, thin legal placeholders, token-sharing pages and authenticated SaaS routes are intentionally excluded.
 
 ## Cannibalization rules
 
@@ -12,6 +12,7 @@ Scope: the 58 indexable website routes in `src/lib/public-site/search-registry.t
 - `/quantara-vs-excel-for-boq` is the branded comparison. `/boq-software-vs-spreadsheets` is category-level. `/construction-estimating-software-vs-excel` is estimating-specific.
 - `/gcc-boq-software` is the regional hub. Country/city pages require genuinely different workflow context and explicit local-rates/compliance/approval limitations.
 - Audience pages answer role-specific workflow questions and should link back to `/industries`, not compete with the broad `/boq-software` page.
+- `/tayqan-ai-quantity-surveyor` owns AI Quantity Surveyor / Digital QS hire intent. `/quantity-surveying-software` and `/boq-software-for-quantity-surveyors` remain software-category and role-workflow pages rather than TAYQAN hire pages.
 
 | Page | Primary Query Intent | Primary Keyword Theme | Supporting Questions | Audience | Funnel Stage | Cannibalization Risk |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -29,6 +30,7 @@ Scope: the 58 indexable website routes in `src/lib/public-site/search-registry.t
 | `/pdf-boq-extraction` | Evaluate text-PDF extraction | PDF BOQ extraction software | Which PDFs are supported? What must be reviewed? What about scans? | Estimators and document teams | Evaluation | High: product intent; separate from OCR education/conversion task |
 | `/scanned-pdf-boq` | Check scanned-PDF capability | scanned PDF BOQ detection and OCR status | Are scans detected? Does Quantara run OCR? What is the manual path? | Teams holding image-only BOQs | Evaluation | High: no-OCR status page, not an OCR product page |
 | `/quantity-surveying-software` | Evaluate software support for QS work | quantity surveying BOQ workflow software | Which QS steps are supported? Are dimensions/calculations reviewable? Does it replace a QS? | Quantity surveyors and cost consultants | Evaluation | High: role workflow, not broad `/boq-software` duplicate |
+| `/tayqan-ai-quantity-surveyor` | Evaluate and hire Digital QS capacity | TAYQAN AI Quantity Surveyor / Digital QS | What does TAYQAN do? Does it replace a QS? Can it measure any drawing? What does it cost? | QS teams, contractors, MEP/fit-out teams, small commercial teams | Conversion/evaluation | High: owns TAYQAN hire intent and must not cannibalize generic QS software pages |
 | `/boq-document-generation` | Generate BOQ outputs from reviewed records | BOQ document generation | Which outputs are supported? Is generation professional approval? | Estimators, QS and contractors | Evaluation | Medium: output intent, not BOQ management generally |
 | `/resources` | Browse BOQ learning material | BOQ resources and guides | Where are definitions, checklists, extraction and comparison guides? | Learners and practitioners | Awareness | Low: hub only |
 | `/what-is-a-boq` | Learn the definition of BOQ | what is a Bill of Quantities | What does a BOQ contain? Who prepares it? How is it used? | Students, clients, construction professionals | Awareness | Low |

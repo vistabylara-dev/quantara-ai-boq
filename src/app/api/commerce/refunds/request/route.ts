@@ -1,6 +1,6 @@
 import { apiSuccess, handleApiError, parseJsonBody } from "@/lib/http/api-response";
 import { getCurrentActor } from "@/lib/auth/current-actor";
-import { setActorContext } from "@/lib/auth/request-context";
+import { setActorContext, withActorRequestContext } from "@/lib/auth/request-context";
 import { requireCapability } from "@/lib/auth/rbac";
 import { requestRefund } from "@/lib/services/refund-request-service";
 import { refundRequestSchema } from "@/lib/validation/commerce-schema";
@@ -15,7 +15,7 @@ export const runtime = "nodejs";
  * `entitlements:manage` capability as checkout — billing is a
  * company-owner/administrator action, not a general member action.
  */
-export async function POST(request: Request) {
+async function POSTHandler(request: Request) {
   try {
     const actor = await getCurrentActor();
     setActorContext(actor);
@@ -28,3 +28,5 @@ export async function POST(request: Request) {
     return handleApiError(error);
   }
 }
+
+export const POST = withActorRequestContext(POSTHandler);

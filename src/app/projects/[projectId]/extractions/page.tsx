@@ -566,6 +566,27 @@ export default function ProjectExtractionsPage(props: { params: Promise<{ projec
               </div>
             </div>
 
+            {reviewSummary.complete && (
+              <div className="mt-5 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-emerald-300 bg-emerald-50 p-4 dark:border-emerald-400/20 dark:bg-emerald-400/5">
+                <div>
+                  <div className="text-sm font-black text-emerald-900 dark:text-emerald-200">Review complete</div>
+                  <div className="mt-1 text-xs font-bold text-emerald-800 dark:text-emerald-300">
+                    {importableEntityCount.toLocaleString()} reviewed items are ready for the governed BOQ import path.
+                  </div>
+                </div>
+                <Link
+                  href={
+                    importableEntityCount > 0
+                      ? `/projects/${encodedProjectId}/boq?action=import-reviewed`
+                      : `/projects/${encodedProjectId}/boq`
+                  }
+                  className="inline-flex min-h-11 items-center justify-center rounded-lg bg-emerald-700 px-4 py-2 text-sm font-black text-white hover:bg-emerald-800"
+                >
+                  Continue to BOQ
+                </Link>
+              </div>
+            )}
+
             <p className="mt-4 text-xs leading-5 text-[#7B879C] dark:text-[#7F8DA6]">
               AI Draft quantities remain professionally unconfirmed until you explicitly confirm them from the BOQ. Rates remain unselected until you use your purchased package, catalogue, company library, or manual pricing workflow.
             </p>

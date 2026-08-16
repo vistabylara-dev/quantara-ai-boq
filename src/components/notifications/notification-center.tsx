@@ -12,6 +12,7 @@ import {
   X,
 } from "lucide-react";
 import Link from "next/link";
+import { createPortal } from "react-dom";
 import {
   useCallback,
   useEffect,
@@ -392,9 +393,10 @@ export default function NotificationCenter() {
         ) : null}
       </button>
 
-      {open ? (
-        <div
-          className="fixed inset-0 z-[80] bg-black/35"
+      {open && typeof document !== "undefined"
+        ? createPortal(
+            <div
+              className="fixed inset-0 z-[9999] bg-black/50"
           onClick={(event) => {
             if (event.target === event.currentTarget) {
               setOpen(false);
@@ -409,7 +411,7 @@ export default function NotificationCenter() {
             aria-modal="true"
             aria-labelledby="quantara-notifications-title"
             dir={direction}
-            className="fixed inset-y-0 end-0 flex w-[min(30rem,100vw)] flex-col border-s border-slate-200 bg-white text-start text-slate-900 shadow-2xl dark:border-white/10 dark:bg-[#07111F] dark:text-white"
+            className="fixed inset-y-0 end-0 z-[10000] flex w-[min(30rem,100vw)] flex-col border-s border-slate-200 bg-white text-start text-slate-900 shadow-2xl dark:border-white/10 dark:bg-[#07111F] dark:text-white"
           >
             <div className="border-b border-slate-200 p-5 dark:border-white/10">
               <div className="flex items-start justify-between gap-4">
@@ -604,8 +606,10 @@ export default function NotificationCenter() {
               )}
             </div>
           </aside>
-        </div>
-      ) : null}
+            </div>,
+            document.body,
+          )
+        : null}
     </>
   );
 }

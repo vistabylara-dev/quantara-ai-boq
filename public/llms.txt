@@ -43,7 +43,7 @@ Project information, extracted data, measurements, calculations, rates and outpu
 ## Primary public pages
 
 - [Product overview](https://quantara.vistabylara.com/)
-- [Feature availability and limitations](https://quantara.vistabylara.com/features)
+- [Quantara features and workflows](https://quantara.vistabylara.com/features)
 - [Pricing and TAYQAN hire options](https://quantara.vistabylara.com/pricing)
 - [TAYQAN AI Quantity Surveyor](https://quantara.vistabylara.com/tayqan-ai-quantity-surveyor)
 - [BOQ software workflow](https://quantara.vistabylara.com/boq-software)
@@ -54,6 +54,57 @@ Project information, extracted data, measurements, calculations, rates and outpu
 - [Workflow comparisons](https://quantara.vistabylara.com/comparisons)
 - [UAE and GCC project context](https://quantara.vistabylara.com/gcc-boq-software)
 - [Public HTML sitemap](https://quantara.vistabylara.com/site-map)
+
+## Integration discovery
+
+Quantara publishes public integration discovery pages so search engines and answer engines can understand the construction-software ecosystem around the product.
+
+- [All Quantara BOQ integrations](https://quantara.vistabylara.com/boq-integrations)
+- Autodesk
+- Revit
+- AutoCAD
+- Autodesk Construction Cloud
+- Autodesk Docs
+- BIM 360
+- Civil 3D
+- Navisworks
+- 3ds Max
+- Inventor
+- Fusion
+- Trimble Connect
+- Procore
+- Bentley iTwin
+- Bluebeam Studio
+- Microsoft 365
+- Google Drive
+- Dropbox
+- Box
+- Archicad
+- Tekla Structures
+- SketchUp
+- Rhino + Grasshopper
+- SolidWorks
+- Vectorworks
+- MicroStation / OpenBuildings
+- ETABS
+- SAFE
+- SAP2000
+- STAAD.Pro
+- Robot Structural Analysis
+- Tekla Structural Designer
+- CostX
+- Candy
+- Sage Estimating
+- Oracle Primavera P6
+- Oracle Aconex
+- Autodesk Takeoff
+- PlanSwift
+- RIB iTWO
+- SAP
+- Oracle ERP
+- Microsoft Dynamics 365
+
+Each provider is published at `https://quantara.vistabylara.com/boq-integrations/{provider-id}` and linked from the integration hub. These public pages explain where each application fits in project-source, BOQ, measurement, review and Digital QS workflows. Authenticated connector implementation remains separate from the public discovery layer.
 
 ## Commercial and policy information
 

@@ -2,7 +2,7 @@ import type { Metadata, MetadataRoute } from "next";
 import { getDictionary } from "@/lib/i18n/dictionaries";
 
 export const PUBLIC_SITE_ORIGIN = "https://quantara.vistabylara.com";
-export const PUBLIC_CONTENT_REVIEW_DATE = "2026-08-09";
+export const PUBLIC_CONTENT_REVIEW_DATE = "2026-08-16";
 
 export type PublicTopicCluster =
   | "core"
@@ -34,7 +34,7 @@ const metadataCopy = getDictionary("en").publicContent.metadata;
 
 export const PUBLIC_SEARCH_PAGES = [
   page({ path: "/", title: "BOQ Measurement & Quantity Software UAE | Quantara", description: "Guided BOQ measurement for reviewed sources, deterministic quantity calculations, visible formulas, voice-assisted input and professional confirmation.", cluster: "core", intent: "commercial", priority: 1, changeFrequency: "weekly" }),
-  page({ path: "/features", title: metadataCopy.featuresTitle, description: metadataCopy.featuresDescription, cluster: "core", intent: "commercial" }),
+  page({ path: "/features", title: "Quantara BOQ Features for Construction Teams", description: "Explore Quantara project sources, AI Draft BOQ, guided measurement, calculations, TAYQAN, integrations, revisions and professional outputs.", cluster: "core", intent: "commercial", priority: 0.95, changeFrequency: "weekly" }),
   page({ path: "/about", title: "About Quantara BOQ Workflow Software", description: "Learn what Quantara is, who it supports and how Vista By Lara is developing an AI-assisted BOQ workflow for construction professionals.", cluster: "company", intent: "navigational" }),
   page({ path: "/security", title: metadataCopy.securityTitle, description: metadataCopy.securityDescription, cluster: "company", intent: "informational" }),
   page({ path: "/terms", title: metadataCopy.termsTitle, description: metadataCopy.termsDescription, cluster: "legal", intent: "navigational", priority: 0.3, changeFrequency: "yearly" }),
@@ -52,6 +52,7 @@ export const PUBLIC_SEARCH_PAGES = [
   page({ path: "/scanned-pdf-boq", title: "Scanned PDF BOQ Detection and OCR Status | Quantara", description: "Quantara detects image-only PDF pages but does not currently perform OCR text extraction. Learn the manual review path and limitations.", cluster: "pdf-extraction", intent: "informational" }),
   page({ path: "/quantity-surveying-software", title: "Quantity Surveying BOQ Workflow Software | Quantara", description: "Support reviewed BOQ records, dimensions, visible calculations, revisions and outputs without replacing a quantity surveyor's judgement.", cluster: "audience", intent: "commercial" }),
   page({ path: "/tayqan-ai-quantity-surveyor", title: "TAYQAN AI Quantity Surveyor for BOQ Work | Quantara", description: "Hire TAYQAN, Quantara's governed Digital QS, for source review, quantity preparation, BOQ assembly and QA with final human acceptance.", cluster: "audience", intent: "commercial", priority: 0.95, changeFrequency: "weekly" }),
+  page({ path: "/boq-integrations", title: "BOQ Integrations for Construction Software | Quantara", description: "Explore Quantara integration pages for BIM, CAD, CDE, cloud storage, estimating, structural engineering and construction management tools.", cluster: "core", intent: "commercial", priority: 0.9, changeFrequency: "weekly" }),
   page({ path: "/boq-document-generation", title: "BOQ Document Generation from Reviewed Data | Quantara", description: "Generate supported BOQ documents and project outputs from reviewed records while keeping professional approval outside the software.", cluster: "core", intent: "commercial" }),
   page({ path: "/resources", title: "BOQ Resources and Construction Workflow Guides", description: "Explore practical BOQ definitions, document-extraction guidance, review checklists, measurement formulas and workflow comparisons.", cluster: "education", intent: "informational" }),
   page({ path: "/what-is-a-boq", title: "What Is a BOQ? Bill of Quantities Explained", description: "Learn what a Bill of Quantities contains, who prepares and reviews it, and how it supports tendering, pricing and project control.", cluster: "education", intent: "informational" }),

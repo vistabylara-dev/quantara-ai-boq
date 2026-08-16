@@ -175,7 +175,9 @@ describe("public product truth", () => {
     expect(source).not.toMatch(/\bstatus\s*:\s*["'](?:Available|Controlled access|Limited|Not available)["']/);
     expect(seoTemplate).toContain("getPublicCapability(capabilityId).status");
     expect(seoTemplate).toContain("getPublicStatus(feature.capabilityId, t)");
-    expect(navigation).toContain("PUBLIC_CAPABILITY_STATUS_LABELS[googleDriveImport.status]");
+    expect(navigation).not.toContain("PUBLIC_CAPABILITY_STATUS_LABELS");
+    expect(navigation).not.toContain("googleDriveImport.status");
+    expect(navigation).toContain('href: "/boq-integrations/google-drive"');
   });
 
   it("cannot present OCR as available while the implementation reports it missing", () => {

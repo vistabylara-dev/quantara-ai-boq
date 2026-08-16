@@ -124,20 +124,40 @@ describe("INTEGRATIONS-1A: AEC applications and connected data hub foundation (i
   });
 
   describe("entitlements — centralized, never hardcoded per component", () => {
-    it("FREE plan allows zero connections and no provider families", async () => {
+    it("FREE plan allows Google Drive but not Autodesk", async () => {
       await setPlan(PlanType.FREE);
       const entitlements = await getIntegrationEntitlements(actor());
       expect(entitlements.source).toBe("real");
-      expect(entitlements.maxActiveConnections).toBe(0);
-      expect(entitlements.allowedProviderFamilies).toEqual([]);
+      expect(entitlements.maxActiveConnections).toBe(1);
+      expect(entitlements.allowedProviderFamilies).toEqual(["google"]);
+      expect(entitlements.manualSync).toBe(true);
+      expect(entitlements.allowedProviderFamilies).not.toContain("autodesk");
     });
 
-    it("TRIAL plan allows a limited connection and no scheduled sync", async () => {
+    it("TRIAL keeps Google access but excludes Autodesk", async () => {
       await setPlan(PlanType.TRIAL);
       const entitlements = await getIntegrationEntitlements(actor());
       expect(entitlements.maxActiveConnections).toBe(1);
+      expect(entitlements.allowedProviderFamilies).toContain("google");
+      expect(entitlements.allowedProviderFamilies).not.toContain("autodesk");
       expect(entitlements.scheduledSync).toBe(false);
       expect(entitlements.bulkExtraction).toBe(false);
+    });
+
+    it("PRO keeps Google access but excludes Autodesk", async () => {
+      await setPlan(PlanType.PRO);
+      const entitlements = await getIntegrationEntitlements(actor());
+      expect(entitlements.allowedProviderFamilies).toContain("google");
+      expect(entitlements.allowedProviderFamilies).not.toContain("autodesk");
+      expect(entitlements.manualSync).toBe(true);
+    });
+
+    it("BUSINESS includes both Google Drive and Autodesk", async () => {
+      await setPlan(PlanType.BUSINESS);
+      const entitlements = await getIntegrationEntitlements(actor());
+      expect(entitlements.allowedProviderFamilies).toContain("google");
+      expect(entitlements.allowedProviderFamilies).toContain("autodesk");
+      expect(entitlements.manualSync).toBe(true);
     });
 
     it("ENTERPRISE plan allows unlimited connections, all provider families, and API/webhook access", async () => {

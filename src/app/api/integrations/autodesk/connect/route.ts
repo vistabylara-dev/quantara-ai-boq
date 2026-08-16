@@ -16,7 +16,12 @@ async function GETHandler(request: Request) {
   try {
     const actor = await getCurrentActor();
     setActorContext(actor);
-    const { state, cookieValue } = createAutodeskOAuthState(actor);
+    const url = new URL(request.url);
+    const { state, cookieValue } = await createAutodeskOAuthState(actor, {
+      projectId: url.searchParams.get("projectId"),
+      intent: url.searchParams.get("intent"),
+      returnTo: url.searchParams.get("returnTo"),
+    });
     const authorizationUrl = initiateAutodeskConnection(actor, state);
 
     const cookieStore = await cookies();
@@ -33,7 +38,8 @@ async function GETHandler(request: Request) {
     if (error instanceof UnauthorizedError) {
       return NextResponse.redirect(new URL("/login?next=/integrations/autodesk/connect", request.url));
     }
-    const code = error instanceof AppError && error.code === "AUTODESK_NOT_CONFIGURED"
+    const allowedCodes = new Set(["AUTODESK_NOT_CONFIGURED", "INTEGRATION_NOT_ENTITLED"]);
+    const code = error instanceof AppError && allowedCodes.has(error.code)
       ? error.code
       : "AUTODESK_CONNECT_FAILED";
     return NextResponse.redirect(new URL(`/integrations/autodesk/connect?connectError=${code}`, request.url));

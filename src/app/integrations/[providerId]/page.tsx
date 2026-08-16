@@ -9,6 +9,7 @@ import { withProjectContext, ProjectContextBanner, useProjectContext } from "../
 
 type ProviderDetail = {
   id: string;
+  providerFamily: string;
   familyDisplayName: string;
   displayName: string;
   categoryLabel: string;
@@ -51,6 +52,7 @@ function ProviderDetailPageContent(props: PageProps) {
   const projectContext = useProjectContext();
   const [provider, setProvider] = useState<ProviderDetail | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const isAutodeskFamily = provider?.providerFamily === "autodesk";
 
   const load = useCallback(async (signal?: AbortSignal) => {
     setLoadError(null);
@@ -173,12 +175,34 @@ function ProviderDetailPageContent(props: PageProps) {
           )}
 
           <div className="mt-8 flex flex-wrap gap-2">
-            {!provider.connection && (
+            {!provider.connection && (!isAutodeskFamily || provider.entitled) && (
               <Link
                 href={withProjectContext(`/integrations/${provider.id}/connect`, projectContext)}
                 className="rounded-2xl border border-[#D9E2EC] bg-[#EEF3F8] px-4 py-2 text-sm font-semibold text-[#536078] dark:border-[#1E2A42] dark:bg-[#111D33] dark:text-[#8CA0BE]"
               >
                 {actionLabel(provider)}
+              </Link>
+            )}
+            {isAutodeskFamily && !provider.entitled && (
+              <div className="w-full rounded-2xl border border-amber-700/40 bg-amber-950/10 p-4 dark:bg-amber-950/20">
+                <p className="text-sm font-semibold text-[#0B1630] dark:text-white">Business plan required</p>
+                <p className="mt-1 text-xs text-[#536078] dark:text-[#B8C4D8]">
+                  AutoCAD / Autodesk integration is included with Quantara Business.
+                </p>
+                <Link
+                  href="/settings/subscription?priceCode=business_monthly"
+                  className="mt-3 inline-flex rounded-xl border border-amber-600 bg-amber-600 px-3 py-2 text-xs font-semibold text-white hover:bg-amber-500"
+                >
+                  Upgrade to Business
+                </Link>
+              </div>
+            )}
+            {provider.connection && isAutodeskFamily && provider.entitled && (
+              <Link
+                href={withProjectContext("/integrations/autodesk/connect", projectContext)}
+                className="rounded-2xl border border-[#0EA5E9] bg-[#0EA5E9] px-4 py-2 text-sm font-semibold text-white hover:opacity-90 dark:border-[#22D3EE] dark:bg-[#22D3EE] dark:text-[#050B18]"
+              >
+                Browse Autodesk files
               </Link>
             )}
             {provider.connection && provider.id === "google-drive" && (

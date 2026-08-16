@@ -133,6 +133,18 @@ describe("AI Draft BOQ workflow", () => {
     expect(boqRepository).toContain("ESTIMATE_INTEGRITY_REQUIRED");
   });
 
+  it("allows a delegated worker to pin the target BOQ and frozen source-file scope", () => {
+    const service = readFileSync(
+      "src/lib/services/ai-draft-boq-service.ts",
+      "utf8",
+    );
+
+    expect(service).toContain("targetBoqId?: string");
+    expect(service).toContain("projectFileIds?: readonly string[]");
+    expect(service).toContain("AI_DRAFT_SOURCE_SCOPE_EMPTY");
+    expect(service).toContain("AI_DRAFT_BOQ_PROJECT_MISMATCH");
+    expect(service).toContain("projectFileId: { in: scopedProjectFileIds }");
+  });
   it("exposes all three post-extraction choices and BOQ-level confirmation", () => {
     const extractionPage = readFileSync(
       "src/app/projects/[projectId]/extractions/page.tsx",

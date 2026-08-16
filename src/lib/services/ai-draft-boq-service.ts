@@ -90,27 +90,65 @@ function assertAiDraftEditable(boq: Awaited<ReturnType<typeof getBOQRecord>>) {
   assertBOQEditable(boq, "edit");
 }
 
-export async function generateAiDraftBoq(actor: CurrentActor, projectIdentifier: string) {
+export type AiDraftGenerationOptions = {
+  targetBoqId?: string;
+  projectFileIds?: readonly string[];
+};
+
+export async function generateAiDraftBoq(
+  actor: CurrentActor,
+  projectIdentifier: string,
+  options: AiDraftGenerationOptions = {},
+) {
   requireCapability(actor, "boq:edit");
   const project = await getProjectRecord(actor.companyId, projectIdentifier);
 
-  const latest = await prisma.bOQ.findFirst({
-    where: { companyId: actor.companyId, projectId: project.id },
-    orderBy: { revisionNumber: "desc" },
-    select: { id: true },
-  });
+  const latest = options.targetBoqId
+    ? null
+    : await prisma.bOQ.findFirst({
+        where: { companyId: actor.companyId, projectId: project.id },
+        orderBy: { revisionNumber: "desc" },
+        select: { id: true },
+      });
 
-  const targetBoqId = latest?.id
+  const targetBoqId = options.targetBoqId
+    ?? latest?.id
     ?? (await createProjectBOQ(actor.companyId, project.id)).id;
+
+  const explicitSourceScope = options.projectFileIds !== undefined;
+  const scopedProjectFileIds = [
+    ...new Set(
+      (options.projectFileIds ?? [])
+        .map((id) => id.trim())
+        .filter(Boolean),
+    ),
+  ];
+
+  if (explicitSourceScope && scopedProjectFileIds.length === 0) {
+    throw new ConflictError(
+      "AI_DRAFT_SOURCE_SCOPE_EMPTY",
+      "The requested AI Draft source scope is empty. Quantara will not silently widen it to unrelated project files.",
+    );
+  }
 
   return prisma.$transaction(async (tx) => {
     const current = await getBOQRecord(actor.companyId, targetBoqId, tx);
     assertAiDraftEditable(current);
 
+    if (current.projectId !== project.id) {
+      throw new ConflictError(
+        "AI_DRAFT_BOQ_PROJECT_MISMATCH",
+        "The requested AI Draft BOQ belongs to another project.",
+      );
+    }
+
     const rows = await tx.extractedEntity.findMany({
       where: {
         companyId: actor.companyId,
         projectId: project.id,
+        ...(scopedProjectFileIds.length > 0
+          ? { projectFileId: { in: scopedProjectFileIds } }
+          : {}),
         status: { in: ["EXTRACTED", "NEEDS_REVIEW", "CONFIRMED", "CORRECTED"] },
       },
       orderBy: [{ projectFileId: "asc" }, { createdAt: "asc" }],

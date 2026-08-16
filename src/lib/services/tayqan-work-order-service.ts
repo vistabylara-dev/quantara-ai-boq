@@ -3,6 +3,8 @@ import {
   ExtractionJobStatus,
   ExtractedEntityStatus,
   Prisma,
+  QuantityProvenanceSource,
+  RateProvenanceSource,
   TayqanIntakeMessageRole,
   TayqanIntakeStatus,
   TayqanWorkStage,
@@ -13,9 +15,14 @@ import type { CurrentActor } from "@/lib/auth/current-actor";
 import { prisma } from "@/lib/db/prisma";
 import { AppError, ConflictError, NotFoundError } from "@/lib/errors/app-error";
 import { getSourceProcessingCapability } from "@/lib/files/source-processing-capability";
+import { getAiDraftExtractedEntityId } from "@/lib/guidance/ai-draft-boq";
 import { extractionJobQueue } from "@/lib/jobs/extraction-worker";
-import { createProjectBOQ } from "@/lib/repositories/boq-repository";
+import {
+  createProjectBOQ,
+  getBOQRecord,
+} from "@/lib/repositories/boq-repository";
 import { getProjectRecord } from "@/lib/repositories/project-repository";
+import { generateAiDraftBoq } from "@/lib/services/ai-draft-boq-service";
 import {
   confirmExtractedEntity,
   correctExtractedEntity,
@@ -61,6 +68,20 @@ type WorkProgress = {
    * or a later file upload from silently entering this job.
    */
   selectedSourceFileIds?: string[];
+
+  /**
+   * Draft-first handoff state. Kept inside the EXISTING progressJson so
+   * there is no Prisma/schema change. The normal Quantara AI Draft service
+   * remains the single implementation of draft creation.
+   */
+  aiDraft?: {
+    boqId: string;
+    addedCount: number;
+    skippedCount: number;
+    alreadyPresentCount: number;
+    unreviewedAddedCount: number;
+    reviewedAddedCount: number;
+  };
 };
 
 type WorkBlocker = {
@@ -1021,6 +1042,14 @@ async function advanceSourceProcessing(actor: CurrentActor, projectSlug: string,
     return toState(await loadOrder(actor.companyId, order.id));
   }
 
+  if (usesDraftFirstWorkflow(order)) {
+    return prepareTayqanAiDraft(
+      actor,
+      projectSlug,
+      order,
+    );
+  }
+
   const next = await moveStage(actor, order, TayqanWorkStage.EVIDENCE_REVIEW, "SOURCE_PROCESSING_COMPLETE");
   return advanceEvidenceReview(actor, projectSlug, next);
 }
@@ -1058,6 +1087,303 @@ function sourceScopedEntityFilter(
         },
       }
     : {};
+}
+
+function usesDraftFirstWorkflow(
+  order: {
+    desiredDeliverable: string;
+  },
+): boolean {
+  return (
+    order.desiredDeliverable === "COMPLETE_BOQ_FROM_SOURCES"
+    || order.desiredDeliverable === "UPDATE_EXISTING_BOQ"
+  );
+}
+
+function aiDraftBoqHref(
+  projectSlug: string,
+  summary: WorkProgress["aiDraft"],
+): string {
+  const params = new URLSearchParams({
+    aiDraft: "1",
+    added: String(summary?.addedCount ?? 0),
+    skipped: String(summary?.skippedCount ?? 0),
+    existing: String(summary?.alreadyPresentCount ?? 0),
+  });
+
+  return `/projects/${projectSlug}/boq?${params.toString()}`;
+}
+
+async function prepareTayqanAiDraft(
+  actor: CurrentActor,
+  projectSlug: string,
+  order: Awaited<ReturnType<typeof loadOrder>>,
+) {
+  const boqId =
+    await ensureWorkingBoq(
+      actor,
+      projectSlug,
+      order,
+    );
+
+  const selectedSourceFileIds =
+    sourceFileIdsFromProgress(order);
+
+  const result =
+    await generateAiDraftBoq(
+      actor,
+      projectSlug,
+      {
+        targetBoqId: boqId,
+        projectFileIds: selectedSourceFileIds,
+      },
+    );
+
+  const progress =
+    parseProgress(order.progressJson);
+
+  const aiDraft: NonNullable<
+    WorkProgress["aiDraft"]
+  > = {
+    boqId: result.boqId,
+    addedCount: result.addedCount,
+    skippedCount: result.skippedCount,
+    alreadyPresentCount:
+      result.alreadyPresentCount,
+    unreviewedAddedCount:
+      result.unreviewedAddedCount,
+    reviewedAddedCount:
+      result.reviewedAddedCount,
+  };
+
+  await updateOrder(
+    actor,
+    order.id,
+    {
+      boqId,
+      progressJson: jsonObject({
+        ...progress,
+        aiDraft,
+      }),
+      lastAdvancedAt: new Date(),
+    },
+    "AI_DRAFT_BOQ_GENERATED",
+    {
+      ...aiDraft,
+      selectedSourceCount:
+        selectedSourceFileIds.length,
+    },
+  );
+
+  const loaded =
+    await loadOrder(
+      actor.companyId,
+      order.id,
+    );
+
+  if (
+    aiDraft.addedCount === 0
+    && aiDraft.alreadyPresentCount === 0
+  ) {
+    return block(
+      actor,
+      loaded,
+      "AI_DRAFT_NO_USABLE_ITEMS",
+      "tayqan.hire.workflow.draftNoUsableItems",
+      {
+        kind: "ACTION",
+        i18nKey:
+          "tayqan.hire.workflow.draftNoUsableItems",
+        actionHref:
+          `/projects/${projectSlug}/extractions`,
+      },
+    );
+  }
+
+  const assembly =
+    await moveStage(
+      actor,
+      loaded,
+      TayqanWorkStage.BOQ_ASSEMBLY,
+      "AI_DRAFT_BOQ_READY_FOR_REVIEW",
+    );
+
+  return block(
+    actor,
+    assembly,
+    "AI_DRAFT_REVIEW_REQUIRED",
+    "tayqan.hire.workflow.draftReadyForReview",
+    {
+      kind: "ACTION",
+      i18nKey:
+        "tayqan.hire.workflow.draftReadyForReview",
+      actionHref:
+        aiDraftBoqHref(
+          projectSlug,
+          aiDraft,
+        ),
+    },
+  );
+}
+
+async function advanceAiDraftProfessionalReview(
+  actor: CurrentActor,
+  projectSlug: string,
+  order: Awaited<ReturnType<typeof loadOrder>>,
+) {
+  if (!order.boqId) {
+    throw new ConflictError(
+      "TAYQAN_BOQ_REQUIRED",
+      "TAYQAN needs a working BOQ before professional review.",
+    );
+  }
+
+  const boq =
+    await getBOQRecord(
+      actor.companyId,
+      order.boqId,
+    );
+
+  const aiDraftItems =
+    boq.sections
+      .flatMap((section) => section.items)
+      .filter(
+        (item) =>
+          getAiDraftExtractedEntityId(
+            item.sourceReference,
+          ) !== null,
+      );
+
+  if (aiDraftItems.length === 0) {
+    return block(
+      actor,
+      order,
+      "AI_DRAFT_NO_USABLE_ITEMS",
+      "tayqan.hire.workflow.draftNoUsableItems",
+      {
+        kind: "ACTION",
+        i18nKey:
+          "tayqan.hire.workflow.draftNoUsableItems",
+        actionHref:
+          `/projects/${projectSlug}/extractions`,
+      },
+    );
+  }
+
+  const pendingQuantityCount =
+    aiDraftItems.filter((item) => {
+      const provenance =
+        item.quantityProvenance;
+
+      return (
+        !provenance
+        || provenance.sourceType
+          === QuantityProvenanceSource
+            .LEGACY_UNVERIFIED
+        || provenance.confirmedAt === null
+      );
+    }).length;
+
+  if (pendingQuantityCount > 0) {
+    return block(
+      actor,
+      order,
+      "AI_DRAFT_REVIEW_REQUIRED",
+      "tayqan.hire.workflow.draftReadyForReview",
+      {
+        kind: "ACTION",
+        i18nKey:
+          "tayqan.hire.workflow.draftReadyForReview",
+        actionHref:
+          aiDraftBoqHref(
+            projectSlug,
+            parseProgress(order.progressJson)
+              .aiDraft,
+          ),
+      },
+    );
+  }
+
+  const remainingExtractionCount =
+    await prisma.extractedEntity.count({
+      where: {
+        companyId: actor.companyId,
+        projectId: order.projectId,
+        ...sourceScopedEntityFilter(order),
+        status: {
+          in: [
+            ExtractedEntityStatus.EXTRACTED,
+            ExtractedEntityStatus.NEEDS_REVIEW,
+          ],
+        },
+      },
+    });
+
+  if (remainingExtractionCount > 0) {
+    return block(
+      actor,
+      order,
+      "AI_DRAFT_EXCEPTIONS_REMAIN",
+      "tayqan.hire.workflow.draftExceptionsRemain",
+      {
+        kind: "ACTION",
+        i18nKey:
+          "tayqan.hire.workflow.draftExceptionsRemain",
+        actionHref:
+          `/projects/${projectSlug}/extractions`,
+      },
+    );
+  }
+
+  if (order.includeRates) {
+    const pendingRateCount =
+      aiDraftItems.filter((item) => {
+        const provenance =
+          item.rateProvenance;
+
+        return (
+          !provenance
+          || provenance.sourceType
+            === RateProvenanceSource
+              .LEGACY_UNVERIFIED
+          || provenance.confirmedAt === null
+        );
+      }).length;
+
+    if (pendingRateCount > 0) {
+      return block(
+        actor,
+        order,
+        "AI_DRAFT_RATES_REMAIN",
+        "tayqan.hire.workflow.draftRatesRemain",
+        {
+          kind: "ACTION",
+          i18nKey:
+            "tayqan.hire.workflow.draftRatesRemain",
+          actionHref:
+            aiDraftBoqHref(
+              projectSlug,
+              parseProgress(order.progressJson)
+                .aiDraft,
+            ),
+        },
+      );
+    }
+  }
+
+  const next =
+    await moveStage(
+      actor,
+      order,
+      TayqanWorkStage.VALIDATION,
+      "AI_DRAFT_PROFESSIONAL_REVIEW_COMPLETE",
+    );
+
+  return advanceValidation(
+    actor,
+    projectSlug,
+    next,
+  );
 }
 
 async function advanceEvidenceReview(
@@ -1469,12 +1795,33 @@ export async function advanceTayqanWorkOrder(actor: CurrentActor, projectIdentif
     case TayqanWorkStage.SOURCE_PROCESSING:
       return advanceSourceProcessing(actor, project.slug, order);
     case TayqanWorkStage.EVIDENCE_REVIEW:
+      if (
+        usesDraftFirstWorkflow(order)
+        && !parseProgress(order.progressJson)
+          .aiDraft
+      ) {
+        return prepareTayqanAiDraft(
+          actor,
+          project.slug,
+          order,
+        );
+      }
       return advanceEvidenceReview(actor, project.slug, order);
     case TayqanWorkStage.QUANTITY_PREPARATION:
       return advanceQuantityPreparation(actor, project.slug, order);
     case TayqanWorkStage.RATE_PREPARATION:
       return advanceRatePreparation(actor, project.slug, order);
     case TayqanWorkStage.BOQ_ASSEMBLY:
+      if (
+        parseProgress(order.progressJson)
+          .aiDraft
+      ) {
+        return advanceAiDraftProfessionalReview(
+          actor,
+          project.slug,
+          order,
+        );
+      }
       return advanceBoqAssembly(actor, project.slug, order);
     case TayqanWorkStage.VALIDATION:
       return advanceValidation(actor, project.slug, order);

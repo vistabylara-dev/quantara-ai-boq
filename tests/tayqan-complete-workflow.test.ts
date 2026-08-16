@@ -31,9 +31,14 @@ describe("TAYQAN complete paid employee workflow", () => {
     expect(source).toContain("continue;");
   });
 
-  it("requires professional review of extracted evidence instead of auto-confirming it", () => {
+  it("delivers the AI Draft before professional review without auto-confirming extraction", () => {
     const source = read("src", "lib", "services", "tayqan-work-order-service.ts");
-    expect(source).toContain("EVIDENCE_REVIEW_REQUIRED");
+    expect(source).toContain("generateAiDraftBoq");
+    expect(source).toContain("AI_DRAFT_REVIEW_REQUIRED");
+    expect(source).toContain("AI_DRAFT_EXCEPTIONS_REMAIN");
+    expect(source).toContain("AI_DRAFT_RATES_REMAIN");
+    expect(source).toContain("QuantityProvenanceSource");
+    expect(source).toContain("RateProvenanceSource");
     expect(source).toContain("confirmExtractedEntity");
     expect(source).toContain("rejectExtractedEntity");
     expect(source).not.toMatch(/status:\s*ExtractedEntityStatus\.CONFIRMED[\s\S]{0,100}updateMany/);
@@ -46,8 +51,12 @@ describe("TAYQAN complete paid employee workflow", () => {
     expect(source).toContain("User-confirmed");
   });
 
-  it("assembles through the governed extraction-to-BOQ import service and ends ready for acceptance", () => {
+  it("reuses the normal AI Draft path for complete/update work and preserves the strict legacy path", () => {
     const source = read("src", "lib", "services", "tayqan-work-order-service.ts");
+    expect(source).toContain("usesDraftFirstWorkflow");
+    expect(source).toContain('order.desiredDeliverable === "COMPLETE_BOQ_FROM_SOURCES"');
+    expect(source).toContain('order.desiredDeliverable === "UPDATE_EXISTING_BOQ"');
+    expect(source).toContain("projectFileIds: selectedSourceFileIds");
     expect(source).toContain("importExtractedEntityToBoq");
     expect(source).toContain("enqueueWorkerReview");
     expect(source).toContain("READY_FOR_ACCEPTANCE");
@@ -126,6 +135,10 @@ describe("B1 governing instruction enforcement", () => {
 
     expect(source).toContain(
       "in: sourceFileIds",
+    );
+
+    expect(source).toContain(
+      "projectFileIds: selectedSourceFileIds",
     );
   });
 

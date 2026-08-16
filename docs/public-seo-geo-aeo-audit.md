@@ -13,11 +13,11 @@ The metadata values below are now centralized in `src/lib/public-site/search-reg
 
 ## Route accounting and index policy
 
-- Static marketing pages on disk: 65.
-- Registered public content pages: 64. `/register` is intentionally a separate utility page.
-- Indexable registry pages: 60.
+- Static marketing pages on disk: 66.
+- Registered public content pages: 65. `/register` is intentionally a separate utility page.
+- Indexable registry pages: 61.
 - Dynamic integration detail pages: 43.
-- Total sitemap URLs: 103.
+- Total sitemap URLs: 104.
 - Noindex thin legal placeholders: `/acceptable-use`, `/cookie-policy`, `/data-processing`, `/subprocessors`.
 - Noindex auth utilities, excluded from the sitemap: `/login`, `/register`, `/forgot-password`, `/reset-password`, `/verify-email`.
 - `/industries/[industryId]` is not a public search template. Its ten configured IDs are behind the application access boundary, have no sitemap entries and are excluded from the metadata completion report.
@@ -31,6 +31,7 @@ The metadata values below are now centralized in `src/lib/public-site/search-reg
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | `/` | Commercial | AI-assisted BOQ workflow | UAE, reviewed sources, calculations, validation | AI-Assisted BOQ Workflow Software UAE \| Quantara | Implemented | Quantara helps construction professionals review supported project sources, visible calculations, BOQ records, validation and professional outputs. | Implemented | AI-Assisted BOQ Workflow Software for UAE Construction Teams | `https://quantara.vistabylara.com/` | Index | Core, resource, comparison and regional hubs | WebPage and visible FAQPage; canonical SoftwareApplication entity is global | Direct answers and limitations present | High |
 | `/features` | Commercial | Quantara product capabilities | AI Draft BOQ, measurement, calculations, TAYQAN, integrations, outputs | Quantara BOQ Features for Construction Teams | Implemented | Explore Quantara project sources, AI Draft BOQ, guided measurement, calculations, TAYQAN, integrations, revisions and professional outputs. | Implemented | Everything you need to move from project information to a professional BOQ | `https://quantara.vistabylara.com/features` | Index | Platform, integration hub, TAYQAN, pricing and registration | WebPage | Status-free sales presentation with professional-control boundary retained | High |
+| `/products` | Commercial | Quantara published products and digital tools | subscriptions, software offers, professional products | Quantara Products & Digital Construction Tools | Implemented | Explore published Quantara products, subscriptions, digital construction tools and professional offers. | Implemented | Products & professional digital tools | `https://quantara.vistabylara.com/products` | Index | Marketplace and individual published product pages | WebPage and BreadcrumbList | Owner-published product index; purchase readiness remains separate from Marketplace publication | Medium |
 | `/about` | Navigational | Quantara identity | Vista By Lara, audience, product boundaries | About Quantara BOQ Workflow Software | Implemented | Learn what Quantara is, who it supports and how Vista By Lara is developing an AI-assisted BOQ workflow for construction professionals. | Implemented | About Quantara | `https://quantara.vistabylara.com/about` | Index | Company, features, contact | WebPage and BreadcrumbList | Canonical entity definition appears in the visible introduction | Low |
 | `/security` | Informational | Security and access boundaries | privacy, access control, Early Access | Quantara Security and Controlled Early Access | Implemented | Review the security, access-control and professional-responsibility boundaries published for Quantara Controlled Early Access. | Implemented | Security and Controlled Early Access | `https://quantara.vistabylara.com/security` | Index | Company, privacy, terms | WebPage recommended | Answer hosting, residency, SSO and assurance questions without certification claims | Medium |
 | `/terms` | Navigational | Controlled Early Access terms | responsibility, availability, acceptable use | Quantara Controlled Early Access Terms | Implemented | Read the terms governing Quantara Controlled Early Access, permitted use, professional responsibility and service availability. | Implemented | Terms of Controlled Early Access | `https://quantara.vistabylara.com/terms` | Index | Legal footer | WebPage optional | Legal content, not a commercial capability page | Low |

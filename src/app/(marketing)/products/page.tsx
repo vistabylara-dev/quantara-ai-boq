@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { PublicPageJsonLd } from "@/components/seo/public-json-ld";
 import { createPublicPageMetadata } from "@/lib/public-site/search-registry";
 import { listPublishedManagedProducts } from "@/lib/services/managed-product-public-service";
 
@@ -24,7 +25,15 @@ export default async function ProductsPage() {
   const products = await listPublishedManagedProducts();
 
   return (
-    <main className="mx-auto max-w-7xl px-5 py-16 sm:px-8">
+    <>
+      <PublicPageJsonLd
+        path="/products"
+        breadcrumbs={[
+          { name: "Home", path: "/" },
+          { name: "Products", path: "/products" },
+        ]}
+      />
+      <main className="mx-auto max-w-7xl px-5 py-16 sm:px-8">
       <p className="text-sm font-semibold uppercase tracking-[0.25em] text-sky-600">
         Quantara Marketplace
       </p>
@@ -66,6 +75,7 @@ export default async function ProductsPage() {
           No Product Manager offers are published yet.
         </div>
       )}
-    </main>
+      </main>
+    </>
   );
 }

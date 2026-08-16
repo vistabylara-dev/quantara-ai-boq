@@ -1,7 +1,7 @@
 # Quantara public search intent map
 
 Reviewed: 2026-08-16
-Scope: 60 indexable registry routes plus 43 public provider integration detail URLs, for 103 sitemap URLs. Auth, account recovery, thin legal placeholders, token-sharing pages and authenticated SaaS routes are intentionally excluded.
+Scope: 61 indexable registry routes plus 43 public provider integration detail URLs, for 104 sitemap URLs. Auth, account recovery, thin legal placeholders, token-sharing pages and authenticated SaaS routes are intentionally excluded.
 
 ## Cannibalization rules
 
@@ -14,11 +14,13 @@ Scope: 60 indexable registry routes plus 43 public provider integration detail U
 - Audience pages answer role-specific workflow questions and should link back to `/industries`, not compete with the broad `/boq-software` page.
 - `/tayqan-ai-quantity-surveyor` owns AI Quantity Surveyor / Digital QS hire intent. `/quantity-surveying-software` and `/boq-software-for-quantity-surveyors` remain software-category and role-workflow pages rather than TAYQAN hire pages.
 - `/boq-integrations` owns broad Quantara integration discovery. `/boq-integrations/{provider-id}` detail URLs own branded searches such as Quantara + Revit, AutoCAD, Procore, CostX or Google Drive and should not compete with `/features`.
+- `/products` owns the published Quantara product catalogue/index intent. Individual `/products/{slug}` pages own the specific product offer and should not compete with `/pricing` or broad feature pages.
 
 | Page | Primary Query Intent | Primary Keyword Theme | Supporting Questions | Audience | Funnel Stage | Cannibalization Risk |
 | --- | --- | --- | --- | --- | --- | --- |
 | `/` | Find an AI-assisted BOQ platform for UAE work | AI-assisted BOQ workflow software UAE | What is Quantara? What does it support? What still needs professional review? | UAE construction professionals | Commercial discovery | High: distinguish from `/ai-boq-software` and `/boq-software-uae` with brand/entity overview |
 | `/features` | Evaluate the full Quantara capability set | Quantara BOQ features | How does Quantara handle project sources, AI Draft BOQ, measurement, calculations, TAYQAN, integrations and outputs? | Construction software buyers, QS, estimators and contractors | Evaluation | Medium: capability-sales page; avoid duplicating individual integration and TAYQAN intent |
+| `/products` | Browse published Quantara products and offers | Quantara products and digital construction tools | Which products are currently published? What purchase route and price are shown? | Construction software buyers and Quantara prospects | Commercial discovery/evaluation | Medium: catalogue index only; individual product pages own offer-specific intent and pricing remains governed by each product |
 | `/about` | Verify company and software identity | About Quantara | Who operates Quantara? Who is it for? What is its scope? | Buyers, partners, answer engines | Trust | Low |
 | `/security` | Assess published security boundaries | Quantara security and Early Access | What access controls are described? Is UAE hosting, SSO or certification claimed? | Security reviewers and buyers | Risk review | Low: keep separate from privacy/legal content |
 | `/terms` | Read access terms | Quantara Controlled Early Access terms | What use is permitted? What professional duties remain? | Users and legal reviewers | Decision/support | Low |

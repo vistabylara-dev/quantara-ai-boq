@@ -6,6 +6,7 @@ import type { ReactNode } from "react";
 import { PUBLIC_WEBSITE_PATHS } from "@/lib/public-site/public-route-paths";
 import HelpFeedbackBubble from "@/components/support/help-feedback-bubble";
 import { TayqanGlobalCompanion } from "@/components/tayqan/tayqan-global-companion";
+import { OnboardingProvider } from "@/components/onboarding/onboarding-provider";
 
 const AppShell = dynamic(() => import("./app-shell"));
 
@@ -57,13 +58,13 @@ export default function ConditionalAppShell({
   }
 
   return (
-    <>
+    <OnboardingProvider>
       <AppShell>{children}</AppShell>
       <HelpFeedbackBubble
         surface="SAAS"
         currentRoute={currentRoute}
       />
       <TayqanGlobalCompanion />
-    </>
+    </OnboardingProvider>
   );
 }

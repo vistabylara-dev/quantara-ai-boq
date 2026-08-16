@@ -10,6 +10,13 @@ import {
   summarizeExtractionReview,
   validateCorrectionDraft,
 } from "@/lib/guidance/project-workflow";
+import {
+  DEFAULT_EXTRACTION_REVIEW_FILTERS,
+  filterExtractionReviewEntities,
+  getExtractionReviewPriority,
+  uniqueExtractionFilterValues,
+  type ExtractionReviewFilters,
+} from "@/lib/guidance/extraction-review-filters";
 import { GuideTip } from "@/components/guidance/guide-tip";
 
 type ProjectFileView = {
@@ -151,6 +158,7 @@ export default function ProjectExtractionsPage(props: { params: Promise<{ projec
   const [correctionDraft, setCorrectionDraft] = useState<CorrectionDraft>({ label: "", quantity: "", unit: "", reason: "" });
   const [rejectionReason, setRejectionReason] = useState("");
   const [formError, setFormError] = useState<string | null>(null);
+  const [filters, setFilters] = useState<ExtractionReviewFilters>({ ...DEFAULT_EXTRACTION_REVIEW_FILTERS });
 
   const encodedProjectId = encodeURIComponent(params.projectId);
 
@@ -193,6 +201,36 @@ export default function ProjectExtractionsPage(props: { params: Promise<{ projec
       (entity) => entity.status === "CONFIRMED" || entity.status === "CORRECTED",
     ).length,
     [entities],
+  );
+
+  const filteredEntities = useMemo(
+    () => filterExtractionReviewEntities(entities, filters),
+    [entities, filters],
+  );
+  const statusOptions = useMemo(
+    () => uniqueExtractionFilterValues(entities.map((entity) => entity.status)),
+    [entities],
+  );
+  const entityTypeOptions = useMemo(
+    () => uniqueExtractionFilterValues(entities.map((entity) => entity.entityType)),
+    [entities],
+  );
+  const extractionMethodOptions = useMemo(
+    () => uniqueExtractionFilterValues(entities.map((entity) => entity.extractionMethod)),
+    [entities],
+  );
+  const priorityCounts = useMemo(
+    () => entities.reduce(
+      (counts, entity) => {
+        counts[getExtractionReviewPriority(entity)] += 1;
+        return counts;
+      },
+      { SAFE: 0, REVIEW: 0, CRITICAL: 0 },
+    ),
+    [entities],
+  );
+  const hasActiveFilters = Object.entries(filters).some(
+    ([key, value]) => key === "search" ? Boolean(value.trim()) : value !== "ALL",
   );
 
   const refreshAfterAction = useCallback(async () => {
@@ -411,6 +449,134 @@ export default function ProjectExtractionsPage(props: { params: Promise<{ projec
         </div>
       )}
 
+      {entities.length > 0 && (
+        <section className="rounded-[28px] border border-[#D9E2EC] bg-white p-6 dark:border-[#1E2A42] dark:bg-[#0B1426]">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#0077B6] dark:text-[#21C7F3]">
+                Smart review filters
+              </p>
+              <h3 className="mt-2 text-xl font-semibold text-[#0B1630] dark:text-white">Focus on exceptions first</h3>
+              <p className="mt-1 text-sm text-[#536078] dark:text-[#B8C4D8]">
+                Filtering only changes what you see. It never confirms, rejects or edits extracted information.
+              </p>
+            </div>
+            <button
+              type="button"
+              disabled={!hasActiveFilters}
+              onClick={() => setFilters({ ...DEFAULT_EXTRACTION_REVIEW_FILTERS })}
+              className="rounded-2xl border border-[#D9E2EC] px-4 py-2 text-sm font-semibold text-[#536078] disabled:cursor-not-allowed disabled:opacity-40 dark:border-[#1E2A42] dark:text-[#B8C4D8]"
+            >
+              Reset filters
+            </button>
+          </div>
+
+          <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+            <label className="xl:col-span-2">
+              <span className="text-xs font-semibold text-[#536078] dark:text-[#B8C4D8]">Search</span>
+              <input
+                type="search"
+                value={filters.search}
+                onChange={(event) => setFilters((current) => ({ ...current, search: event.target.value }))}
+                placeholder="Search label, type, unit or method"
+                className="mt-1 w-full rounded-xl border border-[#D9E2EC] bg-white px-3 py-2 text-sm text-[#0B1630] dark:border-[#1E2A42] dark:bg-[#111D33] dark:text-white"
+              />
+            </label>
+            <label>
+              <span className="text-xs font-semibold text-[#536078] dark:text-[#B8C4D8]">Review priority</span>
+              <select
+                value={filters.priority}
+                onChange={(event) => setFilters((current) => ({ ...current, priority: event.target.value as ExtractionReviewFilters["priority"] }))}
+                className="mt-1 w-full rounded-xl border border-[#D9E2EC] bg-white px-3 py-2 text-sm text-[#0B1630] dark:border-[#1E2A42] dark:bg-[#111D33] dark:text-white"
+              >
+                <option value="ALL">All priorities</option>
+                <option value="CRITICAL">Critical first</option>
+                <option value="REVIEW">Review recommended</option>
+                <option value="SAFE">Safe candidates</option>
+              </select>
+            </label>
+            <label>
+              <span className="text-xs font-semibold text-[#536078] dark:text-[#B8C4D8]">Confidence</span>
+              <select
+                value={filters.confidence}
+                onChange={(event) => setFilters((current) => ({ ...current, confidence: event.target.value as ExtractionReviewFilters["confidence"] }))}
+                className="mt-1 w-full rounded-xl border border-[#D9E2EC] bg-white px-3 py-2 text-sm text-[#0B1630] dark:border-[#1E2A42] dark:bg-[#111D33] dark:text-white"
+              >
+                <option value="ALL">All confidence</option>
+                <option value="LOW">Below 85%</option>
+                <option value="MEDIUM">85–94.99%</option>
+                <option value="HIGH">95%+</option>
+              </select>
+            </label>
+            <label>
+              <span className="text-xs font-semibold text-[#536078] dark:text-[#B8C4D8]">Status</span>
+              <select
+                value={filters.status}
+                onChange={(event) => setFilters((current) => ({ ...current, status: event.target.value }))}
+                className="mt-1 w-full rounded-xl border border-[#D9E2EC] bg-white px-3 py-2 text-sm text-[#0B1630] dark:border-[#1E2A42] dark:bg-[#111D33] dark:text-white"
+              >
+                <option value="ALL">All statuses</option>
+                {statusOptions.map((status) => <option key={status} value={status}>{formatStatusLabel(status)}</option>)}
+              </select>
+            </label>
+            <label>
+              <span className="text-xs font-semibold text-[#536078] dark:text-[#B8C4D8]">Source file</span>
+              <select
+                value={filters.sourceFileId}
+                onChange={(event) => setFilters((current) => ({ ...current, sourceFileId: event.target.value }))}
+                className="mt-1 w-full rounded-xl border border-[#D9E2EC] bg-white px-3 py-2 text-sm text-[#0B1630] dark:border-[#1E2A42] dark:bg-[#111D33] dark:text-white"
+              >
+                <option value="ALL">All source files</option>
+                {files.map((file) => <option key={file.id} value={file.id}>{file.originalName}</option>)}
+              </select>
+            </label>
+            <label>
+              <span className="text-xs font-semibold text-[#536078] dark:text-[#B8C4D8]">Entity type</span>
+              <select
+                value={filters.entityType}
+                onChange={(event) => setFilters((current) => ({ ...current, entityType: event.target.value }))}
+                className="mt-1 w-full rounded-xl border border-[#D9E2EC] bg-white px-3 py-2 text-sm text-[#0B1630] dark:border-[#1E2A42] dark:bg-[#111D33] dark:text-white"
+              >
+                <option value="ALL">All entity types</option>
+                {entityTypeOptions.map((type) => <option key={type} value={type}>{formatStatusLabel(type)}</option>)}
+              </select>
+            </label>
+            <label>
+              <span className="text-xs font-semibold text-[#536078] dark:text-[#B8C4D8]">Extraction method</span>
+              <select
+                value={filters.extractionMethod}
+                onChange={(event) => setFilters((current) => ({ ...current, extractionMethod: event.target.value }))}
+                className="mt-1 w-full rounded-xl border border-[#D9E2EC] bg-white px-3 py-2 text-sm text-[#0B1630] dark:border-[#1E2A42] dark:bg-[#111D33] dark:text-white"
+              >
+                <option value="ALL">All methods</option>
+                {extractionMethodOptions.map((method) => <option key={method} value={method}>{formatStatusLabel(method)}</option>)}
+              </select>
+            </label>
+            <label>
+              <span className="text-xs font-semibold text-[#536078] dark:text-[#B8C4D8]">Missing data</span>
+              <select
+                value={filters.dataIssue}
+                onChange={(event) => setFilters((current) => ({ ...current, dataIssue: event.target.value as ExtractionReviewFilters["dataIssue"] }))}
+                className="mt-1 w-full rounded-xl border border-[#D9E2EC] bg-white px-3 py-2 text-sm text-[#0B1630] dark:border-[#1E2A42] dark:bg-[#111D33] dark:text-white"
+              >
+                <option value="ALL">All records</option>
+                <option value="MISSING_QUANTITY">Missing / invalid quantity</option>
+                <option value="MISSING_UNIT">Missing unit</option>
+              </select>
+            </label>
+          </div>
+
+          <div className="mt-5 flex flex-wrap gap-2 text-xs">
+            <span className="rounded-full bg-[#EEF3F8] px-3 py-1.5 text-[#536078] dark:bg-[#111D33] dark:text-[#B8C4D8]">
+              Showing {filteredEntities.length} of {entities.length}
+            </span>
+            <span className="rounded-full bg-[#159A6A]/10 px-3 py-1.5 text-[#159A6A] dark:text-emerald-300">Safe {priorityCounts.SAFE}</span>
+            <span className="rounded-full bg-[#D98A16]/10 px-3 py-1.5 text-[#D98A16] dark:text-amber-300">Review {priorityCounts.REVIEW}</span>
+            <span className="rounded-full bg-[#D84A4A]/10 px-3 py-1.5 text-[#D84A4A] dark:text-rose-300">Critical {priorityCounts.CRITICAL}</span>
+          </div>
+        </section>
+      )}
+
       {entities.length === 0 ? (
         <section
           id="extraction-review-items"
@@ -435,10 +601,23 @@ export default function ProjectExtractionsPage(props: { params: Promise<{ projec
           className="space-y-4 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#009FE3]"
           aria-label="Extracted candidates"
         >
-          {entities.map((entity) => {
+          {filteredEntities.length === 0 && (
+            <div className="rounded-[28px] border border-dashed border-[#D9E2EC] bg-white p-8 text-center dark:border-[#1E2A42] dark:bg-[#0B1426]">
+              <p className="font-semibold text-[#0B1630] dark:text-white">No extracted candidates match these filters.</p>
+              <button
+                type="button"
+                onClick={() => setFilters({ ...DEFAULT_EXTRACTION_REVIEW_FILTERS })}
+                className="mt-3 text-sm font-semibold text-[#0077B6] dark:text-[#21C7F3]"
+              >
+                Clear filters
+              </button>
+            </div>
+          )}
+          {filteredEntities.map((entity) => {
             const sourceFile = sourceFiles.get(entity.projectFileId);
             const reviewable = isReviewableExtractionStatus(entity.status);
             const isBusy = pendingAction !== null;
+            const reviewPriority = getExtractionReviewPriority(entity);
             const sourceHref = sourceFile
               ? `/projects/${encodedProjectId}/files?file=${encodeURIComponent(sourceFile.id)}`
               : null;
@@ -449,6 +628,17 @@ export default function ProjectExtractionsPage(props: { params: Promise<{ projec
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
                       <StatusBadge label={entity.status} tone={EXTRACTION_STATUS_TONE[entity.status] ?? "default"} />
+                      <span
+                        className={
+                          reviewPriority === "CRITICAL"
+                            ? "rounded-full bg-[#D84A4A]/10 px-2.5 py-1 text-xs font-semibold text-[#D84A4A] dark:text-rose-300"
+                            : reviewPriority === "REVIEW"
+                              ? "rounded-full bg-[#D98A16]/10 px-2.5 py-1 text-xs font-semibold text-[#D98A16] dark:text-amber-300"
+                              : "rounded-full bg-[#159A6A]/10 px-2.5 py-1 text-xs font-semibold text-[#159A6A] dark:text-emerald-300"
+                        }
+                      >
+                        {reviewPriority === "CRITICAL" ? "Critical review" : reviewPriority === "REVIEW" ? "Review recommended" : "Safe candidate"}
+                      </span>
                       <span className="rounded-full border border-[#D9E2EC] bg-[#EEF3F8] px-2.5 py-1 text-xs font-medium text-[#536078] dark:border-[#1E2A42] dark:bg-[#111D33] dark:text-[#B8C4D8]">
                         {formatStatusLabel(entity.entityType)}
                       </span>

@@ -66,13 +66,13 @@ describe("platform administration access surface", () => {
     expect(redirectMock).toHaveBeenCalledWith("/dashboard");
   });
 
-  it("renders children only after the server helper authorizes a platform actor", async () => {
+  it("renders children only after the server helper authorizes the platform owner", async () => {
     const platformActor: PlatformActor = {
       userId: "00000000-0000-4000-8000-000000000001",
       companyId: "00000000-0000-4000-8000-000000000002",
-      platformRole: PlatformRole.PLATFORM_SUPPORT,
-      fullName: "Authorized support user",
-      email: "authorized-support@example.com",
+      platformRole: PlatformRole.PLATFORM_OWNER,
+      fullName: "Authorized owner",
+      email: "authorized-owner@example.com",
     };
     requirePlatformActorMock.mockResolvedValue(platformActor);
 
@@ -83,12 +83,13 @@ describe("platform administration access surface", () => {
     expect(redirectMock).not.toHaveBeenCalled();
   });
 
-  it("shows the single Platform Admin link only inside the non-null platform-role condition", () => {
+  it("shows the single Owner Console link only for PLATFORM_OWNER", () => {
     const source = readFileSync(userMenuPath, "utf8");
     const conditionalAdminLink =
-      /\{user\.platformRole\s*&&\s*\([\s\S]*?href="\/admin"[\s\S]*?Platform Admin[\s\S]*?<\/Link>[\s\S]*?\)\}/;
+      /\{user\.platformRole === "PLATFORM_OWNER"\s*&&\s*\([\s\S]*?href="\/admin"[\s\S]*?Owner Console[\s\S]*?<\/Link>[\s\S]*?\)\}/;
 
     expect(source).toMatch(conditionalAdminLink);
+    expect(source).not.toContain("Platform Admin");
     expect(source.match(/href="\/admin"/g)).toHaveLength(1);
     expect(source).toMatch(/platformRole:\s*"PLATFORM_OWNER"\s*\|\s*"PLATFORM_ADMIN"\s*\|\s*"PLATFORM_SUPPORT"\s*\|\s*null/);
   });
@@ -96,7 +97,8 @@ describe("platform administration access surface", () => {
   it("derives navigation visibility from a fresh, allow-listed session field without secrets", () => {
     const source = readFileSync(sessionRoutePath, "utf8");
 
-    expect(source).toContain("platformIdentity?.isActive && platformIdentity.emailVerifiedAt");
+    expect(source).toContain("platformSimulationSession.findUnique");
+    expect(source).toContain("!activeSimulation");
     expect(source).toContain("? platformIdentity.platformRole");
     expect(source).toContain(": null");
     expect(source).not.toMatch(/select:\s*\{[\s\S]*?passwordHash:\s*true/);

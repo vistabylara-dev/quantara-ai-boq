@@ -434,12 +434,28 @@ async function actorHasInternalTayqanAccess(
       },
     });
 
-  return Boolean(
+  const hasInternalAdminRole = Boolean(
     user?.emailVerifiedAt
     && isTayqanInternalAdminRole(
       user.platformRole,
     ),
   );
+
+  if (!hasInternalAdminRole) {
+    return false;
+  }
+
+  const activeSimulation =
+    await prisma.platformSimulationSession.findUnique({
+      where: {
+        userId: actor.userId,
+      },
+      select: {
+        id: true,
+      },
+    });
+
+  return !activeSimulation;
 }
 
 async function getOrCreateTayqanInternalAdminEntitlement(

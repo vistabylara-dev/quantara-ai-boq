@@ -71,11 +71,6 @@ export default function ProjectsPage() {
       assigning,
     );
 
-    if (!assigning) {
-      setPlatformRole(null);
-      return;
-    }
-
     const controller =
       new AbortController();
 
@@ -97,7 +92,6 @@ export default function ProjectsPage() {
         ) {
           return;
         }
-
         setPlatformRole(null);
       });
 
@@ -105,9 +99,42 @@ export default function ProjectsPage() {
       controller.abort();
   }, []);
 
+  const [removingProjectId, setRemovingProjectId] =
+    useState<string | null>(null);
+
+  const removeProjectFromWorkspace = useCallback(
+    async (project: Project) => {
+      if (
+        !window.confirm(
+          `Remove "${project.name}" from the active workspace? This archives the project; it does not hard-delete project evidence.`,
+        )
+      ) {
+        return;
+      }
+
+      setRemovingProjectId(project.id);
+      setError(null);
+
+      try {
+        await apiClient.delete(
+          `/api/projects/${encodeURIComponent(project.id)}`,
+        );
+        await loadProjects();
+      } catch (removeError) {
+        setError(getApiErrorMessage(removeError));
+      } finally {
+        setRemovingProjectId(null);
+      }
+    },
+    [loadProjects],
+  );
+
   const internalAdminAccess =
     platformRole === "PLATFORM_OWNER"
     || platformRole === "PLATFORM_ADMIN";
+
+  const ownerAccess =
+    platformRole === "PLATFORM_OWNER";
 
   return (
     <div className="min-h-screen bg-[#07111F] text-white">
@@ -191,6 +218,21 @@ export default function ProjectsPage() {
                         >
                           Open
                         </Link>
+
+                        {ownerAccess && !tayqanAssignmentMode && (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              void removeProjectFromWorkspace(project)
+                            }
+                            disabled={removingProjectId === project.id}
+                            className="inline-flex rounded-2xl border border-rose-900 bg-rose-950/30 px-3 py-2 text-sm font-semibold text-rose-300 hover:bg-rose-950/60 disabled:cursor-not-allowed disabled:opacity-50"
+                          >
+                            {removingProjectId === project.id
+                              ? "Removing..."
+                              : "Remove"}
+                          </button>
+                        )}
 
                         {tayqanAssignmentMode && (
                           <Link

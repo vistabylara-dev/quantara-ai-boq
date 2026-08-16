@@ -132,7 +132,10 @@ async function resolveClient(
 
 export async function listProjects(companyId: string) {
   const projects = await prisma.project.findMany({
-    where: { companyId },
+    where: {
+      companyId,
+      status: { not: ProjectStatus.ARCHIVED },
+    },
     include: projectInclude,
     orderBy: { updatedAt: "desc" },
   });

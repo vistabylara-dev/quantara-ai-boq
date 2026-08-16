@@ -1,12 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { Bell, Crown, Menu, Search } from "lucide-react";
+import { Crown, Menu, Search } from "lucide-react";
 import UserMenu from "./user-menu";
 
 import { ThemeToggle } from "@/components/theme-toggle";
 import { LanguageSwitcher } from "./language-switcher";
 import { useTranslations } from "@/lib/i18n/locale-provider";
+import NotificationCenter from "@/components/notifications/notification-center";
 
 type TopHeaderProps = {
   onMenuClick: () => void;
@@ -42,14 +43,7 @@ export default function TopHeader({ onMenuClick }: TopHeaderProps) {
           >
             <Menu className="h-5 w-5" aria-hidden="true" />
           </button>
-          <button
-            type="button"
-            aria-label={t("a11y.notifications")}
-            className="relative inline-flex h-11 w-11 items-center justify-center border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 transition-all dark:border-white/10 dark:bg-white/5 dark:text-slate-300 dark:hover:bg-[#00F0FF]/10 dark:hover:text-[#00F0FF] dark:hover:border-[#00F0FF]/30"
-          >
-            <Bell className="h-5 w-5" aria-hidden="true" />
-            <span className="absolute top-2 end-2 w-2 h-2 rounded-full bg-red-500 dark:bg-[#FF0055] animate-pulse"></span>
-          </button>
+          <NotificationCenter />
           <UserMenu />
         </div>
       </div>

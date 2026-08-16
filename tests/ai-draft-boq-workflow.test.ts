@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   chooseAiDraftSection,
   formatAiDraftCategory,
+  getAiDraftExtractedEntityId,
   isAiDraftCandidateUsable,
   summarizeAiDraftCandidates,
   type AiDraftCandidate,
@@ -52,6 +53,16 @@ describe("AI Draft BOQ workflow", () => {
       skippedCount: 1,
       ignoredFinalizedCount: 1,
     });
+  });
+
+  it("keeps the extraction link recoverable after BOQ quantity provenance becomes manual", () => {
+    const entityId = "123e4567-e89b-42d3-a456-426614174000";
+
+    expect(getAiDraftExtractedEntityId(
+      `DWG-A12 | EXTRACTED_ENTITY:${entityId}`,
+    )).toBe(entityId);
+
+    expect(getAiDraftExtractedEntityId("DWG-A12")).toBeNull();
   });
 
   it("uses a matching project BOQ section", () => {

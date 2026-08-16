@@ -50,6 +50,15 @@ function tokens(value: string): string[] {
     .filter((token) => token.length >= 3 && !STOP_WORDS.has(token));
 }
 
+export function getAiDraftExtractedEntityId(
+  sourceReference: string | null | undefined,
+): string | null {
+  const match = sourceReference?.match(
+    /EXTRACTED_ENTITY:([0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})/i,
+  );
+  return match?.[1] ?? null;
+}
+
 export function isAiDraftCandidateUsable(entity: AiDraftCandidate): boolean {
   return (
     AI_DRAFT_STATUS_SET.has(entity.status.trim().toUpperCase())

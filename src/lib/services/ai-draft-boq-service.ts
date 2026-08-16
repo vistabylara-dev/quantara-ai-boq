@@ -16,6 +16,7 @@ import { ConflictError } from "@/lib/errors/app-error";
 import {
   chooseAiDraftSection,
   formatAiDraftCategory,
+  getAiDraftExtractedEntityId,
   isAiDraftCandidateUsable,
   summarizeAiDraftCandidates,
   type AiDraftCandidate,
@@ -119,7 +120,10 @@ export async function generateAiDraftBoq(actor: CurrentActor, projectIdentifier:
     const currentItems = current.sections.flatMap((section) => section.items);
     const alreadyPresentIds = new Set(
       currentItems
-        .map((item) => item.quantityProvenance?.extractedEntityId)
+        .map((item) =>
+          item.quantityProvenance?.extractedEntityId
+          ?? getAiDraftExtractedEntityId(item.sourceReference),
+        )
         .filter((value): value is string => Boolean(value)),
     );
 
@@ -396,20 +400,38 @@ export async function confirmAiDraftQuantities(actor: CurrentActor, boqId: strin
     const current = await getBOQRecord(actor.companyId, boqId, tx);
     assertAiDraftEditable(current);
 
-    const pendingItems = current.sections
+    const linkedItems = current.sections
       .flatMap((section) => section.items)
-      .filter((item) =>
-        item.quantityProvenance?.sourceType === QuantityProvenanceSource.LEGACY_UNVERIFIED
-        && Boolean(item.quantityProvenance.extractedEntityId),
-      );
+      .flatMap((item) => {
+        const provenance = item.quantityProvenance;
+        const extractedEntityId =
+          provenance?.extractedEntityId
+          ?? getAiDraftExtractedEntityId(item.sourceReference);
 
-    if (pendingItems.length === 0) {
+        if (!provenance || !extractedEntityId) return [];
+
+        const unreviewedAiQuantity =
+          provenance.sourceType === QuantityProvenanceSource.LEGACY_UNVERIFIED;
+        const manuallyReviewedAiQuantity =
+          provenance.sourceType === QuantityProvenanceSource.MANUAL_CONFIRMED
+          && provenance.confirmedAt !== null
+          && getAiDraftExtractedEntityId(item.sourceReference) !== null;
+
+        if (!unreviewedAiQuantity && !manuallyReviewedAiQuantity) return [];
+
+        return [{
+          item,
+          provenance,
+          extractedEntityId,
+          manuallyReviewedAiQuantity,
+        }];
+      });
+
+    if (linkedItems.length === 0) {
       return { confirmedCount: 0, skippedCount: 0, remainingCount: 0 };
     }
 
-    const entityIds = pendingItems
-      .map((item) => item.quantityProvenance?.extractedEntityId)
-      .filter((value): value is string => Boolean(value));
+    const entityIds = linkedItems.map((entry) => entry.extractedEntityId);
 
     const entities = await tx.extractedEntity.findMany({
       where: {
@@ -424,23 +446,44 @@ export async function confirmAiDraftQuantities(actor: CurrentActor, boqId: strin
     let confirmedCount = 0;
     let skippedCount = 0;
 
-    for (const item of pendingItems) {
-      const provenance = item.quantityProvenance;
-      const entityId = provenance?.extractedEntityId;
-      const entity = entityId ? entityById.get(entityId) : null;
+    for (const {
+      item,
+      provenance,
+      extractedEntityId,
+      manuallyReviewedAiQuantity,
+    } of linkedItems) {
+      const entity = entityById.get(extractedEntityId);
 
-      if (
-        !provenance
-        || !entity
-        || entity.quantity === null
-        || !entity.quantity.equals(item.quantity)
-        || (entity.unit ?? "").trim() !== item.unit.trim()
-      ) {
+      if (!entity) {
         skippedCount += 1;
         continue;
       }
 
+      if (entity.status === "IMPORTED") {
+        confirmedCount += 1;
+        continue;
+      }
+
+      const quantityMatchesExtraction =
+        entity.quantity !== null
+        && entity.quantity.equals(item.quantity)
+        && (entity.unit ?? "").trim() === item.unit.trim();
+
+      if (!manuallyReviewedAiQuantity && !quantityMatchesExtraction) {
+        skippedCount += 1;
+        continue;
+      }
+
+      const extractionWasCorrectedInBoq =
+        manuallyReviewedAiQuantity && !quantityMatchesExtraction;
+
       if (REVIEWABLE_ENTITY_STATUSES.has(entity.status)) {
+        const original = {
+          label: entity.label,
+          quantity: entity.quantity?.toNumber() ?? null,
+          unit: entity.unit,
+        };
+
         const claimedEntity = await tx.extractedEntity.updateMany({
           where: {
             id: entity.id,
@@ -450,10 +493,27 @@ export async function confirmAiDraftQuantities(actor: CurrentActor, boqId: strin
           },
           data: {
             status: "IMPORTED",
+            ...(extractionWasCorrectedInBoq
+              ? {
+                  quantity: item.quantity,
+                  unit: item.unit,
+                  correctionJson: {
+                    original,
+                    corrected: {
+                      quantity: item.quantity.toNumber(),
+                      unit: item.unit,
+                    },
+                    correctedByUserId: actor.userId,
+                    correctedAt: now.toISOString(),
+                    reason: "Corrected during AI Draft BOQ review.",
+                  },
+                }
+              : {}),
             confirmedByUserId: actor.userId,
             confirmedAt: now,
           },
         });
+
         if (claimedEntity.count !== 1) {
           throw new ConflictError(
             "AI_DRAFT_ENTITY_CONFIRMATION_CONFLICT",
@@ -464,10 +524,20 @@ export async function confirmAiDraftQuantities(actor: CurrentActor, boqId: strin
         await createAuditLog(actor.companyId, {
           entityType: "ExtractedEntity",
           entityId: entity.id,
-          action: "ENTITY_CONFIRMED",
+          action: extractionWasCorrectedInBoq ? "ENTITY_CORRECTED" : "ENTITY_CONFIRMED",
           actorName: actor.fullName,
-          payload: { source: "AI_DRAFT_BOQ_REVIEW" },
+          payload: extractionWasCorrectedInBoq
+            ? {
+                original,
+                corrected: {
+                  quantity: item.quantity.toNumber(),
+                  unit: item.unit,
+                },
+                reason: "Corrected during AI Draft BOQ review.",
+              }
+            : { source: "AI_DRAFT_BOQ_REVIEW" },
         }, tx);
+
         await createAuditLog(actor.companyId, {
           entityType: "ExtractedEntity",
           entityId: entity.id,
@@ -485,6 +555,7 @@ export async function confirmAiDraftQuantities(actor: CurrentActor, boqId: strin
           },
           data: { status: "IMPORTED" },
         });
+
         if (imported.count !== 1) {
           throw new ConflictError(
             "AI_DRAFT_ENTITY_IMPORT_CONFLICT",
@@ -504,28 +575,30 @@ export async function confirmAiDraftQuantities(actor: CurrentActor, boqId: strin
         continue;
       }
 
-      const claimedProvenance = await tx.bOQItemQuantityProvenance.updateMany({
-        where: {
-          id: provenance.id,
-          companyId: actor.companyId,
-          boqItemId: item.id,
-          sourceType: QuantityProvenanceSource.LEGACY_UNVERIFIED,
-        },
-        data: {
-          sourceType: QuantityProvenanceSource.REVIEWED_EXTRACTION,
-          quantitySnapshot: item.quantity,
-          unitSnapshot: item.unit,
-          confirmedByUserId: actor.userId,
-          confirmedByName: actor.fullName,
-          confirmedAt: now,
-        },
-      });
+      if (provenance.sourceType === QuantityProvenanceSource.LEGACY_UNVERIFIED) {
+        const claimedProvenance = await tx.bOQItemQuantityProvenance.updateMany({
+          where: {
+            id: provenance.id,
+            companyId: actor.companyId,
+            boqItemId: item.id,
+            sourceType: QuantityProvenanceSource.LEGACY_UNVERIFIED,
+          },
+          data: {
+            sourceType: QuantityProvenanceSource.REVIEWED_EXTRACTION,
+            quantitySnapshot: item.quantity,
+            unitSnapshot: item.unit,
+            confirmedByUserId: actor.userId,
+            confirmedByName: actor.fullName,
+            confirmedAt: now,
+          },
+        });
 
-      if (claimedProvenance.count !== 1) {
-        throw new ConflictError(
-          "AI_DRAFT_CONFIRMATION_CONFLICT",
-          "The AI Draft changed while quantities were being confirmed. Reload and try again.",
-        );
+        if (claimedProvenance.count !== 1) {
+          throw new ConflictError(
+            "AI_DRAFT_CONFIRMATION_CONFLICT",
+            "The AI Draft changed while quantities were being confirmed. Reload and try again.",
+          );
+        }
       }
 
       confirmedCount += 1;
@@ -539,14 +612,14 @@ export async function confirmAiDraftQuantities(actor: CurrentActor, boqId: strin
       payload: {
         confirmedCount,
         skippedCount,
-        remainingCount: pendingItems.length - confirmedCount,
+        remainingCount: linkedItems.length - confirmedCount,
       },
     }, tx);
 
     return {
       confirmedCount,
       skippedCount,
-      remainingCount: pendingItems.length - confirmedCount,
+      remainingCount: linkedItems.length - confirmedCount,
     };
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 }

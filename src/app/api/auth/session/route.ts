@@ -11,14 +11,20 @@ export async function GET() {
       return apiSuccess({ authenticated: false });
     }
 
-    const platformIdentity = await prisma.user.findUnique({
-      where: { id: actor.userId },
-      select: {
-        isActive: true,
-        emailVerifiedAt: true,
-        platformRole: true,
-      },
-    });
+    const [platformIdentity, activeSimulation] = await Promise.all([
+      prisma.user.findUnique({
+        where: { id: actor.userId },
+        select: {
+          isActive: true,
+          emailVerifiedAt: true,
+          platformRole: true,
+        },
+      }),
+      prisma.platformSimulationSession.findUnique({
+        where: { userId: actor.userId },
+        select: { id: true },
+      }),
+    ]);
 
     return apiSuccess({
       authenticated: true,
@@ -29,9 +35,12 @@ export async function GET() {
         fullName: actor.fullName,
         email: actor.email,
         platformRole:
-          platformIdentity?.isActive && platformIdentity.emailVerifiedAt
+          platformIdentity?.isActive &&
+          platformIdentity.emailVerifiedAt &&
+          !activeSimulation
             ? platformIdentity.platformRole
             : null,
+        customerPreviewActive: Boolean(activeSimulation),
       },
     });
   } catch (error) {

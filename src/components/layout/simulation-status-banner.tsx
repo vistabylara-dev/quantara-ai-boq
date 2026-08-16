@@ -56,7 +56,7 @@ export default function SimulationStatusBanner() {
   return (
     <div className="flex flex-wrap items-center justify-between gap-3 border-b border-amber-700 bg-amber-950/60 px-4 py-2.5 text-sm text-amber-200 sm:px-6 xl:px-10">
       <span>
-        <strong>CUSTOMER SIMULATION ACTIVE</strong> — viewing as: {status.simulation.mode.replace(/_/g, " ")}
+        <strong>CUSTOMER PREVIEW ACTIVE</strong> — viewing as: {status.simulation.mode.replace(/_/g, " ")}
         {status.simulation.startedAt && ` (started ${new Date(status.simulation.startedAt).toLocaleString()})`}
       </span>
       <button

@@ -38,7 +38,7 @@ type CataloguePage = { total: number };
 const modes: { mode: SimulationMode; label: string }[] = [
   { mode: "TRIAL_ACTIVE", label: "Simulate Trial" },
   { mode: "TRIAL_EXPIRED", label: "Simulate Expired Trial" },
-  { mode: "FREE", label: "Simulate Free" },
+  { mode: "FREE", label: "View as Unpaid Customer" },
   { mode: "PRO", label: "Simulate Pro" },
   { mode: "SINGLE_BOQ_UNLOCKED", label: "Simulate Single-BOQ Unlock" },
 ];
@@ -99,6 +99,12 @@ export default function AdminTestPanel() {
         mode,
         targetBoqId: mode === "SINGLE_BOQ_UNLOCKED" ? targetBoqId.trim() : undefined,
       });
+
+      if (mode === "FREE") {
+        window.location.assign("/dashboard");
+        return;
+      }
+
       setActionMessage(`Simulation set to ${mode}.`);
       await load();
     } catch (error) {

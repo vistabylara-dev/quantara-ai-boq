@@ -8,6 +8,7 @@ import { apiClient } from "@/lib/api/client";
 import { LtrText } from "@/lib/i18n/ltr-text";
 import { useLocale } from "@/lib/i18n/locale-provider";
 import type { SupportContactRequest } from "@/lib/support/contact-request";
+import { OnboardingHelpSection } from "@/components/onboarding/onboarding-provider";
 
 export type HelpFeedbackSurface = "PUBLIC" | "SAAS";
 
@@ -176,7 +177,7 @@ export default function HelpFeedbackBubble({
         style={{ bottom: "max(1rem, env(safe-area-inset-bottom))" }}
       >
         <HelpCircle className="h-5 w-5" aria-hidden="true" />
-        <span>{t("support.label")}</span>
+        <span>{surface === "SAAS" ? t("onboarding.helpTutorials") : t("support.label")}</span>
       </button>
 
       {open ? (
@@ -238,6 +239,8 @@ export default function HelpFeedbackBubble({
               <span className="font-semibold">{t("support.salesTitle")}</span>
               <span className="ms-2 text-xs text-slate-500 dark:text-slate-400">{t("support.salesDescription")}</span>
             </button>
+
+            {surface === "SAAS" ? <OnboardingHelpSection onRequestClose={() => close(true)} /> : null}
 
             <div className="my-5 border-t border-slate-200 dark:border-[#20304D]" />
 

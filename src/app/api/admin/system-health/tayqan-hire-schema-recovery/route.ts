@@ -802,10 +802,55 @@ async function executeRecoveryMutation() {
   }
 }
 
-export async function POST() {
-  return apiFailure(
-    "TAYQAN_HIRE_SCHEMA_RECOVERY_POST_DISABLED",
-    "Production mutation is disabled during Stage 1 read-only preflight.",
-    409,
-  );
+export async function POST(request: Request) {
+  try {
+    await requirePlatformActor([PlatformRole.PLATFORM_OWNER]);
+
+    let body: unknown;
+    try {
+      body = await request.json();
+    } catch {
+      return apiFailure(
+        "TAYQAN_HIRE_SCHEMA_RECOVERY_CONFIRMATION_REQUIRED",
+        "A valid JSON confirmation body is required.",
+        400,
+      );
+    }
+
+    if (body === null || typeof body !== "object" || Array.isArray(body)) {
+      return apiFailure(
+        "TAYQAN_HIRE_SCHEMA_RECOVERY_CONFIRMATION_REQUIRED",
+        "A valid JSON confirmation body is required.",
+        400,
+      );
+    }
+
+    const confirmation = body as Record<string, unknown>;
+    const targetChecksum = PINNED_MIGRATION_MANIFEST[TARGET_MIGRATION];
+
+    if (!targetChecksum) {
+      return apiFailure(
+        "TAYQAN_HIRE_SCHEMA_RECOVERY_SOURCE_MANIFEST_INVALID",
+        "The pinned TAYQAN migration checksum is missing from the manifest.",
+        500,
+      );
+    }
+
+    if (
+      confirmation.confirmAction !== "APPLY_TAYQAN_HIRE_SCHEMA_RECOVERY_ONCE" ||
+      confirmation.confirmMigration !== TARGET_MIGRATION ||
+      confirmation.confirmPinnedCommit !== PINNED_COMMIT ||
+      confirmation.confirmChecksum !== targetChecksum
+    ) {
+      return apiFailure(
+        "TAYQAN_HIRE_SCHEMA_RECOVERY_CONFIRMATION_MISMATCH",
+        "The exact TAYQAN schema recovery confirmation is required.",
+        409,
+      );
+    }
+
+    return executeRecoveryMutation();
+  } catch (error) {
+    return failure(error);
+  }
 }

@@ -1,3 +1,5 @@
+import { PUBLIC_INTEGRATION_PATHS } from "./public-integration-ids";
+
 /**
  * Client-safe route list for selecting the public shell.
  * Keep this list metadata-free so titles and descriptions are not shipped to
@@ -23,6 +25,8 @@ export const PUBLIC_WEBSITE_PATHS = [
   "/scanned-pdf-boq",
   "/quantity-surveying-software",
   "/tayqan-ai-quantity-surveyor",
+  "/boq-integrations",
+  ...PUBLIC_INTEGRATION_PATHS,
   "/boq-document-generation",
   "/resources",
   "/what-is-a-boq",

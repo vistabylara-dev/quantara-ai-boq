@@ -1,8 +1,3 @@
-import {
-  PUBLIC_CAPABILITY_STATUS_LABELS,
-  getPublicCapability,
-  type PublicCapabilityStatus,
-} from "@/lib/public-site/product-truth";
 import en from "@/lib/i18n/dictionaries/en";
 import { translateStructuredContent, type TranslateFn, type TranslationKey } from "@/lib/i18n/translate";
 
@@ -30,8 +25,6 @@ export interface NavigationSection {
 
 // Navigation structure matching Phase 9 requirements exactly
 
-const googleDriveImport = getPublicCapability("google-drive-import");
-
 export const publicNavigation: NavigationSection[] = [
   {
     id: "platform",
@@ -40,7 +33,7 @@ export const publicNavigation: NavigationSection[] = [
       {
         label: "Core Platform",
         items: [
-          { label: "Features", href: "/features", description: "Explore Quantara’s project, source, BOQ, revision, document and integration capabilities with clear status labels." },
+          { label: "Features", href: "/features", description: "Explore Quantara project sources, AI Draft BOQ, measurement, calculations, integrations, revisions, TAYQAN and professional outputs." },
           { label: "AI BOQ Software", href: "/ai-boq-software", description: "Capture supported project information for professional review and structured BOQ work." },
           { label: "BOQ Software", href: "/boq-software", description: "Organize supported BOQ records, calculations, revisions and outputs." },
           { label: "Construction Estimating Software", href: "/construction-estimating-software", description: "Organize reviewed estimating inputs and BOQ records while professionals retain pricing decisions." },
@@ -58,7 +51,13 @@ export const publicNavigation: NavigationSection[] = [
       {
         label: "Integrations",
         items: [
-          { label: "Google Drive Sources", href: "/features#google-drive-import", description: `${googleDriveImport.summary} ${googleDriveImport.limitation}`, status: PUBLIC_CAPABILITY_STATUS_LABELS[googleDriveImport.status] }
+          { label: "All BOQ Integrations", href: "/boq-integrations", description: "Explore Quantara integration pages across BIM, CAD, CDE, cloud storage, estimating and construction platforms." },
+          { label: "Autodesk", href: "/boq-integrations/autodesk", description: "Connect Autodesk project information to Quantara's review-led BOQ workflow." },
+          { label: "Revit", href: "/boq-integrations/revit", description: "Explore Revit and Quantara project-data workflows." },
+          { label: "AutoCAD", href: "/boq-integrations/autocad", description: "Explore AutoCAD and DWG workflows with Quantara." },
+          { label: "Procore", href: "/boq-integrations/procore", description: "Explore Procore project and construction-data workflows with Quantara." },
+          { label: "Google Drive", href: "/boq-integrations/google-drive", description: "Bring selected Google Drive project files into the Quantara workflow." },
+          { label: "CostX", href: "/boq-integrations/costx", description: "Explore CostX estimating and commercial-data workflows with Quantara." }
         ]
       },
       {

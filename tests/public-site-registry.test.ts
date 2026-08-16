@@ -5,6 +5,7 @@ import { NextRequest } from "next/server";
 import robots from "@/app/robots";
 import sitemap from "@/app/sitemap";
 import { middleware } from "@/middleware";
+import { PUBLIC_INTEGRATION_PATHS } from "@/lib/public-site/public-integration-ids";
 import { PUBLIC_WEBSITE_PATHS } from "@/lib/public-site/public-route-paths";
 import {
   PUBLIC_SEARCH_PAGES,
@@ -35,7 +36,9 @@ const indexableEntries = PUBLIC_SEARCH_PAGES.filter((entry) => entry.indexable !
 
 describe("public search registry", () => {
   it("keeps the metadata-free client shell routes aligned with the registry", () => {
-    expect([...PUBLIC_WEBSITE_PATHS].sort()).toEqual([...registeredPaths].sort());
+    expect([...PUBLIC_WEBSITE_PATHS].sort()).toEqual(
+      [...registeredPaths, ...PUBLIC_INTEGRATION_PATHS].sort(),
+    );
   });
 
   it("covers every static marketing page except the noindex registration utility", () => {
@@ -63,7 +66,7 @@ describe("public search registry", () => {
   });
 
   it("keeps the four owner-confirmation-dependent legal documents out of the public search index", () => {
-    expect(indexableEntries).toHaveLength(59);
+    expect(indexableEntries).toHaveLength(60);
     expect(
       PUBLIC_SEARCH_PAGES
         .filter((entry) => entry.indexable === false)
@@ -108,9 +111,14 @@ describe("public search registry", () => {
 
   it("generates the sitemap from indexable registry entries only", () => {
     const sitemapUrls = sitemap().map((entry) => entry.url).sort();
-    const expectedUrls = indexableEntries
-      .map((entry) => `${PUBLIC_SITE_ORIGIN}${entry.path === "/" ? "" : entry.path}`)
-      .sort();
+    const expectedUrls = [
+      ...indexableEntries.map(
+        (entry) => `${PUBLIC_SITE_ORIGIN}${entry.path === "/" ? "" : entry.path}`,
+      ),
+      ...PUBLIC_INTEGRATION_PATHS.map(
+        (path) => `${PUBLIC_SITE_ORIGIN}${path}`,
+      ),
+    ].sort();
 
     expect(sitemapUrls).toEqual(expectedUrls);
     expect(sitemapUrls).not.toContain(`${PUBLIC_SITE_ORIGIN}/login`);
@@ -169,6 +177,9 @@ describe("public search registry", () => {
       "/",
       "/features",
       "/tayqan-ai-quantity-surveyor",
+      "/boq-integrations",
+      "/boq-integrations/autodesk",
+      "/boq-integrations/procore",
       "/pricing",
       "/ai-boq-software",
       "/boq-software",
@@ -198,6 +209,7 @@ describe("public search registry", () => {
     expect(llms).toContain(
       "https://quantara.vistabylara.com/tayqan-ai-quantity-surveyor",
     );
+    expect(llms).toContain("https://quantara.vistabylara.com/boq-integrations");
     expect(llms).toContain("https://quantara.vistabylara.com/site-map");
     expect(llms).toContain(
       "does not make a blanket claim of fully unattended computer-vision takeoff",

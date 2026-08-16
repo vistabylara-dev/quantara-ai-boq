@@ -43,6 +43,9 @@ export function middleware(request: NextRequest) {
 
   const hasSessionCookie = Boolean(request.cookies.get(SESSION_COOKIE_NAME)?.value);
 
+  if (pathname === "/login" && hasSessionCookie) {
+    return NextResponse.redirect(new URL("/dashboard", request.url));
+  }
 
   if (!isPublicPage(pathname) && !hasSessionCookie) {
     const isAdminPage = pathname === "/admin" || pathname.startsWith("/admin/");

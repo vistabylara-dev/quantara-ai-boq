@@ -59,14 +59,27 @@ export function getAiDraftExtractedEntityId(
   return match?.[1] ?? null;
 }
 
+export function getAiDraftQuantityValue(entity: AiDraftCandidate): number {
+  return (
+    entity.quantity !== null
+    && Number.isFinite(entity.quantity)
+    && entity.quantity > 0
+  )
+    ? entity.quantity
+    : 0;
+}
+
+export function isAiDraftMeasurementComplete(entity: AiDraftCandidate): boolean {
+  return (
+    getAiDraftQuantityValue(entity) > 0
+    && Boolean(entity.unit?.trim())
+  );
+}
+
 export function isAiDraftCandidateUsable(entity: AiDraftCandidate): boolean {
   return (
     AI_DRAFT_STATUS_SET.has(entity.status.trim().toUpperCase())
     && entity.label.trim().length > 0
-    && entity.quantity !== null
-    && Number.isFinite(entity.quantity)
-    && entity.quantity > 0
-    && Boolean(entity.unit?.trim())
   );
 }
 
@@ -74,11 +87,14 @@ export function summarizeAiDraftCandidates(entities: readonly AiDraftCandidate[]
   const sourceCandidates = entities.filter((entity) =>
     AI_DRAFT_STATUS_SET.has(entity.status.trim().toUpperCase()),
   );
-  const eligibleCount = sourceCandidates.filter(isAiDraftCandidateUsable).length;
+  const draftableCandidates = sourceCandidates.filter(isAiDraftCandidateUsable);
 
   return {
-    eligibleCount,
-    skippedCount: sourceCandidates.length - eligibleCount,
+    eligibleCount: draftableCandidates.length,
+    measurementIncompleteCount: draftableCandidates.filter(
+      (entity) => !isAiDraftMeasurementComplete(entity),
+    ).length,
+    skippedCount: sourceCandidates.length - draftableCandidates.length,
     ignoredFinalizedCount: entities.length - sourceCandidates.length,
   };
 }

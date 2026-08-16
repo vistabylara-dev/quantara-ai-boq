@@ -1,23 +1,38 @@
 import { PlanType, type Prisma } from "@prisma/client";
+import type Stripe from "stripe";
 import { prisma } from "@/lib/db/prisma";
 import type { PlatformActor } from "@/lib/auth/platform-authorization";
 import { requirePlatformCapability } from "@/lib/auth/platform-authorization";
 import { AppError, ConflictError, NotFoundError } from "@/lib/errors/app-error";
 import { managedCommerceSoftwarePlanKey } from "@/lib/entitlements/commerce-plan-mapping";
 import {
+  getStripeCommercialClient,
+  getStripeCommercialConfigurationState,
+  StripeInvalidKeyError,
+  StripeNotConfiguredError,
+} from "@/lib/payments/stripe-client";
+import {
+  createMapping,
   findPriceMapping,
   findProductMapping,
+  updateMappingState,
 } from "@/lib/repositories/commerce-provider-mapping-repository";
 import type { PlatformRequestMetadata } from "@/lib/repositories/platform-admin-repository";
 import { setCommercePriceReview } from "@/lib/services/commerce-price-approval-service";
 import {
   buildLiveSyncPlan,
-  synchronizeLiveCommerceCatalogue,
-  verifyLiveStripeMapping,
   type LiveSyncPlan,
 } from "@/lib/services/stripe-live-sync-service";
 
 const SOURCE = "ADMIN_PRODUCT_MANAGER";
+const PROVIDER = "STRIPE" as const;
+const ENVIRONMENT = "LIVE" as const;
+
+// Same lock namespace/key used by the proven live catalogue synchronizer.
+// Product Manager holds it for its complete target-only Stripe operation.
+// A catalogue sync attempting to start waits; if one is already RUNNING,
+// Product Manager fails closed instead of overlapping it.
+const LIVE_SYNC_LOCK_NAMESPACE = 231_874_509;
 
 type ManagedMetadata = {
   source: typeof SOURCE;
@@ -45,6 +60,10 @@ type ManagedMetadata = {
   };
 };
 
+type TargetClient = {
+  commerceProduct: typeof prisma.commerceProduct;
+};
+
 function requestMetadataJson(metadata: PlatformRequestMetadata) {
   return {
     method: metadata.method,
@@ -60,8 +79,11 @@ function readMetadata(value: unknown): ManagedMetadata | null {
   return candidate as unknown as ManagedMetadata;
 }
 
-async function getTarget(productId: string) {
-  const product = await prisma.commerceProduct.findUnique({
+async function getTarget(
+  productId: string,
+  client: TargetClient = prisma,
+) {
+  const product = await client.commerceProduct.findUnique({
     where: { id: productId },
     include: {
       prices: {
@@ -81,7 +103,10 @@ async function getTarget(productId: string) {
     );
   }
 
-  if (metadata.publicationState !== "PUBLISHED" || !metadata.marketplace.enabled) {
+  if (
+    metadata.publicationState !== "PUBLISHED" ||
+    !metadata.marketplace.enabled
+  ) {
     throw new ConflictError(
       "MARKETPLACE_PUBLICATION_REQUIRED",
       "Publish the product to Marketplace before activating checkout.",
@@ -167,6 +192,7 @@ function unrelatedPlanChanges(
     baseline.products,
     (row) => row.productId,
   );
+
   for (const row of staged.products) {
     if (row.productId === productId) continue;
     const before = baselineProducts.get(row.productId);
@@ -181,6 +207,7 @@ function unrelatedPlanChanges(
     baseline.prices,
     (row) => row.priceId,
   );
+
   for (const row of staged.prices) {
     if (row.priceId === priceId) continue;
     const before = baselinePrices.get(row.priceId);
@@ -263,11 +290,14 @@ export async function previewManagedProductCheckoutActivation(
   const targetProduct = staged.products.find(
     (row) => row.productId === product.id,
   );
-  const targetPrice = staged.prices.find((row) => row.priceId === price.id);
+  const targetPrice = staged.prices.find(
+    (row) => row.priceId === price.id,
+  );
 
   if (
     !targetProduct ||
-    (targetProduct.action !== "CREATE" && targetProduct.action !== "UPDATE")
+    (targetProduct.action !== "CREATE" &&
+      targetProduct.action !== "UPDATE")
   ) {
     blockers.push(
       `Target product is not Stripe-ready: ${targetProduct?.action ?? "missing"}.`,
@@ -391,6 +421,692 @@ async function updateCheckoutMetadata(
   return next;
 }
 
+function requireLiveStripeClient(): Stripe {
+  const state = getStripeCommercialConfigurationState();
+
+  if (!state.liveMode) {
+    throw new AppError(
+      "STRIPE_LIVE_MODE_NOT_READY",
+      "Live Stripe checkout activation is unavailable because the commercial Stripe client is not configured in live mode.",
+      409,
+    );
+  }
+
+  try {
+    return getStripeCommercialClient();
+  } catch (error) {
+    if (error instanceof StripeNotConfiguredError) {
+      throw new AppError("STRIPE_NOT_CONFIGURED", error.message, 409);
+    }
+
+    if (error instanceof StripeInvalidKeyError) {
+      throw new AppError("STRIPE_INVALID_KEY", error.message, 409);
+    }
+
+    throw error;
+  }
+}
+
+function providerError(error: unknown): AppError {
+  const stripeError = error as
+    | { type?: string; code?: string; message?: string }
+    | undefined;
+
+  console.error(
+    "[product-manager-stripe] provider error",
+    stripeError?.type,
+    stripeError?.code,
+  );
+
+  if (stripeError?.type === "StripeAuthenticationError") {
+    return new AppError(
+      "STRIPE_INVALID_KEY",
+      "Stripe rejected the configured live API key.",
+      409,
+    );
+  }
+
+  if (stripeError?.type === "StripeRateLimitError") {
+    return new AppError(
+      "STRIPE_RATE_LIMITED",
+      "Stripe rate-limited this request. Try again shortly.",
+      502,
+    );
+  }
+
+  if (stripeError?.type === "StripeConnectionError") {
+    return new AppError(
+      "STRIPE_ACCOUNT_UNREACHABLE",
+      "Could not reach Stripe.",
+      502,
+    );
+  }
+
+  return new AppError(
+    "STRIPE_PROVIDER_ERROR",
+    "Stripe returned an error while activating this product.",
+    502,
+  );
+}
+
+function safeMetadata(
+  kind: "product" | "price",
+  code: string,
+): Stripe.MetadataParam {
+  return kind === "product"
+    ? {
+        quantara_product_code: code,
+        quantara_environment: "live",
+      }
+    : {
+        quantara_price_code: code,
+        quantara_environment: "live",
+      };
+}
+
+function idempotencyKey(
+  objectType: "PRODUCT" | "PRICE",
+  code: string,
+): string {
+  return `quantara:live:${objectType}:${code}:create`;
+}
+
+function expectedInterval(
+  billingInterval: "MONTH" | "YEAR" | "ONE_TIME",
+): "month" | "year" | null {
+  if (billingInterval === "MONTH") return "month";
+  if (billingInterval === "YEAR") return "year";
+  return null;
+}
+
+function priceMatches(
+  candidate: Stripe.Price,
+  providerProductId: string,
+  expected: {
+    amountMinor: number;
+    currency: string;
+    billingInterval: "MONTH" | "YEAR" | "ONE_TIME";
+    code: string;
+  },
+): boolean {
+  const candidateProductId =
+    typeof candidate.product === "string"
+      ? candidate.product
+      : candidate.product?.id;
+
+  return (
+    candidateProductId === providerProductId &&
+    candidate.unit_amount === expected.amountMinor &&
+    candidate.currency.toUpperCase() === expected.currency.toUpperCase() &&
+    (candidate.recurring?.interval ?? null) ===
+      expectedInterval(expected.billingInterval) &&
+    candidate.metadata?.quantara_price_code === expected.code &&
+    candidate.metadata?.quantara_environment === "live"
+  );
+}
+
+async function findRecoverableProduct(
+  stripe: Stripe,
+  productCode: string,
+): Promise<Stripe.Product | null> {
+  const candidates: Stripe.Product[] = [];
+  let startingAfter: string | undefined;
+
+  for (;;) {
+    const page = await stripe.products.list(
+      {
+        limit: 100,
+        starting_after: startingAfter,
+      },
+      { timeout: 8_000, maxNetworkRetries: 1 },
+    );
+
+    for (const item of page.data) {
+      if (
+        item.metadata?.quantara_product_code === productCode &&
+        item.metadata?.quantara_environment === "live"
+      ) {
+        candidates.push(item);
+      }
+    }
+
+    if (!page.has_more || page.data.length === 0) break;
+    startingAfter = page.data[page.data.length - 1].id;
+  }
+
+  if (candidates.length > 1) {
+    throw new ConflictError(
+      "STRIPE_PRODUCT_RECOVERY_MULTIPLE_CANDIDATES",
+      "Multiple live Stripe Products carry this product code. No Stripe object was selected.",
+    );
+  }
+
+  return candidates[0] ?? null;
+}
+
+async function findRecoverablePrice(
+  stripe: Stripe,
+  providerProductId: string,
+  expected: {
+    amountMinor: number;
+    currency: string;
+    billingInterval: "MONTH" | "YEAR" | "ONE_TIME";
+    code: string;
+  },
+): Promise<Stripe.Price | null> {
+  const candidates: Stripe.Price[] = [];
+  let startingAfter: string | undefined;
+
+  for (;;) {
+    const page = await stripe.prices.list(
+      {
+        product: providerProductId,
+        limit: 100,
+        starting_after: startingAfter,
+      },
+      { timeout: 8_000, maxNetworkRetries: 1 },
+    );
+
+    for (const item of page.data) {
+      if (
+        item.metadata?.quantara_price_code === expected.code &&
+        item.metadata?.quantara_environment === "live"
+      ) {
+        candidates.push(item);
+      }
+    }
+
+    if (!page.has_more || page.data.length === 0) break;
+    startingAfter = page.data[page.data.length - 1].id;
+  }
+
+  if (candidates.length > 1) {
+    throw new ConflictError(
+      "STRIPE_PRICE_RECOVERY_MULTIPLE_CANDIDATES",
+      "Multiple live Stripe Prices carry this price code. No Stripe object was selected.",
+    );
+  }
+
+  const candidate = candidates[0] ?? null;
+  if (candidate && !priceMatches(candidate, providerProductId, expected)) {
+    throw new ConflictError(
+      "STRIPE_PRICE_RECOVERY_DRIFT",
+      "A live Stripe Price carries this price code but its product, amount, currency, interval, or trusted metadata does not match.",
+    );
+  }
+
+  return candidate;
+}
+
+async function synchronizeTargetProduct(
+  stripe: Stripe,
+  tx: Prisma.TransactionClient,
+  target: Awaited<ReturnType<typeof getTarget>>,
+) {
+  let mapping = await findProductMapping(
+    PROVIDER,
+    ENVIRONMENT,
+    target.product.id,
+    tx,
+  );
+
+  let stripeProduct: Stripe.Product;
+
+  if (mapping) {
+    const retrieved = await stripe.products.retrieve(
+      mapping.providerProductId,
+      undefined,
+      { timeout: 8_000, maxNetworkRetries: 1 },
+    );
+
+    if ("deleted" in retrieved && retrieved.deleted) {
+      throw new ConflictError(
+        "STRIPE_MAPPED_PRODUCT_DELETED",
+        "The mapped Stripe Product has been deleted. Manual review is required.",
+      );
+    }
+
+    stripeProduct = retrieved as Stripe.Product;
+
+    if (
+      stripeProduct.metadata?.quantara_product_code !==
+        target.product.code ||
+      stripeProduct.metadata?.quantara_environment !== "live"
+    ) {
+      throw new ConflictError(
+        "STRIPE_PRODUCT_MAPPING_METADATA_DRIFT",
+        "The mapped Stripe Product does not carry the expected trusted Quantara metadata.",
+      );
+    }
+
+    stripeProduct = await stripe.products.update(
+      stripeProduct.id,
+      {
+        name: target.product.name,
+        description: target.product.description || undefined,
+        active: true,
+        metadata: safeMetadata("product", target.product.code),
+      },
+      { timeout: 8_000, maxNetworkRetries: 1 },
+    );
+  } else {
+    const recovered = await findRecoverableProduct(
+      stripe,
+      target.product.code,
+    );
+
+    stripeProduct = recovered
+      ? await stripe.products.update(
+          recovered.id,
+          {
+            name: target.product.name,
+            description: target.product.description || undefined,
+            active: true,
+            metadata: safeMetadata("product", target.product.code),
+          },
+          { timeout: 8_000, maxNetworkRetries: 1 },
+        )
+      : await stripe.products.create(
+          {
+            name: target.product.name,
+            description: target.product.description || undefined,
+            active: true,
+            metadata: safeMetadata("product", target.product.code),
+          },
+          {
+            idempotencyKey: idempotencyKey(
+              "PRODUCT",
+              target.product.code,
+            ),
+            timeout: 8_000,
+            maxNetworkRetries: 1,
+          },
+        );
+
+    mapping = await createMapping(
+      {
+        provider: PROVIDER,
+        environment: ENVIRONMENT,
+        commerceProductId: target.product.id,
+        providerProductId: stripeProduct.id,
+        providerObjectType: "PRODUCT",
+      },
+      tx,
+    );
+  }
+
+  mapping = await updateMappingState(
+    mapping.id,
+    {
+      providerActive: true,
+      synchronizationStatus: "SYNCED",
+      lastSynchronizedAt: new Date(),
+      lastErrorCode: null,
+    },
+    tx,
+  );
+
+  return { mapping, stripeProduct };
+}
+
+async function synchronizeTargetPrice(
+  stripe: Stripe,
+  tx: Prisma.TransactionClient,
+  target: Awaited<ReturnType<typeof getTarget>>,
+  providerProductId: string,
+) {
+  const expected = {
+    amountMinor: target.price.amountMinor,
+    currency: target.price.currency,
+    billingInterval: target.price.billingInterval,
+    code: target.price.code,
+  };
+
+  let mapping = await findPriceMapping(
+    PROVIDER,
+    ENVIRONMENT,
+    target.price.id,
+    tx,
+  );
+
+  let stripePrice: Stripe.Price;
+
+  if (mapping) {
+    if (!mapping.providerPriceId) {
+      throw new ConflictError(
+        "STRIPE_PRICE_MAPPING_INCOMPLETE",
+        "The mapped Stripe Price is incomplete. Manual review is required.",
+      );
+    }
+
+    stripePrice = await stripe.prices.retrieve(
+      mapping.providerPriceId,
+      undefined,
+      { timeout: 8_000, maxNetworkRetries: 1 },
+    );
+
+    if (!priceMatches(stripePrice, providerProductId, expected)) {
+      throw new ConflictError(
+        "STRIPE_PRICE_MAPPING_DRIFT",
+        "The mapped Stripe Price does not match the internal product, amount, currency, interval, or trusted metadata.",
+      );
+    }
+
+    if (!stripePrice.active) {
+      stripePrice = await stripe.prices.update(
+        stripePrice.id,
+        { active: true },
+        { timeout: 8_000, maxNetworkRetries: 1 },
+      );
+    }
+  } else {
+    const recovered = await findRecoverablePrice(
+      stripe,
+      providerProductId,
+      expected,
+    );
+
+    if (recovered) {
+      stripePrice = recovered.active
+        ? recovered
+        : await stripe.prices.update(
+            recovered.id,
+            { active: true },
+            { timeout: 8_000, maxNetworkRetries: 1 },
+          );
+    } else {
+      stripePrice = await stripe.prices.create(
+        {
+          product: providerProductId,
+          unit_amount: target.price.amountMinor,
+          currency: target.price.currency.toLowerCase(),
+          metadata: safeMetadata("price", target.price.code),
+          recurring: {
+            interval:
+              target.price.billingInterval === "MONTH"
+                ? "month"
+                : "year",
+          },
+        },
+        {
+          idempotencyKey: idempotencyKey(
+            "PRICE",
+            target.price.code,
+          ),
+          timeout: 8_000,
+          maxNetworkRetries: 1,
+        },
+      );
+    }
+
+    mapping = await createMapping(
+      {
+        provider: PROVIDER,
+        environment: ENVIRONMENT,
+        commerceProductId: target.product.id,
+        commercePriceId: target.price.id,
+        providerProductId,
+        providerPriceId: stripePrice.id,
+        providerObjectType: "PRICE",
+      },
+      tx,
+    );
+  }
+
+  mapping = await updateMappingState(
+    mapping.id,
+    {
+      providerActive: true,
+      synchronizationStatus: "SYNCED",
+      lastSynchronizedAt: new Date(),
+      lastErrorCode: null,
+    },
+    tx,
+  );
+
+  return { mapping, stripePrice };
+}
+
+async function verifyTargetOnly(
+  stripe: Stripe,
+  tx: Prisma.TransactionClient,
+  target: Awaited<ReturnType<typeof getTarget>>,
+  productMapping: Awaited<ReturnType<typeof findProductMapping>> & {},
+  priceMapping: Awaited<ReturnType<typeof findPriceMapping>> & {},
+) {
+  if (!priceMapping.providerPriceId) {
+    throw new AppError(
+      "STRIPE_TARGET_MAPPING_NOT_READY",
+      "The target Stripe Price mapping is incomplete.",
+      502,
+    );
+  }
+
+  const retrievedProduct = await stripe.products.retrieve(
+    productMapping.providerProductId,
+    undefined,
+    { timeout: 8_000, maxNetworkRetries: 1 },
+  );
+
+  if ("deleted" in retrievedProduct && retrievedProduct.deleted) {
+    throw new AppError(
+      "STRIPE_TARGET_VERIFY_FAILED",
+      "The target Stripe Product was deleted during verification.",
+      502,
+    );
+  }
+
+  const stripeProduct = retrievedProduct as Stripe.Product;
+  const stripePrice = await stripe.prices.retrieve(
+    priceMapping.providerPriceId,
+    undefined,
+    { timeout: 8_000, maxNetworkRetries: 1 },
+  );
+
+  if (
+    !stripeProduct.active ||
+    stripeProduct.name !== target.product.name ||
+    stripeProduct.metadata?.quantara_product_code !==
+      target.product.code ||
+    stripeProduct.metadata?.quantara_environment !== "live"
+  ) {
+    throw new AppError(
+      "STRIPE_TARGET_PRODUCT_VERIFY_FAILED",
+      "The target Stripe Product did not verify against the internal Product Manager record.",
+      502,
+    );
+  }
+
+  if (
+    !stripePrice.active ||
+    !priceMatches(stripePrice, stripeProduct.id, {
+      amountMinor: target.price.amountMinor,
+      currency: target.price.currency,
+      billingInterval: target.price.billingInterval,
+      code: target.price.code,
+    })
+  ) {
+    throw new AppError(
+      "STRIPE_TARGET_PRICE_VERIFY_FAILED",
+      "The target Stripe Price did not verify against the internal Product Manager record.",
+      502,
+    );
+  }
+
+  const verifiedAt = new Date();
+
+  await updateMappingState(
+    productMapping.id,
+    {
+      providerActive: true,
+      synchronizationStatus: "SYNCED",
+      lastVerifiedAt: verifiedAt,
+      lastErrorCode: null,
+    },
+    tx,
+  );
+
+  await updateMappingState(
+    priceMapping.id,
+    {
+      providerActive: true,
+      synchronizationStatus: "SYNCED",
+      lastVerifiedAt: verifiedAt,
+      lastErrorCode: null,
+    },
+    tx,
+  );
+}
+
+async function acquireLiveSyncLock(
+  tx: Prisma.TransactionClient,
+): Promise<void> {
+  await tx.$executeRaw`
+    SELECT pg_advisory_xact_lock(
+      ${LIVE_SYNC_LOCK_NAMESPACE},
+      hashtext('STRIPE:LIVE')
+    )
+  `;
+}
+
+async function activateTargetOnly(
+  actor: PlatformActor,
+  productId: string,
+  requestMetadata: PlatformRequestMetadata,
+) {
+  const stripe = requireLiveStripeClient();
+
+  try {
+    return await prisma.$transaction(
+      async (tx) => {
+        await acquireLiveSyncLock(tx);
+
+        const runningGlobalSync = await tx.commerceSyncRun.findFirst({
+          where: {
+            provider: PROVIDER,
+            environment: ENVIRONMENT,
+            operation: "SYNCHRONIZE",
+            status: "RUNNING",
+          },
+          select: { id: true, startedAt: true },
+        });
+
+        if (runningGlobalSync) {
+          throw new ConflictError(
+            "STRIPE_SYNC_IN_PROGRESS",
+            "A live Stripe catalogue synchronization is already in progress. Product activation was not started.",
+          );
+        }
+
+        const target = await getTarget(productId, tx);
+
+        if (target.price.reviewStatus !== "APPROVED") {
+          throw new ConflictError(
+            "PRICE_NOT_APPROVED",
+            "The target price must be approved before Stripe activation.",
+          );
+        }
+
+        const syncingMetadata: ManagedMetadata = {
+          ...target.metadata,
+          checkout: {
+            state: "SYNCING",
+            lastErrorCode: null,
+            activatedAt: null,
+          },
+        };
+
+        // Keep the Commerce product fail-closed during all provider work.
+        // Existing checkout/public-commerce cannot see it yet.
+        await tx.commerceProduct.update({
+          where: { id: target.product.id },
+          data: {
+            isActive: false,
+            isPublic: false,
+            metadataJson:
+              syncingMetadata as unknown as Prisma.InputJsonValue,
+          },
+        });
+
+        const productResult = await synchronizeTargetProduct(
+          stripe,
+          tx,
+          target,
+        );
+
+        const priceResult = await synchronizeTargetPrice(
+          stripe,
+          tx,
+          target,
+          productResult.stripeProduct.id,
+        );
+
+        await verifyTargetOnly(
+          stripe,
+          tx,
+          target,
+          productResult.mapping,
+          priceResult.mapping,
+        );
+
+        const readyMetadata: ManagedMetadata = {
+          ...syncingMetadata,
+          checkout: {
+            state: "READY",
+            lastErrorCode: null,
+            activatedAt: new Date().toISOString(),
+          },
+        };
+
+        // Only now — after exact target verification — can the proven
+        // checkout-availability service see this product.
+        await tx.commerceProduct.update({
+          where: { id: target.product.id },
+          data: {
+            isActive: true,
+            isPublic: true,
+            metadataJson:
+              readyMetadata as unknown as Prisma.InputJsonValue,
+          },
+        });
+
+        await tx.platformAuditLog.create({
+          data: {
+            actorUserId: actor.userId,
+            actorPlatformRole: actor.platformRole,
+            action:
+              "commerce_product_manager.checkout_ready_target_only",
+            targetType: "CommerceProduct",
+            targetId: target.product.id,
+            requestMetadataJson:
+              requestMetadataJson(requestMetadata),
+            afterJson: {
+              productCode: target.product.code,
+              priceCode: target.price.code,
+              checkoutState: "READY",
+              provider: PROVIDER,
+              environment: ENVIRONMENT,
+              synchronizationScope: "TARGET_ONLY",
+            },
+          },
+        });
+
+        return {
+          checkoutState: "READY" as const,
+          synchronizationScope: "TARGET_ONLY" as const,
+        };
+      },
+      {
+        maxWait: 10_000,
+        timeout: 90_000,
+      },
+    );
+  } catch (error) {
+    if (error instanceof AppError) throw error;
+    throw providerError(error);
+  }
+}
+
 export async function activateManagedProductCheckout(
   actor: PlatformActor,
   productId: string,
@@ -399,10 +1115,8 @@ export async function activateManagedProductCheckout(
   requirePlatformCapability(actor, "platform:operate");
 
   const target = await getTarget(productId);
-  const preflight = await previewManagedProductCheckoutActivation(
-    actor,
-    productId,
-  );
+  const preflight =
+    await previewManagedProductCheckoutActivation(actor, productId);
 
   if (!preflight.safe) {
     throw new ConflictError(
@@ -413,13 +1127,13 @@ export async function activateManagedProductCheckout(
 
   if (target.metadata.checkout?.state === "READY") {
     const existingProductMapping = await findProductMapping(
-      "STRIPE",
-      "LIVE",
+      PROVIDER,
+      ENVIRONMENT,
       target.product.id,
     );
     const existingPriceMapping = await findPriceMapping(
-      "STRIPE",
-      "LIVE",
+      PROVIDER,
+      ENVIRONMENT,
       target.price.id,
     );
 
@@ -431,6 +1145,7 @@ export async function activateManagedProductCheckout(
     ) {
       return {
         checkoutState: "READY" as const,
+        synchronizationScope: "TARGET_ONLY" as const,
         preflight,
         alreadyReady: true,
       };
@@ -438,177 +1153,64 @@ export async function activateManagedProductCheckout(
   }
 
   const previousReviewStatus = target.price.reviewStatus;
-
-  await ensureManagedSoftwarePlan(
-    target.product,
-    target.price,
-    target.metadata,
-  );
-
-  await setCommercePriceReview(
-    actor,
-    target.price.id,
-    {
-      reviewStatus: "APPROVED",
-      reviewNote:
-        "Approved by Product Manager guarded Stripe activation.",
-    },
-    requestMetadata,
-  );
-
-  let stagedMetadata = await updateCheckoutMetadata(
-    target.product.id,
-    target.metadata,
-    {
-      state: "SYNCING",
-      lastErrorCode: null,
-      activatedAt: null,
-    },
-    { isActive: true, isPublic: true },
-  );
+  let reviewChanged = false;
 
   try {
-    const currentPlan = await buildLiveSyncPlan();
-    const unsafe = unrelatedUnsafeActions(
-      currentPlan,
-      target.product.id,
-      target.price.id,
-    );
-
-    const targetProductAction = currentPlan.products.find(
-      (row) => row.productId === target.product.id,
-    );
-    const targetPriceAction = currentPlan.prices.find(
-      (row) => row.priceId === target.price.id,
-    );
-
-    if (
-      unsafe.length > 0 ||
-      !targetProductAction ||
-      !["CREATE", "UPDATE"].includes(targetProductAction.action) ||
-      !targetPriceAction ||
-      !["CREATE", "REACTIVATE", "UNCHANGED"].includes(
-        targetPriceAction.action,
-      )
-    ) {
-      throw new ConflictError(
-        "STRIPE_PLAN_CHANGED",
-        "Stripe synchronization plan changed after preflight. Checkout was not activated.",
-      );
-    }
-
-    const sync = await synchronizeLiveCommerceCatalogue(
-      actor,
-      {
-        catalogueFingerprint: currentPlan.catalogueFingerprint,
-        confirm: true,
-      },
-      requestMetadata,
-    );
-
-    if (sync.errors.length > 0) {
-      throw new AppError(
-        "STRIPE_SYNC_WARNINGS",
-        "Stripe synchronization completed with provider warnings. Checkout remains disabled.",
-        502,
-      );
-    }
-
-    const verification = await verifyLiveStripeMapping(
-      actor,
-      requestMetadata,
-    );
-
-    if (
-      verification.errored > 0 ||
-      verification.skipped > 0 ||
-      verification.drift.length > 0
-    ) {
-      throw new AppError(
-        "STRIPE_VERIFY_FAILED",
-        "Stripe verification reported drift or unreachable mappings. Checkout remains disabled.",
-        502,
-      );
-    }
-
-    const productMapping = await findProductMapping(
-      "STRIPE",
-      "LIVE",
-      target.product.id,
-    );
-    const priceMapping = await findPriceMapping(
-      "STRIPE",
-      "LIVE",
-      target.price.id,
-    );
-
-    if (
-      !productMapping?.providerActive ||
-      productMapping.synchronizationStatus !== "SYNCED" ||
-      !priceMapping?.providerActive ||
-      priceMapping.synchronizationStatus !== "SYNCED"
-    ) {
-      throw new AppError(
-        "STRIPE_TARGET_MAPPING_NOT_READY",
-        "The target Product/Price mapping did not verify as active and synchronized.",
-        502,
-      );
-    }
-
-    stagedMetadata = await updateCheckoutMetadata(
-      target.product.id,
-      stagedMetadata,
-      {
-        state: "READY",
-        lastErrorCode: null,
-        activatedAt: new Date().toISOString(),
-      },
-      { isActive: true, isPublic: true },
-    );
-
-    await prisma.platformAuditLog.create({
-      data: {
-        actorUserId: actor.userId,
-        actorPlatformRole: actor.platformRole,
-        action: "commerce_product_manager.checkout_ready",
-        targetType: "CommerceProduct",
-        targetId: target.product.id,
-        requestMetadataJson: requestMetadataJson(requestMetadata),
-        afterJson: {
-          productCode: target.product.code,
-          priceCode: target.price.code,
-          checkoutState: "READY",
-          provider: "STRIPE",
-          environment: "LIVE",
-        },
-      },
-    });
-
-    return {
-      checkoutState: "READY" as const,
-      preflight,
-      alreadyReady: false,
-      syncRun: sync.run,
-      verificationRun: verification.run,
-    };
-  } catch (error) {
-    const errorCode =
-      error instanceof AppError || error instanceof ConflictError
-        ? error.code
-        : "CHECKOUT_ACTIVATION_FAILED";
-
-    await updateCheckoutMetadata(
-      target.product.id,
-      stagedMetadata,
-      {
-        state: "ERROR",
-        lastErrorCode: errorCode,
-        activatedAt: null,
-      },
-      { isActive: false, isPublic: false },
+    await ensureManagedSoftwarePlan(
+      target.product,
+      target.price,
+      target.metadata,
     );
 
     if (previousReviewStatus !== "APPROVED") {
+      await setCommercePriceReview(
+        actor,
+        target.price.id,
+        {
+          reviewStatus: "APPROVED",
+          reviewNote:
+            "Approved by Product Manager guarded target-only Stripe activation.",
+        },
+        requestMetadata,
+      );
+      reviewChanged = true;
+    }
+
+    const activation = await activateTargetOnly(
+      actor,
+      productId,
+      requestMetadata,
+    );
+
+    return {
+      ...activation,
+      preflight,
+      alreadyReady: false,
+    };
+  } catch (error) {
+    const errorCode =
+      error instanceof AppError
+        ? error.code
+        : "CHECKOUT_ACTIVATION_FAILED";
+
+    try {
+      await updateCheckoutMetadata(
+        target.product.id,
+        target.metadata,
+        {
+          state: "ERROR",
+          lastErrorCode: errorCode,
+          activatedAt: null,
+        },
+        { isActive: false, isPublic: false },
+      );
+    } catch {
+      // Provider/activation failure remains fail-closed even if recording
+      // the safe error state also fails: Product Manager publication did
+      // not make the product Commerce-active before this operation.
+    }
+
+    if (reviewChanged) {
       try {
         await setCommercePriceReview(
           actor,
@@ -616,13 +1218,13 @@ export async function activateManagedProductCheckout(
           {
             reviewStatus: previousReviewStatus,
             reviewNote:
-              "Restored after failed Product Manager Stripe activation.",
+              "Restored after failed Product Manager target-only Stripe activation.",
           },
           requestMetadata,
         );
       } catch {
-        // Product flags are already false, so checkout remains fail-closed
-        // even if restoring the review status itself cannot be recorded.
+        // Product flags are forced false above, so checkout remains blocked
+        // even if review-status restoration cannot be recorded.
       }
     }
 

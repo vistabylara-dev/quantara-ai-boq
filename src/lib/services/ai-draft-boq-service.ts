@@ -17,6 +17,7 @@ import {
   chooseAiDraftSection,
   formatAiDraftCategory,
   getAiDraftExtractedEntityId,
+  getAiDraftQuantityValue,
   isAiDraftCandidateUsable,
   isAiDraftMeasurementComplete,
   summarizeAiDraftCandidates,
@@ -142,6 +143,7 @@ export async function generateAiDraftBoq(actor: CurrentActor, projectIdentifier:
         alreadyPresentCount: alreadyPresentIds.size,
         unreviewedAddedCount: 0,
         reviewedAddedCount: 0,
+        measurementIncompleteAddedCount: 0,
       };
     }
 
@@ -228,9 +230,7 @@ export async function generateAiDraftBoq(actor: CurrentActor, projectIdentifier:
       nextSortOrderBySection.set(sectionId, sortOrder + 1);
 
       const measurementComplete = isAiDraftMeasurementComplete(candidate);
-      const quantity = new Prisma.Decimal(
-        measurementComplete ? candidate.quantity! : 0,
-      );
+      const quantity = new Prisma.Decimal(getAiDraftQuantityValue(candidate));
       const unit = candidate.unit?.trim() ?? "";
       if (!measurementComplete) measurementIncompleteAddedCount += 1;
 

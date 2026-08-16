@@ -4,6 +4,7 @@ import {
   chooseAiDraftSection,
   formatAiDraftCategory,
   getAiDraftExtractedEntityId,
+  getAiDraftQuantityValue,
   isAiDraftCandidateUsable,
   isAiDraftMeasurementComplete,
   summarizeAiDraftCandidates,
@@ -43,6 +44,11 @@ describe("AI Draft BOQ workflow", () => {
     expect(isAiDraftMeasurementComplete(candidate({ unit: null }))).toBe(false);
     expect(isAiDraftMeasurementComplete(candidate({ unit: " " }))).toBe(false);
     expect(isAiDraftMeasurementComplete(candidate())).toBe(true);
+
+    // Preserve valid extracted evidence field-by-field.
+    expect(getAiDraftQuantityValue(candidate({ quantity: 240, unit: null }))).toBe(240);
+    expect(getAiDraftQuantityValue(candidate({ quantity: null, unit: "m" }))).toBe(0);
+    expect(getAiDraftQuantityValue(candidate({ quantity: -5, unit: "m" }))).toBe(0);
   });
 
   it("keeps rejected and already imported extraction out of new draft generation", () => {
@@ -111,7 +117,7 @@ describe("AI Draft BOQ workflow", () => {
     );
     expect(aiDraft).toContain("RateProvenanceSource.LEGACY_UNVERIFIED");
     expect(aiDraft).toContain("AI draft - rate selection pending");
-    expect(aiDraft).toContain("measurementComplete ? candidate.quantity! : 0");
+    expect(aiDraft).toContain("new Prisma.Decimal(getAiDraftQuantityValue(candidate))");
     expect(aiDraft).toContain('const unit = candidate.unit?.trim() ?? ""');
     expect(aiDraft).toContain("ENTITY_IMPORTED_TO_BOQ");
   });

@@ -59,11 +59,19 @@ export function getAiDraftExtractedEntityId(
   return match?.[1] ?? null;
 }
 
-export function isAiDraftMeasurementComplete(entity: AiDraftCandidate): boolean {
+export function getAiDraftQuantityValue(entity: AiDraftCandidate): number {
   return (
     entity.quantity !== null
     && Number.isFinite(entity.quantity)
     && entity.quantity > 0
+  )
+    ? entity.quantity
+    : 0;
+}
+
+export function isAiDraftMeasurementComplete(entity: AiDraftCandidate): boolean {
+  return (
+    getAiDraftQuantityValue(entity) > 0
     && Boolean(entity.unit?.trim())
   );
 }

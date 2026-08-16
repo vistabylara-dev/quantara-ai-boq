@@ -78,11 +78,44 @@ export type CreateQueuedExtractionJobInput = {
   maximumAttempts?: number;
 };
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function getDriverAdapterErrorKind(error: Record<string, unknown>): unknown {
+  // With Prisma's driver-adapter query path, transaction conflicts can reach
+  // the caller as DriverAdapterError instead of PrismaClientKnownRequestError
+  // P2034. The adapter exposes the mapped database failure on cause.kind.
+  const directCause = isRecord(error.cause) ? error.cause : null;
+  if (directCause?.kind !== undefined) {
+    return directCause.kind;
+  }
+
+  // Some Prisma request paths wrap the same DriverAdapterError in
+  // meta.driverAdapterError. Support that representation as well without
+  // depending on an error message string.
+  const meta = isRecord(error.meta) ? error.meta : null;
+  const driverAdapterError =
+    meta && isRecord(meta.driverAdapterError)
+      ? meta.driverAdapterError
+      : null;
+  const nestedCause =
+    driverAdapterError && isRecord(driverAdapterError.cause)
+      ? driverAdapterError.cause
+      : null;
+
+  return nestedCause?.kind;
+}
+
 function isSerializationFailure(error: unknown): boolean {
-  // Prisma P2034: "Transaction failed due to a write conflict or a deadlock. Please retry your
-  // transaction" — surfaced for a SERIALIZABLE transaction aborted by Postgres's conflict
-  // detection (SQLSTATE 40001).
-  return typeof error === "object" && error !== null && "code" in error && (error as { code?: unknown }).code === "P2034";
+  if (!isRecord(error)) return false;
+
+  // Prisma's traditional representation for a transaction write conflict /
+  // deadlock under SERIALIZABLE isolation.
+  if (error.code === "P2034") return true;
+
+  // Rust-free / driver-adapter representation used by @prisma/adapter-pg.
+  return getDriverAdapterErrorKind(error) === "TransactionWriteConflict";
 }
 
 /**

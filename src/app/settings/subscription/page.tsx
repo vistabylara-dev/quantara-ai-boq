@@ -530,7 +530,7 @@ function SubscriptionSettingsContent() {
                 const meta = SOFTWARE_PLAN_UI[code];
                 const price = product.prices.find((candidate) => candidate.billingInterval === billingInterval);
                 const annualSaving = annualSavingPercent(product);
-                const selected = price?.priceCode === selectedPricingIntent;
+                const isSelectedPricingIntent = price?.priceCode === selectedPricingIntent;
                 const currentPlan = entitlements.planName.trim().toLowerCase() === product.name.trim().toLowerCase();
                 const busy = price !== undefined && busyKey === `checkout-${price.priceCode}`;
                 const disabled = !price || !price.available || hasExistingSubscription || currentPlan;
@@ -550,7 +550,7 @@ function SubscriptionSettingsContent() {
                       meta.recommended
                         ? "border-cyan-400/45 bg-gradient-to-b from-cyan-400/10 to-slate-900 shadow-xl shadow-cyan-950/20"
                         : "border-slate-800 bg-slate-900/80"
-                    } ${selected ? "ring-2 ring-cyan-400/70" : ""}`}
+                    } ${isSelectedPricingIntent ? "ring-2 ring-cyan-400/70" : ""}`}
                   >
                     <div className="flex items-center justify-between gap-3">
                       <span className={`rounded-full border px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] ${
@@ -560,7 +560,7 @@ function SubscriptionSettingsContent() {
                       }`}>
                         {meta.badge}
                       </span>
-                      {selected && <span className="text-xs font-semibold text-cyan-300">Selected</span>}
+                      {isSelectedPricingIntent && <span className="text-xs font-semibold text-cyan-300">Selected</span>}
                     </div>
 
                     <h3 className="mt-5 text-2xl font-semibold text-white">{product.name}</h3>
@@ -606,8 +606,8 @@ function SubscriptionSettingsContent() {
                       }
                       disabled={disabled || busy}
                       title={price && !price.available ? unavailableLabel(price.unavailableReason) : undefined}
-                      aria-current={selected ? "true" : undefined}
-                      data-selected-pricing-intent={selected ? "true" : undefined}
+                      aria-current={isSelectedPricingIntent ? "true" : undefined}
+                      data-selected-pricing-intent={isSelectedPricingIntent ? "true" : undefined}
                       className={`mt-7 w-full rounded-xl px-4 py-3 text-sm font-semibold transition focus:outline-none focus:ring-2 focus:ring-cyan-400 disabled:cursor-not-allowed disabled:opacity-50 ${
                         meta.recommended
                           ? "bg-cyan-400 text-slate-950 hover:bg-cyan-300"

@@ -26,6 +26,12 @@ type PageProps = {
 
 type PendingAction = "save" | "create" | "revision" | "lock" | null;
 
+type AiDraftConfirmationResult = {
+  confirmedCount: number;
+  skippedCount: number;
+  remainingCount: number;
+};
+
 const WORKFLOW_FACT_TRANSLATION_KEYS = {
   sources: "boqEditor.factSources",
   extraction: "boqEditor.factExtraction",
@@ -91,6 +97,8 @@ export default function ProjectBOQPage(props: PageProps) {
   const [unavailableWorkflowFacts, setUnavailableWorkflowFacts] = useState<UnavailableWorkflowFact[]>([]);
   const [validationWarningCount, setValidationWarningCount] = useState<number | null>(null);
   const [validationPreviewError, setValidationPreviewError] = useState<string | null>(null);
+  const [isConfirmingAiDraft, setIsConfirmingAiDraft] = useState(false);
+  const [aiDraftMessage, setAiDraftMessage] = useState<string | null>(null);
   const handledActionSignatureRef = useRef<string | null>(null);
 
   const loadWorkspace = useCallback(async (signal?: AbortSignal) => {
@@ -375,6 +383,47 @@ export default function ProjectBOQPage(props: PageProps) {
   const activeRevision = useMemo(() => activeBoq ?? revisions[0] ?? null, [activeBoq, revisions]);
 
   const activeRevisionId = activeRevision?.id ?? null;
+  const aiDraftMode = searchParams.get("aiDraft") === "1";
+  const aiDraftAddedCount = Number(searchParams.get("added") ?? "0") || 0;
+  const aiDraftSkippedCount = Number(searchParams.get("skipped") ?? "0") || 0;
+  const aiDraftExistingCount = Number(searchParams.get("existing") ?? "0") || 0;
+  const hasAiDraftItems = useMemo(
+    () => Boolean(activeRevision?.sections.some(
+      (section) => section.items.some(
+        (item) => item.notes?.includes("AI Draft from extracted project evidence"),
+      ),
+    )),
+    [activeRevision],
+  );
+  const showAiDraftReview = aiDraftMode || hasAiDraftItems;
+
+  const confirmRemainingAiDraftQuantities = useCallback(async () => {
+    if (!activeRevision || isReadOnlyBOQ(activeRevision) || isConfirmingAiDraft) return;
+    if (hasUnsavedChanges) {
+      setActionError(t("boqEditor.saveBeforeAddingOrImporting"));
+      return;
+    }
+
+    setIsConfirmingAiDraft(true);
+    setActionError(null);
+    setAiDraftMessage(null);
+    try {
+      const result = await apiClient.post<AiDraftConfirmationResult>(
+        `/api/boqs/${encodeURIComponent(activeRevision.id)}/ai-draft/confirm-quantities`,
+        {},
+      );
+      setAiDraftMessage(
+        result.confirmedCount > 0
+          ? `${result.confirmedCount} AI Draft ${result.confirmedCount === 1 ? "quantity was" : "quantities were"} professionally confirmed. ${result.remainingCount} remain for review.`
+          : "No additional AI Draft quantities were confirmed. Review any remaining exceptions before finalizing.",
+      );
+      await loadWorkspace();
+    } catch (error) {
+      setActionError(getLocalizedApiErrorMessage(error, t, locale));
+    } finally {
+      setIsConfirmingAiDraft(false);
+    }
+  }, [activeRevision, hasUnsavedChanges, isConfirmingAiDraft, loadWorkspace, locale, t]);
 
   useEffect(() => {
     if (!activeRevisionId) {
@@ -659,6 +708,63 @@ export default function ProjectBOQPage(props: PageProps) {
           </div>
         </div>
       </div>
+
+      {showAiDraftReview && activeRevision && !isReadOnly && (
+        <section className="rounded-[28px] border border-blue-500/40 bg-blue-500/10 p-5 text-slate-200">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+            <div className="max-w-3xl">
+              <p className="text-xs font-semibold uppercase tracking-[0.22em] text-blue-300">AI Draft BOQ</p>
+              <h3 className="mt-2 text-xl font-semibold text-white">Review the completed BOQ instead of approving extraction one item at a time</h3>
+              <p className="mt-2 text-sm leading-6 text-slate-300">
+                {aiDraftMode
+                  ? `Quantara added ${aiDraftAddedCount} extracted ${aiDraftAddedCount === 1 ? "item" : "items"} to this editable draft.`
+                  : "This editable BOQ contains AI Draft items from extracted project evidence."}
+                {aiDraftMode && aiDraftExistingCount > 0 ? ` ${aiDraftExistingCount} extracted ${aiDraftExistingCount === 1 ? "item was" : "items were"} already present and were not duplicated.` : ""}
+                {aiDraftMode && aiDraftSkippedCount > 0 ? ` ${aiDraftSkippedCount} incomplete ${aiDraftSkippedCount === 1 ? "candidate still needs" : "candidates still need"} extraction review.` : ""}
+              </p>
+              <p className="mt-2 text-xs leading-5 text-slate-400">
+                Unchanged AI Draft quantities stay unconfirmed until you approve them here. Any quantity you edit follows the existing manual confirmation path. Quantara does not invent rates: use your purchased packages, catalogue/company library, or manual pricing before final validation.
+              </p>
+            </div>
+            <div className="flex shrink-0 flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  const editor = document.getElementById("boq-editor-section");
+                  editor?.scrollIntoView({ behavior: "smooth", block: "start" });
+                  editor?.focus({ preventScroll: true });
+                }}
+                className="rounded-xl border border-slate-600 px-4 py-2 text-sm font-semibold text-slate-200 hover:bg-slate-800"
+              >
+                Review BOQ
+              </button>
+              <button
+                type="button"
+                onClick={() => void confirmRemainingAiDraftQuantities()}
+                disabled={isConfirmingAiDraft || hasUnsavedChanges}
+                title={hasUnsavedChanges ? "Save the BOQ before confirming AI Draft quantities." : ""}
+                className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {isConfirmingAiDraft ? "Confirming..." : "Confirm Remaining Draft Quantities"}
+              </button>
+              {aiDraftMode && aiDraftSkippedCount > 0 && (
+                <button
+                  type="button"
+                  onClick={() => router.push(`/projects/${encodeURIComponent(params.projectId)}/extractions`)}
+                  className="rounded-xl border border-amber-600/70 px-4 py-2 text-sm font-semibold text-amber-200 hover:bg-amber-950/30"
+                >
+                  Review {aiDraftSkippedCount} Extraction {aiDraftSkippedCount === 1 ? "Exception" : "Exceptions"}
+                </button>
+              )}
+            </div>
+          </div>
+          {aiDraftMessage && (
+            <p role="status" className="mt-4 rounded-xl border border-emerald-700/60 bg-emerald-950/30 px-4 py-3 text-sm text-emerald-200">
+              {aiDraftMessage}
+            </p>
+          )}
+        </section>
+      )}
 
       {workflowFactsWarning ? (
         <div

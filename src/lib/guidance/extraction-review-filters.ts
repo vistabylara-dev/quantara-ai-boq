@@ -51,6 +51,11 @@ function hasRetainedEvidence(entity: FilterableExtractionEntity): boolean {
   return Boolean(entity.sourceText?.trim()) || Boolean(entity.tableEvidence?.length);
 }
 
+function isReviewableStatus(status: string): boolean {
+  const normalized = status.trim().toUpperCase();
+  return normalized === "EXTRACTED" || normalized === "NEEDS_REVIEW";
+}
+
 export function getExtractionReviewPriority(entity: FilterableExtractionEntity): ExtractionReviewPriority {
   if (
     isBlank(entity.label)
@@ -96,7 +101,10 @@ export function filterExtractionReviewEntities<T extends FilterableExtractionEnt
   const normalizedSearch = filters.search.trim().toLowerCase();
 
   return entities.filter((entity) => {
-    if (filters.priority !== "ALL" && getExtractionReviewPriority(entity) !== filters.priority) return false;
+    if (filters.priority !== "ALL") {
+      if (!isReviewableStatus(entity.status)) return false;
+      if (getExtractionReviewPriority(entity) !== filters.priority) return false;
+    }
     if (filters.confidence !== "ALL" && getExtractionConfidenceBand(entity) !== filters.confidence) return false;
     if (filters.status !== "ALL" && entity.status !== filters.status) return false;
     if (filters.sourceFileId !== "ALL" && entity.projectFileId !== filters.sourceFileId) return false;

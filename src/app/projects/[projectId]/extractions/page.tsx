@@ -220,7 +220,9 @@ export default function ProjectExtractionsPage(props: { params: Promise<{ projec
     [entities],
   );
   const priorityCounts = useMemo(
-    () => entities.reduce(
+    () => entities.filter(
+      (entity) => isReviewableExtractionStatus(entity.status),
+    ).reduce(
       (counts, entity) => {
         counts[getExtractionReviewPriority(entity)] += 1;
         return counts;
@@ -628,17 +630,19 @@ export default function ProjectExtractionsPage(props: { params: Promise<{ projec
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
                       <StatusBadge label={entity.status} tone={EXTRACTION_STATUS_TONE[entity.status] ?? "default"} />
-                      <span
-                        className={
-                          reviewPriority === "CRITICAL"
+                      {reviewable && (
+                        <span
+                          className={
+                            reviewPriority === "CRITICAL"
                             ? "rounded-full bg-[#D84A4A]/10 px-2.5 py-1 text-xs font-semibold text-[#D84A4A] dark:text-rose-300"
                             : reviewPriority === "REVIEW"
                               ? "rounded-full bg-[#D98A16]/10 px-2.5 py-1 text-xs font-semibold text-[#D98A16] dark:text-amber-300"
                               : "rounded-full bg-[#159A6A]/10 px-2.5 py-1 text-xs font-semibold text-[#159A6A] dark:text-emerald-300"
                         }
                       >
-                        {reviewPriority === "CRITICAL" ? "Critical review" : reviewPriority === "REVIEW" ? "Review recommended" : "Safe candidate"}
-                      </span>
+                          {reviewPriority === "CRITICAL" ? "Critical review" : reviewPriority === "REVIEW" ? "Review recommended" : "Safe candidate"}
+                        </span>
+                      )}
                       <span className="rounded-full border border-[#D9E2EC] bg-[#EEF3F8] px-2.5 py-1 text-xs font-medium text-[#536078] dark:border-[#1E2A42] dark:bg-[#111D33] dark:text-[#B8C4D8]">
                         {formatStatusLabel(entity.entityType)}
                       </span>

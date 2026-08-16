@@ -58,6 +58,22 @@ describe("extraction review filters", () => {
     expect(entities).toHaveLength(3);
   });
 
+  it("excludes finalized records from active priority queues", () => {
+    const entities = [
+      entity({ id: "pending-safe", status: "EXTRACTED" }),
+      entity({ id: "confirmed", status: "CONFIRMED" }),
+      entity({ id: "corrected", status: "CORRECTED" }),
+      entity({ id: "rejected", status: "REJECTED" }),
+    ];
+
+    const result = filterExtractionReviewEntities(entities, {
+      ...DEFAULT_EXTRACTION_REVIEW_FILTERS,
+      priority: "SAFE",
+    });
+
+    expect(result.map((entry) => entry.id)).toEqual(["pending-safe"]);
+  });
+
   it("combines source, method, status, confidence, issue, and text filters", () => {
     const entities = [
       entity({ id: "match", projectFileId: "file-a", label: "Chilled water pipe", extractionMethod: "TABLE" }),

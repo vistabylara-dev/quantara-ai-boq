@@ -144,6 +144,7 @@ describe("authentication emails (integration, real local Postgres)", () => {
         companyName: "Auth Email Test Co",
         fullName: "Register Owner",
         email: REGISTER_EMAIL,
+        phone: "+971500000014",
         password: "Password123",
       });
       registeredCompanyId = result.companyId;

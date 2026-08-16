@@ -108,41 +108,43 @@ export default function ClientForm({
     <form onSubmit={handleSubmit} className={compact ? "space-y-4" : "space-y-6 rounded-[32px] border border-slate-800 bg-slate-950 p-6"}>
       <div className="grid gap-4 sm:grid-cols-2">
         <label className="block text-sm text-slate-300">
-          <span className="text-slate-400">Client name</span>
-          <input className={inputClass} value={values.name} onChange={update("name")} required />
+          <span className="text-slate-400">Client / contact name (optional)</span>
+          <input className={inputClass} value={values.name} onChange={update("name")} />
           {fieldErrors.name && <p className="mt-2 text-xs text-rose-400">{fieldErrors.name[0]}</p>}
         </label>
         <label className="block text-sm text-slate-300">
           <span className="text-slate-400">Company name</span>
-          <input className={inputClass} value={values.companyName} onChange={update("companyName")} />
+          <input className={inputClass} value={values.companyName} onChange={update("companyName")} required />
+          {fieldErrors.companyName && <p className="mt-2 text-xs text-rose-400">{fieldErrors.companyName[0]}</p>}
         </label>
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2">
         <label className="block text-sm text-slate-300">
           <span className="text-slate-400">Email</span>
-          <input type="email" className={inputClass} value={values.email} onChange={update("email")} />
+          <input type="email" className={inputClass} value={values.email} onChange={update("email")} required />
           {fieldErrors.email && <p className="mt-2 text-xs text-rose-400">{fieldErrors.email[0]}</p>}
         </label>
         <label className="block text-sm text-slate-300">
           <span className="text-slate-400">Phone</span>
-          <input className={inputClass} value={values.phone} onChange={update("phone")} />
+          <input type="tel" className={inputClass} value={values.phone} onChange={update("phone")} required />
+          {fieldErrors.phone && <p className="mt-2 text-xs text-rose-400">{fieldErrors.phone[0]}</p>}
         </label>
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2">
         <label className="block text-sm text-slate-300">
-          <span className="text-slate-400">Address</span>
+          <span className="text-slate-400">Address (optional)</span>
           <input className={inputClass} value={values.address} onChange={update("address")} />
         </label>
         <label className="block text-sm text-slate-300">
-          <span className="text-slate-400">Tax registration number</span>
+          <span className="text-slate-400">Tax registration number (optional)</span>
           <input className={inputClass} value={values.taxRegistrationNumber} onChange={update("taxRegistrationNumber")} />
         </label>
       </div>
 
       <label className="block text-sm text-slate-300">
-        <span className="text-slate-400">Notes</span>
+        <span className="text-slate-400">Notes (optional)</span>
         <textarea className={`${inputClass} min-h-[100px]`} value={values.notes} onChange={update("notes")} />
       </label>
 

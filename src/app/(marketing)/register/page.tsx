@@ -98,9 +98,10 @@ function RegisterForm() {
   const [companyName, setCompanyName] = useState("");
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
 
-  const [role, setRole] = useState("Quantity Surveyor");
+  const [role, setRole] = useState("");
   const [country, setCountry] = useState("");
   const [primaryIndustry, setPrimaryIndustry] = useState("");
   const [intendedUse, setIntendedUse] = useState("");
@@ -136,7 +137,7 @@ function RegisterForm() {
     setError(null);
     try {
       await apiClient.post("/api/auth/register", { 
-        companyName, fullName, email, password,
+        companyName, fullName, email, phone, password,
         role, country, primaryIndustry, intendedUse: intendedUse || selectedPackage, approximateVolume, consent
       });
       setRegistered(true);
@@ -185,10 +186,11 @@ function RegisterForm() {
             
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label className="text-sm text-slate-300" htmlFor="fullName">{t("publicContent.accountSetup.fullName")}</label>
+                <label className="text-sm text-slate-300" htmlFor="fullName">
+                  {t("publicContent.accountSetup.fullName")} <span className="text-slate-500">({locale === "ar" ? "اختياري" : "optional"})</span>
+                </label>
                 <input
                   id="fullName"
-                  required
                   value={fullName}
                   onChange={(event) => setFullName(event.target.value)}
                   className="mt-1 w-full rounded-2xl border border-slate-800 bg-slate-900 px-4 py-3 text-sm text-white outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
@@ -220,13 +222,16 @@ function RegisterForm() {
                 />
               </div>
               <div>
-                <label className="text-sm text-slate-300" htmlFor="role">{t("publicContent.accountSetup.role")}</label>
+                <label className="text-sm text-slate-300" htmlFor="role">
+                  {t("publicContent.accountSetup.role")} <span className="text-slate-500">({locale === "ar" ? "اختياري" : "optional"})</span>
+                </label>
                 <select
                   id="role"
                   value={role}
                   onChange={(event) => setRole(event.target.value)}
                   className="mt-1 w-full rounded-2xl border border-slate-800 bg-slate-900 px-4 py-3 text-sm text-white outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 appearance-none"
                 >
+                  <option value="">{locale === "ar" ? "اختر الدور (اختياري)" : "Select role (optional)"}</option>
                   <option value="Quantity Surveyor">{t("publicContent.accountSetup.roles.quantitySurveyor")}</option>
                   <option value="Estimator">{t("publicContent.accountSetup.roles.estimator")}</option>
                   <option value="Engineer">{t("publicContent.accountSetup.roles.engineer")}</option>
@@ -240,12 +245,29 @@ function RegisterForm() {
               </div>
             </div>
 
+            <div>
+              <label className="text-sm text-slate-300" htmlFor="phone">
+                {locale === "ar" ? "رقم الهاتف" : "Phone"}
+              </label>
+              <input
+                id="phone"
+                type="tel"
+                required
+                dir="ltr"
+                autoComplete="tel"
+                value={phone}
+                onChange={(event) => setPhone(event.target.value)}
+                className="mt-1 w-full rounded-2xl border border-slate-800 bg-slate-900 px-4 py-3 text-sm text-white outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
+              />
+            </div>
+
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label className="text-sm text-slate-300" htmlFor="country">{t("publicContent.accountSetup.country")}</label>
+                <label className="text-sm text-slate-300" htmlFor="country">
+                  {t("publicContent.accountSetup.country")} <span className="text-slate-500">({locale === "ar" ? "اختياري" : "optional"})</span>
+                </label>
                 <input
                   id="country"
-                  required
                   value={country}
                   onChange={(event) => setCountry(event.target.value)}
                   className="mt-1 w-full rounded-2xl border border-slate-800 bg-slate-900 px-4 py-3 text-sm text-white outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"

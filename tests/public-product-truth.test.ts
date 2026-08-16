@@ -212,7 +212,7 @@ describe("public product truth", () => {
     expect(source).not.toMatch(/\b24\s*\/\s*7 support\b/i);
     expect(source).not.toMatch(/Request Early Access/i);
     expect(source).toContain('t("publicContent.pricing.hero")');
-    expect(source).toContain('t("publicContent.home.commercialFaq")');
+    expect(source).toContain("getPublicSalesTruth");
   });
 
   it("publishes exact owner-approved public subscription prices with static price codes only", () => {

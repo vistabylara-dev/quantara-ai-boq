@@ -107,17 +107,17 @@ The metadata values below are now centralized in `src/lib/public-site/search-reg
 
 ## Metadata and social completion summary
 
-- All 62 registered public content routes have one unique title and description.
+- All 64 registered public content routes have one unique title and description.
 - All registered titles are 60 characters or fewer; all descriptions are 155 characters or fewer.
 - `createPublicPageMetadata()` produces an absolute title, self canonical, consistent robots state, canonical Open Graph URL and matching Twitter metadata.
-- The sitemap is generated from the same registry and includes only 58 indexable pages.
+- The sitemap includes 103 public URLs: 60 indexable registry pages plus 43 public provider integration detail URLs.
 - Login, registration and recovery metadata use the noindex utility helper.
 - Shared Open Graph and Twitter image routes now provide the social image source. Local rendered checks pass; the deployed preview still requires final crawler and social-card verification.
 - The root canonical no longer needs to act as a fallback for registered pages; each page owns its canonical through the helper.
 
 ## Central architecture and safe follow-up
 
-- `src/lib/public-site/search-registry.ts` owns the 62 content paths, search intent, metadata, indexability and sitemap fields.
+- `src/lib/public-site/search-registry.ts` owns the 64 registered content paths, search intent, metadata and indexability fields; the sitemap also adds the 43 public provider integration detail URLs.
 - `src/lib/public-site/product-truth.ts` owns the stable entity definition, workflow statement, professional-review notice and capability statuses.
 - `src/lib/public-site/schema.ts` owns canonical entity IDs and the page/entity graph builders. Shared public templates now consume this contract.
 - `src/app/(marketing)/layout.tsx` emits the single Organization, WebSite and SoftwareApplication entity graph for the public website. Public route templates emit page graphs through the same schema module.

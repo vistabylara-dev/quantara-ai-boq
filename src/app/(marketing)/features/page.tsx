@@ -35,8 +35,8 @@ export default async function FeaturesPage() {
       <PublicPageJsonLd
         path="/features"
         breadcrumbs={[
-          { name: "Home", path: "/" },
-          { name: "Features", path: "/features" },
+          { name: t("legal.shared.home"), path: "/" },
+          { name: t("publicContent.features.breadcrumb"), path: "/features" },
         ]}
       />
 

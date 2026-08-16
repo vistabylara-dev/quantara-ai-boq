@@ -30,6 +30,7 @@ const copy = {
     categoryIntro:
       "Browse every integration by construction-software category.",
     cardAction: "Explore integration",
+    integrationCount: "Integrations",
     finalTitle: "Bring your project ecosystem into one BOQ workflow",
     finalBody:
       "Create a Quantara account, explore the feature set, or use TAYQAN when you want Digital QS capacity to move the work forward.",
@@ -47,6 +48,7 @@ const copy = {
     categoryIntro:
       "تصفح جميع التكاملات حسب فئة برنامج البناء.",
     cardAction: "استكشف التكامل",
+    integrationCount: "التكاملات",
     finalTitle: "اجمع منظومة مشروعك داخل سير عمل BOQ واحد",
     finalBody:
       "أنشئ حساب Quantara، واستكشف الميزات، أو استخدم TAYQAN عندما تحتاج قدرة مسّاح كميات رقمي لدفع العمل إلى الأمام.",
@@ -54,6 +56,16 @@ const copy = {
     features: "عرض ميزات Quantara",
   },
 } as const;
+
+const ARABIC_INTEGRATION_CATEGORY_LABELS: typeof INTEGRATION_CATEGORY_LABELS = {
+  BIM_CAD: "BIM وCAD",
+  CONSTRUCTION_MANAGEMENT: "إدارة الإنشاءات",
+  COMMON_DATA_ENVIRONMENTS: "بيئات البيانات المشتركة",
+  DOCUMENTS_STORAGE: "المستندات والتخزين السحابي",
+  ESTIMATING_COST: "التقدير والتكلفة",
+  STRUCTURAL_ENGINEERING: "الهندسة الإنشائية",
+  VISUALIZATION_RENDERING: "التصور والإظهار",
+};
 
 export default async function BoqIntegrationsPage() {
   const locale = await getServerLocale();
@@ -76,7 +88,12 @@ export default async function BoqIntegrationsPage() {
     })),
   });
 
-  const categoryGroups = Object.entries(INTEGRATION_CATEGORY_LABELS)
+  const categoryLabels =
+    locale === "ar"
+      ? ARABIC_INTEGRATION_CATEGORY_LABELS
+      : INTEGRATION_CATEGORY_LABELS;
+
+  const categoryGroups = Object.entries(categoryLabels)
     .map(([category, label]) => ({
       category,
       label,
@@ -112,7 +129,9 @@ export default async function BoqIntegrationsPage() {
             <span className="text-3xl font-extrabold">
               {PROVIDER_REGISTRY.length}
             </span>
-            <span className="text-sm text-slate-400">Integrations</span>
+            <span className="text-sm text-slate-400">
+              {pageCopy.integrationCount}
+            </span>
           </div>
         </header>
 

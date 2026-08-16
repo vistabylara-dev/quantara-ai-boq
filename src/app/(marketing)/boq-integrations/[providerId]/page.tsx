@@ -209,7 +209,7 @@ export default async function IntegrationDetailPage({ params }: PageProps) {
   const pageCopy = copy[locale];
   const sales = getPublicSalesTruth(locale);
   const categoryLabel = INTEGRATION_CATEGORY_LABELS[provider.category];
-  const scope = [...new Set([...provider.supportedData, ...provider.plannedData])];
+  const scope = provider.supportedData;
 
   const breadcrumbItems = [
     { name: t("publicLanding.home"), item: "/" },

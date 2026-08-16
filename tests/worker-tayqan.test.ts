@@ -304,13 +304,28 @@ describe("TAYQAN-1 EN/AR dictionary keys", () => {
     // plain untranslated English prose. "TAYQAN" itself (the brand) and bare
     // technical identifiers are allowed to contain Latin letters.
     const LATIN_PROSE = /[A-Za-z]{2,}/;
+    const ALLOWED_LATIN_IDENTIFIERS = [
+      "TAYQAN",
+      "Quantara",
+      "Stripe",
+      "MEP",
+      "HVAC",
+      "ELV",
+      "Hardscape",
+      "Softscape",
+    ] as const;
+
     function walk(node: unknown, path: string, offenders: string[]) {
       if (typeof node === "string") {
-        // Strip the brand name and {vars} interpolation placeholders (e.g.
-        // "{count}", "{number}") before checking for stray English prose —
-        // those are template syntax, not untranslated presentation text.
-        const withoutBrandAndVars = node.replace(/TAYQAN/g, "").replace(/\{\w+\}/g, "");
-        if (LATIN_PROSE.test(withoutBrandAndVars)) offenders.push(`${path} = ${JSON.stringify(node)}`);
+        // Strip approved brand/technical identifiers and {vars} interpolation
+        // placeholders before checking for stray English prose. The allow-list
+        // is intentionally narrow so genuine untranslated English still fails.
+        const withoutVars = node.replace(/\{\w+\}/g, "");
+        const withoutAllowedIdentifiers = ALLOWED_LATIN_IDENTIFIERS.reduce(
+          (value, identifier) => value.split(identifier).join(""),
+          withoutVars,
+        );
+        if (LATIN_PROSE.test(withoutAllowedIdentifiers)) offenders.push(`${path} = ${JSON.stringify(node)}`);
         return;
       }
       if (node && typeof node === "object") {

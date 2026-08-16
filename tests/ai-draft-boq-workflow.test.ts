@@ -4,7 +4,9 @@ import {
   chooseAiDraftSection,
   formatAiDraftCategory,
   getAiDraftExtractedEntityId,
+  getAiDraftQuantityValue,
   isAiDraftCandidateUsable,
+  isAiDraftMeasurementComplete,
   summarizeAiDraftCandidates,
   type AiDraftCandidate,
 } from "../src/lib/guidance/ai-draft-boq";
@@ -31,11 +33,22 @@ describe("AI Draft BOQ workflow", () => {
     expect(isAiDraftCandidateUsable(candidate({ status: "CORRECTED" }))).toBe(true);
   });
 
-  it("never invents missing quantity or unit", () => {
-    expect(isAiDraftCandidateUsable(candidate({ quantity: null }))).toBe(false);
-    expect(isAiDraftCandidateUsable(candidate({ quantity: 0 }))).toBe(false);
-    expect(isAiDraftCandidateUsable(candidate({ unit: null }))).toBe(false);
-    expect(isAiDraftCandidateUsable(candidate({ unit: " " }))).toBe(false);
+  it("allows incomplete measurements into the draft without treating them as complete", () => {
+    expect(isAiDraftCandidateUsable(candidate({ quantity: null }))).toBe(true);
+    expect(isAiDraftCandidateUsable(candidate({ quantity: 0 }))).toBe(true);
+    expect(isAiDraftCandidateUsable(candidate({ unit: null }))).toBe(true);
+    expect(isAiDraftCandidateUsable(candidate({ unit: " " }))).toBe(true);
+
+    expect(isAiDraftMeasurementComplete(candidate({ quantity: null }))).toBe(false);
+    expect(isAiDraftMeasurementComplete(candidate({ quantity: 0 }))).toBe(false);
+    expect(isAiDraftMeasurementComplete(candidate({ unit: null }))).toBe(false);
+    expect(isAiDraftMeasurementComplete(candidate({ unit: " " }))).toBe(false);
+    expect(isAiDraftMeasurementComplete(candidate())).toBe(true);
+
+    // Preserve valid extracted evidence field-by-field.
+    expect(getAiDraftQuantityValue(candidate({ quantity: 240, unit: null }))).toBe(240);
+    expect(getAiDraftQuantityValue(candidate({ quantity: null, unit: "m" }))).toBe(0);
+    expect(getAiDraftQuantityValue(candidate({ quantity: -5, unit: "m" }))).toBe(0);
   });
 
   it("keeps rejected and already imported extraction out of new draft generation", () => {
@@ -43,13 +56,16 @@ describe("AI Draft BOQ workflow", () => {
     expect(isAiDraftCandidateUsable(candidate({ status: "IMPORTED" }))).toBe(false);
   });
 
-  it("summarizes usable, skipped, and finalized extraction separately", () => {
+  it("summarizes draftable, measurement-incomplete, skipped, and finalized extraction separately", () => {
     expect(summarizeAiDraftCandidates([
-      candidate({ id: "usable" }),
+      candidate({ id: "complete" }),
       candidate({ id: "missing-unit", unit: null }),
+      candidate({ id: "missing-quantity", quantity: null }),
+      candidate({ id: "missing-label", label: " " }),
       candidate({ id: "rejected", status: "REJECTED" }),
     ])).toEqual({
-      eligibleCount: 1,
+      eligibleCount: 3,
+      measurementIncompleteCount: 2,
       skippedCount: 1,
       ignoredFinalizedCount: 1,
     });
@@ -101,7 +117,20 @@ describe("AI Draft BOQ workflow", () => {
     );
     expect(aiDraft).toContain("RateProvenanceSource.LEGACY_UNVERIFIED");
     expect(aiDraft).toContain("AI draft - rate selection pending");
+    expect(aiDraft).toContain("new Prisma.Decimal(getAiDraftQuantityValue(candidate))");
+    expect(aiDraft).toContain('const unit = candidate.unit?.trim() ?? ""');
     expect(aiDraft).toContain("ENTITY_IMPORTED_TO_BOQ");
+  });
+
+  it("keeps unresolved measurements blocked from final BOQ integrity", () => {
+    const boqRepository = readFileSync(
+      "src/lib/repositories/boq-repository.ts",
+      "utf8",
+    );
+
+    expect(boqRepository).toContain("BOQ_ITEM_INVALID_UNIT");
+    expect(boqRepository).toContain("BOQ_ITEM_INVALID_QUANTITY");
+    expect(boqRepository).toContain("ESTIMATE_INTEGRITY_REQUIRED");
   });
 
   it("allows a delegated worker to pin the target BOQ and frozen source-file scope", () => {
@@ -116,7 +145,6 @@ describe("AI Draft BOQ workflow", () => {
     expect(service).toContain("AI_DRAFT_BOQ_PROJECT_MISMATCH");
     expect(service).toContain("projectFileId: { in: scopedProjectFileIds }");
   });
-
   it("exposes all three post-extraction choices and BOQ-level confirmation", () => {
     const extractionPage = readFileSync(
       "src/app/projects/[projectId]/extractions/page.tsx",

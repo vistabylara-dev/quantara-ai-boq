@@ -62,6 +62,32 @@ const PINNED_MIGRATION_MANIFEST: Readonly<Record<string, string>> = {
   "20260815102000_tayqan_hire_intake": "7f83100a8dbaf3ac417222289192d1ce8422316b5a661531b76fe35b0dc4aacd",
 };
 
+const LEGACY_CHECKSUM_ALLOWLIST: Readonly<Record<string, {
+  recordedChecksum: string;
+  expectedChecksum: string;
+}>> = {
+  "20260804071557_master_scale_1a_foundation": {
+    recordedChecksum: "ee83571781341215f53a4ec11359b2afb8a04b6529bbb4aef803bd554685270b",
+    expectedChecksum: "c755efb158106195c61951f09081ce59a580edd88e395b978222289693477bac",
+  },
+  "20260804071718_master_scale_1a_search_indexes": {
+    recordedChecksum: "122d743a0403e77ad7e0ed9447f5b8826f2fbdbc55612d936eff004dd13c2eec",
+    expectedChecksum: "b43afc4d698e365fa3ef71ad277291386d31da0da92c130193c9e164371227d9",
+  },
+  "20260805025000_add_sales_inquiry": {
+    recordedChecksum: "e844c9dfb791b910a2b86c4a5f6821710a103c49609e3265519dd4598cde58d2",
+    expectedChecksum: "3def2f3a0b9b6d97789929a80b0d851435a8f5800b4306e045d44607462408a5",
+  },
+  "20260805110000_proposal_source_type_recovery": {
+    recordedChecksum: "580a4f53fdbf78bce61000227116b4819a828bbaad3efefd7a6c874ae5946f59",
+    expectedChecksum: "d8df46265b4a3d4c4e34eac5376618ca34c53a10939fdd67a0f24081d31aa03f",
+  },
+  "20260806155214_add_boq_locked_by_user": {
+    recordedChecksum: "3f9cac6bc067d8ffd91d4606925288f02eba0355443ab5a9bfcbb349b31daa1b",
+    expectedChecksum: "ec496aa33bae6ec7df1cb1f876d2a7c9bfaac382848c188c878b059179506268",
+  },
+};
+
 type MigrationRow = {
   migration_name: string;
   checksum: string;
@@ -100,6 +126,8 @@ type PreflightEvidence = {
     rolledBackRecords: number;
     unknownRecordedMigrations: string[];
     checksumMismatches: string[];
+    allowedLegacyChecksumMismatches: string[];
+    blockingChecksumMismatches: string[];
     pendingMigrations: string[];
   };
   coreTables: Record<string, boolean>;
@@ -112,6 +140,7 @@ type PreflightEvidence = {
     finishedAt: Date | null;
     rolledBackAt: Date | null;
     appliedStepsCount: number;
+    allowedLegacy: boolean;
   }>;
   targetMigration: {
     name: string;
@@ -382,6 +411,19 @@ function isDirtyRow(row: MigrationRow): boolean {
   return row.finished_at === null || row.rolled_back_at !== null;
 }
 
+function isAllowedLegacyChecksumMismatch(
+  name: string,
+  recordedChecksum: string,
+  expectedChecksum: string,
+): boolean {
+  const allowed = LEGACY_CHECKSUM_ALLOWLIST[name];
+  return (
+    allowed !== undefined &&
+    allowed.recordedChecksum === recordedChecksum &&
+    allowed.expectedChecksum === expectedChecksum
+  );
+}
+
 async function readMigrationRows(client: PoolClient): Promise<MigrationRow[]> {
   const migrationTable = await client.query<{ present: boolean }>(
     `SELECT to_regclass($1) IS NOT NULL AS present`,
@@ -452,8 +494,29 @@ function summarizePreflight(
         finishedAt: row.finished_at,
         rolledBackAt: row.rolled_back_at,
         appliedStepsCount: row.applied_steps_count,
+        allowedLegacy: isAllowedLegacyChecksumMismatch(
+          name,
+          row.checksum,
+          expectedChecksum,
+        ),
       }));
   });
+
+  const allowedLegacyChecksumMismatches = [
+    ...new Set(
+      checksumMismatchDetails
+        .filter((detail) => detail.allowedLegacy)
+        .map((detail) => detail.name),
+    ),
+  ];
+
+  const blockingChecksumMismatches = [
+    ...new Set(
+      checksumMismatchDetails
+        .filter((detail) => !detail.allowedLegacy)
+        .map((detail) => detail.name),
+    ),
+  ];
 
   const pendingMigrations = migrations
     .filter((migration) => !cleanNames.has(migration.name))
@@ -487,7 +550,7 @@ function summarizePreflight(
     verdict = "HISTORY_DIRTY";
   } else if (unexpectedRecordedMigrations.length > 0 || duplicateRecordedMigrations.length > 0) {
     verdict = "HISTORY_DIVERGED";
-  } else if (checksumMismatches.length > 0 || targetChecksumMismatch) {
+  } else if (blockingChecksumMismatches.length > 0 || targetChecksumMismatch) {
     verdict = "CHECKSUM_MISMATCH";
   } else if (targetRows.length > 0 && targetCleanRows.length === 0) {
     verdict = "HISTORY_DIRTY";
@@ -537,6 +600,8 @@ function summarizePreflight(
       rolledBackRecords: rows.filter((row) => row.rolled_back_at !== null).length,
       unknownRecordedMigrations: unexpectedRecordedMigrations,
       checksumMismatches,
+      allowedLegacyChecksumMismatches,
+      blockingChecksumMismatches,
       pendingMigrations,
     },
     coreTables,

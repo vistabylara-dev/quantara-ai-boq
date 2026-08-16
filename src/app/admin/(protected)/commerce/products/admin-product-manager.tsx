@@ -34,7 +34,8 @@ type ManagedProduct = {
   category: string;
   slug: string;
   merchant: { enabled: boolean };
-  fulfillmentAdapter: "NONE";
+  fulfillmentAdapter: "NONE" | "SOFTWARE_PLAN";
+  checkoutState: "DISABLED" | "SYNCING" | "READY" | "ERROR";
   prices: Array<{
     id: string;
     amountMinor: number;
@@ -55,6 +56,12 @@ type FormState = {
   billingInterval: BillingInterval;
   purchaseMode: PurchaseMode;
   marketplaceEnabled: boolean;
+  fulfillmentMode: "LISTING_ONLY" | "SOFTWARE_SUBSCRIPTION";
+  softwarePlanType: "PRO" | "BUSINESS" | "ENTERPRISE";
+  maxUsers: string;
+  maxProjects: string;
+  maxActiveBoqs: string;
+  maxDocumentsPerMonth: string;
   slug: string;
   metaTitle: string;
   metaDescription: string;
@@ -81,6 +88,12 @@ const initialForm: FormState = {
   billingInterval: "ONE_TIME",
   purchaseMode: "DIRECT",
   marketplaceEnabled: true,
+  fulfillmentMode: "LISTING_ONLY",
+  softwarePlanType: "PRO",
+  maxUsers: "",
+  maxProjects: "",
+  maxActiveBoqs: "",
+  maxDocumentsPerMonth: "",
   slug: "",
   metaTitle: "",
   metaDescription: "",
@@ -132,6 +145,11 @@ export default function AdminProductManager() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [busyProductId, setBusyProductId] = useState<string | null>(null);
+  const [busyCheckoutProductId, setBusyCheckoutProductId] =
+    useState<string | null>(null);
+  const [checkoutPreflight, setCheckoutPreflight] = useState<
+    Record<string, { safe: boolean; blockers: string[] }>
+  >({});
   const [loadError, setLoadError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -228,6 +246,57 @@ export default function AdminProductManager() {
     }
   }
 
+  async function checkoutAction(
+    product: ManagedProduct,
+    action: "PREFLIGHT" | "ACTIVATE",
+  ) {
+    if (busyCheckoutProductId) return;
+
+    setBusyCheckoutProductId(product.id);
+    setError(null);
+    setMessage(null);
+
+    try {
+      const result = await apiClient.post<{
+        safe?: boolean;
+        blockers?: string[];
+        checkoutState?: string;
+      }>(
+        `/api/admin/commerce/product-manager/${product.id}/checkout`,
+        { action },
+      );
+
+      if (action === "PREFLIGHT") {
+        const report = {
+          safe: result.safe === true,
+          blockers: result.blockers ?? [],
+        };
+        setCheckoutPreflight((current) => ({
+          ...current,
+          [product.id]: report,
+        }));
+        setMessage(
+          report.safe
+            ? `${product.name}: Stripe preflight is clean. No Stripe write was made.`
+            : `${product.name}: Stripe activation is blocked by the readiness report.`,
+        );
+      } else {
+        setMessage(
+          `${product.name}: Stripe checkout is READY and verified.`,
+        );
+        setCheckoutPreflight((current) => ({
+          ...current,
+          [product.id]: { safe: true, blockers: [] },
+        }));
+        await load();
+      }
+    } catch (checkoutError) {
+      setError(getApiErrorMessage(checkoutError));
+    } finally {
+      setBusyCheckoutProductId(null);
+    }
+  }
+
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!canSubmit || isSaving) return;
@@ -239,7 +308,20 @@ export default function AdminProductManager() {
     try {
       const created = await apiClient.post<ManagedProduct>(
         "/api/admin/commerce/product-manager",
-        { ...form, priceAed: Number(form.priceAed) },
+        {
+          ...form,
+          priceAed: Number(form.priceAed),
+          maxUsers: form.maxUsers.trim() ? Number(form.maxUsers) : null,
+          maxProjects: form.maxProjects.trim()
+            ? Number(form.maxProjects)
+            : null,
+          maxActiveBoqs: form.maxActiveBoqs.trim()
+            ? Number(form.maxActiveBoqs)
+            : null,
+          maxDocumentsPerMonth: form.maxDocumentsPerMonth.trim()
+            ? Number(form.maxDocumentsPerMonth)
+            : null,
+        },
       );
       setMessage(`${created.name} saved as an inert private draft. Stripe and Marketplace were not changed.`);
       setForm(initialForm);
@@ -337,6 +419,107 @@ export default function AdminProductManager() {
               title="Marketplace sales channel"
               description="Prepare this product for Marketplace after the guarded publish stage."
             />
+          </Section>
+
+          <Section
+            icon={ShieldCheck}
+            title="Fulfilment & checkout"
+            description="A product becomes chargeable only after its fulfilment path is explicit and Stripe preflight passes."
+          >
+            <Field title="Fulfilment mode">
+              <select
+                value={form.fulfillmentMode}
+                onChange={(e) =>
+                  update(
+                    "fulfillmentMode",
+                    e.target.value as FormState["fulfillmentMode"],
+                  )
+                }
+                className={inputClass}
+              >
+                <option value="LISTING_ONLY">
+                  Marketplace listing only
+                </option>
+                <option value="SOFTWARE_SUBSCRIPTION">
+                  Quantara software subscription
+                </option>
+              </select>
+            </Field>
+
+            {form.fulfillmentMode === "SOFTWARE_SUBSCRIPTION" && (
+              <div className="grid gap-4 sm:grid-cols-2">
+                <Field title="Plan class">
+                  <select
+                    value={form.softwarePlanType}
+                    onChange={(e) =>
+                      update(
+                        "softwarePlanType",
+                        e.target.value as FormState["softwarePlanType"],
+                      )
+                    }
+                    className={inputClass}
+                  >
+                    <option value="PRO">Pro</option>
+                    <option value="BUSINESS">Business</option>
+                    <option value="ENTERPRISE">Enterprise</option>
+                  </select>
+                </Field>
+
+                <Field title="Maximum users">
+                  <input
+                    type="number"
+                    min="1"
+                    value={form.maxUsers}
+                    onChange={(e) => update("maxUsers", e.target.value)}
+                    className={inputClass}
+                    placeholder="Unlimited when blank"
+                  />
+                </Field>
+
+                <Field title="Maximum projects">
+                  <input
+                    type="number"
+                    min="1"
+                    value={form.maxProjects}
+                    onChange={(e) => update("maxProjects", e.target.value)}
+                    className={inputClass}
+                    placeholder="Unlimited when blank"
+                  />
+                </Field>
+
+                <Field title="Maximum active BOQs">
+                  <input
+                    type="number"
+                    min="1"
+                    value={form.maxActiveBoqs}
+                    onChange={(e) =>
+                      update("maxActiveBoqs", e.target.value)
+                    }
+                    className={inputClass}
+                    placeholder="Recorded limit"
+                  />
+                </Field>
+
+                <Field title="Documents / month">
+                  <input
+                    type="number"
+                    min="1"
+                    value={form.maxDocumentsPerMonth}
+                    onChange={(e) =>
+                      update("maxDocumentsPerMonth", e.target.value)
+                    }
+                    className={inputClass}
+                    placeholder="Recorded limit"
+                  />
+                </Field>
+              </div>
+            )}
+
+            <p className="rounded-xl border border-[#D9E2EC] p-3 text-xs text-[#536078] dark:border-[#1E2A42] dark:text-[#B8C4D8]">
+              One-time generic checkout stays disabled until Quantara has a
+              dedicated one-time order/fulfilment ledger. This protects
+              customers from paying for an item the SaaS cannot fulfil.
+            </p>
           </Section>
 
           <Section icon={Search} title="Search & AI discovery" description="SEO metadata stored with the product.">
@@ -443,8 +626,57 @@ export default function AdminProductManager() {
                     </div>
 
                     <div className="mt-3 rounded-xl bg-[#EEF3F8] p-3 text-xs dark:bg-[#111D33]">
-                      Fulfilment adapter: <strong>{product.fulfillmentAdapter}</strong>
+                      <p>
+                        Fulfilment adapter:{" "}
+                        <strong>{product.fulfillmentAdapter}</strong>
+                      </p>
+                      <p className="mt-1">
+                        Checkout state: <strong>{product.checkoutState}</strong>
+                      </p>
                     </div>
+
+                    {product.publicationState === "PUBLISHED" &&
+                      product.fulfillmentAdapter === "SOFTWARE_PLAN" && (
+                        <div className="mt-3 space-y-2">
+                          <div className="flex gap-2">
+                            <button
+                              type="button"
+                              disabled={busyCheckoutProductId === product.id}
+                              onClick={() =>
+                                void checkoutAction(product, "PREFLIGHT")
+                              }
+                              className="flex-1 rounded-xl border border-[#D9E2EC] bg-white px-3 py-2.5 text-xs font-semibold text-[#0B1630] hover:bg-[#EEF3F8] disabled:opacity-50 dark:border-[#1E2A42] dark:bg-[#0B1426] dark:text-white"
+                            >
+                              {busyCheckoutProductId === product.id
+                                ? "Checking…"
+                                : "Stripe preflight"}
+                            </button>
+
+                            <button
+                              type="button"
+                              disabled={
+                                busyCheckoutProductId === product.id ||
+                                checkoutPreflight[product.id]?.safe !== true
+                              }
+                              onClick={() =>
+                                void checkoutAction(product, "ACTIVATE")
+                              }
+                              className="flex-1 rounded-xl bg-emerald-600 px-3 py-2.5 text-xs font-semibold text-white disabled:opacity-40"
+                            >
+                              Activate checkout
+                            </button>
+                          </div>
+
+                          {checkoutPreflight[product.id] &&
+                            !checkoutPreflight[product.id].safe && (
+                              <div className="rounded-xl border border-amber-400/30 bg-amber-400/5 p-3 text-xs text-amber-700 dark:text-amber-300">
+                                {checkoutPreflight[product.id].blockers.join(
+                                  " ",
+                                )}
+                              </div>
+                            )}
+                        </div>
+                      )}
 
                     <div className="mt-3 flex gap-2">
                       <button

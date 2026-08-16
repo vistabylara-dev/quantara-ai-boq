@@ -4,6 +4,21 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { apiClient } from "@/lib/api/client";
 
+type CheckoutAvailability = {
+  hasExistingSubscription: boolean;
+  products: Array<{
+    productCode: string;
+    prices: Array<{
+      priceCode: string;
+      billingInterval: "MONTH" | "YEAR";
+      amountMinor: number;
+      currency: string;
+      available: boolean;
+      unavailableReason: string | null;
+    }>;
+  }>;
+};
+
 type ManagedMarketplaceProduct = {
   code: string;
   type: string;
@@ -25,6 +40,9 @@ type ManagedMarketplaceProduct = {
 
 export default function ManagedProductsSection() {
   const [products, setProducts] = useState<ManagedMarketplaceProduct[]>([]);
+  const [checkout, setCheckout] = useState<CheckoutAvailability | null>(null);
+  const [busyPriceCode, setBusyPriceCode] = useState<string | null>(null);
+  const [checkoutError, setCheckoutError] = useState<string | null>(null);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -37,13 +55,52 @@ export default function ManagedProductsSection() {
       .then(setProducts)
       .catch((error) => {
         if (error instanceof DOMException && error.name === "AbortError") return;
-        // Strictly additive: this channel must never break Industry Library
-        // or TAYQAN if its own API is temporarily unavailable.
         setProducts([]);
+      });
+
+    void apiClient
+      .get<CheckoutAvailability>(
+        "/api/commerce/checkout-options",
+        controller.signal,
+      )
+      .then(setCheckout)
+      .catch((error) => {
+        if (error instanceof DOMException && error.name === "AbortError") return;
+        // Marketplace listings remain visible even when the authenticated
+        // checkout-readiness endpoint is unavailable.
+        setCheckout(null);
       });
 
     return () => controller.abort();
   }, []);
+
+  async function startCheckout(
+    priceCode: string,
+    billingInterval: "MONTH" | "YEAR",
+  ) {
+    if (busyPriceCode) return;
+
+    setBusyPriceCode(priceCode);
+    setCheckoutError(null);
+
+    try {
+      const result = await apiClient.post<{
+        checkoutSessionId: string;
+        checkoutUrl: string;
+      }>("/api/commerce/checkout", {
+        checkoutMode: "SUBSCRIPTION",
+        priceCode,
+        billingInterval,
+      });
+
+      window.location.assign(result.checkoutUrl);
+    } catch (error) {
+      setCheckoutError(
+        error instanceof Error ? error.message : "Checkout could not be started.",
+      );
+      setBusyPriceCode(null);
+    }
+  }
 
   if (products.length === 0) return null;
 
@@ -62,9 +119,21 @@ export default function ManagedProductsSection() {
         </p>
       </div>
 
+      {checkoutError && (
+        <div className="mb-4 rounded-xl border border-rose-900 bg-rose-950/30 p-3 text-sm text-rose-300">
+          {checkoutError}
+        </div>
+      )}
+
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         {products.map((product) => {
           const price = product.prices[0];
+          const checkoutProduct = checkout?.products.find(
+            (candidate) => candidate.productCode === product.code,
+          );
+          const checkoutPrice = checkoutProduct?.prices.find(
+            (candidate) => candidate.priceCode === price?.code,
+          );
           const suffix =
             price?.billingInterval === "MONTH"
               ? "/mo"
@@ -104,12 +173,32 @@ export default function ManagedProductsSection() {
                 </p>
               </div>
 
-              <Link
-                href={`/products/${product.slug}`}
-                className="mt-5 rounded-xl border border-violet-600 bg-violet-600 px-4 py-3 text-center text-sm font-bold text-white transition-colors hover:bg-violet-500"
-              >
-                View product
-              </Link>
+              <div className="mt-5 grid gap-2">
+                <Link
+                  href={`/products/${product.slug}`}
+                  className="rounded-xl border border-violet-600 px-4 py-3 text-center text-sm font-bold text-violet-200 transition-colors hover:bg-violet-950/40"
+                >
+                  View product
+                </Link>
+
+                {checkoutPrice?.available && (
+                  <button
+                    type="button"
+                    disabled={busyPriceCode === checkoutPrice.priceCode}
+                    onClick={() =>
+                      void startCheckout(
+                        checkoutPrice.priceCode,
+                        checkoutPrice.billingInterval,
+                      )
+                    }
+                    className="rounded-xl bg-emerald-600 px-4 py-3 text-sm font-bold text-white hover:bg-emerald-500 disabled:opacity-50"
+                  >
+                    {busyPriceCode === checkoutPrice.priceCode
+                      ? "Opening checkout…"
+                      : "Buy now"}
+                  </button>
+                )}
+              </div>
             </article>
           );
         })}

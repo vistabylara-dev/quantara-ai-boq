@@ -12,6 +12,15 @@ export const adminProductManagerCreateSchema = z
     purchaseMode: z.enum(["DIRECT", "QUOTATION_REQUIRED", "CONTACT_SALES"]).default("DIRECT"),
     marketplaceEnabled: z.boolean().default(true),
 
+    fulfillmentMode: z
+      .enum(["LISTING_ONLY", "SOFTWARE_SUBSCRIPTION"])
+      .default("LISTING_ONLY"),
+    softwarePlanType: z.enum(["PRO", "BUSINESS", "ENTERPRISE"]).default("PRO"),
+    maxUsers: z.number().int().positive().nullable().default(null),
+    maxProjects: z.number().int().positive().nullable().default(null),
+    maxActiveBoqs: z.number().int().positive().nullable().default(null),
+    maxDocumentsPerMonth: z.number().int().positive().nullable().default(null),
+
     slug: z.string().trim().min(2).max(120).regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/),
     metaTitle: z.string().trim().min(2).max(70),
     metaDescription: z.string().trim().min(2).max(320),
@@ -33,6 +42,24 @@ export const adminProductManagerCreateSchema = z
   })
   .strict()
   .superRefine((value, context) => {
+    if (value.fulfillmentMode === "SOFTWARE_SUBSCRIPTION") {
+      if (value.purchaseMode !== "DIRECT") {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["purchaseMode"],
+          message: "Software subscription fulfilment requires Direct checkout.",
+        });
+      }
+
+      if (value.billingInterval === "ONE_TIME") {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["billingInterval"],
+          message: "Software subscription fulfilment requires monthly or yearly billing.",
+        });
+      }
+    }
+
     if (!value.merchantEnabled) return;
 
     if (!value.merchantTitle) {

@@ -147,13 +147,29 @@ export async function seedCommerceLinkedSoftwarePlans(client: SoftwarePlanClient
  * next webhook delivery, and would take an unnecessary row write/lock on
  * every event.
  */
+export function managedCommerceSoftwarePlanKey(commerceProductCode: string): string {
+  return `commerce_pm_${commerceProductCode}`;
+}
+
 export async function resolveSoftwarePlanForCommerceProductCode(
   commerceProductCode: string,
   client: SoftwarePlanClient = prisma,
 ) {
   const spec = findCommerceLinkedPlanSpec(commerceProductCode);
-  if (!spec) return null;
-  const existing = await client.softwarePlan.findUnique({ where: { key: spec.softwarePlanKey } });
-  if (existing) return existing;
-  return ensureCommerceLinkedSoftwarePlan(spec, client);
+
+  // Preserve the proven Starter / Professional / Business bridge exactly.
+  if (spec) {
+    const existing = await client.softwarePlan.findUnique({
+      where: { key: spec.softwarePlanKey },
+    });
+    if (existing) return existing;
+    return ensureCommerceLinkedSoftwarePlan(spec, client);
+  }
+
+  // Product Manager subscriptions use a namespaced SoftwarePlan created
+  // before live Stripe activation. No plan is created here: webhook
+  // processing can only resolve a plan the owner workflow already prepared.
+  return client.softwarePlan.findUnique({
+    where: { key: managedCommerceSoftwarePlanKey(commerceProductCode) },
+  });
 }

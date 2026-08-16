@@ -9,6 +9,11 @@ type ManagedMetadata = {
   category: string;
   slug: string;
   seo: { metaTitle: string; metaDescription: string };
+  checkout?: {
+    state: "DISABLED" | "SYNCING" | "READY" | "ERROR";
+    lastErrorCode?: string | null;
+    activatedAt?: string | null;
+  };
   merchant: {
     enabled: boolean;
     title: string;
@@ -66,6 +71,7 @@ function toPublicDTO(row: {
     slug: metadata.slug,
     seo: metadata.seo,
     merchant: metadata.merchant,
+    checkoutState: metadata.checkout?.state ?? "DISABLED",
     prices: row.prices
       .filter((price) => price.isActive)
       .map((price) => ({

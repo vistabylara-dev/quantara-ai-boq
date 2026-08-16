@@ -29,7 +29,22 @@ type ManagedMetadata = {
     availability: "in_stock" | "out_of_stock" | "preorder";
     condition: "new" | "refurbished" | "used";
   };
-  fulfillment: { adapter: "NONE" };
+  fulfillment:
+    | { adapter: "NONE" }
+    | {
+        adapter: "SOFTWARE_PLAN";
+        softwarePlanKey: string;
+        planType: "PRO" | "BUSINESS" | "ENTERPRISE";
+        maxUsers: number | null;
+        maxProjects: number | null;
+        maxActiveBoqs: number | null;
+        maxDocumentsPerMonth: number | null;
+      };
+  checkout?: {
+    state: "DISABLED" | "SYNCING" | "READY" | "ERROR";
+    lastErrorCode?: string | null;
+    activatedAt?: string | null;
+  };
 };
 
 function requestMetadataJson(metadata: PlatformRequestMetadata) {
@@ -100,7 +115,9 @@ function toDTO(row: {
       availability: "in_stock",
       condition: "new",
     },
+    fulfillment: metadata?.fulfillment ?? { adapter: "NONE" },
     fulfillmentAdapter: metadata?.fulfillment.adapter ?? "NONE",
+    checkoutState: metadata?.checkout?.state ?? "DISABLED",
     prices: row.prices,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
@@ -201,7 +218,23 @@ export async function createAdminProductManagerDraft(
       availability: input.availability,
       condition: input.condition,
     },
-    fulfillment: { adapter: "NONE" },
+    fulfillment:
+      input.fulfillmentMode === "SOFTWARE_SUBSCRIPTION"
+        ? {
+            adapter: "SOFTWARE_PLAN",
+            softwarePlanKey: `commerce_pm_${input.code}`,
+            planType: input.softwarePlanType,
+            maxUsers: input.maxUsers,
+            maxProjects: input.maxProjects,
+            maxActiveBoqs: input.maxActiveBoqs,
+            maxDocumentsPerMonth: input.maxDocumentsPerMonth,
+          }
+        : { adapter: "NONE" },
+    checkout: {
+      state: "DISABLED",
+      lastErrorCode: null,
+      activatedAt: null,
+    },
   };
 
   const productId = await prisma.$transaction(async (tx) => {
@@ -338,6 +371,11 @@ export async function publishAdminProductManagerProduct(
   const nextMetadata: ManagedMetadata = {
     ...metadata,
     publicationState: "PUBLISHED",
+    checkout: {
+      state: "DISABLED",
+      lastErrorCode: null,
+      activatedAt: null,
+    },
   };
 
   await prisma.$transaction(async (tx) => {
@@ -392,6 +430,11 @@ export async function unpublishAdminProductManagerProduct(
   const nextMetadata: ManagedMetadata = {
     ...metadata,
     publicationState: "DRAFT",
+    checkout: {
+      state: "DISABLED",
+      lastErrorCode: null,
+      activatedAt: null,
+    },
   };
 
   await prisma.$transaction(async (tx) => {

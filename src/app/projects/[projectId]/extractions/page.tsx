@@ -17,6 +17,7 @@ import {
   uniqueExtractionFilterValues,
   type ExtractionReviewFilters,
 } from "@/lib/guidance/extraction-review-filters";
+import { summarizeAiDraftCandidates } from "@/lib/guidance/ai-draft-boq";
 import { GuideTip } from "@/components/guidance/guide-tip";
 
 type ProjectFileView = {
@@ -58,6 +59,15 @@ type CorrectionDraft = {
 type PendingAction = {
   entityId: string;
   action: "confirm" | "correct" | "reject";
+};
+
+type AiDraftGenerationResult = {
+  boqId: string;
+  addedCount: number;
+  skippedCount: number;
+  alreadyPresentCount: number;
+  unreviewedAddedCount: number;
+  reviewedAddedCount: number;
 };
 
 const EXTRACTION_STATUS_TONE: Record<string, StatusTone> = {
@@ -159,6 +169,8 @@ export default function ProjectExtractionsPage(props: { params: Promise<{ projec
   const [rejectionReason, setRejectionReason] = useState("");
   const [formError, setFormError] = useState<string | null>(null);
   const [filters, setFilters] = useState<ExtractionReviewFilters>({ ...DEFAULT_EXTRACTION_REVIEW_FILTERS });
+  const [exceptionsOnly, setExceptionsOnly] = useState(false);
+  const [isGeneratingDraft, setIsGeneratingDraft] = useState(false);
 
   const encodedProjectId = encodeURIComponent(params.projectId);
 
@@ -203,10 +215,20 @@ export default function ProjectExtractionsPage(props: { params: Promise<{ projec
     [entities],
   );
 
-  const filteredEntities = useMemo(
-    () => filterExtractionReviewEntities(entities, filters),
-    [entities, filters],
+  const draftSummary = useMemo(
+    () => summarizeAiDraftCandidates(entities),
+    [entities],
   );
+
+  const filteredEntities = useMemo(() => {
+    const filtered = filterExtractionReviewEntities(entities, filters);
+    if (!exceptionsOnly) return filtered;
+    return filtered.filter(
+      (entity) =>
+        isReviewableExtractionStatus(entity.status)
+        && getExtractionReviewPriority(entity) !== "SAFE",
+    );
+  }, [entities, exceptionsOnly, filters]);
   const statusOptions = useMemo(
     () => uniqueExtractionFilterValues(entities.map((entity) => entity.status)),
     [entities],
@@ -231,7 +253,7 @@ export default function ProjectExtractionsPage(props: { params: Promise<{ projec
     ),
     [entities],
   );
-  const hasActiveFilters = Object.entries(filters).some(
+  const hasActiveFilters = exceptionsOnly || Object.entries(filters).some(
     ([key, value]) => key === "search" ? Boolean(value.trim()) : value !== "ALL",
   );
 
@@ -344,6 +366,55 @@ export default function ProjectExtractionsPage(props: { params: Promise<{ projec
     setActionError(null);
   }
 
+  function focusReviewItems() {
+    requestAnimationFrame(() => {
+      const reviewItems = document.getElementById("extraction-review-items");
+      reviewItems?.scrollIntoView({ behavior: "smooth", block: "start" });
+      reviewItems?.focus({ preventScroll: true });
+    });
+  }
+
+  function reviewExceptionsFirst() {
+    setFilters({ ...DEFAULT_EXTRACTION_REVIEW_FILTERS });
+    setExceptionsOnly(true);
+    focusReviewItems();
+  }
+
+  function reviewEverythingFirst() {
+    setFilters({ ...DEFAULT_EXTRACTION_REVIEW_FILTERS });
+    setExceptionsOnly(false);
+    focusReviewItems();
+  }
+
+  async function generateDraftBoq() {
+    if (isGeneratingDraft || draftSummary.eligibleCount === 0) return;
+    setIsGeneratingDraft(true);
+    setActionError(null);
+    setActionMessage(null);
+
+    try {
+      const result = await apiClient.post<AiDraftGenerationResult>(
+        `/api/projects/${encodedProjectId}/extractions/generate-draft-boq`,
+        {},
+      );
+      const query = new URLSearchParams({
+        aiDraft: "1",
+        added: String(result.addedCount),
+        skipped: String(result.skippedCount),
+        existing: String(result.alreadyPresentCount),
+      });
+      window.location.assign(`/projects/${encodedProjectId}/boq?${query.toString()}`);
+    } catch (error) {
+      setActionError(
+        error instanceof ApiClientError
+          ? error.message
+          : "The AI Draft BOQ could not be prepared. Try again.",
+      );
+    } finally {
+      setIsGeneratingDraft(false);
+    }
+  }
+
   if (isLoading) {
     return (
       <div className="rounded-[32px] border border-[#D9E2EC] bg-white p-8 dark:border-[#1E2A42] dark:bg-[#0B1426]">
@@ -394,7 +465,7 @@ export default function ProjectExtractionsPage(props: { params: Promise<{ projec
           />
         </div>
         <p className="mt-3 max-w-3xl text-sm text-[#536078] dark:text-[#B8C4D8]">
-          Quantara presents source-linked candidates for professional review. Nothing on this page is confirmed or added to a BOQ automatically.
+          Quantara presents source-linked candidates for professional review. Nothing is professionally confirmed automatically. You can review first, or prepare an editable AI Draft BOQ and perform the professional review in the completed BOQ table.
         </p>
 
         <div className="mt-6 grid gap-3 sm:grid-cols-3">
@@ -412,32 +483,88 @@ export default function ProjectExtractionsPage(props: { params: Promise<{ projec
           </div>
         </div>
 
-        <div className="mt-6 flex flex-col gap-4 rounded-2xl border border-[#009FE3]/30 bg-[#009FE3]/5 p-5 dark:border-[#21C7F3]/30 dark:bg-[#21C7F3]/5 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#0077B6] dark:text-[#21C7F3]">What should I do next?</p>
-            <p className="mt-2 text-sm font-medium text-[#0B1630] dark:text-white">
-              {reviewSummary.total === 0
-                ? "Review your project sources and process supported files to continue."
-                : reviewSummary.needsAttention > 0
-                  ? `Next step: Review the remaining ${reviewSummary.needsAttention} extracted ${reviewSummary.needsAttention === 1 ? "item" : "items"}.`
-                  : "Extraction review complete. Continue to the BOQ workflow."}
-            </p>
-          </div>
-          {(reviewSummary.total === 0 || reviewSummary.complete) && (
+        {reviewSummary.total === 0 ? (
+          <div className="mt-6 flex flex-col gap-4 rounded-2xl border border-[#009FE3]/30 bg-[#009FE3]/5 p-5 dark:border-[#21C7F3]/30 dark:bg-[#21C7F3]/5 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#0077B6] dark:text-[#21C7F3]">What should I do next?</p>
+              <p className="mt-2 text-sm font-medium text-[#0B1630] dark:text-white">
+                Review your project sources and process supported files to continue.
+              </p>
+            </div>
             <Link
-              href={
-                reviewSummary.complete
-                  ? importableEntityCount > 0
-                    ? `/projects/${encodedProjectId}/boq?action=import-reviewed`
-                    : `/projects/${encodedProjectId}/boq`
-                  : `/projects/${encodedProjectId}/files`
-              }
+              href={`/projects/${encodedProjectId}/files`}
               className="inline-flex shrink-0 justify-center rounded-2xl bg-[#009FE3] px-4 py-2 text-sm font-semibold text-white hover:opacity-90 dark:bg-[#21C7F3] dark:text-[#040A16]"
             >
-              {reviewSummary.complete ? "Continue to BOQ" : "Review Project Sources"}
+              Review Project Sources
             </Link>
-          )}
-        </div>
+          </div>
+        ) : (
+          <div className="mt-6 rounded-3xl border border-[#009FE3]/30 bg-[#009FE3]/5 p-5 dark:border-[#21C7F3]/30 dark:bg-[#21C7F3]/5">
+            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#0077B6] dark:text-[#21C7F3]">Choose how you want to continue</p>
+            <h3 className="mt-2 text-xl font-semibold text-[#0B1630] dark:text-white">Review where it is fastest for you</h3>
+            <p className="mt-2 max-w-4xl text-sm leading-6 text-[#536078] dark:text-[#B8C4D8]">
+              Quantara can prepare the editable BOQ now, or you can review extracted information first. The AI Draft path never approves extraction silently and never invents commercial rates.
+            </p>
+
+            <div className="mt-5 grid gap-3 lg:grid-cols-3">
+              <div className="flex flex-col rounded-2xl border border-[#009FE3]/40 bg-white p-5 dark:border-[#21C7F3]/40 dark:bg-[#0B1426]">
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#0077B6] dark:text-[#21C7F3]">Fastest path</p>
+                <h4 className="mt-2 font-semibold text-[#0B1630] dark:text-white">Generate Draft BOQ Now</h4>
+                <p className="mt-2 flex-1 text-sm leading-6 text-[#536078] dark:text-[#B8C4D8]">
+                  Prepare the editable BOQ from {draftSummary.eligibleCount} usable extracted {draftSummary.eligibleCount === 1 ? "item" : "items"}. Review the completed table and correct only what is wrong.
+                </p>
+                {draftSummary.skippedCount > 0 && (
+                  <p className="mt-2 text-xs font-medium text-[#D98A16] dark:text-amber-300">
+                    {draftSummary.skippedCount} incomplete {draftSummary.skippedCount === 1 ? "candidate" : "candidates"} will stay in extraction review.
+                  </p>
+                )}
+                <button
+                  type="button"
+                  onClick={() => void generateDraftBoq()}
+                  disabled={isGeneratingDraft || draftSummary.eligibleCount === 0}
+                  className="mt-4 rounded-xl bg-[#009FE3] px-4 py-2.5 text-sm font-semibold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40 dark:bg-[#21C7F3] dark:text-[#040A16]"
+                >
+                  {isGeneratingDraft ? "Preparing AI Draft..." : "Generate Draft BOQ Now"}
+                </button>
+              </div>
+
+              <div className="flex flex-col rounded-2xl border border-[#D98A16]/30 bg-white p-5 dark:border-amber-400/20 dark:bg-[#0B1426]">
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#D98A16] dark:text-amber-300">Exception review</p>
+                <h4 className="mt-2 font-semibold text-[#0B1630] dark:text-white">Review Exceptions First</h4>
+                <p className="mt-2 flex-1 text-sm leading-6 text-[#536078] dark:text-[#B8C4D8]">
+                  Focus only on {priorityCounts.CRITICAL + priorityCounts.REVIEW} critical or recommended-review {priorityCounts.CRITICAL + priorityCounts.REVIEW === 1 ? "item" : "items"} before preparing the BOQ.
+                </p>
+                <button
+                  type="button"
+                  onClick={reviewExceptionsFirst}
+                  disabled={priorityCounts.CRITICAL + priorityCounts.REVIEW === 0}
+                  className="mt-4 rounded-xl border border-[#D98A16] px-4 py-2.5 text-sm font-semibold text-[#D98A16] transition hover:bg-[#D98A16]/5 disabled:cursor-not-allowed disabled:opacity-40 dark:text-amber-300"
+                >
+                  Review Exceptions
+                </button>
+              </div>
+
+              <div className="flex flex-col rounded-2xl border border-[#D9E2EC] bg-white p-5 dark:border-[#1E2A42] dark:bg-[#0B1426]">
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#7B879C] dark:text-[#7F8DA6]">Full professional review</p>
+                <h4 className="mt-2 font-semibold text-[#0B1630] dark:text-white">Review Everything First</h4>
+                <p className="mt-2 flex-1 text-sm leading-6 text-[#536078] dark:text-[#B8C4D8]">
+                  Keep the existing detailed workflow and confirm, correct, or reject every extracted candidate before BOQ preparation.
+                </p>
+                <button
+                  type="button"
+                  onClick={reviewEverythingFirst}
+                  className="mt-4 rounded-xl border border-[#D9E2EC] px-4 py-2.5 text-sm font-semibold text-[#536078] transition hover:bg-[#EEF3F8] dark:border-[#1E2A42] dark:text-[#B8C4D8] dark:hover:bg-[#111D33]"
+                >
+                  Review All Extracted Data
+                </button>
+              </div>
+            </div>
+
+            <p className="mt-4 text-xs leading-5 text-[#7B879C] dark:text-[#7F8DA6]">
+              AI Draft quantities remain professionally unconfirmed until you explicitly confirm them from the BOQ. Rates remain unselected until you use your purchased package, catalogue, company library, or manual pricing workflow.
+            </p>
+          </div>
+        )}
       </section>
 
       {actionError && (
@@ -466,7 +593,10 @@ export default function ProjectExtractionsPage(props: { params: Promise<{ projec
             <button
               type="button"
               disabled={!hasActiveFilters}
-              onClick={() => setFilters({ ...DEFAULT_EXTRACTION_REVIEW_FILTERS })}
+              onClick={() => {
+                setFilters({ ...DEFAULT_EXTRACTION_REVIEW_FILTERS });
+                setExceptionsOnly(false);
+              }}
               className="rounded-2xl border border-[#D9E2EC] px-4 py-2 text-sm font-semibold text-[#536078] disabled:cursor-not-allowed disabled:opacity-40 dark:border-[#1E2A42] dark:text-[#B8C4D8]"
             >
               Reset filters

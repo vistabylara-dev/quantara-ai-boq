@@ -68,6 +68,7 @@ type AiDraftGenerationResult = {
   alreadyPresentCount: number;
   unreviewedAddedCount: number;
   reviewedAddedCount: number;
+  measurementIncompleteAddedCount: number;
 };
 
 const EXTRACTION_STATUS_TONE: Record<string, StatusTone> = {
@@ -511,11 +512,16 @@ export default function ProjectExtractionsPage(props: { params: Promise<{ projec
                 <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#0077B6] dark:text-[#21C7F3]">Fastest path</p>
                 <h4 className="mt-2 font-semibold text-[#0B1630] dark:text-white">Generate Draft BOQ Now</h4>
                 <p className="mt-2 flex-1 text-sm leading-6 text-[#536078] dark:text-[#B8C4D8]">
-                  Prepare the editable BOQ from {draftSummary.eligibleCount} usable extracted {draftSummary.eligibleCount === 1 ? "item" : "items"}. Review the completed table and correct only what is wrong.
+                  Prepare the editable BOQ from {draftSummary.eligibleCount} extracted {draftSummary.eligibleCount === 1 ? "item" : "items"}. Review the completed table and complete or correct only what is needed.
                 </p>
-                {draftSummary.skippedCount > 0 && (
+                {draftSummary.measurementIncompleteCount > 0 && (
                   <p className="mt-2 text-xs font-medium text-[#D98A16] dark:text-amber-300">
-                    {draftSummary.skippedCount} incomplete {draftSummary.skippedCount === 1 ? "candidate" : "candidates"} will stay in extraction review.
+                    {draftSummary.measurementIncompleteCount} {draftSummary.measurementIncompleteCount === 1 ? "item has" : "items have"} an unresolved quantity and/or unit. Quantara will carry {draftSummary.measurementIncompleteCount === 1 ? "it" : "them"} into the AI Draft as clearly unresolved fields for completion in the BOQ.
+                  </p>
+                )}
+                {draftSummary.skippedCount > 0 && (
+                  <p className="mt-2 text-xs font-medium text-[#D84A4A] dark:text-rose-300">
+                    {draftSummary.skippedCount} {draftSummary.skippedCount === 1 ? "candidate cannot" : "candidates cannot"} enter the draft because the item description is missing.
                   </p>
                 )}
                 <button

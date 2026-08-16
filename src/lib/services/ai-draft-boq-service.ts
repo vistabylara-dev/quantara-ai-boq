@@ -18,6 +18,7 @@ import {
   formatAiDraftCategory,
   getAiDraftExtractedEntityId,
   isAiDraftCandidateUsable,
+  isAiDraftMeasurementComplete,
   summarizeAiDraftCandidates,
   type AiDraftCandidate,
   type AiDraftSection,
@@ -209,6 +210,7 @@ export async function generateAiDraftBoq(actor: CurrentActor, projectIdentifier:
     );
     let reviewedAddedCount = 0;
     let unreviewedAddedCount = 0;
+    let measurementIncompleteAddedCount = 0;
 
     for (const { row, candidate } of toAdd) {
       const matchedSectionId = chooseAiDraftSection(businessSections, candidate);
@@ -225,7 +227,13 @@ export async function generateAiDraftBoq(actor: CurrentActor, projectIdentifier:
       const sortOrder = nextSortOrderBySection.get(sectionId) ?? 1;
       nextSortOrderBySection.set(sectionId, sortOrder + 1);
 
-      const quantity = new Prisma.Decimal(row.quantity!);
+      const measurementComplete = isAiDraftMeasurementComplete(candidate);
+      const quantity = new Prisma.Decimal(
+        measurementComplete ? candidate.quantity! : 0,
+      );
+      const unit = candidate.unit?.trim() ?? "";
+      if (!measurementComplete) measurementIncompleteAddedCount += 1;
+
       const zero = new Prisma.Decimal(0);
       const marginMode = MarginMode.MARKUP;
       const amounts = calculateBOQItem({
@@ -257,7 +265,7 @@ export async function generateAiDraftBoq(actor: CurrentActor, projectIdentifier:
           description: row.label,
           specification: row.sourceText ?? "",
           quantity,
-          unit: row.unit!.trim(),
+          unit,
           unitCost: zero,
           freightCost: zero,
           installationCost: zero,
@@ -270,15 +278,17 @@ export async function generateAiDraftBoq(actor: CurrentActor, projectIdentifier:
           sourceReference,
           confidenceScore: row.confidence,
           status: BOQItemStatus.DRAFT,
-          notes:
-            "AI Draft from extracted project evidence. Professional quantity review and commercial rate selection are still required.",
+          notes: measurementComplete
+            ? "AI Draft from extracted project evidence. Professional quantity review and commercial rate selection are still required."
+            : "AI Draft from extracted project evidence. Quantity and/or unit is unresolved and must be completed in the BOQ before validation.",
           sortOrder,
           sourceType: BoqItemSourceType.IMPORT,
         },
       });
 
       const previouslyReviewed = (
-        (row.status === "CONFIRMED" || row.status === "CORRECTED")
+        measurementComplete
+        && (row.status === "CONFIRMED" || row.status === "CORRECTED")
         && row.confirmedAt !== null
       );
 
@@ -293,7 +303,7 @@ export async function generateAiDraftBoq(actor: CurrentActor, projectIdentifier:
           extractedEntityId: row.id,
           projectFileId: row.projectFileId,
           quantitySnapshot: quantity,
-          unitSnapshot: row.unit!.trim(),
+          unitSnapshot: unit,
           confirmedByUserId: previouslyReviewed ? row.confirmedByUserId : null,
           confirmedByName: previouslyReviewed
             ? "Previously reviewed extraction"
@@ -359,8 +369,9 @@ export async function generateAiDraftBoq(actor: CurrentActor, projectIdentifier:
           boqId: current.id,
           extractedEntityId: row.id,
           quantity: quantity.toString(),
-          unit: row.unit!.trim(),
+          unit,
           confidence: row.confidence.toString(),
+          measurementComplete,
           rateAutomaticallyApplied: false,
         },
       }, tx);
@@ -378,6 +389,7 @@ export async function generateAiDraftBoq(actor: CurrentActor, projectIdentifier:
         alreadyPresentCount: alreadyPresentIds.size,
         reviewedAddedCount,
         unreviewedAddedCount,
+        measurementIncompleteAddedCount,
         ratesAutomaticallyApplied: false,
       },
     }, tx);
@@ -389,6 +401,7 @@ export async function generateAiDraftBoq(actor: CurrentActor, projectIdentifier:
       alreadyPresentCount: alreadyPresentIds.size,
       unreviewedAddedCount,
       reviewedAddedCount,
+      measurementIncompleteAddedCount,
     };
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 }
@@ -476,6 +489,13 @@ export async function confirmAiDraftQuantities(actor: CurrentActor, boqId: strin
 
       const extractionWasCorrectedInBoq =
         manuallyReviewedAiQuantity && !quantityMatchesExtraction;
+      const boqMeasurementComplete =
+        item.quantity.toNumber() > 0 && item.unit.trim().length > 0;
+
+      if (manuallyReviewedAiQuantity && !boqMeasurementComplete) {
+        skippedCount += 1;
+        continue;
+      }
 
       if (REVIEWABLE_ENTITY_STATUSES.has(entity.status)) {
         const original = {
@@ -546,6 +566,12 @@ export async function confirmAiDraftQuantities(actor: CurrentActor, boqId: strin
           payload: { boqId: current.id, source: "AI_DRAFT" },
         }, tx);
       } else if (entity.status === "CONFIRMED" || entity.status === "CORRECTED") {
+        const original = {
+          label: entity.label,
+          quantity: entity.quantity?.toNumber() ?? null,
+          unit: entity.unit,
+        };
+
         const imported = await tx.extractedEntity.updateMany({
           where: {
             id: entity.id,
@@ -553,7 +579,27 @@ export async function confirmAiDraftQuantities(actor: CurrentActor, boqId: strin
             projectId: current.projectId,
             status: { in: ["CONFIRMED", "CORRECTED"] },
           },
-          data: { status: "IMPORTED" },
+          data: {
+            status: "IMPORTED",
+            ...(extractionWasCorrectedInBoq
+              ? {
+                  quantity: item.quantity,
+                  unit: item.unit,
+                  correctionJson: {
+                    original,
+                    corrected: {
+                      quantity: item.quantity.toNumber(),
+                      unit: item.unit,
+                    },
+                    correctedByUserId: actor.userId,
+                    correctedAt: now.toISOString(),
+                    reason: "Completed during AI Draft BOQ review.",
+                  },
+                  confirmedByUserId: actor.userId,
+                  confirmedAt: now,
+                }
+              : {}),
+          },
         });
 
         if (imported.count !== 1) {
@@ -561,6 +607,23 @@ export async function confirmAiDraftQuantities(actor: CurrentActor, boqId: strin
             "AI_DRAFT_ENTITY_IMPORT_CONFLICT",
             "A reviewed extraction changed while AI Draft quantities were being confirmed. Reload and try again.",
           );
+        }
+
+        if (extractionWasCorrectedInBoq) {
+          await createAuditLog(actor.companyId, {
+            entityType: "ExtractedEntity",
+            entityId: entity.id,
+            action: "ENTITY_CORRECTED",
+            actorName: actor.fullName,
+            payload: {
+              original,
+              corrected: {
+                quantity: item.quantity.toNumber(),
+                unit: item.unit,
+              },
+              reason: "Completed during AI Draft BOQ review.",
+            },
+          }, tx);
         }
 
         await createAuditLog(actor.companyId, {

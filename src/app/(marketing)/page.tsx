@@ -31,10 +31,11 @@ import {
   createPublicPageMetadata,
   getPublicSearchPage,
 } from "@/lib/public-site/search-registry";
+import { getPublicSalesTruth } from "@/lib/public-site/sales-truth";
 
 export const metadata = createPublicPageMetadata("/");
 
-function buildFaqs(t: TranslateFn) {
+function buildFaqs(t: TranslateFn, pricingAnswer: string) {
   return [
   {
     question: t("publicContent.home.faq.whatQuestion"),
@@ -66,16 +67,17 @@ function buildFaqs(t: TranslateFn) {
   },
   {
     question: t("publicContent.home.faq.pricingQuestion"),
-    answer: t("publicContent.home.commercialFaq"),
+    answer: pricingAnswer,
   },
 ] as const;
 }
 
-function buildWorkflowStages(t: TranslateFn) {
+function buildWorkflowStages(t: TranslateFn, aiDraftTitle: string, aiDraftBody: string) {
   return [
     { title: t("publicContent.home.stages.projectSetupTitle"), description: t("publicContent.home.stages.projectSetupBody"), icon: FolderKanban },
     { title: t("publicContent.home.stages.sourcesTitle"), description: t("publicContent.home.stages.sourcesBody"), icon: FileSearch },
     { title: t("publicContent.home.stages.extractionTitle"), description: t("publicContent.home.stages.extractionBody"), icon: ClipboardCheck },
+    { title: aiDraftTitle, description: aiDraftBody, icon: ClipboardCheck },
     { title: t("publicContent.home.stages.dimensionsTitle"), description: t("publicContent.home.stages.dimensionsBody"), icon: Calculator },
     { title: t("publicContent.home.stages.calculationsTitle"), description: t("publicContent.home.stages.calculationsBody"), icon: Calculator },
     { title: t("publicContent.home.stages.organizationTitle"), description: t("publicContent.home.stages.organizationBody"), icon: FolderKanban },
@@ -111,6 +113,7 @@ const statusStyle: Record<PublicCapabilityStatus, string> = {
 export default async function HomePage() {
   const locale = await getServerLocale();
   const t = createTranslator(getDictionary(locale));
+  const sales = getPublicSalesTruth(locale);
   const featuredCapabilities = featuredCapabilityIds.map((id) =>
     getPublicCapabilityRegisterEntry(id, t),
   );
@@ -120,8 +123,8 @@ export default async function HomePage() {
     ),
   ) as Record<PublicCapabilityStatus, { label: string; description: string }>;
   const productTruth = getQuantaraProductTruthForDisplay(t);
-  const workflowStages = buildWorkflowStages(t);
-  const faqs = buildFaqs(t);
+  const workflowStages = buildWorkflowStages(t, sales.aiDraftStageTitle, sales.aiDraftStageBody);
+  const faqs = buildFaqs(t, sales.pricingFaqAnswer);
   const trustSignals = [
     t("publicContent.home.trustSupportedSources"),
     t("publicContent.home.trustVisibleCalculations"),
@@ -157,13 +160,13 @@ export default async function HomePage() {
             {t("publicContent.home.eyebrow")}
           </p>
           <h1 className="mb-6 text-5xl font-extrabold tracking-tight sm:text-6xl">
-            {t("publicContent.home.pageTitle")}
+            {sales.heroTitle}
           </h1>
           <p className="mx-auto mb-5 max-w-4xl text-xl leading-relaxed text-slate-300">
-            {productTruth.workflowTruth}
+            {sales.heroBody}
           </p>
           <p className="mx-auto mb-5 text-sm font-semibold uppercase tracking-[0.16em] text-blue-300">
-            {t("publicContent.home.heroCapabilitySignal")}
+            {sales.heroSignal}
           </p>
           <p className="mx-auto mb-10 max-w-3xl text-base leading-relaxed text-slate-400">
             {t("publicContent.home.audience", {
@@ -177,8 +180,8 @@ export default async function HomePage() {
             <Link href="/features" className="inline-flex h-12 w-full items-center justify-center rounded-lg border border-slate-800 bg-slate-950 px-7 font-semibold text-white hover:bg-slate-900 sm:w-auto">
               {t("publicContent.home.checkFeatures")}
             </Link>
-            <Link href="/contact-sales" className="inline-flex h-12 w-full items-center justify-center rounded-lg border border-slate-800 bg-slate-950 px-7 font-semibold text-white hover:bg-slate-900 sm:w-auto">
-              {t("publicContent.home.discussRequirements")}
+            <Link href="/pricing" className="inline-flex h-12 w-full items-center justify-center rounded-lg border border-slate-800 bg-slate-950 px-7 font-semibold text-white hover:bg-slate-900 sm:w-auto">
+              {sales.viewPricing}
             </Link>
           </div>
           <div className="flex flex-wrap justify-center gap-x-6 gap-y-3 text-sm font-medium text-slate-400">
@@ -207,7 +210,45 @@ export default async function HomePage() {
         </div>
       </section>
 
-      <section className="px-4 py-20" aria-labelledby="workflow-heading">
+      <section className="px-4 py-20" aria-labelledby="accelerated-workflow-heading">
+        <div className="container mx-auto max-w-6xl">
+          <div className="mx-auto mb-10 max-w-3xl text-center">
+            <p className="mb-3 text-sm font-bold uppercase tracking-[0.2em] text-blue-300">
+              {sales.twoWaysEyebrow}
+            </p>
+            <h2 id="accelerated-workflow-heading" className="mb-4 text-3xl font-bold sm:text-4xl">
+              {sales.twoWaysTitle}
+            </h2>
+            <p className="leading-relaxed text-slate-400">{sales.twoWaysBody}</p>
+          </div>
+
+          <div className="grid gap-6 lg:grid-cols-2">
+            <article className="rounded-3xl border border-blue-900/70 bg-gradient-to-br from-blue-950/50 to-slate-950 p-8">
+              <div className="mb-5 flex h-11 w-11 items-center justify-center rounded-2xl bg-blue-600/20">
+                <ClipboardCheck className="h-6 w-6 text-blue-300" aria-hidden="true" />
+              </div>
+              <h3 className="mb-3 text-2xl font-bold">{sales.aiDraftTitle}</h3>
+              <p className="mb-6 leading-relaxed text-slate-300">{sales.aiDraftBody}</p>
+              <Link href="/features" className="inline-flex items-center font-semibold text-blue-300 hover:text-blue-200">
+                {sales.aiDraftCta} <ArrowRight className="ms-2 h-4 w-4" aria-hidden="true" />
+              </Link>
+            </article>
+
+            <article className="rounded-3xl border border-cyan-900/70 bg-gradient-to-br from-cyan-950/40 to-slate-950 p-8">
+              <div className="mb-5 flex h-11 w-11 items-center justify-center rounded-2xl bg-cyan-500/15">
+                <Calculator className="h-6 w-6 text-cyan-300" aria-hidden="true" />
+              </div>
+              <h3 className="mb-3 text-2xl font-bold">{sales.tayqanTitle}</h3>
+              <p className="mb-6 leading-relaxed text-slate-300">{sales.tayqanBody}</p>
+              <Link href="/pricing" className="inline-flex items-center font-semibold text-cyan-300 hover:text-cyan-200">
+                {sales.tayqanCta} <ArrowRight className="ms-2 h-4 w-4" aria-hidden="true" />
+              </Link>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section className="border-t border-slate-800 px-4 py-20" aria-labelledby="workflow-heading">
         <div className="container mx-auto max-w-6xl">
           <div className="mx-auto mb-12 max-w-3xl text-center">
             <p className="mb-3 text-sm font-bold uppercase tracking-[0.2em] text-blue-300">{t("publicContent.home.workflowEyebrow")}</p>

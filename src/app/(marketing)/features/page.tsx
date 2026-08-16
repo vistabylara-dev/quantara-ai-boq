@@ -10,6 +10,7 @@ import {
   type PublicCapabilityStatus,
 } from "@/lib/public-site/product-truth";
 import { createPublicPageMetadata } from "@/lib/public-site/search-registry";
+import { getPublicSalesTruth } from "@/lib/public-site/sales-truth";
 import { getDictionary } from "@/lib/i18n/dictionaries";
 import { getServerLocale } from "@/lib/i18n/server-locale";
 import { createTranslator } from "@/lib/i18n/translate";
@@ -45,7 +46,16 @@ const statusPresentation: Record<
 export default async function FeaturesPage() {
   const locale = await getServerLocale();
   const t = createTranslator(getDictionary(locale));
-  const publicCapabilities = getPublicCapabilityRegisterEntries(t);
+  const sales = getPublicSalesTruth(locale);
+  const publicCapabilities = getPublicCapabilityRegisterEntries(t).map((capability) =>
+    capability.id === "commercial-access"
+      ? {
+          ...capability,
+          summary: sales.commercialSummary,
+          limitation: sales.commercialLimitation,
+        }
+      : capability,
+  );
   const productTruth = getQuantaraProductTruthForDisplay(t);
   const capabilityStatus = Object.fromEntries(
     (["AVAILABLE", "CONTROLLED_ACCESS", "LIMITED", "NOT_AVAILABLE"] as const).map(
@@ -86,7 +96,52 @@ export default async function FeaturesPage() {
         </div>
       </section>
 
-      <section className="border-y border-slate-800 bg-slate-900/50 px-4 py-8">
+      <section className="border-y border-slate-800 bg-slate-900/40 px-4 py-16" aria-labelledby="current-workflow-heading">
+        <div className="container mx-auto max-w-6xl">
+          <div className="mx-auto mb-10 max-w-3xl text-center">
+            <p className="mb-3 text-sm font-bold uppercase tracking-[0.2em] text-blue-300">
+              {sales.featureSpotlightEyebrow}
+            </p>
+            <h2 id="current-workflow-heading" className="mb-4 text-3xl font-bold sm:text-4xl">
+              {sales.featureSpotlightTitle}
+            </h2>
+            <p className="leading-relaxed text-slate-400">{sales.featureSpotlightBody}</p>
+          </div>
+
+          <div className="grid gap-6 lg:grid-cols-2">
+            <article className="rounded-3xl border border-blue-900/70 bg-slate-950 p-8">
+              <h3 className="mb-3 text-2xl font-bold">{sales.aiDraftTitle}</h3>
+              <p className="mb-6 leading-relaxed text-slate-300">{sales.aiDraftBody}</p>
+              <ul className="mb-7 space-y-3">
+                {sales.aiDraftBullets.map((item) => (
+                  <li key={item} className="flex gap-3 text-sm leading-relaxed text-slate-300">
+                    <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-blue-300" aria-hidden="true" />
+                    <span>{item}</span>
+                  </li>
+                ))}
+              </ul>
+            </article>
+
+            <article className="rounded-3xl border border-cyan-900/70 bg-slate-950 p-8">
+              <h3 className="mb-3 text-2xl font-bold">{sales.tayqanTitle}</h3>
+              <p className="mb-6 leading-relaxed text-slate-300">{sales.tayqanBody}</p>
+              <ul className="mb-7 space-y-3">
+                {sales.tayqanBullets.map((item) => (
+                  <li key={item} className="flex gap-3 text-sm leading-relaxed text-slate-300">
+                    <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-cyan-300" aria-hidden="true" />
+                    <span>{item}</span>
+                  </li>
+                ))}
+              </ul>
+              <Link href="/pricing" className="inline-flex items-center font-semibold text-cyan-300 hover:text-cyan-200">
+                {sales.tayqanCta} <ArrowRight className="ms-2 h-4 w-4" aria-hidden="true" />
+              </Link>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section className="border-b border-slate-800 bg-slate-900/50 px-4 py-8">
         <div className="container mx-auto grid max-w-6xl gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {(Object.keys(statusPresentation) as PublicCapabilityStatus[]).map((status) => {
             const presentation = statusPresentation[status];

@@ -104,6 +104,15 @@ type PreflightEvidence = {
   };
   coreTables: Record<string, boolean>;
   protectedCounts: Record<string, number>;
+  checksumMismatchDetails: Array<{
+    name: string;
+    recordedChecksum: string;
+    expectedChecksum: string;
+    startedAt: Date;
+    finishedAt: Date | null;
+    rolledBackAt: Date | null;
+    appliedStepsCount: number;
+  }>;
   targetMigration: {
     name: string;
     checksum: string;
@@ -429,6 +438,23 @@ function summarizePreflight(
     })
     .map((migration) => migration.name);
 
+  const checksumMismatchDetails = checksumMismatches.flatMap((name) => {
+    const expectedChecksum =
+      migrations.find((migration) => migration.name === name)?.checksum ?? "";
+
+    return (rowByName.get(name) ?? [])
+      .filter((row) => row.checksum !== expectedChecksum)
+      .map((row) => ({
+        name,
+        recordedChecksum: row.checksum,
+        expectedChecksum,
+        startedAt: row.started_at,
+        finishedAt: row.finished_at,
+        rolledBackAt: row.rolled_back_at,
+        appliedStepsCount: row.applied_steps_count,
+      }));
+  });
+
   const pendingMigrations = migrations
     .filter((migration) => !cleanNames.has(migration.name))
     .map((migration) => migration.name);
@@ -515,6 +541,7 @@ function summarizePreflight(
     },
     coreTables,
     protectedCounts,
+    checksumMismatchDetails,
     targetMigration: {
       name: TARGET_MIGRATION,
       checksum: migrations.find((migration) => migration.name === TARGET_MIGRATION)?.checksum ?? "",

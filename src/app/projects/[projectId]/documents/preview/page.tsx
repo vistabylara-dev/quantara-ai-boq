@@ -165,6 +165,12 @@ export default function DocumentPreviewPage(props: PageProps) {
             </select>
             <select
               value={selectedTemplateId}
+              onPointerDown={(event) => {
+                if (templates.length === 0) {
+                  event.preventDefault();
+                  window.location.assign("/templates");
+                }
+              }}
               onChange={(event) => setSelectedTemplateId(event.target.value)}
               className="rounded-2xl border border-slate-800 bg-slate-900 px-4 py-2 text-sm text-white outline-none focus:border-blue-500"
             >
@@ -243,6 +249,10 @@ export default function DocumentPreviewPage(props: PageProps) {
       <div className="overflow-hidden rounded-[32px] border border-slate-800 bg-white">
         {previewUrl ? (
           <iframe ref={iframeRef} src={previewUrl} title={t("preview.documentPreviewIframeTitle")} className="h-[1200px] w-full border-0" />
+        ) : !selectedTemplateId && selectedBoqId ? (
+          <Link href="/templates" className="block p-8 text-center text-slate-500 no-underline">
+            {t("preview.selectRevisionAndTemplate")}
+          </Link>
         ) : (
           <div className="p-8 text-center text-slate-500">{t("preview.selectRevisionAndTemplate")}</div>
         )}

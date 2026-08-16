@@ -63,7 +63,7 @@ describe("public search registry", () => {
   });
 
   it("keeps the four owner-confirmation-dependent legal documents out of the public search index", () => {
-    expect(indexableEntries).toHaveLength(58);
+    expect(indexableEntries).toHaveLength(59);
     expect(
       PUBLIC_SEARCH_PAGES
         .filter((entry) => entry.indexable === false)
@@ -168,6 +168,7 @@ describe("public search registry", () => {
     for (const path of [
       "/",
       "/features",
+      "/tayqan-ai-quantity-surveyor",
       "/pricing",
       "/ai-boq-software",
       "/boq-software",
@@ -194,6 +195,9 @@ describe("public search registry", () => {
 
     expect(llms).toMatch(/^# Quantara/m);
     expect(llms).toContain("https://quantara.vistabylara.com/features");
+    expect(llms).toContain(
+      "https://quantara.vistabylara.com/tayqan-ai-quantity-surveyor",
+    );
     expect(llms).toContain("https://quantara.vistabylara.com/site-map");
     expect(llms).toContain(
       "does not make a blanket claim of fully unattended computer-vision takeoff",

@@ -45,6 +45,7 @@ Project information, extracted data, measurements, calculations, rates and outpu
 - [Product overview](https://quantara.vistabylara.com/)
 - [Feature availability and limitations](https://quantara.vistabylara.com/features)
 - [Pricing and TAYQAN hire options](https://quantara.vistabylara.com/pricing)
+- [TAYQAN AI Quantity Surveyor](https://quantara.vistabylara.com/tayqan-ai-quantity-surveyor)
 - [BOQ software workflow](https://quantara.vistabylara.com/boq-software)
 - [Text-based PDF BOQ extraction](https://quantara.vistabylara.com/pdf-boq-extraction)
 - [Scanned PDF and OCR status](https://quantara.vistabylara.com/scanned-pdf-boq)

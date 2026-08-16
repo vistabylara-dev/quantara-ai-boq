@@ -133,7 +133,7 @@ export default async function FeaturesPage() {
                   </li>
                 ))}
               </ul>
-              <Link href="/pricing" className="inline-flex items-center font-semibold text-cyan-300 hover:text-cyan-200">
+              <Link href="/tayqan-ai-quantity-surveyor" className="inline-flex items-center font-semibold text-cyan-300 hover:text-cyan-200">
                 {sales.tayqanCta} <ArrowRight className="ms-2 h-4 w-4" aria-hidden="true" />
               </Link>
             </article>

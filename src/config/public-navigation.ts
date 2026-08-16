@@ -64,6 +64,7 @@ export const publicNavigation: NavigationSection[] = [
       {
         label: "Professional Workflows",
         items: [
+          { label: "TAYQAN AI Quantity Surveyor", href: "/tayqan-ai-quantity-surveyor", description: "Hire governed Digital QS capacity for supported source review, quantity preparation, BOQ assembly and final QA with human acceptance." },
           { label: "Quantity Surveying Software", href: "/quantity-surveying-software", description: "Reviewed BOQ workflow support for quantity surveyors without replacing professional judgement." },
           {
             label: en.publicContent.navigation.securityLabel,

@@ -22,6 +22,7 @@ export const PUBLIC_WEBSITE_PATHS = [
   "/pdf-boq-extraction",
   "/scanned-pdf-boq",
   "/quantity-surveying-software",
+  "/tayqan-ai-quantity-surveyor",
   "/boq-document-generation",
   "/resources",
   "/what-is-a-boq",

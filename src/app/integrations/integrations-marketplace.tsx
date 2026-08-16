@@ -307,7 +307,8 @@ function ProviderCard({ provider, onSelect }: { provider: Provider; onSelect: (i
   const t = useTranslations();
   const Icon = ICONS[provider.icon] ?? Plug;
   const displayStatus = provider.connection ? provider.connection.status : provider.status;
-  const isDisabledAction = provider.status === "COMING_SOON" && !provider.connection;
+  const isAutodeskLocked = provider.providerFamily === "autodesk" && !provider.entitled;
+  const isDisabledAction = (provider.status === "COMING_SOON" && !provider.connection) || isAutodeskLocked;
 
   return (
     <button
@@ -334,7 +335,7 @@ function ProviderCard({ provider, onSelect }: { provider: Provider; onSelect: (i
             : "border-[#0EA5E9] bg-[#0EA5E9]/10 text-[#0284C7] dark:border-[#22D3EE] dark:bg-[#22D3EE]/10 dark:text-[#22D3EE]"
         }`}
       >
-        {actionLabel(t, provider)}
+        {isAutodeskLocked ? "Business plan required" : actionLabel(t, provider)}
       </span>
     </button>
   );
@@ -422,15 +423,32 @@ function ProviderDetailDrawer({
         )}
 
         <div className="mt-6 flex flex-wrap gap-2">
-          {isAutodeskFamily && (
+          {isAutodeskFamily && provider.entitled && (
             <a
-              href={hasAutodeskConnection ? "/integrations/autodesk/connect" : "/api/integrations/autodesk/connect"}
+              href={withProjectContext(
+                hasAutodeskConnection ? "/integrations/autodesk/connect" : "/api/integrations/autodesk/connect",
+                projectContext,
+              )}
               className="rounded-2xl border border-[#0EA5E9] bg-[#0EA5E9] px-4 py-2 text-sm font-semibold text-white hover:opacity-90 dark:border-[#22D3EE] dark:bg-[#22D3EE] dark:text-[#050B18]"
             >
               {hasAutodeskConnection
                 ? t("integrations.autodesk.browseAction")
                 : t("integrations.actionConnect", { family: "Autodesk" })}
             </a>
+          )}
+          {isAutodeskFamily && !provider.entitled && (
+            <div className="w-full rounded-2xl border border-amber-700/40 bg-amber-950/10 p-4 dark:bg-amber-950/20">
+              <p className="text-sm font-semibold text-[#0B1630] dark:text-white">Business plan required</p>
+              <p className="mt-1 text-xs text-[#536078] dark:text-[#B8C4D8]">
+                AutoCAD / Autodesk integration is included with Quantara Business.
+              </p>
+              <Link
+                href="/settings/subscription?priceCode=business_monthly"
+                className="mt-3 inline-flex rounded-xl border border-amber-600 bg-amber-600 px-3 py-2 text-xs font-semibold text-white hover:bg-amber-500"
+              >
+                Upgrade to Business
+              </Link>
+            </div>
           )}
           <Link
             href={withProjectContext(`/integrations/${provider.id}`, projectContext)}

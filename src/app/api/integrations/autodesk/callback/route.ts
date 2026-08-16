@@ -19,10 +19,16 @@ async function GETHandler(request: Request) {
   const stateCookie = cookieStore.get(STATE_COOKIE_NAME)?.value ?? null;
   cookieStore.delete(STATE_COOKIE_NAME);
 
+  let restoredContext: { projectId: string | null; intent: string | null; returnTo: string | null } = {
+    projectId: null,
+    intent: null,
+    returnTo: null,
+  };
+
   try {
     const actor = await getCurrentActor();
     setActorContext(actor);
-    verifyAutodeskOAuthState(actor, url.searchParams.get("state"), stateCookie);
+    restoredContext = await verifyAutodeskOAuthState(actor, url.searchParams.get("state"), stateCookie);
 
     if (url.searchParams.get("error")) {
       throw new AppError("AUTODESK_AUTH_DENIED", "Autodesk authorization was not granted.", 403);
@@ -33,6 +39,10 @@ async function GETHandler(request: Request) {
     }
 
     await completeAutodeskConnection(actor, code);
+
+    if (restoredContext.projectId) connectPageUrl.searchParams.set("projectId", restoredContext.projectId);
+    if (restoredContext.intent) connectPageUrl.searchParams.set("intent", restoredContext.intent);
+    if (restoredContext.returnTo) connectPageUrl.searchParams.set("returnTo", restoredContext.returnTo);
     connectPageUrl.searchParams.set("connected", "1");
     return NextResponse.redirect(connectPageUrl);
   } catch (error) {
@@ -46,10 +56,14 @@ async function GETHandler(request: Request) {
       "AUTODESK_TOKEN_ERROR",
       "AUTODESK_NO_REFRESH_TOKEN",
       "AUTODESK_REAUTH_REQUIRED",
+      "INTEGRATION_NOT_ENTITLED",
     ]);
     const code = error instanceof AppError && allowedCodes.has(error.code)
       ? error.code
       : "AUTODESK_TOKEN_ERROR";
+    if (restoredContext.projectId) connectPageUrl.searchParams.set("projectId", restoredContext.projectId);
+    if (restoredContext.intent) connectPageUrl.searchParams.set("intent", restoredContext.intent);
+    if (restoredContext.returnTo) connectPageUrl.searchParams.set("returnTo", restoredContext.returnTo);
     connectPageUrl.searchParams.set("connectError", code);
     return NextResponse.redirect(connectPageUrl);
   }

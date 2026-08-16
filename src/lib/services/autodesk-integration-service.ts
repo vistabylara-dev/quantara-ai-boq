@@ -29,23 +29,83 @@ import {
   updateStoredCredentials,
   upsertConnectedExternalConnection,
 } from "@/lib/repositories/integration-repository";
+import { getProjectRecord } from "@/lib/repositories/project-repository";
+import { getIntegrationEntitlements } from "@/lib/entitlements/integration-entitlement-service";
 
 const PROVIDER_ID = "autodesk";
 export const STATE_COOKIE_NAME = "autodesk_oauth_state";
 const OAUTH_STATE_MAX_AGE_MS = 10 * 60 * 1000;
 const REFRESH_WINDOW_MS = 60_000;
 
+export async function assertAutodeskIntegrationEntitled(actor: CurrentActor): Promise<void> {
+  const entitlements = await getIntegrationEntitlements(actor);
+  const allowed = entitlements.allowedProviderFamilies === "all"
+    || entitlements.allowedProviderFamilies.includes("autodesk");
+
+  if (!allowed) {
+    throw new AppError(
+      "INTEGRATION_NOT_ENTITLED",
+      "AutoCAD / Autodesk integration is available on the Quantara Business plan.",
+      403,
+    );
+  }
+}
+
+const AUTODESK_OAUTH_INTENTS = ["boq-source"] as const;
+export type AutodeskOAuthIntent = (typeof AUTODESK_OAUTH_INTENTS)[number];
+
+export function parseAutodeskOAuthIntent(value: string | null): AutodeskOAuthIntent | null {
+  return value && (AUTODESK_OAUTH_INTENTS as readonly string[]).includes(value)
+    ? (value as AutodeskOAuthIntent)
+    : null;
+}
+
+export type AutodeskOAuthContext = {
+  projectId: string | null;
+  intent: AutodeskOAuthIntent | null;
+  returnTo: string | null;
+};
+
 type OAuthStateCookiePayload = {
   state: string;
   userId: string;
   companyId: string;
   issuedAt: number;
+  projectId?: string | null;
+  intent?: AutodeskOAuthIntent | null;
+  returnTo?: string | null;
 };
 
 type ValidAutodeskAccess = {
   connectionId: string;
   accessToken: string;
 };
+
+function isValidReturnTo(returnTo: string, projectId: string): boolean {
+  if (!returnTo.startsWith("/") || returnTo.startsWith("//")) return false;
+  const projectPrefix = `/projects/${encodeURIComponent(projectId)}`;
+  const normalizedUrl = new URL(returnTo, "https://oauth-context.invalid");
+  return normalizedUrl.pathname === projectPrefix || normalizedUrl.pathname.startsWith(`${projectPrefix}/`);
+}
+
+async function resolveOAuthContext(
+  actor: CurrentActor,
+  candidate: { projectId?: string | null; intent?: string | null; returnTo?: string | null },
+): Promise<AutodeskOAuthContext> {
+  const intent = parseAutodeskOAuthIntent(candidate.intent ?? null);
+  if (!candidate.projectId) return { projectId: null, intent: null, returnTo: null };
+
+  try {
+    const project = await getProjectRecord(actor.companyId, candidate.projectId);
+    const projectId = project.slug;
+    const returnTo = candidate.returnTo && isValidReturnTo(candidate.returnTo, projectId)
+      ? candidate.returnTo
+      : null;
+    return { projectId, intent, returnTo };
+  } catch {
+    return { projectId: null, intent: null, returnTo: null };
+  }
+}
 
 const refreshesInFlight = new Map<string, Promise<ValidAutodeskAccess>>();
 
@@ -97,14 +157,20 @@ function oauthStateMismatch(): AppError {
   );
 }
 
-/** Creates an opaque state and a signed, HttpOnly-cookie payload bound to the active tenant. */
-export function createAutodeskOAuthState(actor: CurrentActor): { state: string; cookieValue: string } {
+/** Creates an opaque state and a signed, HttpOnly-cookie payload bound to the active tenant and project context. */
+export async function createAutodeskOAuthState(
+  actor: CurrentActor,
+  candidateContext: { projectId?: string | null; intent?: string | null; returnTo?: string | null } = {},
+): Promise<{ state: string; cookieValue: string }> {
   requireCapability(actor, "integrations:connect");
+  await assertAutodeskIntegrationEntitled(actor);
+  const context = await resolveOAuthContext(actor, candidateContext);
   const payload: OAuthStateCookiePayload = {
     state: randomBytes(24).toString("base64url"),
     userId: actor.userId,
     companyId: actor.companyId,
     issuedAt: Date.now(),
+    ...context,
   };
   const encodedPayload = Buffer.from(JSON.stringify(payload), "utf8").toString("base64url");
   return {
@@ -114,11 +180,11 @@ export function createAutodeskOAuthState(actor: CurrentActor): { state: string; 
 }
 
 /** Verifies signature, expiry, actor binding, and the returned APS state in constant time. */
-export function verifyAutodeskOAuthState(
+export async function verifyAutodeskOAuthState(
   actor: CurrentActor,
   returnedState: string | null,
   cookieValue: string | null,
-): void {
+): Promise<AutodeskOAuthContext> {
   requireCapability(actor, "integrations:connect");
   if (!returnedState || !cookieValue) throw oauthStateMismatch();
   const [encodedPayload, suppliedSignature, ...extraParts] = cookieValue.split(".");
@@ -151,6 +217,12 @@ export function verifyAutodeskOAuthState(
   ) {
     throw oauthStateMismatch();
   }
+
+  return resolveOAuthContext(actor, {
+    projectId: payload.projectId ?? null,
+    intent: payload.intent ?? null,
+    returnTo: payload.returnTo ?? null,
+  });
 }
 
 export function initiateAutodeskConnection(actor: CurrentActor, state: string): string {
@@ -160,6 +232,7 @@ export function initiateAutodeskConnection(actor: CurrentActor, state: string): 
 
 export async function completeAutodeskConnection(actor: CurrentActor, code: string): Promise<void> {
   requireCapability(actor, "integrations:connect");
+  await assertAutodeskIntegrationEntitled(actor);
   const token = await exchangeAutodeskAuthorizationCode(code);
   if (!token.refresh_token) {
     throw new AppError(
@@ -332,18 +405,21 @@ export async function withAutodeskReadAccess<T>(
   operation: (accessToken: string) => Promise<T>,
 ): Promise<T> {
   requireCapability(actor, "integrations:connect");
+  await assertAutodeskIntegrationEntitled(actor);
   const { connectionId, accessToken } = await getValidAutodeskAccessToken(actor);
   return runAutodeskApiCall(connectionId, () => operation(accessToken));
 }
 
 export async function browseAutodeskHubs(actor: CurrentActor): Promise<AutodeskHub[]> {
   requireCapability(actor, "integrations:connect");
+  await assertAutodeskIntegrationEntitled(actor);
   const { connectionId, accessToken } = await getValidAutodeskAccessToken(actor);
   return runAutodeskApiCall(connectionId, () => listAutodeskHubs(accessToken));
 }
 
 export async function browseAutodeskProjects(actor: CurrentActor, hubId: string): Promise<AutodeskProject[]> {
   requireCapability(actor, "integrations:connect");
+  await assertAutodeskIntegrationEntitled(actor);
   const { connectionId, accessToken } = await getValidAutodeskAccessToken(actor);
   return runAutodeskApiCall(connectionId, () => listAutodeskProjects(accessToken, hubId));
 }
@@ -353,6 +429,7 @@ export async function browseAutodeskContents(
   input: { hubId: string; projectId: string; folderId?: string },
 ): Promise<AutodeskContentEntry[]> {
   requireCapability(actor, "integrations:connect");
+  await assertAutodeskIntegrationEntitled(actor);
   const { connectionId, accessToken } = await getValidAutodeskAccessToken(actor);
   return runAutodeskApiCall(connectionId, () => (
     input.folderId

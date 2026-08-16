@@ -28,8 +28,9 @@ export type IntegrationEntitlements = {
   apiWebhookAccess: boolean;
 };
 
-const TRIAL_ALLOWED_FAMILIES = ["autodesk", "microsoft", "google"];
-const PRO_ALLOWED_FAMILIES = ["autodesk", "trimble", "procore", "bentley", "bluebeam", "microsoft", "google", "dropbox", "box", "archicad"];
+const TRIAL_ALLOWED_FAMILIES = ["microsoft", "google"];
+const PRO_ALLOWED_FAMILIES = ["trimble", "procore", "bentley", "bluebeam", "microsoft", "google", "dropbox", "box", "archicad"];
+const BUSINESS_ALLOWED_FAMILIES = ["autodesk", ...PRO_ALLOWED_FAMILIES];
 
 function forPlan(planType: PlanType): Omit<IntegrationEntitlements, "source" | "planType"> {
   switch (planType) {
@@ -60,7 +61,7 @@ function forPlan(planType: PlanType): Omit<IntegrationEntitlements, "source" | "
     case "BUSINESS":
       return {
         maxActiveConnections: 15,
-        allowedProviderFamilies: PRO_ALLOWED_FAMILIES,
+        allowedProviderFamilies: BUSINESS_ALLOWED_FAMILIES,
         manualSync: true,
         scheduledSync: true,
         bulkExtraction: false,
@@ -84,9 +85,9 @@ function forPlan(planType: PlanType): Omit<IntegrationEntitlements, "source" | "
     case "FREE":
     default:
       return {
-        maxActiveConnections: 0,
-        allowedProviderFamilies: [],
-        manualSync: false,
+        maxActiveConnections: 1,
+        allowedProviderFamilies: ["google"],
+        manualSync: true,
         scheduledSync: false,
         bulkExtraction: false,
         advancedModelData: false,

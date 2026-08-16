@@ -34,11 +34,13 @@ const candidateStore = vi.hoisted(() => {
 
 const projectRepository = vi.hoisted(() => ({ getProjectRecord: vi.fn() }));
 const auditRepository = vi.hoisted(() => ({ createAuditLog: vi.fn() }));
+const integrationEntitlements = vi.hoisted(() => ({ getIntegrationEntitlements: vi.fn() }));
 
 vi.mock("@/lib/repositories/integration-repository", () => repository);
 vi.mock("@/lib/db/prisma", () => ({ prisma: candidateStore.prisma }));
 vi.mock("@/lib/repositories/project-repository", () => projectRepository);
 vi.mock("@/lib/repositories/audit-repository", () => auditRepository);
+vi.mock("@/lib/entitlements/integration-entitlement-service", () => integrationEntitlements);
 
 import {
   buildAutodeskAuthorizationUrl,
@@ -176,11 +178,32 @@ describe("Autodesk read-only cloud integration", () => {
     projectRepository.getProjectRecord.mockResolvedValue({ id: "project-db", slug: "project-slug" });
     auditRepository.createAuditLog.mockReset();
     auditRepository.createAuditLog.mockResolvedValue(undefined);
+    integrationEntitlements.getIntegrationEntitlements.mockReset();
+    integrationEntitlements.getIntegrationEntitlements.mockResolvedValue({
+      allowedProviderFamilies: ["autodesk", "google"],
+    });
   });
 
   afterEach(() => {
     vi.unstubAllEnvs();
     vi.unstubAllGlobals();
+  });
+
+  it("blocks Autodesk OAuth and browsing when the current plan excludes Autodesk", async () => {
+    integrationEntitlements.getIntegrationEntitlements.mockResolvedValue({
+      allowedProviderFamilies: ["google"],
+    });
+
+    await expect(createAutodeskOAuthState(actor)).rejects.toMatchObject({
+      code: "INTEGRATION_NOT_ENTITLED",
+    });
+
+    configureConnectedAutodeskCredential();
+    await expect(browseAutodeskHubs(actor)).rejects.toMatchObject({
+      code: "INTEGRATION_NOT_ENTITLED",
+    });
+
+    expect(vi.mocked(fetch)).not.toHaveBeenCalled();
   });
 
   it("builds the APS v2 authorization URL with the exact callback, read-only scope, and state", () => {
@@ -194,10 +217,10 @@ describe("Autodesk read-only cloud integration", () => {
     expect(url.searchParams.has("data:write")).toBe(false);
   });
 
-  it("starts Autodesk browser authorization before the provider client secret is needed", () => {
+  it("starts Autodesk browser authorization before the provider client secret is needed", async () => {
     vi.stubEnv("AUTODESK_CLIENT_SECRET", "");
 
-    const { state } = createAutodeskOAuthState(actor);
+    const { state } = await createAutodeskOAuthState(actor);
     const url = new URL(buildAutodeskAuthorizationUrl(state));
 
     expect(url.origin + url.pathname).toBe(
@@ -210,11 +233,29 @@ describe("Autodesk read-only cloud integration", () => {
     expect(url.searchParams.get("scope")).toBe("data:read");
   });
 
-  it("rejects malformed or mismatched signed OAuth state", () => {
-    const { state, cookieValue } = createAutodeskOAuthState(actor);
-    expect(() => verifyAutodeskOAuthState(actor, state, cookieValue)).not.toThrow();
-    expect(() => verifyAutodeskOAuthState(actor, "different-state", cookieValue)).toThrow(/could not be verified/i);
-    expect(() => verifyAutodeskOAuthState(actor, state, "malformed")).toThrow(/could not be verified/i);
+  it("rejects malformed or mismatched signed OAuth state", async () => {
+    const { state, cookieValue } = await createAutodeskOAuthState(actor);
+    await expect(verifyAutodeskOAuthState(actor, state, cookieValue)).resolves.toEqual({
+      projectId: null,
+      intent: null,
+      returnTo: null,
+    });
+    await expect(verifyAutodeskOAuthState(actor, "different-state", cookieValue)).rejects.toThrow(/could not be verified/i);
+    await expect(verifyAutodeskOAuthState(actor, state, "malformed")).rejects.toThrow(/could not be verified/i);
+  });
+
+  it("round-trips validated BOQ-source project context through signed Autodesk OAuth state", async () => {
+    const { state, cookieValue } = await createAutodeskOAuthState(actor, {
+      projectId: "project-slug",
+      intent: "boq-source",
+      returnTo: "/projects/project-slug/boq",
+    });
+
+    await expect(verifyAutodeskOAuthState(actor, state, cookieValue)).resolves.toEqual({
+      projectId: "project-slug",
+      intent: "boq-source",
+      returnTo: "/projects/project-slug/boq",
+    });
   });
 
   it("exchanges a code server-side, validates data:read, and persists credentials without returning them", async () => {

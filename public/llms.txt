@@ -1,17 +1,50 @@
 # Quantara
 
-> Quantara is AI-assisted BOQ measurement and quantity calculation software for construction professionals. It supports review-led project-source, measurement, calculation, BOQ, validation and document workflows while leaving professional judgement and approval with the responsible user.
+> Quantara is AI-assisted BOQ measurement and quantity calculation software for construction professionals. It brings supported project sources, reviewable extraction, AI Draft BOQ, guided measurement, deterministic quantity calculations, validation and professional BOQ outputs into one controlled workflow.
 
-Quantara is operated by Vista By Lara and is offered through Controlled Early Access. Public capability statements must be read with their stated availability and limitations. Quantara supports guided BOQ measurement and deterministic quantity calculation for supported calculation types. Reviewed source-linked or professionally entered dimensions feed visible engineering formulas and calculated quantities that require professional confirmation.
+## What Quantara does
 
-Voice-assisted measurement input and supported BOQ change proposals are available in supported authenticated BOQ contexts. Supported Autodesk DWG analysis can create traceable review candidates from Autodesk model metadata and properties. Quantara does not make a blanket claim of fully unattended computer-vision takeoff from arbitrary drawing geometry, nor does it guarantee professional accuracy without review.
+Quantara helps construction professionals move from supported project evidence toward a reviewable BOQ. Supported workflows include text-based PDF table-row extraction, structured XLSX/CSV import, reviewed extracted information, guided BOQ measurement, visible deterministic engineering calculations, voice-assisted measurement and BOQ editing, controlled Google Drive import, supported Autodesk / AutoCAD DWG analysis, BOQ validation and professional document outputs.
 
-Current supported source workflows store extractable text from text-based PDFs, create review candidates only from supported detected table rows, and import structured XLSX or CSV files. Plain PDF paragraph text is not converted into BOQ candidates. Image-only pages can be detected but require manual transcription. Google Drive import requires an authorized controlled-access connection. BOQ documents can use supported PDF, XLSX, CSV, DOCX and HTML flows; technical-report generation is limited to DOCX in supported configured environments, and durable production storage must be confirmed during Controlled Early Access.
+AI Draft BOQ can assemble usable extracted evidence into an editable draft before every extraction issue has been individually resolved. Supported source and quantity provenance is preserved where available. Missing quantity or unit information remains visible for professional completion instead of being invented, and commercial rates are not silently fabricated. AI Draft BOQ is a draft workflow and is not automatic professional approval.
+
+## TAYQAN — AI Quantity Surveyor / Digital QS
+
+TAYQAN is Quantara's governed AI Quantity Surveyor workflow. It can carry work through source discovery, source processing, evidence review, quantity preparation, governed rate preparation when requested, BOQ assembly, validation / final QA, and a Ready for Acceptance state.
+
+TAYQAN does not automatically approve, issue, lock, tender-submit or certify a BOQ. It must not invent missing geometry, dimensions, quantities or rates. Final professional acceptance remains under human control.
+
+Current TAYQAN hire options are:
+- TAYQAN Day: AED 299 one-time for a 24-hour hire, up to 2 distinct projects.
+- TAYQAN Week: AED 999 one-time for a 7-day hire.
+- TAYQAN Monthly / Digital QS: AED 2,499 per month.
+
+TAYQAN hire is commercially separate from the core Quantara SaaS subscription.
+
+## Quantara subscription pricing
+
+Published core subscription prices are:
+- Starter: AED 149 per month or AED 1,490 per year.
+- Professional: AED 399 per month or AED 3,990 per year.
+- Business: AED 899 per month or AED 8,990 per year.
+
+A user chooses a public plan, creates or signs in to an account, and continues to eligible authenticated checkout when the selected approved price is active and synchronized.
+
+## Important capability boundaries
+
+Quantara does not currently perform OCR text extraction from scanned or image-only PDFs. Image-only pages can be detected, but their content requires manual transcription.
+
+Quantara does not make a blanket claim of fully unattended computer-vision takeoff from arbitrary drawing geometry. This limitation does not apply to the available guided BOQ measurement, deterministic quantity calculation, or supported Autodesk / AutoCAD DWG analysis workflows.
+
+Generic CAD/BIM/IFC model quantity extraction is not claimed as a current capability.
+
+Project information, extracted data, measurements, calculations, rates and outputs require review by the responsible construction professional before tender, procurement, contractual or construction use. Quantara and TAYQAN assist the Quantity Surveyor workflow; they do not automatically replace professional responsibility or approval.
 
 ## Primary public pages
 
 - [Product overview](https://quantara.vistabylara.com/)
 - [Feature availability and limitations](https://quantara.vistabylara.com/features)
+- [Pricing and TAYQAN hire options](https://quantara.vistabylara.com/pricing)
 - [BOQ software workflow](https://quantara.vistabylara.com/boq-software)
 - [Text-based PDF BOQ extraction](https://quantara.vistabylara.com/pdf-boq-extraction)
 - [Scanned PDF and OCR status](https://quantara.vistabylara.com/scanned-pdf-boq)
@@ -23,12 +56,12 @@ Current supported source workflows store extractable text from text-based PDFs, 
 
 ## Commercial and policy information
 
-- [Controlled Early Access and commercial availability](https://quantara.vistabylara.com/pricing)
+- [Published Quantara pricing](https://quantara.vistabylara.com/pricing)
 - [Contact Quantara](https://quantara.vistabylara.com/contact-sales)
 - [Security boundaries](https://quantara.vistabylara.com/security)
 - [Privacy policy](https://quantara.vistabylara.com/privacy)
-- [Controlled Early Access terms](https://quantara.vistabylara.com/terms)
+- [Terms](https://quantara.vistabylara.com/terms)
 
 ## Citation guidance
 
-Use the public page that directly supports a statement. Do not infer unavailable capabilities, prices, certifications, regulatory compliance, hosting location, accuracy percentages or professional approval from general marketing language.
+Use the public page that directly supports a statement. Do not infer unavailable capabilities, certifications, regulatory compliance, hosting location, guaranteed speed, guaranteed accuracy or professional approval from general marketing language.

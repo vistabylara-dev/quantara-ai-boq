@@ -3,6 +3,7 @@ import Link from "next/link";
 import { ArrowRight, CheckCircle2, AlertCircle } from "lucide-react";
 import PublicJsonLd from "@/components/seo/public-json-ld";
 import PublicBreadcrumb from "@/components/ui/public-breadcrumb";
+import PublicBuyerJourney from "@/components/marketing/public-buyer-journey";
 import {
   buildPublicPageGraph,
   inferPublicPathFromSchema,
@@ -39,6 +40,7 @@ export interface IndustryLandingPageContent {
   limitations: string[];
   faqs: IndustryFAQ[];
   relatedPages: { label: string; href: string }[];
+  showBuyerJourney?: boolean;
   /** @deprecated Kept only to infer the route while callers migrate to `path`. */
   schema?: Record<string, unknown>;
 }
@@ -123,6 +125,15 @@ export default async function IndustryLandingPage({ content: sourceContent }: { 
             </div>
           </div>
         </section>
+
+        {content.showBuyerJourney && (
+          <div className="mb-16">
+            <PublicBuyerJourney
+              locale={locale}
+              startAccountLabel={t("publicContent.cta.startAccountSetup")}
+            />
+          </div>
+        )}
 
         <section className="mb-16">
           <h2 className="text-2xl font-bold text-slate-900 mb-6 pb-2 border-b border-slate-200">{t("publicLanding.capabilitiesScope")}</h2>

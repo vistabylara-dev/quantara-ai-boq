@@ -3,6 +3,7 @@ import Link from "next/link";
 import { CheckCircle2, ChevronDown } from "lucide-react";
 import PublicJsonLd from "@/components/seo/public-json-ld";
 import PublicBreadcrumb from "@/components/ui/public-breadcrumb";
+import PublicBuyerJourney from "@/components/marketing/public-buyer-journey";
 import {
   PUBLIC_CAPABILITY_STATUS_LABELS,
   getPublicCapability,
@@ -68,6 +69,7 @@ export interface SeoLandingPageContent {
     label: string;
     description: string;
   }>;
+  showBuyerJourney?: boolean;
 }
 
 const statusColors: Record<PublicCapabilityStatus, string> = {
@@ -211,6 +213,13 @@ export default async function SeoLandingPage({ content: sourceContent, currentPa
                 ))}
               </div>
             </section>
+
+            {content.showBuyerJourney && (
+              <PublicBuyerJourney
+                locale={locale}
+                startAccountLabel={t("publicContent.cta.startAccountSetup")}
+              />
+            )}
 
             {/* Relevant Features */}
             <section>

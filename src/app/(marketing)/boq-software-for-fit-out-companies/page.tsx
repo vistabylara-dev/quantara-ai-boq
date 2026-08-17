@@ -109,6 +109,7 @@ export default function Page() {
     "label": "Features"
   }
 ],
+    showBuyerJourney: true,
     path: "/boq-software-for-fit-out-companies"
   };
 

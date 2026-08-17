@@ -122,6 +122,7 @@ export default async function Page() {
     "label": "BOQ Software"
   }
 ],
+    showBuyerJourney: true,
     path: "/boq-software-uae"
   };
 

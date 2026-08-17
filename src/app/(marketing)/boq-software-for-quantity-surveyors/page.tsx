@@ -109,6 +109,7 @@ export default function Page() {
     "label": "About Quantara"
   }
 ],
+    showBuyerJourney: true,
     path: "/boq-software-for-quantity-surveyors"
   };
 

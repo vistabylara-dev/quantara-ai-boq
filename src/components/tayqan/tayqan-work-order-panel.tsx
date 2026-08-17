@@ -58,6 +58,8 @@ export function TayqanWorkOrderPanel({
   const [rate, setRate] = useState("");
   const [note, setNote] = useState("");
   const qaNotified = useRef<string | null>(null);
+  // Senior QS can outlive the poll interval; never overlap expensive /advance calls.
+  const advanceInFlight = useRef(false);
 
   const load = useCallback(async () => {
     try {
@@ -92,7 +94,14 @@ export function TayqanWorkOrderPanel({
 
   useEffect(() => {
     if (!state || state.status !== "RUNNING") return;
-    const timer = window.setInterval(() => { void advance(state.id); }, 3000);
+    const workOrderId = state.id;
+    const timer = window.setInterval(() => {
+      if (advanceInFlight.current) return;
+      advanceInFlight.current = true;
+      void advance(workOrderId).finally(() => {
+        advanceInFlight.current = false;
+      });
+    }, 3000);
     return () => window.clearInterval(timer);
   }, [state, advance]);
 

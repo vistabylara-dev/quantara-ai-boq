@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import {
   ExtractionEngineType,
   ExtractionJobStatus,
@@ -23,6 +24,8 @@ import {
 } from "@/lib/repositories/boq-repository";
 import { getProjectRecord } from "@/lib/repositories/project-repository";
 import { generateAiDraftBoq } from "@/lib/services/ai-draft-boq-service";
+import { prepareTayqanMeasurementProposals } from "@/lib/services/tayqan-measurement-service";
+import { TAYQAN_MEASUREMENT_VERSION } from "@/lib/tayqan/tayqan-measurement-contract";
 import {
   confirmExtractedEntity,
   correctExtractedEntity,
@@ -81,6 +84,34 @@ type WorkProgress = {
     alreadyPresentCount: number;
     unreviewedAddedCount: number;
     reviewedAddedCount: number;
+  };
+
+  /** Senior TAYQAN measurement checkpoint; stored in existing progressJson, never schema. */
+  tayqanMeasurement?: {
+    version: string;
+    measuredSubjectCount: number;
+    createdCalculationCount: number;
+    reusedCalculationCount: number;
+    exceptionCount: number;
+    provider: string;
+    model: string;
+    seniorReview: {
+      clusterReviewCount: number;
+      globalReviewApplied: boolean;
+      acceptedSubjectCount: number;
+      rejectedSubjectCount: number;
+      findingCount: number;
+      evidencePageCoveragePercent: number;
+    };
+    /** Small UI/status preview; the complete register is persisted in batched work events. */
+    exceptions: Array<{
+      kind: string;
+      message: string;
+      pageIds: string[];
+    }>;
+    exceptionRegisterRunId: string;
+    exceptionRegisterBatchCount: number;
+    exceptionPreviewTruncated: boolean;
   };
 };
 
@@ -272,6 +303,44 @@ function sourceFileIdsFromProgress(
     parseProgress(order.progressJson)
       .selectedSourceFileIds ?? []
   );
+}
+
+const TAYQAN_MEASUREMENT_LEASE_CODE = "TAYQAN_MEASUREMENT_RUNNING";
+const TAYQAN_MEASUREMENT_LEASE_STALE_MS = 15 * 60 * 1_000;
+const TAYQAN_EXCEPTION_EVENT_BATCH_SIZE = 25;
+
+async function claimTayqanMeasurementLease(
+  actor: CurrentActor,
+  order: Awaited<ReturnType<typeof loadOrder>>,
+): Promise<string | null> {
+  const leaseToken = `tayqan-measurement:${randomUUID()}`;
+  const now = new Date();
+  const staleBefore = new Date(now.getTime() - TAYQAN_MEASUREMENT_LEASE_STALE_MS);
+  const claimed = await prisma.tayqanWorkOrder.updateMany({
+    where: {
+      id: order.id, companyId: actor.companyId, status: TayqanWorkStatus.RUNNING, stage: TayqanWorkStage.SOURCE_PROCESSING,
+      OR: [{ blockerCode: null }, { blockerCode: TAYQAN_MEASUREMENT_LEASE_CODE, lastAdvancedAt: { lt: staleBefore } }],
+    },
+    data: { blockerCode: TAYQAN_MEASUREMENT_LEASE_CODE, blockerMessage: leaseToken, blockerJson: Prisma.DbNull, lastAdvancedAt: now },
+  });
+  if (claimed.count !== 1) return null;
+  await appendWorkEvent(actor.companyId, order.id, order.stage, "TAYQAN_MEASUREMENT_LEASE_ACQUIRED", { staleAfterMinutes: TAYQAN_MEASUREMENT_LEASE_STALE_MS / 60_000 });
+  return leaseToken;
+}
+
+async function heartbeatTayqanMeasurementLease(actor: CurrentActor, orderId: string, leaseToken: string) {
+  const refreshed = await prisma.tayqanWorkOrder.updateMany({
+    where: { id: orderId, companyId: actor.companyId, blockerCode: TAYQAN_MEASUREMENT_LEASE_CODE, blockerMessage: leaseToken },
+    data: { lastAdvancedAt: new Date() },
+  });
+  if (refreshed.count !== 1) throw new ConflictError("TAYQAN_MEASUREMENT_LEASE_LOST", "TAYQAN measurement execution ownership changed; this request will not persist a competing result.");
+}
+
+async function releaseTayqanMeasurementLease(actor: CurrentActor, orderId: string, leaseToken: string) {
+  await prisma.tayqanWorkOrder.updateMany({
+    where: { id: orderId, companyId: actor.companyId, blockerCode: TAYQAN_MEASUREMENT_LEASE_CODE, blockerMessage: leaseToken },
+    data: { blockerCode: null, blockerMessage: null, blockerJson: Prisma.DbNull, lastAdvancedAt: new Date() },
+  });
 }
 
 function pricingBasisAllowsMatchedCatalogue(
@@ -582,7 +651,7 @@ export async function startOrResumeTayqanWorkOrder(
     includeRates: created.includeRates,
   });
   await persistConversationStatus(actor.companyId, session.id, "tayqan.hire.workflow.workOrderStarted");
-  return advanceTayqanWorkOrder(actor, project.slug, created.id);
+  return toState(await loadOrder(actor.companyId, created.id));
 }
 
 async function block(
@@ -1043,11 +1112,68 @@ async function advanceSourceProcessing(actor: CurrentActor, projectSlug: string,
   }
 
   if (usesDraftFirstWorkflow(order)) {
-    return prepareTayqanAiDraft(
-      actor,
-      projectSlug,
-      order,
-    );
+    let measuredOrder = order;
+    const progress = parseProgress(order.progressJson);
+
+    if (progress.tayqanMeasurement?.version !== TAYQAN_MEASUREMENT_VERSION) {
+      const leaseToken = await claimTayqanMeasurementLease(actor, order);
+      if (!leaseToken) return toState(await loadOrder(actor.companyId, order.id));
+
+      try {
+        const leasedOrder = await loadOrder(actor.companyId, order.id);
+        const leasedProgress = parseProgress(leasedOrder.progressJson);
+        if (leasedProgress.tayqanMeasurement?.version === TAYQAN_MEASUREMENT_VERSION) {
+          await releaseTayqanMeasurementLease(actor, order.id, leaseToken);
+          return prepareTayqanAiDraft(actor, projectSlug, leasedOrder);
+        }
+
+        const measurement = await prepareTayqanMeasurementProposals(
+          actor, projectSlug,
+          { projectId: leasedOrder.projectId, sourceFileIds: sourceFileIdsFromProgress(leasedOrder), governingContext: leasedProgress.instructionContext ?? null },
+          { onProgress: async () => heartbeatTayqanMeasurementLease(actor, order.id, leaseToken) },
+        );
+        const measurementExceptions = measurement.exceptions.slice(0, 50).map((exception) => ({ kind: exception.kind, message: exception.message, pageIds: exception.pageIds }));
+        const exceptionBatches = Array.from(
+          { length: Math.ceil(measurement.exceptions.length / TAYQAN_EXCEPTION_EVENT_BATCH_SIZE) },
+          (_, index) => measurement.exceptions.slice(index * TAYQAN_EXCEPTION_EVENT_BATCH_SIZE, (index + 1) * TAYQAN_EXCEPTION_EVENT_BATCH_SIZE),
+        );
+        for (let index = 0; index < exceptionBatches.length; index += 1) {
+          const batch = exceptionBatches[index]!;
+          await appendWorkEvent(actor.companyId, order.id, leasedOrder.stage, "TAYQAN_MEASUREMENT_EXCEPTION_REGISTER", {
+            version: TAYQAN_MEASUREMENT_VERSION, registerRunId: leaseToken, batchIndex: index + 1, batchCount: exceptionBatches.length, totalExceptionCount: measurement.exceptions.length,
+            exceptions: batch.map((exception) => ({ kind: exception.kind, message: exception.message, pageIds: exception.pageIds, relatedEntityId: exception.relatedEntityId })),
+          });
+        }
+        const completionPayload = {
+          version: TAYQAN_MEASUREMENT_VERSION, measuredSubjectCount: measurement.measuredSubjectCount, createdCalculationCount: measurement.createdCalculationCount,
+          reusedCalculationCount: measurement.reusedCalculationCount, exceptionCount: measurement.exceptionCount,
+          exceptionKinds: [...new Set(measurement.exceptions.map((exception) => exception.kind))], seniorReview: measurement.seniorReview,
+          exceptionRegisterRunId: leaseToken, exceptionRegisterBatchCount: exceptionBatches.length,
+        };
+        await prisma.$transaction(async (tx) => {
+          const completed = await tx.tayqanWorkOrder.updateMany({
+            where: { id: order.id, companyId: actor.companyId, blockerCode: TAYQAN_MEASUREMENT_LEASE_CODE, blockerMessage: leaseToken },
+            data: {
+              progressJson: jsonObject({ ...leasedProgress, tayqanMeasurement: {
+                version: TAYQAN_MEASUREMENT_VERSION, measuredSubjectCount: measurement.measuredSubjectCount, createdCalculationCount: measurement.createdCalculationCount, reusedCalculationCount: measurement.reusedCalculationCount,
+                exceptionCount: measurement.exceptionCount, provider: measurement.provider, model: measurement.model, seniorReview: measurement.seniorReview, exceptions: measurementExceptions,
+                exceptionRegisterRunId: leaseToken, exceptionRegisterBatchCount: exceptionBatches.length, exceptionPreviewTruncated: measurement.exceptions.length > measurementExceptions.length,
+              } }),
+              blockerCode: null, blockerMessage: null, blockerJson: Prisma.DbNull, lastAdvancedAt: new Date(),
+            },
+          });
+          if (completed.count !== 1) throw new ConflictError("TAYQAN_MEASUREMENT_LEASE_LOST", "TAYQAN measurement execution ownership changed before completion; competing results were not committed to the work order.");
+          await tx.tayqanWorkEvent.create({ data: { companyId: actor.companyId, workOrderId: order.id, stage: leasedOrder.stage, eventType: "TAYQAN_MEASUREMENT_COMPLETE", payloadJson: jsonObject(completionPayload) } });
+        });
+        await persistConversationStatus(actor.companyId, order.intakeSessionId, "tayqan.hire.workflow.measurementComplete", { count: measurement.measuredSubjectCount });
+        measuredOrder = await loadOrder(actor.companyId, order.id);
+      } catch (error) {
+        await releaseTayqanMeasurementLease(actor, order.id, leaseToken);
+        throw error;
+      }
+    }
+
+    return prepareTayqanAiDraft(actor, projectSlug, measuredOrder);
   }
 
   const next = await moveStage(actor, order, TayqanWorkStage.EVIDENCE_REVIEW, "SOURCE_PROCESSING_COMPLETE");
@@ -1136,6 +1262,7 @@ async function prepareTayqanAiDraft(
       {
         targetBoqId: boqId,
         projectFileIds: selectedSourceFileIds,
+        quantityMode: "TAYQAN_MEASUREMENT_PROPOSAL",
       },
     );
 

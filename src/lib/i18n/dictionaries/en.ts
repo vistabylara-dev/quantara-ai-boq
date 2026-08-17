@@ -1788,6 +1788,7 @@ const en = {
         sourceRevisionConflict: "I found conflicting revisions for the same drawing number. Your instruction is to ask before choosing, so I will not process both revisions. Resolve the authoritative source in Files, then ask me to check again.",
         sourcesRequired: "I need project source files before I can continue. Upload the drawings, schedules, specifications or existing BOQ and I will resume this same work order.",
         sourceProcessing: "I’m processing {count} remaining source task(s). I will reuse any completed processing rather than create it again.",
+        measurementComplete: "TAYQAN completed the senior measurement and independent cross-check for {count} measurable scope item(s). Evidence, revisions, units and exceptions were reconciled before Draft BOQ assembly; unit prices remain for professional input and final review.",
         sourceNeedsInput: "One source-processing task needs input before I can continue.",
         sourceFailed: "A project source could not be processed. Resolve that source and I will resume the same work order.",
         reviewEvidence: "I found extracted project evidence that requires a professional decision before I can use it in the BOQ.",

@@ -395,6 +395,16 @@ export default function ProjectBOQPage(props: PageProps) {
     )),
     [activeRevision],
   );
+  const aiSuggestedMeasurementCount = useMemo(
+    () => activeRevision?.sections.reduce(
+      (total, section) =>
+        total + section.items.filter(
+          (item) => item.notes?.includes("AI-suggested measurement"),
+        ).length,
+      0,
+    ) ?? 0,
+    [activeRevision],
+  );
   const showAiDraftReview = aiDraftMode || hasAiDraftItems;
 
   const confirmRemainingAiDraftQuantities = useCallback(async () => {
@@ -722,8 +732,13 @@ export default function ProjectBOQPage(props: PageProps) {
                 {aiDraftMode && aiDraftExistingCount > 0 ? ` ${aiDraftExistingCount} extracted ${aiDraftExistingCount === 1 ? "item was" : "items were"} already present and were not duplicated.` : ""}
                 {aiDraftMode && aiDraftSkippedCount > 0 ? ` ${aiDraftSkippedCount} incomplete ${aiDraftSkippedCount === 1 ? "candidate still needs" : "candidates still need"} extraction review.` : ""}
               </p>
+              {aiSuggestedMeasurementCount > 0 && (
+                <p className="mt-2 rounded-xl border border-blue-400/30 bg-blue-400/10 px-3 py-2 text-xs leading-5 text-blue-100">
+                  Quantara inferred {aiSuggestedMeasurementCount} missing {aiSuggestedMeasurementCount === 1 ? "measurement" : "measurements"} from stored drawing evidence. Review the suggested quantity/unit in the BOQ table; the existing confirmation action is the single professional approval step.
+                </p>
+              )}
               <p className="mt-2 text-xs leading-5 text-slate-400">
-                Unchanged AI Draft quantities stay unconfirmed until you approve them here. Any quantity you edit follows the existing manual confirmation path. Quantara does not invent rates: use your purchased packages, catalogue/company library, or manual pricing before final validation.
+                AI-suggested and unchanged AI Draft quantities stay unconfirmed until you approve them here. Any quantity you edit follows the existing manual confirmation path. Quantara does not invent rates: use your purchased packages, catalogue/company library, or manual pricing before final validation.
               </p>
             </div>
             <div className="flex shrink-0 flex-wrap gap-2">

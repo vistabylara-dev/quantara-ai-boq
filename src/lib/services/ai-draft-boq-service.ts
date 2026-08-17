@@ -24,6 +24,14 @@ import {
   type AiDraftCandidate,
   type AiDraftSection,
 } from "@/lib/guidance/ai-draft-boq";
+import {
+  applyAiMeasurementSuggestion,
+  formatAiMeasurementSuggestionMarker,
+  hasAiMeasurementSuggestion,
+  inferAiDraftMeasurement,
+  type AiMeasurementEvidencePage,
+  type AiMeasurementSuggestion,
+} from "@/lib/guidance/ai-measurement-inference";
 import { createAuditLog } from "@/lib/repositories/audit-repository";
 import {
   createProjectBOQ,
@@ -37,6 +45,31 @@ const REVIEWED_ENTITY_STATUSES = new Set(["CONFIRMED", "CORRECTED", "IMPORTED"])
 
 function extractionMarker(entityId: string): string {
   return `EXTRACTED_ENTITY:${entityId}`;
+}
+
+function jsonRecord(value: unknown): Record<string, unknown> | null {
+  return value !== null && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null;
+}
+
+function toMeasurementEvidencePage(row: {
+  projectFileId: string;
+  pageNumber: number;
+  textLayerJson: Prisma.JsonValue | null;
+}): AiMeasurementEvidencePage {
+  const layer = jsonRecord(row.textLayerJson);
+  const signals = jsonRecord(layer?.signals);
+  const rawTitles = signals?.drawingTitles;
+  return {
+    projectFileId: row.projectFileId,
+    pageNumber: row.pageNumber,
+    text: typeof layer?.text === "string" ? layer.text : null,
+    normalizedText: typeof layer?.normalizedText === "string" ? layer.normalizedText : null,
+    drawingTitles: Array.isArray(rawTitles)
+      ? rawTitles.filter((value): value is string => typeof value === "string")
+      : [],
+  };
 }
 
 function toCandidate(entity: {
@@ -154,7 +187,46 @@ export async function generateAiDraftBoq(
       orderBy: [{ projectFileId: "asc" }, { createdAt: "asc" }],
     });
 
-    const candidates = rows.map(toCandidate);
+    const sourceFileIds = [...new Set(rows.map((row) => row.projectFileId))];
+    const pageRows = sourceFileIds.length > 0
+      ? await tx.drawingPage.findMany({
+          where: {
+            companyId: actor.companyId,
+            projectFileId: { in: sourceFileIds },
+          },
+          orderBy: [{ projectFileId: "asc" }, { pageNumber: "asc" }],
+          select: {
+            projectFileId: true,
+            pageNumber: true,
+            textLayerJson: true,
+          },
+        })
+      : [];
+
+    const pagesByFileId = new Map<string, AiMeasurementEvidencePage[]>();
+    for (const pageRow of pageRows) {
+      const page = toMeasurementEvidencePage(pageRow);
+      const existing = pagesByFileId.get(page.projectFileId) ?? [];
+      existing.push(page);
+      pagesByFileId.set(page.projectFileId, existing);
+    }
+
+    const suggestionByEntityId = new Map<string, AiMeasurementSuggestion>();
+    const candidates = rows.map((row) => {
+      const candidate = toCandidate(row);
+      const suggestion = inferAiDraftMeasurement(
+        {
+          ...candidate,
+          technicalDataJson: row.technicalDataJson,
+        },
+        pagesByFileId.get(row.projectFileId) ?? [],
+      );
+      if (suggestion) suggestionByEntityId.set(row.id, suggestion);
+      return applyAiMeasurementSuggestion(candidate, suggestion);
+    });
+    const candidateByEntityId = new Map(
+      candidates.map((candidate) => [candidate.id, candidate] as const),
+    );
     const summary = summarizeAiDraftCandidates(candidates);
 
     const currentItems = current.sections.flatMap((section) => section.items);
@@ -168,7 +240,11 @@ export async function generateAiDraftBoq(
     );
 
     const toAdd = rows
-      .map((row) => ({ row, candidate: toCandidate(row) }))
+      .map((row) => ({
+        row,
+        candidate: candidateByEntityId.get(row.id) ?? toCandidate(row),
+        suggestion: suggestionByEntityId.get(row.id) ?? null,
+      }))
       .filter(({ row, candidate }) =>
         !alreadyPresentIds.has(row.id) && isAiDraftCandidateUsable(candidate),
       );
@@ -182,6 +258,7 @@ export async function generateAiDraftBoq(
         unreviewedAddedCount: 0,
         reviewedAddedCount: 0,
         measurementIncompleteAddedCount: 0,
+        inferredMeasurementAddedCount: 0,
       };
     }
 
@@ -251,8 +328,9 @@ export async function generateAiDraftBoq(
     let reviewedAddedCount = 0;
     let unreviewedAddedCount = 0;
     let measurementIncompleteAddedCount = 0;
+    let inferredMeasurementAddedCount = 0;
 
-    for (const { row, candidate } of toAdd) {
+    for (const { row, candidate, suggestion } of toAdd) {
       const matchedSectionId = chooseAiDraftSection(businessSections, candidate);
       const sectionId = matchedSectionId ?? fallbackSectionId;
 
@@ -271,6 +349,7 @@ export async function generateAiDraftBoq(
       const quantity = new Prisma.Decimal(getAiDraftQuantityValue(candidate));
       const unit = candidate.unit?.trim() ?? "";
       if (!measurementComplete) measurementIncompleteAddedCount += 1;
+      if (suggestion && measurementComplete) inferredMeasurementAddedCount += 1;
 
       const zero = new Prisma.Decimal(0);
       const marginMode = MarginMode.MARKUP;
@@ -286,9 +365,21 @@ export async function generateAiDraftBoq(
 
       const marker = extractionMarker(row.id);
       const retainedSourceReference = row.sourceReference?.trim();
-      const sourceReference = retainedSourceReference
-        ? `${retainedSourceReference} | ${marker}`
-        : marker;
+      const measurementMarker = suggestion
+        ? formatAiMeasurementSuggestionMarker(suggestion)
+        : null;
+      const sourceReference = [
+        retainedSourceReference,
+        marker,
+        measurementMarker,
+      ].filter((value): value is string => Boolean(value)).join(" | ");
+
+      const specification = [
+        row.sourceText?.trim() || null,
+        suggestion?.evidenceSummary
+          ? `AI measurement evidence: ${suggestion.evidenceSummary}`
+          : null,
+      ].filter((value): value is string => Boolean(value)).join("\n\n");
 
       const item = await tx.bOQItem.create({
         data: {
@@ -301,7 +392,7 @@ export async function generateAiDraftBoq(
               ?? formatAiDraftCategory(row.entityType)
             : formatAiDraftCategory(row.entityType),
           description: row.label,
-          specification: row.sourceText ?? "",
+          specification,
           quantity,
           unit,
           unitCost: zero,
@@ -317,7 +408,9 @@ export async function generateAiDraftBoq(
           confidenceScore: row.confidence,
           status: BOQItemStatus.DRAFT,
           notes: measurementComplete
-            ? "AI Draft from extracted project evidence. Professional quantity review and commercial rate selection are still required."
+            ? suggestion
+              ? "AI Draft from extracted project evidence with an AI-suggested measurement. Review the quantity/unit once in this BOQ before confirmation. Commercial rate selection is still required."
+              : "AI Draft from extracted project evidence. Professional quantity review and commercial rate selection are still required."
             : "AI Draft from extracted project evidence. Quantity and/or unit is unresolved and must be completed in the BOQ before validation.",
           sortOrder,
           sourceType: BoqItemSourceType.IMPORT,
@@ -325,7 +418,8 @@ export async function generateAiDraftBoq(
       });
 
       const previouslyReviewed = (
-        measurementComplete
+        !suggestion
+        && measurementComplete
         && (row.status === "CONFIRMED" || row.status === "CORRECTED")
         && row.confirmedAt !== null
       );
@@ -410,6 +504,16 @@ export async function generateAiDraftBoq(
           unit,
           confidence: row.confidence.toString(),
           measurementComplete,
+          ...(suggestion
+            ? {
+                measurementSuggestion: {
+                  method: suggestion.method,
+                  confidence: suggestion.confidence,
+                  pageNumbers: suggestion.pageNumbers,
+                  evidenceSummary: suggestion.evidenceSummary,
+                },
+              }
+            : {}),
           rateAutomaticallyApplied: false,
         },
       }, tx);
@@ -428,6 +532,7 @@ export async function generateAiDraftBoq(
         reviewedAddedCount,
         unreviewedAddedCount,
         measurementIncompleteAddedCount,
+        inferredMeasurementAddedCount,
         ratesAutomaticallyApplied: false,
       },
     }, tx);
@@ -440,6 +545,7 @@ export async function generateAiDraftBoq(
       unreviewedAddedCount,
       reviewedAddedCount,
       measurementIncompleteAddedCount,
+      inferredMeasurementAddedCount,
     };
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 }
@@ -467,6 +573,9 @@ export async function confirmAiDraftQuantities(actor: CurrentActor, boqId: strin
           provenance.sourceType === QuantityProvenanceSource.MANUAL_CONFIRMED
           && provenance.confirmedAt !== null
           && getAiDraftExtractedEntityId(item.sourceReference) !== null;
+        const aiSuggestedQuantity =
+          unreviewedAiQuantity
+          && hasAiMeasurementSuggestion(item.sourceReference);
 
         if (!unreviewedAiQuantity && !manuallyReviewedAiQuantity) return [];
 
@@ -475,6 +584,7 @@ export async function confirmAiDraftQuantities(actor: CurrentActor, boqId: strin
           provenance,
           extractedEntityId,
           manuallyReviewedAiQuantity,
+          aiSuggestedQuantity,
         }];
       });
 
@@ -502,6 +612,7 @@ export async function confirmAiDraftQuantities(actor: CurrentActor, boqId: strin
       provenance,
       extractedEntityId,
       manuallyReviewedAiQuantity,
+      aiSuggestedQuantity,
     } of linkedItems) {
       const entity = entityById.get(extractedEntityId);
 
@@ -520,20 +631,32 @@ export async function confirmAiDraftQuantities(actor: CurrentActor, boqId: strin
         && entity.quantity.equals(item.quantity)
         && (entity.unit ?? "").trim() === item.unit.trim();
 
-      if (!manuallyReviewedAiQuantity && !quantityMatchesExtraction) {
+      const boqMeasurementComplete =
+        item.quantity.toNumber() > 0 && item.unit.trim().length > 0;
+
+      if (
+        !manuallyReviewedAiQuantity
+        && !aiSuggestedQuantity
+        && !quantityMatchesExtraction
+      ) {
+        skippedCount += 1;
+        continue;
+      }
+
+      if (
+        (manuallyReviewedAiQuantity || aiSuggestedQuantity)
+        && !boqMeasurementComplete
+      ) {
         skippedCount += 1;
         continue;
       }
 
       const extractionWasCorrectedInBoq =
-        manuallyReviewedAiQuantity && !quantityMatchesExtraction;
-      const boqMeasurementComplete =
-        item.quantity.toNumber() > 0 && item.unit.trim().length > 0;
-
-      if (manuallyReviewedAiQuantity && !boqMeasurementComplete) {
-        skippedCount += 1;
-        continue;
-      }
+        (manuallyReviewedAiQuantity || aiSuggestedQuantity)
+        && !quantityMatchesExtraction;
+      const correctionReason = aiSuggestedQuantity
+        ? "Accepted AI measurement suggestion during AI Draft BOQ review."
+        : "Corrected during AI Draft BOQ review.";
 
       if (REVIEWABLE_ENTITY_STATUSES.has(entity.status)) {
         const original = {
@@ -563,7 +686,7 @@ export async function confirmAiDraftQuantities(actor: CurrentActor, boqId: strin
                     },
                     correctedByUserId: actor.userId,
                     correctedAt: now.toISOString(),
-                    reason: "Corrected during AI Draft BOQ review.",
+                    reason: correctionReason,
                   },
                 }
               : {}),
@@ -591,7 +714,7 @@ export async function confirmAiDraftQuantities(actor: CurrentActor, boqId: strin
                   quantity: item.quantity.toNumber(),
                   unit: item.unit,
                 },
-                reason: "Corrected during AI Draft BOQ review.",
+                reason: correctionReason,
               }
             : { source: "AI_DRAFT_BOQ_REVIEW" },
         }, tx);
@@ -631,7 +754,7 @@ export async function confirmAiDraftQuantities(actor: CurrentActor, boqId: strin
                     },
                     correctedByUserId: actor.userId,
                     correctedAt: now.toISOString(),
-                    reason: "Completed during AI Draft BOQ review.",
+                    reason: correctionReason,
                   },
                   confirmedByUserId: actor.userId,
                   confirmedAt: now,
@@ -659,7 +782,7 @@ export async function confirmAiDraftQuantities(actor: CurrentActor, boqId: strin
                 quantity: item.quantity.toNumber(),
                 unit: item.unit,
               },
-              reason: "Completed during AI Draft BOQ review.",
+              reason: correctionReason,
             },
           }, tx);
         }

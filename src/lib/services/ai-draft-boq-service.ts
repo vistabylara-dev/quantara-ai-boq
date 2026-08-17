@@ -32,6 +32,10 @@ import {
   type AiMeasurementEvidencePage,
   type AiMeasurementSuggestion,
 } from "@/lib/guidance/ai-measurement-inference";
+import {
+  formatMeasurementMethodSuggestionMarker,
+  recommendMeasurementMethod,
+} from "@/lib/calculations/measurement-method-recommender";
 import { createAuditLog } from "@/lib/repositories/audit-repository";
 import {
   createProjectBOQ,
@@ -240,11 +244,22 @@ export async function generateAiDraftBoq(
     );
 
     const toAdd = rows
-      .map((row) => ({
-        row,
-        candidate: candidateByEntityId.get(row.id) ?? toCandidate(row),
-        suggestion: suggestionByEntityId.get(row.id) ?? null,
-      }))
+      .map((row) => {
+        const candidate =
+          candidateByEntityId.get(row.id) ?? toCandidate(row);
+
+        return {
+          row,
+          candidate,
+          suggestion: suggestionByEntityId.get(row.id) ?? null,
+          methodRecommendation: recommendMeasurementMethod({
+            entityType: row.entityType,
+            label: candidate.label,
+            sourceText: row.sourceText,
+            unit: candidate.unit,
+          }),
+        };
+      })
       .filter(({ row, candidate }) =>
         !alreadyPresentIds.has(row.id) && isAiDraftCandidateUsable(candidate),
       );
@@ -330,7 +345,12 @@ export async function generateAiDraftBoq(
     let measurementIncompleteAddedCount = 0;
     let inferredMeasurementAddedCount = 0;
 
-    for (const { row, candidate, suggestion } of toAdd) {
+    for (const {
+      row,
+      candidate,
+      suggestion,
+      methodRecommendation,
+    } of toAdd) {
       const matchedSectionId = chooseAiDraftSection(businessSections, candidate);
       const sectionId = matchedSectionId ?? fallbackSectionId;
 
@@ -368,10 +388,14 @@ export async function generateAiDraftBoq(
       const measurementMarker = suggestion
         ? formatAiMeasurementSuggestionMarker(suggestion)
         : null;
+      const methodMarker = methodRecommendation
+        ? formatMeasurementMethodSuggestionMarker(methodRecommendation)
+        : null;
       const sourceReference = [
         retainedSourceReference,
         marker,
         measurementMarker,
+        methodMarker,
       ].filter((value): value is string => Boolean(value)).join(" | ");
 
       const specification = [
@@ -379,7 +403,14 @@ export async function generateAiDraftBoq(
         suggestion?.evidenceSummary
           ? `AI measurement evidence: ${suggestion.evidenceSummary}`
           : null,
+        methodRecommendation
+          ? `Quantara measurement method: ${methodRecommendation.label} (${methodRecommendation.resultUnit}). ${methodRecommendation.reason}`
+          : null,
       ].filter((value): value is string => Boolean(value)).join("\n\n");
+
+      const methodRecommendationNote = methodRecommendation
+        ? ` Quantara recommends ${methodRecommendation.label} (${methodRecommendation.resultUnit}) as the measurement method for this item.`
+        : "";
 
       const item = await tx.bOQItem.create({
         data: {
@@ -409,9 +440,9 @@ export async function generateAiDraftBoq(
           status: BOQItemStatus.DRAFT,
           notes: measurementComplete
             ? suggestion
-              ? "AI Draft from extracted project evidence with an AI-suggested measurement. Review the quantity/unit once in this BOQ before confirmation. Commercial rate selection is still required."
-              : "AI Draft from extracted project evidence. Professional quantity review and commercial rate selection are still required."
-            : "AI Draft from extracted project evidence. Quantity and/or unit is unresolved and must be completed in the BOQ before validation.",
+              ? `AI Draft from extracted project evidence with an AI-suggested measurement. Review the quantity/unit once in this BOQ before confirmation. Commercial rate selection is still required.${methodRecommendationNote}`
+              : `AI Draft from extracted project evidence. Professional quantity review and commercial rate selection are still required.${methodRecommendationNote}`
+            : `AI Draft from extracted project evidence. Quantity and/or unit is unresolved and must be completed in the BOQ before validation.${methodRecommendationNote}`,
           sortOrder,
           sourceType: BoqItemSourceType.IMPORT,
         },

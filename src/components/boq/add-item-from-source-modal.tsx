@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import type {
   ExtractedEntityStatus,
@@ -10,6 +10,7 @@ import type {
 } from "@prisma/client";
 import { apiClient } from "@/lib/api/client";
 import { listSupportedCalculationTypes } from "@/lib/calculations/required-dimensions-registry";
+import { recommendMeasurementMethod } from "@/lib/calculations/measurement-method-recommender";
 import { QuantityCalculationPanel } from "@/components/boq/quantity-calculation-panel";
 import { useLocale } from "@/lib/i18n/locale-provider";
 import { getLocalizedApiErrorMessage } from "@/lib/i18n/api-error-message";
@@ -128,6 +129,33 @@ export default function AddItemFromSourceModal({
   const [confirmedCalculation, setConfirmedCalculation] = useState<{ resultValue: number; resultUnit: string } | null>(null);
   const supportedCalculationTypes = listSupportedCalculationTypes();
 
+  const extractionMeasurementRecommendation = useMemo(
+    () =>
+      selectedEntity
+        ? recommendMeasurementMethod({
+            entityType: selectedEntity.entityType,
+            label: selectedEntity.label,
+            sourceText: selectedEntity.sourceText,
+            unit: selectedEntity.unit,
+          })
+        : null,
+    [selectedEntity],
+  );
+
+  const manualMeasurementRecommendation = useMemo(
+    () =>
+      recommendMeasurementMethod({
+        label: manualDraft.description,
+        sourceText: manualDraft.specification,
+        unit: manualDraft.unit,
+      }),
+    [
+      manualDraft.description,
+      manualDraft.specification,
+      manualDraft.unit,
+    ],
+  );
+
   const switchToManualFromLocked = useCallback((item: SearchResultItem) => {
     setManualDraft((current) => ({ ...current, description: item.name, unit: item.unit }));
     setTab("manual");
@@ -190,6 +218,18 @@ export default function AddItemFromSourceModal({
   }, [locale, projectId, t, tab]);
 
   const selectReviewedEntity = useCallback((entity: ExtractedEntityView) => {
+    const recommendation = recommendMeasurementMethod({
+      entityType: entity.entityType,
+      label: entity.label,
+      sourceText: entity.sourceText,
+      unit: entity.unit,
+    });
+    const hasDirectQuantity = Boolean(
+      entity.quantity !== null
+      && entity.quantity > 0
+      && entity.unit?.trim(),
+    );
+
     setSelectedEntity(entity);
     setExtractionDraft({
       itemCode: `EXT-${String(nextItemNumber).padStart(3, "0")}`.slice(0, 50),
@@ -199,8 +239,15 @@ export default function AddItemFromSourceModal({
       unitCost: "0",
       marginPercentage: "0",
     });
-    setUseExtractionCalculation(false);
-    setExtractionCalculationType("");
+    const shouldUseRecommendedCalculation =
+      !hasDirectQuantity && Boolean(recommendation);
+
+    setUseExtractionCalculation(shouldUseRecommendedCalculation);
+    setExtractionCalculationType(
+      shouldUseRecommendedCalculation
+        ? recommendation?.calculationType ?? ""
+        : "",
+    );
     setConfirmedExtractionCalculation(null);
     setError(null);
   }, [nextItemNumber]);
@@ -555,13 +602,41 @@ export default function AddItemFromSourceModal({
                   )}
                 </div>
 
+                {extractionMeasurementRecommendation && (
+                  <div className="rounded-xl border border-blue-500/40 bg-blue-500/10 p-4">
+                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-blue-300">
+                      {locale === "ar"
+                        ? "توصية Quantara لطريقة القياس"
+                        : "Quantara measurement recommendation"}
+                    </p>
+                    <p className="mt-2 text-sm font-semibold text-white">
+                      {translateCalculationType(
+                        extractionMeasurementRecommendation.calculationType,
+                        t,
+                      )}
+                      {" · "}
+                      {extractionMeasurementRecommendation.resultUnit}
+                    </p>
+                    <p className="mt-1 text-xs leading-5 text-slate-400">
+                      {locale === "ar"
+                        ? "اختارت Quantara طريقة القياس الأنسب بناءً على نوع البند والأدلة المستخرجة. يمكنك تغيير الطريقة قبل الحساب."
+                        : `${extractionMeasurementRecommendation.reason} You can override the selected calculator before calculating.`}
+                    </p>
+                  </div>
+                )}
+
                 <label className="flex items-start gap-3 text-sm text-slate-300">
                   <input
                     type="checkbox"
                     checked={useExtractionCalculation}
                     onChange={(e) => {
-                      setUseExtractionCalculation(e.target.checked);
-                      setExtractionCalculationType("");
+                      const enabled = e.target.checked;
+                      setUseExtractionCalculation(enabled);
+                      setExtractionCalculationType(
+                        enabled
+                          ? extractionMeasurementRecommendation?.calculationType ?? ""
+                          : "",
+                      );
                       setConfirmedExtractionCalculation(null);
                       setError(null);
                     }}
@@ -738,9 +813,14 @@ export default function AddItemFromSourceModal({
                 type="checkbox"
                 checked={useMeasurementCalculation}
                 onChange={(e) => {
-                  setUseMeasurementCalculation(e.target.checked);
+                  const enabled = e.target.checked;
+                  setUseMeasurementCalculation(enabled);
                   setConfirmedCalculation(null);
-                  if (!e.target.checked) setCalculationType("");
+                  setCalculationType(
+                    enabled
+                      ? manualMeasurementRecommendation?.calculationType ?? ""
+                      : "",
+                  );
                 }}
                 className="h-4 w-4 rounded border-slate-700 bg-slate-900"
               />
@@ -750,6 +830,29 @@ export default function AddItemFromSourceModal({
             <p className="text-xs text-slate-500">
               {t("boqEditor.voiceInsideMeasurementPanel")}
             </p>
+
+            {manualMeasurementRecommendation && (
+              <div className="rounded-xl border border-blue-500/40 bg-blue-500/10 p-4">
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-blue-300">
+                  {locale === "ar"
+                    ? "توصية Quantara لطريقة القياس"
+                    : "Quantara measurement recommendation"}
+                </p>
+                <p className="mt-2 text-sm font-semibold text-white">
+                  {translateCalculationType(
+                    manualMeasurementRecommendation.calculationType,
+                    t,
+                  )}
+                  {" · "}
+                  {manualMeasurementRecommendation.resultUnit}
+                </p>
+                <p className="mt-1 text-xs leading-5 text-slate-400">
+                  {locale === "ar"
+                    ? "اختارت Quantara طريقة القياس الأنسب من وصف البند. يمكنك تغيير الطريقة قبل الحساب."
+                    : `${manualMeasurementRecommendation.reason} You can override the selected calculator before calculating.`}
+                </p>
+              </div>
+            )}
 
             {useMeasurementCalculation && (
               <div className="space-y-3 rounded-2xl border border-slate-800 bg-slate-900/50 p-4">

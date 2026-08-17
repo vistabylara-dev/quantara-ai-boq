@@ -30,6 +30,7 @@ import {
   getBOQRecord,
 } from "@/lib/repositories/boq-repository";
 import { getProjectRecord } from "@/lib/repositories/project-repository";
+import { TAYQAN_MEASUREMENT_CALCULATED_BY_PREFIX } from "@/lib/tayqan/tayqan-measurement-contract";
 
 const AI_DRAFT_FALLBACK_CODE = "AI-DRAFT";
 const REVIEWABLE_ENTITY_STATUSES = new Set(["EXTRACTED", "NEEDS_REVIEW"]);
@@ -93,6 +94,8 @@ function assertAiDraftEditable(boq: Awaited<ReturnType<typeof getBOQRecord>>) {
 export type AiDraftGenerationOptions = {
   targetBoqId?: string;
   projectFileIds?: readonly string[];
+  /** Default preserves the existing self-service AI Draft behavior. TAYQAN opts in explicitly. */
+  quantityMode?: "EXTRACTION_ONLY" | "TAYQAN_MEASUREMENT_PROPOSAL";
 };
 
 export async function generateAiDraftBoq(
@@ -154,7 +157,42 @@ export async function generateAiDraftBoq(
       orderBy: [{ projectFileId: "asc" }, { createdAt: "asc" }],
     });
 
-    const candidates = rows.map(toCandidate);
+    const tayqanMeasurements = options.quantityMode === "TAYQAN_MEASUREMENT_PROPOSAL"
+      && rows.length > 0
+      ? await tx.quantityCalculation.findMany({
+          where: {
+            companyId: actor.companyId,
+            projectId: project.id,
+            extractedEntityId: { in: rows.map((row) => row.id) },
+            calculatedBy: { startsWith: TAYQAN_MEASUREMENT_CALCULATED_BY_PREFIX },
+            status: { not: "REJECTED" },
+          },
+          orderBy: { updatedAt: "desc" },
+        })
+      : [];
+
+    const tayqanMeasurementByEntityId = new Map<string, (typeof tayqanMeasurements)[number]>();
+    for (const measurement of tayqanMeasurements) {
+      if (measurement.extractedEntityId && !tayqanMeasurementByEntityId.has(measurement.extractedEntityId)) {
+        tayqanMeasurementByEntityId.set(measurement.extractedEntityId, measurement);
+      }
+    }
+
+    const rowsForDraft = rows.map((row) => {
+      const measurement = tayqanMeasurementByEntityId.get(row.id);
+      if (!measurement) return row;
+      return {
+        ...row,
+        quantity: measurement.resultValue,
+        unit: measurement.resultUnit,
+        confidence: new Prisma.Decimal(Math.min(
+          row.confidence.toNumber(),
+          measurement.confidence.toNumber(),
+        )),
+      };
+    });
+
+    const candidates = rowsForDraft.map(toCandidate);
     const summary = summarizeAiDraftCandidates(candidates);
 
     const currentItems = current.sections.flatMap((section) => section.items);
@@ -167,7 +205,7 @@ export async function generateAiDraftBoq(
         .filter((value): value is string => Boolean(value)),
     );
 
-    const toAdd = rows
+    const toAdd = rowsForDraft
       .map((row) => ({ row, candidate: toCandidate(row) }))
       .filter(({ row, candidate }) =>
         !alreadyPresentIds.has(row.id) && isAiDraftCandidateUsable(candidate),
@@ -253,6 +291,7 @@ export async function generateAiDraftBoq(
     let measurementIncompleteAddedCount = 0;
 
     for (const { row, candidate } of toAdd) {
+      const tayqanMeasurement = tayqanMeasurementByEntityId.get(row.id) ?? null;
       const matchedSectionId = chooseAiDraftSection(businessSections, candidate);
       const sectionId = matchedSectionId ?? fallbackSectionId;
 
@@ -316,16 +355,24 @@ export async function generateAiDraftBoq(
           sourceReference,
           confidenceScore: row.confidence,
           status: BOQItemStatus.DRAFT,
-          notes: measurementComplete
-            ? "AI Draft from extracted project evidence. Professional quantity review and commercial rate selection are still required."
-            : "AI Draft from extracted project evidence. Quantity and/or unit is unresolved and must be completed in the BOQ before validation.",
+          notes: tayqanMeasurement
+            ? "TAYQAN measured this draft quantity from project drawing evidence using the deterministic quantity engine. Professional review is still required; unit price is intentionally left for the engineer."
+            : measurementComplete
+              ? "AI Draft from extracted project evidence. Professional quantity review and commercial rate selection are still required."
+              : "AI Draft from extracted project evidence. Quantity and/or unit is unresolved and must be completed in the BOQ before validation.",
           sortOrder,
           sourceType: BoqItemSourceType.IMPORT,
         },
       });
 
+      const tayqanMeasurementConfirmed = Boolean(
+        tayqanMeasurement
+        && tayqanMeasurement.status === "CONFIRMED"
+        && tayqanMeasurement.confirmedAt !== null
+      );
       const previouslyReviewed = (
-        measurementComplete
+        !tayqanMeasurement
+        && measurementComplete
         && (row.status === "CONFIRMED" || row.status === "CORRECTED")
         && row.confirmedAt !== null
       );
@@ -335,18 +382,33 @@ export async function generateAiDraftBoq(
           companyId: actor.companyId,
           projectId: project.id,
           boqItemId: item.id,
-          sourceType: previouslyReviewed
-            ? QuantityProvenanceSource.REVIEWED_EXTRACTION
-            : QuantityProvenanceSource.LEGACY_UNVERIFIED,
+          sourceType: tayqanMeasurementConfirmed
+            ? QuantityProvenanceSource.CONFIRMED_CALCULATION
+            : previouslyReviewed
+              ? QuantityProvenanceSource.REVIEWED_EXTRACTION
+              : QuantityProvenanceSource.LEGACY_UNVERIFIED,
           extractedEntityId: row.id,
+          quantityCalculationId: tayqanMeasurement?.id ?? null,
           projectFileId: row.projectFileId,
           quantitySnapshot: quantity,
           unitSnapshot: unit,
-          confirmedByUserId: previouslyReviewed ? row.confirmedByUserId : null,
-          confirmedByName: previouslyReviewed
-            ? "Previously reviewed extraction"
-            : "AI draft - professional review pending",
-          confirmedAt: previouslyReviewed ? row.confirmedAt : null,
+          confirmedByUserId: tayqanMeasurementConfirmed
+            ? tayqanMeasurement?.confirmedByUserId ?? null
+            : previouslyReviewed
+              ? row.confirmedByUserId
+              : null,
+          confirmedByName: tayqanMeasurementConfirmed
+            ? "Confirmed TAYQAN calculation"
+            : previouslyReviewed
+              ? "Previously reviewed extraction"
+              : tayqanMeasurement
+                ? "TAYQAN measurement - professional review pending"
+                : "AI draft - professional review pending",
+          confirmedAt: tayqanMeasurementConfirmed
+            ? tayqanMeasurement?.confirmedAt ?? null
+            : previouslyReviewed
+              ? row.confirmedAt
+              : null,
         },
       });
 
@@ -411,6 +473,7 @@ export async function generateAiDraftBoq(
           confidence: row.confidence.toString(),
           measurementComplete,
           rateAutomaticallyApplied: false,
+          tayqanMeasurementCalculationId: tayqanMeasurement?.id ?? null,
         },
       }, tx);
     }

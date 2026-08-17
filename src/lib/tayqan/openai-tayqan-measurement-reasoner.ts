@@ -1,0 +1,839 @@
+import { ExtractedEntityType } from "@prisma/client";
+import {
+  listSupportedCalculationTypes,
+} from "@/lib/calculations/required-dimensions-registry";
+import {
+  TAYQAN_MEASUREMENT_EXCEPTION_KINDS,
+  TAYQAN_MEASUREMENT_METHODS,
+  tayqanMeasurementPlanSchema,
+  type TayqanMeasurementPlan,
+} from "@/lib/tayqan/tayqan-measurement-contract";
+import {
+  applyTayqanSeniorReview,
+  buildTayqanMeasurementClusters,
+  calculateTayqanEvidencePageCoveragePercent,
+  mergeTayqanMeasurementPlans,
+  tayqanMeasurementProposalKey,
+  tayqanSeniorReviewSchema,
+  type TayqanMeasurementEvidenceBundle,
+  type TayqanMeasurementReasoner,
+  type TayqanMeasurementReasonerResult,
+  type TayqanSeniorReview,
+} from "@/lib/tayqan/tayqan-measurement-reasoner";
+
+const MAX_PAGE_TEXT = 12_000;
+const MAX_ENTITY_TEXT = 2_500;
+const MAX_CLUSTER_CONCURRENCY = 2;
+const MAX_PAGES_PER_CLUSTER = 8;
+const REQUEST_RETRY_COUNT = 2;
+const GLOBAL_REVIEW_BATCH_SIZE = 200;
+
+type OpenAITayqanMeasurementConfig = {
+  apiKey: string;
+  model: string;
+  safetyIdentifier?: string;
+  useSeniorProMode?: boolean;
+};
+
+class NonRetryableOpenAIError extends Error {}
+
+function record(value: unknown): Record<string, unknown> | null {
+  return value !== null && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null;
+}
+
+function extractOutputText(response: Record<string, unknown>): string {
+  if (typeof response.output_text === "string" && response.output_text.trim()) {
+    return response.output_text;
+  }
+  if (!Array.isArray(response.output)) {
+    throw new Error("OpenAI TAYQAN measurement response did not contain structured output.");
+  }
+  for (const output of response.output) {
+    const outputRecord = record(output);
+    if (!Array.isArray(outputRecord?.content)) continue;
+    for (const content of outputRecord.content) {
+      const contentRecord = record(content);
+      if (contentRecord?.type === "refusal") {
+        throw new Error("OpenAI refused the bounded TAYQAN measurement request.");
+      }
+      if (contentRecord?.type === "output_text" && typeof contentRecord.text === "string") {
+        return contentRecord.text;
+      }
+    }
+  }
+  throw new Error("OpenAI TAYQAN measurement response did not contain structured output text.");
+}
+
+const measurementPlanJsonSchema = {
+  type: "object",
+  additionalProperties: false,
+  required: ["subjects", "exceptions"],
+  properties: {
+    subjects: {
+      type: "array",
+      maxItems: 350,
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: [
+          "existingEntityId",
+          "primaryPageId",
+          "evidencePageIds",
+          "entityType",
+          "label",
+          "workPackage",
+          "location",
+          "measurementMethod",
+          "methodSelectionRationale",
+          "methodConfidence",
+          "calculationType",
+          "inputs",
+          "supportingChecks",
+          "rationale",
+          "sourceSummary",
+          "confidence",
+        ],
+        properties: {
+          existingEntityId: { type: ["string", "null"] },
+          primaryPageId: { type: "string" },
+          evidencePageIds: { type: "array", minItems: 1, maxItems: 16, items: { type: "string" } },
+          entityType: { type: "string", enum: Object.values(ExtractedEntityType) },
+          label: { type: "string", minLength: 1, maxLength: 240 },
+          workPackage: { type: "string", minLength: 1, maxLength: 160 },
+          location: { type: ["string", "null"], maxLength: 160 },
+          measurementMethod: { type: "string", enum: [...TAYQAN_MEASUREMENT_METHODS] },
+          methodSelectionRationale: { type: "string", minLength: 1, maxLength: 1_500 },
+          methodConfidence: { type: "number", minimum: 0, maximum: 100 },
+          calculationType: { type: "string", enum: listSupportedCalculationTypes() },
+          inputs: {
+            type: "array",
+            minItems: 1,
+            maxItems: 16,
+            items: {
+              type: "object",
+              additionalProperties: false,
+              required: [
+                "key",
+                "value",
+                "unit",
+                "derivation",
+                "evidencePageIds",
+                "evidenceRoomIds",
+                "evidenceNote",
+                "confidence",
+              ],
+              properties: {
+                key: { type: "string", minLength: 1, maxLength: 80 },
+                value: { type: "number", minimum: 0 },
+                unit: { type: ["string", "null"] },
+                derivation: {
+                  type: "string",
+                  enum: [
+                    "EXPLICIT_DIMENSION",
+                    "SCHEDULE_VALUE",
+                    "DIRECT_COUNT",
+                    "COUNT_RECONCILIATION",
+                    "ROOM_GEOMETRY",
+                    "VERIFIED_SCALE_GEOMETRY",
+                  ],
+                },
+                evidencePageIds: { type: "array", minItems: 1, maxItems: 8, items: { type: "string" } },
+                evidenceRoomIds: { type: "array", maxItems: 8, items: { type: "string" } },
+                evidenceNote: { type: "string", minLength: 1, maxLength: 500 },
+                confidence: { type: "number", minimum: 0, maximum: 100 },
+              },
+            },
+          },
+          supportingChecks: {
+            type: "array",
+            maxItems: 6,
+            items: {
+              type: "object",
+              additionalProperties: false,
+              required: [
+                "application",
+                "measurementMethod",
+                "calculationType",
+                "inputs",
+                "rationale",
+                "confidence",
+              ],
+              properties: {
+                application: { type: "string", enum: ["CROSS_CHECK", "REPETITION_MULTIPLIER"] },
+                measurementMethod: { type: "string", enum: [...TAYQAN_MEASUREMENT_METHODS] },
+                calculationType: { type: "string", enum: listSupportedCalculationTypes() },
+                inputs: {
+                  type: "array",
+                  minItems: 1,
+                  maxItems: 16,
+                  items: {
+                    type: "object",
+                    additionalProperties: false,
+                    required: [
+                      "key",
+                      "value",
+                      "unit",
+                      "derivation",
+                      "evidencePageIds",
+                      "evidenceRoomIds",
+                      "evidenceNote",
+                      "confidence",
+                    ],
+                    properties: {
+                      key: { type: "string", minLength: 1, maxLength: 80 },
+                      value: { type: "number", minimum: 0 },
+                      unit: { type: ["string", "null"] },
+                      derivation: {
+                        type: "string",
+                        enum: [
+                          "EXPLICIT_DIMENSION",
+                          "SCHEDULE_VALUE",
+                          "DIRECT_COUNT",
+                          "COUNT_RECONCILIATION",
+                          "ROOM_GEOMETRY",
+                          "VERIFIED_SCALE_GEOMETRY",
+                        ],
+                      },
+                      evidencePageIds: { type: "array", minItems: 1, maxItems: 8, items: { type: "string" } },
+                      evidenceRoomIds: { type: "array", maxItems: 8, items: { type: "string" } },
+                      evidenceNote: { type: "string", minLength: 1, maxLength: 500 },
+                      confidence: { type: "number", minimum: 0, maximum: 100 },
+                    },
+                  },
+                },
+                rationale: { type: "string", minLength: 1, maxLength: 1_200 },
+                confidence: { type: "number", minimum: 0, maximum: 100 },
+              },
+            },
+          },
+          rationale: { type: "string", minLength: 1, maxLength: 2_000 },
+          sourceSummary: { type: "string", minLength: 1, maxLength: 2_000 },
+          confidence: { type: "number", minimum: 0, maximum: 100 },
+        },
+      },
+    },
+    exceptions: {
+      type: "array",
+      maxItems: 350,
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: ["kind", "message", "pageIds", "relatedEntityId"],
+        properties: {
+          kind: {
+            type: "string",
+            enum: [...TAYQAN_MEASUREMENT_EXCEPTION_KINDS],
+          },
+          message: { type: "string", minLength: 1, maxLength: 1_500 },
+          pageIds: { type: "array", maxItems: 16, items: { type: "string" } },
+          relatedEntityId: { type: ["string", "null"] },
+        },
+      },
+    },
+  },
+} as const;
+
+const seniorReviewJsonSchema = {
+  type: "object",
+  additionalProperties: false,
+  required: ["decisions", "findings"],
+  properties: {
+    decisions: {
+      type: "array",
+      maxItems: 350,
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: [
+          "proposalKey",
+          "decision",
+          "exceptionKind",
+          "severity",
+          "message",
+          "pageIds",
+        ],
+        properties: {
+          proposalKey: { type: "string", minLength: 1, maxLength: 900 },
+          decision: { type: "string", enum: ["ACCEPT", "REJECT"] },
+          exceptionKind: {
+            type: ["string", "null"],
+            enum: [...TAYQAN_MEASUREMENT_EXCEPTION_KINDS, null],
+          },
+          severity: { type: "string", enum: ["LOW", "MEDIUM", "HIGH", "CRITICAL"] },
+          message: { type: "string", minLength: 1, maxLength: 1_500 },
+          pageIds: { type: "array", minItems: 1, maxItems: 16, items: { type: "string" } },
+        },
+      },
+    },
+    findings: {
+      type: "array",
+      maxItems: 350,
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: ["kind", "severity", "message", "pageIds", "relatedProposalKeys"],
+        properties: {
+          kind: { type: "string", enum: [...TAYQAN_MEASUREMENT_EXCEPTION_KINDS] },
+          severity: { type: "string", enum: ["LOW", "MEDIUM", "HIGH", "CRITICAL"] },
+          message: { type: "string", minLength: 1, maxLength: 1_500 },
+          pageIds: { type: "array", minItems: 1, maxItems: 16, items: { type: "string" } },
+          relatedProposalKeys: { type: "array", maxItems: 24, items: { type: "string" } },
+        },
+      },
+    },
+  },
+} as const;
+
+function clusterContext(
+  bundle: TayqanMeasurementEvidenceBundle,
+  pageIds: readonly string[],
+) {
+  const pageSet = new Set(pageIds);
+  const pages = bundle.pages
+    .filter((page) => pageSet.has(page.id))
+    .map((page) => ({
+      id: page.id,
+      projectFileId: page.projectFileId,
+      file: page.originalName,
+      pageNumber: page.pageNumber,
+      drawingNumber: page.drawingNumber,
+      drawingTitle: page.drawingTitle,
+      revisionNumber: page.revisionNumber,
+      discipline: page.discipline,
+      drawingType: page.drawingType,
+      sheetName: page.sheetName,
+      role: page.role,
+      text: page.text?.slice(0, MAX_PAGE_TEXT) ?? null,
+      drawingTitles: page.drawingTitles,
+      technicalLines: page.technicalLines,
+      detectedScale: page.detectedScale,
+      scaleVerified: page.scaleVerified,
+      scaleRatio: page.scaleRatio,
+      drawingUnit: page.drawingUnit,
+      realWorldUnit: page.realWorldUnit,
+      hasImage: page.hasImage,
+    }));
+
+  const fileIds = new Set(pages.map((page) => page.projectFileId));
+  const entities = bundle.existingEntities
+    .filter((entity) =>
+      (entity.drawingPageId && pageSet.has(entity.drawingPageId))
+      || fileIds.has(entity.projectFileId),
+    )
+    .slice(0, 160)
+    .map((entity) => ({
+      ...entity,
+      sourceText: entity.sourceText?.slice(0, MAX_ENTITY_TEXT) ?? null,
+      technicalData: entity.technicalData,
+    }));
+
+  const rooms = bundle.rooms
+    .filter((room) => !room.drawingPageId || pageSet.has(room.drawingPageId))
+    .slice(0, 120);
+
+  return {
+    project: bundle.project,
+    governingContext: bundle.governingContext,
+    pages,
+    existingEntities: entities,
+    rooms,
+  };
+}
+
+function compactProjectContext(bundle: TayqanMeasurementEvidenceBundle) {
+  return {
+    project: bundle.project,
+    governingContext: bundle.governingContext,
+    pages: bundle.pages.map((page) => ({
+      id: page.id,
+      projectFileId: page.projectFileId,
+      file: page.originalName,
+      pageNumber: page.pageNumber,
+      drawingNumber: page.drawingNumber,
+      drawingTitle: page.drawingTitle,
+      revisionNumber: page.revisionNumber,
+      discipline: page.discipline,
+      role: page.role,
+      detectedScale: page.detectedScale,
+      scaleVerified: page.scaleVerified,
+      technicalLines: page.technicalLines.slice(0, 20),
+      text: page.text?.slice(0, 1_200) ?? null,
+    })),
+  };
+}
+
+async function mapWithConcurrency<T, R>(
+  values: readonly T[],
+  concurrency: number,
+  mapper: (value: T, index: number) => Promise<R>,
+): Promise<R[]> {
+  const output = new Array<R>(values.length);
+  let cursor = 0;
+
+  async function worker() {
+    for (;;) {
+      const index = cursor;
+      cursor += 1;
+      if (index >= values.length) return;
+      output[index] = await mapper(values[index]!, index);
+    }
+  }
+
+  await Promise.all(
+    Array.from({ length: Math.min(concurrency, values.length) }, () => worker()),
+  );
+  return output;
+}
+
+function supportsGpt56Features(model: string): boolean {
+  return /^gpt-5\.6(?:-|$)/i.test(model.trim());
+}
+
+function shouldRetryStatus(status: number): boolean {
+  return status === 408 || status === 409 || status === 429 || status >= 500;
+}
+
+async function sleep(milliseconds: number) {
+  await new Promise((resolve) => setTimeout(resolve, milliseconds));
+}
+
+async function requestStructuredJson(
+  config: OpenAITayqanMeasurementConfig,
+  fetchImpl: typeof fetch,
+  input: {
+    content: Array<Record<string, unknown>>;
+    schemaName: string;
+    schema: Record<string, unknown>;
+    reasoningEffort: "high" | "xhigh" | "max";
+    reasoningMode?: "pro";
+    timeoutMs: number;
+  },
+): Promise<{ id: string | null; decoded: unknown }> {
+  let lastError: Error | null = null;
+
+  for (let attempt = 0; attempt < REQUEST_RETRY_COUNT; attempt += 1) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), input.timeoutMs);
+
+    try {
+      const reasoning: Record<string, unknown> = {
+        effort: supportsGpt56Features(config.model)
+          ? input.reasoningEffort
+          : "high",
+      };
+      if (supportsGpt56Features(config.model) && input.reasoningMode) {
+        reasoning.mode = input.reasoningMode;
+      }
+
+      const body: Record<string, unknown> = {
+        model: config.model,
+        input: [{ role: "user", content: input.content }],
+        store: false,
+        text: {
+          format: {
+            type: "json_schema",
+            name: input.schemaName,
+            strict: true,
+            schema: input.schema,
+          },
+        },
+        reasoning,
+      };
+      if (config.safetyIdentifier) {
+        body.safety_identifier = config.safetyIdentifier;
+      }
+
+      const response = await fetchImpl("https://api.openai.com/v1/responses", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${config.apiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(body),
+        signal: controller.signal,
+      });
+
+      if (!response.ok) {
+        const message = `OpenAI TAYQAN request failed with status ${response.status}.`;
+        if (attempt + 1 < REQUEST_RETRY_COUNT && shouldRetryStatus(response.status)) {
+          lastError = new Error(message);
+          await sleep(700 * (attempt + 1));
+          continue;
+        }
+        throw new NonRetryableOpenAIError(message);
+      }
+
+      const raw = await response.json() as Record<string, unknown>;
+      if (raw.status === "incomplete") {
+        throw new Error("OpenAI TAYQAN response was incomplete.");
+      }
+      let decoded: unknown;
+      try {
+        decoded = JSON.parse(extractOutputText(raw));
+      } catch (error) {
+        if (error instanceof SyntaxError) {
+          throw new Error("OpenAI TAYQAN reasoner returned invalid structured JSON.");
+        }
+        throw error;
+      }
+
+      return {
+        id: typeof raw.id === "string" ? raw.id : null,
+        decoded,
+      };
+    } catch (error) {
+      const normalizedError = error instanceof Error ? error : new Error(String(error));
+      if (normalizedError instanceof NonRetryableOpenAIError) throw normalizedError;
+      lastError = normalizedError;
+      if (attempt + 1 >= REQUEST_RETRY_COUNT) throw normalizedError;
+      await sleep(700 * (attempt + 1));
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+
+  throw lastError ?? new Error("OpenAI TAYQAN request failed.");
+}
+
+async function buildImageContent(
+  input: Parameters<TayqanMeasurementReasoner>[0],
+  pageIds: readonly string[],
+  model: string,
+): Promise<Array<Record<string, unknown>>> {
+  const content: Array<Record<string, unknown>> = [];
+  for (const pageId of pageIds) {
+    const page = input.bundle.pages.find((candidate) => candidate.id === pageId);
+    if (!page?.hasImage) continue;
+    const imageDataUrl = await input.loadPageImageDataUrl(pageId);
+    if (!imageDataUrl) continue;
+    content.push({
+      type: "input_text",
+      text: `PAGE_IMAGE id=${page.id} file=${page.originalName} page=${page.pageNumber} drawing=${page.drawingNumber ?? ""} revision=${page.revisionNumber ?? ""} title=${page.drawingTitle ?? ""}`,
+    });
+    content.push({
+      type: "input_image",
+      image_url: imageDataUrl,
+      detail: supportsGpt56Features(model) ? "original" : "high",
+    });
+  }
+  return content;
+}
+
+function measurementInstruction(): string {
+  return [
+    "Act as the measurement engineer inside a senior quantity-surveying team.",
+    "Treat the project as a coordinated drawing/specification set, not isolated pages.",
+    "Follow plan call-outs into sections, elevations, details and schedules before proposing a measurement.",
+    "Respect the frozen source scope, revision identifiers, customer exclusions and authoritative-source policy supplied in governingContext.",
+    "If a customer names a measurement standard, do not apply unstated clauses from model memory. Apply only standard-specific rules explicitly present in supplied project evidence/configured context; use STANDARD_RULE_UNAVAILABLE whenever a missing rule could change the measured result.",
+    "Create professional BOQ scope labels with a workPackage and location where the evidence supports them.",
+    "Autonomously choose the PRIMARY measurementMethod for every payable BOQ scope: COUNT, LINEAR, AREA, VOLUME or WEIGHT. The user must not be asked to choose a calculator.",
+    "Then choose the specific deterministic calculationType that implements that method. measurementMethod and calculationType must agree with the server mapping.",
+    "Choose the method from the PAYABLE BOQ INTENT, not merely the physical object. Example: concrete in F1 footings is VOLUME/CONCRETE_VOLUME; a door is COUNT/COUNT; floor finish is AREA/FLOOR_AREA; pipe/cable route is LINEAR; reinforcement is WEIGHT only when evidence is sufficient.",
+    "A physical object can support more than one measurement. supportingChecks never create extra BOQ rows.",
+    "Use application=CROSS_CHECK when the supporting calculation only corroborates the primary quantity.",
+    "Use application=REPETITION_MULTIPLIER only for an evidence-backed COUNT/COUNT that deterministically repeats one identical primary geometry. The server, not the model, multiplies base geometry by the verified count.",
+    "Example: F1 footing concrete may use VOLUME/CONCRETE_VOLUME for one footing and COUNT/COUNT with REPETITION_MULTIPLIER for the verified F1 occurrences.",
+    "If the same physical source implies genuinely different payable scopes (for example footing concrete, reinforcement and formwork), return separate subjects. Do not attach multiple primary payable calculators to one existingEntityId; use existingEntityId=null for derived scope candidates when necessary.",
+    "If payable intent is ambiguous, use METHOD_SELECTION_UNCERTAIN. If distinct payable scopes cannot be safely separated, use COMPOSITE_SCOPE_REQUIRES_SPLIT. If a supporting check contradicts the primary evidence, use SUPPORTING_CHECK_MISMATCH.",
+    "Identify BOQ-measurable scope and evidence-backed deterministic-formula inputs only.",
+    "Never output a unit price, rate, cost, margin, total, commercial value or market rate.",
+    "Never calculate the final BOQ quantity yourself; the server applies the deterministic formula registry.",
+    "Method families are enforced server-side: COUNT=>COUNT; LINEAR=>SKIRTING_LENGTH/PIPE_LENGTH/CABLE_LENGTH; AREA=>FLOOR_AREA/CEILING_AREA/WALL_AREA/PAINT_AREA/PARTITION_AREA/DUCT_SURFACE_AREA/FORMWORK_AREA; VOLUME=>CONCRETE_VOLUME/EXCAVATION_VOLUME; WEIGHT=>REINFORCEMENT_WEIGHT.",
+    "Every numeric input must be grounded in explicit printed dimensions, schedules, reconciled counts, stored room geometry, or geometry from a VERIFIED scale.",
+    "Detected/unverified scale text is context only and never authorizes scaled geometry.",
+    "Printed dimensions may be used without verified scale because they are explicit evidence.",
+    "DIRECT_COUNT means you counted clearly identifiable discrete occurrences on one bounded page/schedule source. Use it only when the symbols/rows are unambiguous and each occurrence is visibly distinct.",
+    "COUNT_RECONCILIATION means you actually compared at least two independent count sources, such as plan symbols against a schedule; otherwise do not use that derivation.",
+    "Do not assume standard wall heights, floor-to-floor heights, typical counts, allowances, wastage, vertical drops or repetition multipliers unless explicitly evidenced.",
+    "Do not double-count the same physical scope because it appears on plan, section and schedule.",
+    "For openings and deductions, cite the page evidence used and do not deduct the same opening twice.",
+    "For MEP route lengths, use explicit dimensions or VERIFIED scale geometry only; do not estimate a route by visual impression.",
+    "If plan and schedule counts disagree, create PLAN_SCHEDULE_MISMATCH instead of choosing one silently.",
+    "If revisions conflict or the same drawing number appears with different revisions in the evidence, create REVISION_CONFLICT.",
+    "If specification notes and drawing evidence materially conflict, create SPEC_DRAWING_CONFLICT.",
+    "If evidence is insufficient, ambiguous or unsupported by a deterministic formula, create an exception instead of guessing.",
+    "Reuse existingEntityId only when it clearly represents the same physical scope. Otherwise return null and create a new evidence-backed candidate.",
+    "Use only supplied page IDs, existing entity IDs and stored room IDs.",
+    "ROOM_GEOMETRY inputs must cite stored room IDs whose scaleVerified field is true.",
+    "Every input evidencePageId must also appear in the subject evidencePageIds, and primaryPageId must be included there too.",
+    "For each input, evidenceNote must state exactly what was read or reconciled from the cited evidence without hidden assumptions.",
+  ].join("\n");
+}
+
+function seniorCheckerInstruction(globalReview: boolean): string {
+  return [
+    "Act as an independent Chief Quantity Surveyor checking another estimator's measurement proposals with the judgement expected of a senior QS with decades of project experience.",
+    globalReview
+      ? "This is the final cross-cluster reconciliation. Look especially for duplicate scope across disciplines/pages, revision conflicts, inconsistent units, schedule-plan mismatches and missing coordination."
+      : "This is a bounded cluster peer-check. Use the supplied drawing images and context to verify every proposal against its actual evidence.",
+    "You are a checker, not a second estimator: do not invent replacement quantities or rates.",
+    "ACCEPT a proposal only when the physical scope, primary measurement method, calculator/formula type, inputs, units, deductions and page provenance are adequately supported.",
+    "Independently challenge whether the selected measurementMethod matches the payable BOQ intent. A technically valid formula is still wrong if it measures the wrong commercial/measurement scope.",
+    "Check supportingChecks independently. CROSS_CHECK is corroboration only. REPETITION_MULTIPLIER is permitted only for a verified COUNT/COUNT of genuinely identical repeated scope; reject it if geometry, type or revision differs between occurrences.",
+    "Reject or raise SUPPORTING_CHECK_MISMATCH if a count/area/volume/weight supporting calculation materially conflicts with the primary proposal.",
+    "Reject COMPOSITE_SCOPE_REQUIRES_SPLIT when one source entity is being used to collapse multiple distinct payable scopes that should become separate derived BOQ candidates.",
+    "REJECT proposals that rely on guessing, wrong scale authority, stale/conflicting revisions, duplicate scope, wrong units, unsupported formula choice, wrong method selection or materially incomplete evidence.",
+    "When rejecting, choose the most specific exceptionKind and cite the relevant page IDs.",
+    "Every proposalKey must receive exactly one decision.",
+    "Use findings for project-level issues or scope gaps that are not represented by a single rejected proposal.",
+    "A scope gap finding should identify measurable work apparently present in the supplied evidence but absent from the candidate plan; do not fabricate its quantity.",
+    "Do not treat confidence scores as proof. Check the evidence chain itself.",
+    "Do not approve, certify, lock or issue the BOQ. All accepted quantities remain AI-proposed and professional-review pending.",
+  ].join("\n");
+}
+
+async function runSeniorReview(
+  config: OpenAITayqanMeasurementConfig,
+  fetchImpl: typeof fetch,
+  content: Array<Record<string, unknown>>,
+  globalReview: boolean,
+): Promise<{ id: string | null; review: TayqanSeniorReview }> {
+  const response = await requestStructuredJson(config, fetchImpl, {
+    content,
+    schemaName: "tayqan_senior_qs_review",
+    schema: seniorReviewJsonSchema as unknown as Record<string, unknown>,
+    // Production default is xhigh. max/pro is an explicit operator opt-in after
+    // representative-project latency/quality validation, never an accidental default.
+    reasoningEffort: globalReview && config.useSeniorProMode === true ? "max" : "xhigh",
+    reasoningMode: globalReview && config.useSeniorProMode === true ? "pro" : undefined,
+    timeoutMs: globalReview && config.useSeniorProMode === true ? 210_000 : 150_000,
+  });
+  return {
+    id: response.id,
+    review: tayqanSeniorReviewSchema.parse(response.decoded),
+  };
+}
+
+function chunkValues<T>(values: readonly T[], size: number): T[][] {
+  return Array.from(
+    { length: Math.ceil(values.length / size) },
+    (_, index) => values.slice(index * size, (index + 1) * size),
+  );
+}
+
+function compactProposalIndex(
+  plan: TayqanMeasurementPlan,
+  bundle: TayqanMeasurementEvidenceBundle,
+) {
+  const pageById = new Map(bundle.pages.map((page) => [page.id, page] as const));
+  return plan.subjects.map((subject) => ({
+    proposalKey: tayqanMeasurementProposalKey(subject),
+    entityType: subject.entityType,
+    measurementMethod: subject.measurementMethod,
+    calculationType: subject.calculationType,
+    methodConfidence: subject.methodConfidence,
+    supportingChecks: subject.supportingChecks.map((check) => ({
+      application: check.application,
+      measurementMethod: check.measurementMethod,
+      calculationType: check.calculationType,
+      confidence: check.confidence,
+    })),
+    label: subject.label,
+    workPackage: subject.workPackage,
+    location: subject.location,
+    evidence: subject.evidencePageIds.map((pageId) => {
+      const page = pageById.get(pageId);
+      return {
+        pageId,
+        drawingNumber: page?.drawingNumber ?? null,
+        revisionNumber: page?.revisionNumber ?? null,
+        discipline: page?.discipline ?? null,
+      };
+    }),
+  }));
+}
+
+export function createOpenAITayqanMeasurementReasoner(
+  config: OpenAITayqanMeasurementConfig,
+  fetchImpl: typeof fetch = fetch,
+): TayqanMeasurementReasoner {
+  return async (input): Promise<TayqanMeasurementReasonerResult> => {
+    const clusters = buildTayqanMeasurementClusters(
+      input.bundle.pages,
+      MAX_PAGES_PER_CLUSTER,
+    );
+    const responseIds: string[] = [];
+    const allowedPageIds = new Set(input.bundle.pages.map((page) => page.id));
+    let completedClusterReviews = 0;
+
+    const reportClusterProgress = async () => {
+      completedClusterReviews += 1;
+      await input.onProgress?.({
+        phase: "CLUSTER_REVIEW_COMPLETE",
+        completed: completedClusterReviews,
+        total: clusters.length,
+      });
+    };
+
+    const checkedClusterPlans = await mapWithConcurrency(
+      clusters,
+      MAX_CLUSTER_CONCURRENCY,
+      async (cluster) => {
+        const context = clusterContext(input.bundle, cluster.pageIds);
+        const imageContent = await buildImageContent(input, cluster.pageIds, config.model);
+        const measurementContent: Array<Record<string, unknown>> = [{
+          type: "input_text",
+          text: JSON.stringify({
+            instruction: measurementInstruction(),
+            clusterKey: cluster.key,
+            context,
+          }),
+        }, ...imageContent];
+
+        const measured = await requestStructuredJson(config, fetchImpl, {
+          content: measurementContent,
+          schemaName: "tayqan_measurement_plan",
+          schema: measurementPlanJsonSchema as unknown as Record<string, unknown>,
+          reasoningEffort: "high",
+          timeoutMs: 120_000,
+        });
+        if (measured.id) responseIds.push(measured.id);
+        const measuredPlan = mergeTayqanMeasurementPlans([
+          tayqanMeasurementPlanSchema.parse(measured.decoded),
+        ]);
+
+        if (measuredPlan.subjects.length === 0) {
+          await reportClusterProgress();
+          return {
+            plan: measuredPlan,
+            acceptedCount: 0,
+            rejectedCount: 0,
+            findingCount: 0,
+            reviewApplied: false,
+          };
+        }
+
+        const proposals = measuredPlan.subjects.map((subject) => ({
+          proposalKey: tayqanMeasurementProposalKey(subject),
+          subject,
+        }));
+
+        const checkerContent: Array<Record<string, unknown>> = [{
+          type: "input_text",
+          text: JSON.stringify({
+            instruction: seniorCheckerInstruction(false),
+            clusterKey: cluster.key,
+            context,
+            proposals,
+            existingExceptions: measuredPlan.exceptions,
+          }),
+        }, ...imageContent];
+
+        const checked = await runSeniorReview(config, fetchImpl, checkerContent, false);
+        if (checked.id) responseIds.push(checked.id);
+        const applied = applyTayqanSeniorReview(
+          measuredPlan,
+          checked.review,
+          allowedPageIds,
+        );
+        await reportClusterProgress();
+
+        return {
+          ...applied,
+          reviewApplied: true,
+        };
+      },
+    );
+
+    let mergedPlan = mergeTayqanMeasurementPlans(
+      checkedClusterPlans.map((entry) => entry.plan),
+    );
+
+    let globalReviewApplied = false;
+    let globalRejectedCount = 0;
+    let globalFindingCount = 0;
+
+    if (mergedPlan.subjects.length > 0) {
+      const projectContext = compactProjectContext(input.bundle);
+      const allProposalIndex = compactProposalIndex(mergedPlan, input.bundle);
+      const preGlobalExceptions = mergedPlan.exceptions;
+      const globalReviewedPlans: TayqanMeasurementPlan[] = [];
+      const globalReviewBatches = chunkValues(mergedPlan.subjects, GLOBAL_REVIEW_BATCH_SIZE);
+      let completedGlobalReviewBatches = 0;
+
+      for (const subjectBatch of globalReviewBatches) {
+        const batchPlan = tayqanMeasurementPlanSchema.parse({
+          subjects: subjectBatch,
+          exceptions: [],
+        });
+        const proposals = subjectBatch.map((subject) => ({
+          proposalKey: tayqanMeasurementProposalKey(subject),
+          subject,
+        }));
+        const globalContent: Array<Record<string, unknown>> = [{
+          type: "input_text",
+          text: JSON.stringify({
+            instruction: seniorCheckerInstruction(true),
+            projectContext,
+            allProposalIndex,
+            focusProposals: proposals,
+            instructionForFindings: "Return decisions for every focus proposal. relatedProposalKeys in findings must reference focusProposals only, even when the message identifies a duplicate against the allProposalIndex.",
+            existingExceptions: preGlobalExceptions.slice(0, 350),
+            evidencePageCoveragePercent: calculateTayqanEvidencePageCoveragePercent(
+              mergedPlan,
+              input.bundle.pages,
+            ),
+          }),
+        }];
+
+        const globalReview = await runSeniorReview(
+          config,
+          fetchImpl,
+          globalContent,
+          true,
+        );
+        if (globalReview.id) responseIds.push(globalReview.id);
+        const applied = applyTayqanSeniorReview(
+          batchPlan,
+          globalReview.review,
+          allowedPageIds,
+        );
+        globalReviewedPlans.push(applied.plan);
+        globalRejectedCount += applied.rejectedCount;
+        globalFindingCount += applied.findingCount;
+        completedGlobalReviewBatches += 1;
+        await input.onProgress?.({
+          phase: "GLOBAL_REVIEW_BATCH_COMPLETE",
+          completed: completedGlobalReviewBatches,
+          total: globalReviewBatches.length,
+        });
+      }
+
+      mergedPlan = mergeTayqanMeasurementPlans([
+        ...globalReviewedPlans,
+        { subjects: [], exceptions: preGlobalExceptions },
+      ]);
+      globalReviewApplied = true;
+    }
+
+    const clusterRejectedCount = checkedClusterPlans.reduce(
+      (sum, entry) => sum + entry.rejectedCount,
+      0,
+    );
+    const clusterFindingCount = checkedClusterPlans.reduce(
+      (sum, entry) => sum + entry.findingCount,
+      0,
+    );
+
+    return {
+      provider: "openai",
+      model: config.model,
+      responseIds,
+      plan: mergedPlan,
+      seniorReview: {
+        clusterReviewCount: checkedClusterPlans.filter((entry) => entry.reviewApplied).length,
+        globalReviewApplied,
+        acceptedSubjectCount: mergedPlan.subjects.length,
+        rejectedSubjectCount: clusterRejectedCount + globalRejectedCount,
+        findingCount: clusterFindingCount + globalFindingCount,
+        evidencePageCoveragePercent: calculateTayqanEvidencePageCoveragePercent(
+          mergedPlan,
+          input.bundle.pages,
+        ),
+      },
+    };
+  };
+}

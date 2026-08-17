@@ -134,7 +134,7 @@ describe("AI measurement inference", () => {
 
   it("infers beam/tie-beam segment counts only from their matching layout pages", () => {
     const b1 = inferAiDraftMeasurement(
-      candidate("B1", { dimensions_cm: "20 X 80" }),
+      candidate("B1", { dimensions_cm: "20 \u00D7 80" }),
       [footingLayout, slabLayout, tieBeamLayout],
     );
     const tb1 = inferAiDraftMeasurement(

@@ -87,7 +87,7 @@ function normalizeDimensions(candidate: AiMeasurementCandidate): NormalizedStruc
   }
 
   const section = typeof raw.dimensions_cm === "string" ? raw.dimensions_cm.trim() : "";
-  const sectionMatch = section.match(/^(\d+(?:\.\d+)?)\s*[xXÃ—]\s*(\d+(?:\.\d+)?)$/);
+  const sectionMatch = section.match(/^(\d+(?:\.\d+)?)\s*(?:[xX]|\u00D7)\s*(\d+(?:\.\d+)?)$/);
   if (sectionMatch) {
     return {
       kind: "BEAM_SECTION",
@@ -164,14 +164,14 @@ function dimensionEvidenceText(
   ) {
     const total = round(dimensions.volumePerUnitM3 * count);
     dimensions.totalVolumeM3 = total;
-    return `Schedule dimensions normalized from cm: ${dimensions.lengthM} Ã— ${dimensions.widthM} Ã— ${dimensions.depthM} m. Geometric volume reference: ${dimensions.volumePerUnitM3} m3 each / ${total} m3 for ${count} occurrence${count === 1 ? "" : "s"}.`;
+    return `Schedule dimensions normalized from cm: ${dimensions.lengthM} x ${dimensions.widthM} x ${dimensions.depthM} m. Geometric volume reference: ${dimensions.volumePerUnitM3} m3 each / ${total} m3 for ${count} occurrence${count === 1 ? "" : "s"}.`;
   }
   if (
     dimensions.kind === "BEAM_SECTION"
     && dimensions.widthM !== undefined
     && dimensions.depthM !== undefined
   ) {
-    return `Schedule section normalized from cm: ${dimensions.widthM} Ã— ${dimensions.depthM} m. Segment length is not inferred by this safe path.`;
+    return `Schedule section normalized from cm: ${dimensions.widthM} x ${dimensions.depthM} m. Segment length is not inferred by this safe path.`;
   }
   return null;
 }

@@ -10,8 +10,9 @@ export const passwordSchema = z
 export const registerSchema = z
   .object({
     companyName: z.string().trim().min(1, "Company name is required.").max(255),
-    fullName: z.string().trim().min(1, "Full name is required.").max(255),
+    fullName: z.string().trim().max(255).optional(),
     email: z.string().trim().email("A valid email address is required.").max(255),
+    phone: z.string().trim().min(1, "Phone is required.").max(50),
     password: passwordSchema,
     role: z.string().optional(),
     country: z.string().optional(),

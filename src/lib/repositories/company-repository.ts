@@ -30,6 +30,7 @@ export type CreateCompanyInput = {
   legalName: string;
   tradeName: string;
   email: string;
+  phone: string;
   primaryIndustry?: string;
   monthlyVolume?: string;
 };
@@ -40,7 +41,9 @@ export function createCompany(data: CreateCompanyInput, db: DbClient = prisma) {
       legalName: data.legalName,
       tradeName: data.tradeName,
       email: data.email,
+      phone: data.phone,
       primaryIndustry: data.primaryIndustry,
+
       monthlyVolume: data.monthlyVolume,
     },
   });

@@ -23,6 +23,7 @@ const {
 } = await import("../src/lib/services/auth-service");
 const { generateRawToken, hashToken } = await import("../src/lib/auth/tokens");
 const { UnauthorizedError } = await import("../src/lib/errors/app-error");
+const { registerSchema } = await import("../src/lib/validation/auth-schemas");
 
 const RUN_ID = Date.now();
 const primaryEmail = `auth-test-primary-${RUN_ID}@example.com`;
@@ -46,19 +47,30 @@ describe("auth service (integration, real local Postgres)", () => {
   });
 
   it("registers a company owner and rejects a duplicate email", async () => {
-    const result = await registerCompanyOwner({
+    const registration = registerSchema.parse({
       companyName: "Auth Test Co",
-      fullName: "Primary Owner",
       email: primaryEmail,
+      phone: "+971500000011",
       password: PASSWORD,
     });
+
+    const result = await registerCompanyOwner(registration);
     expect(result.email).toBe(primaryEmail.toLowerCase());
+
+    const [registeredCompany, registeredUser] = await Promise.all([
+      prisma.company.findUniqueOrThrow({ where: { id: result.companyId } }),
+      prisma.user.findUniqueOrThrow({ where: { id: result.userId } }),
+    ]);
+
+    expect(registeredCompany.phone).toBe("+971500000011");
+    expect(registeredUser.fullName).toBe("Auth Test Co");
 
     await expect(
       registerCompanyOwner({
         companyName: "Duplicate Co",
         fullName: "Someone Else",
         email: primaryEmail,
+        phone: "+971500000012",
         password: PASSWORD,
       }),
     ).rejects.toMatchObject({ code: "EMAIL_ALREADY_REGISTERED" });
@@ -137,6 +149,7 @@ describe("auth service (integration, real local Postgres)", () => {
       companyName: "Auth Test Secondary Co",
       fullName: "Secondary Owner",
       email: secondaryEmail,
+      phone: "+971500000013",
       password: PASSWORD,
     });
 

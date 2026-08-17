@@ -49,6 +49,7 @@ export async function registerCompanyOwner(input: RegisterInput) {
         legalName: input.companyName,
         tradeName: input.companyName,
         email: input.email.toLowerCase(),
+        phone: input.phone,
         primaryIndustry: input.primaryIndustry,
         monthlyVolume: input.approximateVolume,
       },
@@ -59,9 +60,9 @@ export async function registerCompanyOwner(input: RegisterInput) {
         companyId: company.id,
         email: input.email.toLowerCase(),
         passwordHash,
-        fullName: input.fullName,
+        fullName: input.fullName?.trim() || input.companyName,
         role: UserRole.COMPANY_OWNER,
-        jobTitle: input.role, // role maps to jobTitle in our UI
+        jobTitle: input.role?.trim() || null, // optional role maps to jobTitle in our UI
         marketingConsent: input.consent,
         isActive: true, // Self-service SaaS; email verification is still mandatory.
       },

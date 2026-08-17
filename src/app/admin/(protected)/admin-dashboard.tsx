@@ -448,6 +448,7 @@ export default function AdminDashboard() {
             {isOwner && <QuickActionLink href="#audit-panel" label="Audit" />}
             <QuickActionLink href="#system-health-panel" label="System status" />
             {isOwner && <QuickActionLink href="#test-panel" label="Test panel" />}
+            {isOwner && <QuickActionLink href="/admin/projects/project-00/sample-boq" label="Sample BOQ" />}
             {isOwner && <QuickActionLink href="/admin/master-boq" label="Master BOQ" />}
             {isOwner && <QuickActionLink href="/integrations" label="Integrations" />}
             {isOwner && <QuickActionLink href="/admin/integrations" label="Integrations Admin" />}

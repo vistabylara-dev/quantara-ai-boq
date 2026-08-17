@@ -177,9 +177,14 @@ export default function AdminSampleBoqPage(props: {
 
   async function ensureEmptyEditableBoq(): Promise<BoqView> {
     if (existingItemCount > 0) {
-      throw new Error(
-        "Safety stop: this project already contains BOQ items. The admin one-item sample tool will not delete, overwrite, or mix with an existing BOQ. Use an empty admin test project for an exact one-item acceptance test.",
+      const isolated = await apiClient.post<BoqView>(
+        `/api/admin/projects/${encodedProjectId}/sample-boq`,
+        {},
       );
+      if (totalBoqItems(isolated) !== 0) {
+        throw new Error("Safety stop: the isolated admin sample BOQ was not empty.");
+      }
+      return isolated;
     }
 
     let target = boqs.find((boq) => boq.status === "draft") ?? null;
@@ -358,8 +363,8 @@ export default function AdminSampleBoqPage(props: {
           </div>
 
           {existingItemCount > 0 && (
-            <div className="mt-4 rounded-2xl border border-rose-800/60 bg-rose-950/30 p-4 text-sm text-rose-200" role="alert">
-              Safety stop active: this project already has {existingItemCount} BOQ item{existingItemCount === 1 ? "" : "s"}. This tool will not delete or mix with them.
+            <div className="mt-4 rounded-2xl border border-cyan-800/60 bg-cyan-950/30 p-4 text-sm leading-6 text-cyan-100" role="status">
+              Existing BOQ history detected: {existingItemCount} item{existingItemCount === 1 ? "" : "s"} across project revisions. They will stay untouched. Generating a sample creates a new empty Admin Sample BOQ revision, adds only the selected extraction, and makes that sample the latest revision for end-to-end testing.
             </div>
           )}
         </section>
@@ -407,7 +412,7 @@ export default function AdminSampleBoqPage(props: {
               <button
                 type="button"
                 onClick={() => void generateOneItemDraft()}
-                disabled={isGenerating || selectedEntities.length !== 1 || existingItemCount > 0}
+                disabled={isGenerating || selectedEntities.length !== 1}
                 className="rounded-xl bg-cyan-500 px-5 py-3 text-sm font-black text-slate-950 hover:bg-cyan-400 disabled:cursor-not-allowed disabled:opacity-40"
               >
                 {isGenerating
@@ -473,7 +478,7 @@ export default function AdminSampleBoqPage(props: {
         <section className="rounded-[28px] border border-slate-800 bg-slate-950 p-6 text-sm text-slate-300">
           <h2 className="font-black text-white">Acceptance gate</h2>
           <p className="mt-2 leading-6">
-            Success means: exactly one selected extraction → exactly one BOQ item → editable draft BOQ. The tool stops instead of deleting or mixing with an existing non-empty BOQ.
+            Success means: exactly one selected extraction → a new isolated one-item Admin Sample BOQ revision → editable draft BOQ. Existing project revisions and their items are never copied, deleted, or changed.
           </p>
         </section>
       </div>

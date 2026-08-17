@@ -52,7 +52,7 @@ const STRUCTURAL_TYPE_LABEL =
   /^(?:F\d+\*?|STB\d+|TB\d+|B\d+|CB|C\d+)$/i;
 
 const DISCRETE_COUNT_LABEL =
-  /\b(?:door|window|diffuser|grille|sprinkler(?: head)?|socket|switch|luminaire|light fixture|fcu|ahu|pump|fan|valve|basin|toilet|wc)\b/i;
+  /\b(?:doors?|windows?|diffusers?|grilles?|sprinklers?(?: heads?)?|sockets?|switch(?:es)?|luminaires?|light fixtures?|light fittings?|fcus?|ahus?|pumps?|fans?|valves?|basins?|toilets?|wcs?)\b/i;
 
 function normalizeUnit(unit: string | null | undefined): string {
   return (unit ?? "")
@@ -179,7 +179,7 @@ export function recommendMeasurementMethod(
     );
   }
 
-  if (/\b(?:skirting|baseboard)\b/i.test(semanticText)) {
+  if (/\b(?:skirtings?|baseboards?)\b/i.test(semanticText)) {
     return recommendation(
       QuantityCalculationType.SKIRTING_LENGTH,
       94,
@@ -188,7 +188,7 @@ export function recommendMeasurementMethod(
   }
 
   if (
-    /\b(?:ductwork|air duct|supply duct|return duct|exhaust duct)\b/i
+    /\b(?:ductwork|air ducts?|supply ducts?|return ducts?|exhaust ducts?)\b/i
       .test(semanticText)
   ) {
     return recommendation(
@@ -199,8 +199,8 @@ export function recommendMeasurementMethod(
   }
 
   if (
-    /\b(?:pipe|piping|pipework)\b/i.test(semanticText)
-    && !/\b(?:fitting|elbow|tee|valve|coupling|flange)\b/i.test(label)
+    /\b(?:pipes?|piping|pipework)\b/i.test(semanticText)
+    && !/\b(?:fittings?|elbows?|tees?|valves?|couplings?|flanges?)\b/i.test(label)
   ) {
     return recommendation(
       QuantityCalculationType.PIPE_LENGTH,
@@ -210,8 +210,8 @@ export function recommendMeasurementMethod(
   }
 
   if (
-    /\bcable\b/i.test(semanticText)
-    && !/\b(?:cable tray|cable ladder|cable gland|cable lug)\b/i.test(label)
+    /\bcables?\b/i.test(semanticText)
+    && !/\b(?:cable trays?|cable ladders?|cable glands?|cable lugs?)\b/i.test(label)
   ) {
     return recommendation(
       QuantityCalculationType.CABLE_LENGTH,
@@ -221,7 +221,7 @@ export function recommendMeasurementMethod(
   }
 
   if (
-    /\b(?:partition|drywall|gypsum partition)\b/i.test(semanticText)
+    /\b(?:partitions?|drywall|gypsum partitions?)\b/i.test(semanticText)
   ) {
     return recommendation(
       QuantityCalculationType.PARTITION_AREA,
@@ -239,7 +239,7 @@ export function recommendMeasurementMethod(
   }
 
   if (
-    /\b(?:false ceiling|ceiling tile|ceiling finish|ceiling)\b/i
+    /\b(?:false ceilings?|ceiling tiles?|ceiling finishes?|ceilings?)\b/i
       .test(semanticText)
   ) {
     return recommendation(
@@ -250,7 +250,7 @@ export function recommendMeasurementMethod(
   }
 
   if (
-    /\b(?:floor tiles?|flooring|floor finish|vinyl flooring|carpet|floor screed)\b/i
+    /\b(?:floor tiles?|flooring|floor finishes?|vinyl flooring|carpet|floor screeds?)\b/i
       .test(semanticText)
   ) {
     return recommendation(
@@ -261,7 +261,7 @@ export function recommendMeasurementMethod(
   }
 
   if (
-    /\b(?:wall tiles?|wall finish|wall cladding|wall plaster|wall render)\b/i
+    /\b(?:wall tiles?|wall finishes?|wall cladding|wall plaster|wall render)\b/i
       .test(semanticText)
   ) {
     return recommendation(

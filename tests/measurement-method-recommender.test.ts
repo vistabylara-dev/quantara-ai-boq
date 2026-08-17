@@ -88,6 +88,37 @@ describe("normal Quantara measurement method recommendation", () => {
 
   it("does not treat cable tray as a cable run", () => {
     expect(recommend("Cable tray 300mm")).toBeNull();
+    expect(recommend("Cable trays 300mm")).toBeNull();
+  });
+
+  it("handles common plural BOQ descriptions", () => {
+    expect(
+      recommend("Internal doors")?.calculationType,
+    ).toBe(QuantityCalculationType.COUNT);
+
+    expect(
+      recommend("Supply air diffusers")?.calculationType,
+    ).toBe(QuantityCalculationType.COUNT);
+
+    expect(
+      recommend("100mm chilled water pipes")?.calculationType,
+    ).toBe(QuantityCalculationType.PIPE_LENGTH);
+
+    expect(
+      recommend("Power cables")?.calculationType,
+    ).toBe(QuantityCalculationType.CABLE_LENGTH);
+
+    expect(
+      recommend("Supply air ducts")?.calculationType,
+    ).toBe(QuantityCalculationType.DUCT_SURFACE_AREA);
+
+    expect(
+      recommend("Gypsum partitions")?.calculationType,
+    ).toBe(QuantityCalculationType.PARTITION_AREA);
+
+    expect(
+      recommend("Ceiling tiles")?.calculationType,
+    ).toBe(QuantityCalculationType.CEILING_AREA);
   });
 
   it("routes area-based work to the existing calculators", () => {

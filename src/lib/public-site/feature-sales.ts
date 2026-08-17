@@ -59,6 +59,7 @@ const FEATURE_SALES = {
           ["Google Drive project sources", "Bring selected project files from Google Drive into the project workflow."],
           ["Autodesk and AutoCAD workflows", "Use Autodesk-connected project and DWG information within a review-led Quantara workflow."],
           ["Catalogue and industry packages", "Use governed project, company and industry data where it fits the project workflow."],
+          ["Company library", "Save reviewed BOQ items into a company-wide library with versions and variants, and reuse them across future projects."],
           ["English and Arabic interface", "Work in English or Arabic with right-to-left interface support."],
         ],
       },
@@ -67,6 +68,7 @@ const FEATURE_SALES = {
         body: "Turn reviewed BOQ data into controlled project deliverables.",
         features: [
           ["Professional BOQ outputs", "Generate supported project and BOQ outputs from reviewed project information."],
+          ["Client proposal links", "Share a secure, token-gated proposal link generated from a reviewed BOQ revision or technical report, with optional passcode protection and an expiry date."],
           ["Document templates", "Apply company and project templates to reviewed BOQ records."],
           ["Technical-report assistant", "Prepare structured technical-report content alongside project and BOQ records."],
           ["Revision-aware delivery", "Keep the working BOQ, project evidence and output context aligned through revisions."],
@@ -141,6 +143,7 @@ const FEATURE_SALES = {
           ["مصادر Google Drive", "اجلب ملفات المشروع المحددة من Google Drive إلى سير عمل المشروع."],
           ["سير عمل Autodesk وAutoCAD", "استخدم معلومات Autodesk وDWG داخل سير عمل Quantara الخاضع للمراجعة."],
           ["الكتالوج وحزم القطاعات", "استخدم بيانات المشروع والشركة والقطاع المنظمة عندما تناسب سير عمل المشروع."],
+          ["مكتبة الشركة", "احفظ بنود BOQ المراجعة داخل مكتبة على مستوى الشركة مع إصدارات ومتغيرات، وأعد استخدامها في مشاريع مستقبلية."],
           ["واجهة إنجليزية وعربية", "اعمل باللغة الإنجليزية أو العربية مع دعم كامل لاتجاه RTL."],
         ],
       },
@@ -149,6 +152,7 @@ const FEATURE_SALES = {
         body: "حوّل بيانات BOQ المراجعة إلى مخرجات مشروع منضبطة.",
         features: [
           ["مخرجات BOQ المهنية", "أنشئ مخرجات المشروع وBOQ المدعومة من معلومات المشروع التي تمت مراجعتها."],
+          ["روابط عروض العملاء", "شارك رابط عرض آمناً محمياً برمز وصول يُنشأ من مراجعة معتمدة لجدول كميات أو تقرير فني، مع حماية اختيارية برمز مرور وتاريخ انتهاء صلاحية."],
           ["قوالب المستندات", "طبّق قوالب الشركة والمشروع على سجلات BOQ المراجعة."],
           ["مساعد التقارير الفنية", "أعد محتوى التقارير الفنية المنظمة إلى جانب سجلات المشروع وBOQ."],
           ["تسليم مرتبط بالمراجعات", "حافظ على توافق BOQ العامل وأدلة المشروع وسياق المخرجات عبر المراجعات."],

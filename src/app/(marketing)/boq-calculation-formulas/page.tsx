@@ -648,6 +648,56 @@ export default async function BOQCalculationFormulasPage() {
                   </div>
                 </div>
               </section>
+
+              {/* 14. HVAC Ductwork */}
+              <section>
+                <h3 className="text-2xl mt-0">14. HVAC Ductwork</h3>
+                <div className="bg-slate-50 dark:bg-slate-900 p-6 rounded-xl border border-slate-200 dark:border-slate-800">
+                  <h4 className="font-semibold mb-2 mt-0">Duct surface area</h4>
+                  <div className="font-mono text-lg bg-white dark:bg-slate-950 p-4 rounded-lg text-center mb-6 border border-slate-200 dark:border-slate-800 max-w-sm" aria-label="Area equals Duct Perimeter multiplied by Length">
+                    A = P × L
+                  </div>
+                  <div className="grid md:grid-cols-2 gap-8">
+                    <div>
+                      <ul className="text-sm space-y-1 m-0 p-0 list-none">
+                        <li><strong>P</strong> = duct perimeter in m</li>
+                        <li><strong>L</strong> = duct length in m</li>
+                        <li><strong>A</strong> = duct surface area in m²</li>
+                      </ul>
+                    </div>
+                    <div>
+                      <p className="text-sm text-slate-600 dark:text-slate-400 m-0">
+                        Measured per duct section from the verified perimeter and length. Insulation, dampers, flanges, supports and fittings should be measured or counted separately where the project requires it.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </section>
+
+              {/* 15. Electrical Cabling */}
+              <section>
+                <h3 className="text-2xl mt-0">15. Electrical Cabling</h3>
+                <div className="bg-slate-50 dark:bg-slate-900 p-6 rounded-xl border border-slate-200 dark:border-slate-800">
+                  <h4 className="font-semibold mb-2 mt-0">Cable length</h4>
+                  <div className="font-mono text-lg bg-white dark:bg-slate-950 p-4 rounded-lg text-center mb-6 border border-slate-200 dark:border-slate-800 max-w-md" aria-label="Cable Length equals Route Length plus Vertical Drops plus Approved Termination Allowance">
+                    L = R + V + T
+                  </div>
+                  <div className="grid md:grid-cols-2 gap-8">
+                    <div>
+                      <ul className="text-sm space-y-1 m-0 p-0 list-none">
+                        <li><strong>R</strong> = verified route length in m</li>
+                        <li><strong>V</strong> = vertical drops in m (where applicable)</li>
+                        <li><strong>T</strong> = approved termination allowance in m</li>
+                      </ul>
+                    </div>
+                    <div>
+                      <p className="text-sm text-slate-600 dark:text-slate-400 m-0">
+                        Containment, first-fix accessories, glanding, and testing and commissioning items should be counted separately; cable length does not automatically include them.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </section>
             </div>
 
             <h2 className="text-3xl mt-16 mb-8 border-b border-slate-200 dark:border-slate-800 pb-2">Cost Formulas</h2>

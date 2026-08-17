@@ -5,8 +5,10 @@ import { useCallback, useEffect, useState } from "react";
 import type { ClientListResult } from "@/types/client";
 import { formatDate } from "@/lib/formatting/dates";
 import { apiClient, getApiErrorMessage } from "@/lib/api/client";
+import { useTranslations } from "@/lib/i18n/locale-provider";
 
 export default function ClientsPage() {
+  const t = useTranslations();
   const [result, setResult] = useState<ClientListResult | null>(null);
   const [search, setSearch] = useState("");
   const [isLoading, setIsLoading] = useState(true);
@@ -42,14 +44,14 @@ export default function ClientsPage() {
       <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
         <div className="mb-6 flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
           <div>
-            <p className="text-sm uppercase tracking-[0.3em] text-slate-500">Clients</p>
-            <h1 className="mt-2 text-3xl font-semibold text-white">Client directory</h1>
+            <p className="text-sm uppercase tracking-[0.3em] text-slate-500">{t("clients.list.eyebrow")}</p>
+            <h1 className="mt-2 text-3xl font-semibold text-white">{t("clients.list.title")}</h1>
           </div>
           <Link
             href="/clients/new"
             className="inline-flex rounded-2xl border border-slate-700 bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-500"
           >
-            New client
+            {t("clients.list.newClient")}
           </Link>
         </div>
 
@@ -58,40 +60,40 @@ export default function ClientsPage() {
             type="search"
             value={search}
             onChange={(event) => setSearch(event.target.value)}
-            placeholder="Search by name, company, email, or phone"
+            placeholder={t("clients.list.searchPlaceholder")}
             className="w-full max-w-md rounded-2xl border border-slate-800 bg-slate-900 px-4 py-3 text-sm text-white outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
           />
         </div>
 
         {isLoading ? (
           <div className="rounded-[32px] border border-slate-800 bg-slate-950 p-8 text-slate-300">
-            <p className="text-lg font-semibold text-white">Loading clients</p>
-            <p className="mt-2 text-sm text-slate-400">Fetching the company client directory...</p>
+            <p className="text-lg font-semibold text-white">{t("clients.list.loadingTitle")}</p>
+            <p className="mt-2 text-sm text-slate-400">{t("clients.list.loadingBody")}</p>
           </div>
         ) : error ? (
           <div className="rounded-[32px] border border-slate-800 bg-slate-950 p-8 text-slate-300">
-            <p className="text-lg font-semibold text-white">Clients unavailable</p>
+            <p className="text-lg font-semibold text-white">{t("clients.list.unavailableTitle")}</p>
             <p className="mt-2 text-sm text-rose-300">{error}</p>
             <button
               type="button"
               onClick={() => void loadClients(search)}
               className="mt-6 rounded-2xl border border-slate-700 bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-500"
             >
-              Try again
+              {t("clients.list.tryAgain")}
             </button>
           </div>
         ) : (
           <div className="overflow-x-auto rounded-[32px] border border-slate-800 bg-slate-950">
-            <table className="min-w-full text-left text-sm text-slate-300">
+            <table className="min-w-full text-start text-sm text-slate-300">
               <thead className="bg-slate-900 text-slate-400">
                 <tr>
-                  <th className="px-6 py-4">Client</th>
-                  <th className="px-6 py-4">Company</th>
-                  <th className="px-6 py-4">Email</th>
-                  <th className="px-6 py-4">Phone</th>
-                  <th className="px-6 py-4">Status</th>
-                  <th className="px-6 py-4">Updated</th>
-                  <th className="px-6 py-4">Actions</th>
+                  <th className="px-6 py-4">{t("clients.list.columnClient")}</th>
+                  <th className="px-6 py-4">{t("clients.list.columnCompany")}</th>
+                  <th className="px-6 py-4">{t("clients.list.columnEmail")}</th>
+                  <th className="px-6 py-4">{t("clients.list.columnPhone")}</th>
+                  <th className="px-6 py-4">{t("clients.list.columnStatus")}</th>
+                  <th className="px-6 py-4">{t("clients.list.columnUpdated")}</th>
+                  <th className="px-6 py-4">{t("clients.list.columnActions")}</th>
                 </tr>
               </thead>
               <tbody>
@@ -109,7 +111,7 @@ export default function ClientsPage() {
                             : "border-emerald-800 bg-emerald-950 text-emerald-300"
                         }`}
                       >
-                        {client.isArchived ? "Archived" : "Active"}
+                        {client.isArchived ? t("clients.list.archived") : t("clients.list.active")}
                       </span>
                     </td>
                     <td className="px-6 py-4 text-slate-300">{formatDate(client.updatedAt)}</td>
@@ -118,7 +120,7 @@ export default function ClientsPage() {
                         href={`/clients/${client.id}`}
                         className="inline-flex rounded-2xl border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-200 hover:bg-slate-800"
                       >
-                        Open
+                        {t("clients.list.open")}
                       </Link>
                     </td>
                   </tr>
@@ -126,9 +128,7 @@ export default function ClientsPage() {
                 {clients.length === 0 && (
                   <tr>
                     <td colSpan={7} className="px-6 py-10 text-center text-slate-400">
-                      {search
-                        ? "No clients match this search."
-                        : "No clients yet. Use New client to add the first contact."}
+                      {search ? t("clients.list.emptySearch") : t("clients.list.emptyDefault")}
                     </td>
                   </tr>
                 )}

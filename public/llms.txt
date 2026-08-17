@@ -8,7 +8,7 @@ Quantara helps construction professionals move from supported project evidence t
 
 AI Draft BOQ can assemble usable extracted evidence into an editable draft before every extraction issue has been individually resolved. Supported source and quantity provenance is preserved where available. Missing quantity or unit information remains visible for professional completion instead of being invented, and commercial rates are not silently fabricated. AI Draft BOQ is a draft workflow and is not automatic professional approval.
 
-## TAYQAN ΓÇö AI Quantity Surveyor / Digital QS
+## TAYQAN - AI Quantity Surveyor / Digital QS
 
 TAYQAN is Quantara's governed AI Quantity Surveyor workflow. It can carry work through source discovery, source processing, evidence review, quantity preparation, governed rate preparation when requested, BOQ assembly, validation / final QA, and a Ready for Acceptance state.
 

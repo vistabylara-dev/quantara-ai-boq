@@ -157,7 +157,7 @@ export default function AdminSampleBoqPage(props: {
     setMessage(null);
   }
 
-  function useOnly(entityId: string) {
+  function selectOnly(entityId: string) {
     setSelectedIds(new Set([entityId]));
     setError(null);
     setMessage("All other usable candidates are ignored for this admin sample only.");
@@ -457,7 +457,7 @@ export default function AdminSampleBoqPage(props: {
                       </label>
                       <button
                         type="button"
-                        onClick={() => useOnly(entity.id)}
+                        onClick={() => selectOnly(entity.id)}
                         className="shrink-0 rounded-xl border border-cyan-700 px-3 py-2 text-xs font-bold text-cyan-200 hover:bg-cyan-950/30"
                       >
                         Use Only This Item

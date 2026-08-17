@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { getPublicCapability } from "@/lib/public-site/product-truth";
@@ -7,6 +7,24 @@ const repoRoot = process.cwd();
 
 function read(path: string): string {
   return readFileSync(join(repoRoot, path), "utf8");
+}
+
+function findMarketingPageSources(directory: string): string[] {
+  return readdirSync(join(repoRoot, directory), { withFileTypes: true }).flatMap(
+    (entry) => {
+      const path = `${directory}/${entry.name}`;
+
+      if (entry.isDirectory()) {
+        return findMarketingPageSources(path);
+      }
+
+      if (entry.isFile() && entry.name === "page.tsx") {
+        return [path];
+      }
+
+      return [];
+    },
+  );
 }
 
 const targetPages = [
@@ -40,7 +58,12 @@ describe("Part 3 high-intent buyer journeys", () => {
       expect(read(page), page).toContain("showBuyerJourney: true");
     }
 
-    expect(targetPages).toHaveLength(8);
+    const optedInPages = findMarketingPageSources("src/app/(marketing)")
+      .filter((page) => read(page).includes("showBuyerJourney: true"))
+      .sort();
+
+    expect(optedInPages).toEqual([...targetPages].sort());
+    expect(optedInPages).toHaveLength(8);
   });
 
   it("renders the opt-in block in all three public landing architectures", () => {

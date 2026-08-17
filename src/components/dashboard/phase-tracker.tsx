@@ -1,6 +1,10 @@
+"use client";
+
 import type { PhaseItem } from "../../types/dashboard";
+import { useTranslations } from "@/lib/i18n/locale-provider";
 
 export default function PhaseTracker({ items }: { items: PhaseItem[] }) {
+  const t = useTranslations();
   return (
     <div className="mt-6 space-y-4">
       {items.map((item) => (
@@ -17,7 +21,7 @@ export default function PhaseTracker({ items }: { items: PhaseItem[] }) {
                   : "bg-slate-800 text-slate-400"
               }`}
             >
-              {item.status === "active" ? "Active" : "Locked"}
+              {item.status === "active" ? t("dashboardComponents.phaseTracker.active") : t("dashboardComponents.phaseTracker.locked")}
             </span>
           </div>
         </div>

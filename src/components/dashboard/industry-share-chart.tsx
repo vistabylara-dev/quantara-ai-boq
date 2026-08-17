@@ -1,18 +1,20 @@
 "use client";
 
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { useTranslations } from "@/lib/i18n/locale-provider";
 
 type IndustryShareChartProps = {
   data: Array<{ label: string; value: number }>;
 };
 
 export default function IndustryShareChart({ data }: IndustryShareChartProps) {
+  const t = useTranslations();
   return (
     <div className="rounded-[32px] border border-slate-800 bg-slate-950 p-6">
       <div className="mb-4 flex items-center justify-between gap-4">
         <div>
-          <p className="text-sm uppercase tracking-[0.28em] text-slate-500">Industry share</p>
-          <h3 className="mt-2 text-xl font-semibold text-white">Active BOQ breakdown</h3>
+          <p className="text-sm uppercase tracking-[0.28em] text-slate-500">{t("dashboardComponents.industryShareChart.eyebrow")}</p>
+          <h3 className="mt-2 text-xl font-semibold text-white">{t("dashboardComponents.industryShareChart.title")}</h3>
         </div>
       </div>
       <div className="h-64">

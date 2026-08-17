@@ -1,7 +1,11 @@
+"use client";
+
 import type { IndustryEngine } from "@/types/industry";
 import { ArrowUpRight, Columns, ShieldCheck } from "lucide-react";
+import { useTranslations } from "@/lib/i18n/locale-provider";
 
 export default function IndustrySummaryCard({ industry }: { industry: IndustryEngine }) {
+  const t = useTranslations();
   return (
     <article className="rounded-[28px] border border-slate-800 bg-slate-950 p-6">
       <div className="flex items-start justify-between gap-4">
@@ -20,14 +24,14 @@ export default function IndustrySummaryCard({ industry }: { industry: IndustryEn
         <div className="rounded-3xl border border-slate-800 bg-slate-900 p-4 text-sm text-slate-300">
           <div className="flex items-center gap-2">
             <Columns className="h-4 w-4 text-slate-400" />
-            <span>Sections</span>
+            <span>{t("dashboardComponents.industrySummaryCard.sections")}</span>
           </div>
           <p className="mt-2 text-xl font-semibold text-white">{industry.boqSections.length}</p>
         </div>
         <div className="rounded-3xl border border-slate-800 bg-slate-900 p-4 text-sm text-slate-300">
           <div className="flex items-center gap-2">
             <ShieldCheck className="h-4 w-4 text-slate-400" />
-            <span>Rules</span>
+            <span>{t("dashboardComponents.industrySummaryCard.rules")}</span>
           </div>
           <p className="mt-2 text-xl font-semibold text-white">{industry.validationRules.length}</p>
         </div>

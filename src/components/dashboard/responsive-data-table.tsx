@@ -16,7 +16,7 @@ export default function ResponsiveDataTable<T extends { id: string }>({
   return (
     <>
       <div className="mt-4 hidden overflow-x-auto rounded-3xl border border-[#D5E0EC] dark:border-[#20304D] md:block">
-        <table className="min-w-full text-left text-sm">
+        <table className="min-w-full text-start text-sm">
           <thead className="bg-[#EAF1F8] dark:bg-[#101D34] text-[#536078] dark:text-[#7F8DA6]">
             <tr>
               {columns.map((column) => (
@@ -43,7 +43,7 @@ export default function ResponsiveDataTable<T extends { id: string }>({
               {columns.map((column) => (
                 <div key={column.key} className="flex items-center justify-between gap-3">
                   <dt className="text-xs uppercase tracking-[0.14em] text-[#7B879C] dark:text-[#7F8DA6]">{column.header}</dt>
-                  <dd className="text-right font-medium text-[#08152E] dark:text-[#F4F8FF]">{column.render(row)}</dd>
+                  <dd className="text-end font-medium text-[#08152E] dark:text-[#F4F8FF]">{column.render(row)}</dd>
                 </div>
               ))}
             </dl>

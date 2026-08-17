@@ -18,7 +18,7 @@ export default function EmptyState({
       <div className="relative mb-3 h-20 w-32 text-[#0077B6] dark:text-[#21C7F3]">
         <EmptyStateIllustration className="h-full w-full" />
         {Icon && (
-          <span className="absolute -bottom-1 -right-1 flex h-8 w-8 items-center justify-center rounded-xl border border-[#D5E0EC] bg-white dark:border-[#20304D] dark:bg-[#091326]">
+          <span className="absolute -bottom-1 -end-1 flex h-8 w-8 items-center justify-center rounded-xl border border-[#D5E0EC] bg-white dark:border-[#20304D] dark:bg-[#091326]">
             <Icon className="h-4 w-4 text-[#536078] dark:text-[#9FB3CE]" aria-hidden="true" />
           </span>
         )}

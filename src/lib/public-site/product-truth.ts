@@ -128,6 +128,13 @@ const PUBLIC_CAPABILITY_DEFINITIONS = [
     limitation: "Generated documents are not professional approval and remain subject to project-specific review.",
   },
   {
+    id: "client-proposals",
+    name: "Client proposal links",
+    status: "AVAILABLE",
+    summary: "Generate a secure, token-gated proposal link from a reviewed BOQ revision or a completed technical report, with optional passcode protection, an expiry date and revoke, reopen or regenerate controls, for external client review.",
+    limitation: "Creating a proposal is subject to the account's plan entitlement, and each proposal is tied to the specific BOQ revision or completed technical report it was created from, not the live editable BOQ.",
+  },
+  {
     id: "document-templates",
     name: "Document templates",
     status: "AVAILABLE",
@@ -145,15 +152,22 @@ const PUBLIC_CAPABILITY_DEFINITIONS = [
     id: "source-attribution",
     name: "Source attribution",
     status: "LIMITED",
-    summary: "Keep source identity and available evidence references with supported project records.",
+    summary: "Keep source identity and available evidence references with supported project records, including BOQ items reused from the company library.",
     limitation: "Quantara does not claim complete end-to-end traceability for every BOQ field and generated output.",
   },
   {
     id: "industry-packages",
     name: "Catalogue and industry packages",
     status: "CONTROLLED_ACCESS",
-    summary: "Use governed catalogue or industry-package data where the company has the required entitlement.",
+    summary: "Use governed catalogue or industry-package data where the company has the required entitlement, including saving premium items into the company's reusable library.",
     limitation: "Package availability and access vary; the public website does not represent every package as included.",
+  },
+  {
+    id: "company-library",
+    name: "Company library of reusable BOQ items",
+    status: "AVAILABLE",
+    summary: "Save reviewed BOQ items into a company-wide library with versions and variants, track item usage across projects, and mark favorites for faster reuse in future BOQs.",
+    limitation: "Premium library items still depend on the company's catalogue or industry-package entitlement, and every reused item remains subject to professional review in its new BOQ context.",
   },
   {
     id: "bilingual-rtl-interface",
@@ -277,6 +291,11 @@ const PUBLIC_CAPABILITY_REGISTER_KEYS = {
     summary: "publicContent.capabilityRegister.capabilities.professionalOutputs.summary",
     limitation: "publicContent.capabilityRegister.capabilities.professionalOutputs.limitation",
   },
+  "client-proposals": {
+    name: "publicContent.capabilityRegister.capabilities.clientProposals.name",
+    summary: "publicContent.capabilityRegister.capabilities.clientProposals.summary",
+    limitation: "publicContent.capabilityRegister.capabilities.clientProposals.limitation",
+  },
   "document-templates": {
     name: "publicContent.capabilityRegister.capabilities.documentTemplates.name",
     summary: "publicContent.capabilityRegister.capabilities.documentTemplates.summary",
@@ -296,6 +315,11 @@ const PUBLIC_CAPABILITY_REGISTER_KEYS = {
     name: "publicContent.capabilityRegister.capabilities.industryPackages.name",
     summary: "publicContent.capabilityRegister.capabilities.industryPackages.summary",
     limitation: "publicContent.capabilityRegister.capabilities.industryPackages.limitation",
+  },
+  "company-library": {
+    name: "publicContent.capabilityRegister.capabilities.companyLibrary.name",
+    summary: "publicContent.capabilityRegister.capabilities.companyLibrary.summary",
+    limitation: "publicContent.capabilityRegister.capabilities.companyLibrary.limitation",
   },
   "bilingual-rtl-interface": {
     name: "publicContent.capabilityRegister.capabilities.bilingualRtlInterface.name",
@@ -371,10 +395,12 @@ export const PUBLIC_PRODUCT_LIFECYCLE_BY_ID = {
   "autodesk-dwg-analysis": "BETA_LIMITED",
   validation: "LIVE",
   "professional-outputs": "LIVE",
+  "client-proposals": "LIVE",
   "document-templates": "LIVE",
   "technical-report-generation": "BETA_LIMITED",
   "source-attribution": "LIVE",
   "industry-packages": "BETA_LIMITED",
+  "company-library": "LIVE",
   "bilingual-rtl-interface": "LIVE",
   "commercial-access": "BETA_LIMITED",
   "automatic-drawing-takeoff": "NOT_AVAILABLE",
@@ -435,6 +461,10 @@ export const PUBLIC_PRODUCT_EVIDENCE_BY_ID = {
     "src/lib/services/document-generation-service.ts",
     "tests/document-generation-service.test.ts",
   ],
+  "client-proposals": [
+    "src/lib/services/client-proposal-service.ts",
+    "tests/client-proposal-service.test.ts",
+  ],
   "document-templates": [
     "src/lib/services/document-template-service.ts",
     "tests/template-governance-service.test.ts",
@@ -450,6 +480,10 @@ export const PUBLIC_PRODUCT_EVIDENCE_BY_ID = {
   "industry-packages": [
     "src/lib/entitlements/package-entitlement-service.ts",
     "tests/catalogue-package-integrity.test.ts",
+  ],
+  "company-library": [
+    "src/lib/services/company-library-service.ts",
+    "tests/phase7-entitlements-and-library.test.ts",
   ],
   "bilingual-rtl-interface": [
     "src/lib/i18n/server-locale.ts",

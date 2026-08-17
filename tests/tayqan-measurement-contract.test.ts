@@ -820,5 +820,56 @@ describe("TAYQAN senior work-order governance wiring", () => {
     );
     expect(service).toContain("safetyIdentifier");
   });
+
+  it("preserves normal Quantara inference while TAYQAN remains explicit", () => {
+    const source = readFileSync(
+      "src/lib/services/ai-draft-boq-service.ts",
+      "utf8",
+    );
+
+    expect(source).toContain(
+      "applyAiMeasurementSuggestion",
+    );
+
+    expect(source).toContain(
+      "recommendMeasurementMethod",
+    );
+
+    expect(source).toContain(
+      'quantityMode?: "EXTRACTION_ONLY" | "TAYQAN_MEASUREMENT_PROPOSAL"',
+    );
+
+    expect(source).toContain(
+      "useQuantaraMeasurementIntelligence",
+    );
+
+    expect(source).toContain(
+      "tayqanMeasurementByEntityId",
+    );
+  });
+
+  it("confirms an accepted unchanged TAYQAN quantity as a calculation", () => {
+    const source = readFileSync(
+      "src/lib/services/ai-draft-boq-service.ts",
+      "utf8",
+    );
+
+    expect(source).toContain(
+      "tayqanCalculatedQuantity",
+    );
+
+    expect(source).toContain(
+      "CONFIRMED_CALCULATION",
+    );
+
+    expect(source).toContain(
+      "AI_DRAFT_TAYQAN_REVIEW",
+    );
+
+    expect(source).toContain(
+      "TAYQAN_CALCULATION_CONFIRMATION_CONFLICT",
+    );
+  });
+
 });
 

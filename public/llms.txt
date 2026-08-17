@@ -4,7 +4,7 @@
 
 ## What Quantara does
 
-Quantara helps construction professionals move from supported project evidence toward a reviewable BOQ. Supported workflows include text-based PDF table-row extraction, structured XLSX/CSV import, reviewed extracted information, guided BOQ measurement, visible deterministic engineering calculations, voice-assisted measurement and BOQ editing, controlled Google Drive import, supported Autodesk / AutoCAD DWG analysis, BOQ validation and professional document outputs.
+Quantara helps construction professionals move from supported project evidence toward a reviewable BOQ. Supported workflows include text-based PDF table-row extraction, structured XLSX/CSV import, reviewed extracted information, guided BOQ measurement, visible deterministic engineering calculations, voice-assisted measurement and BOQ editing, controlled Google Drive import, supported Autodesk / AutoCAD DWG analysis, a company library of reusable BOQ items, secure token-gated client proposal links, BOQ validation and professional document outputs.
 
 AI Draft BOQ can assemble usable extracted evidence into an editable draft before every extraction issue has been individually resolved. Supported source and quantity provenance is preserved where available. Missing quantity or unit information remains visible for professional completion instead of being invented, and commercial rates are not silently fabricated. AI Draft BOQ is a draft workflow and is not automatic professional approval.
 

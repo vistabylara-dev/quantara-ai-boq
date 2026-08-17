@@ -841,6 +841,11 @@ const en = {
           summary: "Generate supported BOQ documents and project outputs from reviewed project data.",
           limitation: "Generated documents are not professional approval and remain subject to project-specific review.",
         },
+        clientProposals: {
+          name: "Client proposal links",
+          summary: "Generate a secure, token-gated proposal link from a reviewed BOQ revision or a completed technical report, with optional passcode protection, an expiry date and revoke, reopen or regenerate controls, for external client review.",
+          limitation: "Creating a proposal is subject to the account's plan entitlement, and each proposal is tied to the specific BOQ revision or completed technical report it was created from, not the live editable BOQ.",
+        },
         documentTemplates: {
           name: "Document templates",
           summary: "Apply supported document templates to reviewed BOQ records and project data.",
@@ -853,13 +858,18 @@ const en = {
         },
         sourceAttribution: {
           name: "Source attribution",
-          summary: "Keep source identity and available evidence references with supported project records.",
+          summary: "Keep source identity and available evidence references with supported project records, including BOQ items reused from the company library.",
           limitation: "Quantara does not claim complete end-to-end traceability for every BOQ field and generated output.",
         },
         industryPackages: {
           name: "Catalogue and industry packages",
-          summary: "Use governed catalogue or industry-package data where the company has the required entitlement.",
+          summary: "Use governed catalogue or industry-package data where the company has the required entitlement, including saving premium items into the company's reusable library.",
           limitation: "Package availability and access vary; the public website does not represent every package as included.",
+        },
+        companyLibrary: {
+          name: "Company library of reusable BOQ items",
+          summary: "Save reviewed BOQ items into a company-wide library with versions and variants, track item usage across projects, and mark favorites for faster reuse in future BOQs.",
+          limitation: "Premium library items still depend on the company's catalogue or industry-package entitlement, and every reused item remains subject to professional review in its new BOQ context.",
         },
         bilingualRtlInterface: {
           name: "English and Arabic interface with RTL",

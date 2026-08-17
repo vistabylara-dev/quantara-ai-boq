@@ -1,4 +1,4 @@
-import type { QuantityCalculationType } from "@prisma/client";
+import { QuantityCalculationType } from "@prisma/client";
 import type { CurrentActor } from "@/lib/auth/current-actor";
 import { requireCapability } from "@/lib/auth/rbac";
 import { AppError } from "@/lib/errors/app-error";
@@ -7,6 +7,7 @@ import {
   getMissingRequiredDimensions,
   type DimensionValue,
 } from "@/lib/calculations/required-dimensions-registry";
+import { recommendMeasurementMethod } from "@/lib/calculations/measurement-method-recommender";
 import type { FormulaResult } from "@/lib/calculations/quantity-formulas";
 import {
   assertValidCalculatedResult,
@@ -81,6 +82,14 @@ export async function prefillDimensionValues(
   }
   const technicalData = (entity?.technicalDataJson as Record<string, unknown> | null) ?? null;
   const entityConfidence = entity ? entity.confidence.toNumber() : null;
+  const entityMeasurementRecommendation = entity
+    ? recommendMeasurementMethod({
+        entityType: entity.entityType,
+        label: entity.label,
+        sourceText: entity.sourceText,
+        unit: entity.unit,
+      })
+    : null;
 
   // Only these three registry input keys have a well-defined, schema-backed DetectedRoom
   // equivalent — an explicit, documented mapping, never a fuzzy guess.
@@ -92,6 +101,26 @@ export async function prefillDimensionValues(
   };
 
   return definition.inputs.map((input): DimensionValue => {
+    if (
+      input.key === "verifiedCount"
+      && entity
+      && entity.quantity !== null
+      && entity.quantity.toNumber() > 0
+      && entityMeasurementRecommendation?.calculationType
+        === QuantityCalculationType.COUNT
+    ) {
+      return {
+        key: input.key,
+        label: input.label,
+        unit: input.unit,
+        required: input.required,
+        value: entity.quantity.toNumber(),
+        source: "extracted_entity",
+        confidence: entityConfidence,
+        reviewStatus: "PREFILLED",
+      };
+    }
+
     const fromTechnicalData = technicalData?.[input.key];
     if (typeof fromTechnicalData === "number" && Number.isFinite(fromTechnicalData)) {
       return {

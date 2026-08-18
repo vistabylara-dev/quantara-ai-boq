@@ -23,6 +23,7 @@ import {
   getBOQRecord,
 } from "@/lib/repositories/boq-repository";
 import { getProjectRecord } from "@/lib/repositories/project-repository";
+import { parseRevisionNumber } from "@/lib/revisions/revision-number";
 import { generateAiDraftBoq } from "@/lib/services/ai-draft-boq-service";
 import { prepareTayqanMeasurementProposals } from "@/lib/services/tayqan-measurement-service";
 import {
@@ -830,6 +831,52 @@ async function ensureWorkingBoq(
   return created.databaseId;
 }
 
+/**
+ * PR2 gap 4: prefers a real, deterministic revision-number comparison over
+ * upload-recency when one reliably exists for every file competing for a
+ * given drawing number. parseRevisionNumber (src/lib/revisions/revision-number.ts)
+ * is a real, tested parser reused exactly as written — but it's scoped to
+ * BOQ revision numbers ("R01", "R02", ...), a different domain from
+ * arbitrary drawing-office revision conventions ("A", "P2", "Issue 3", ...).
+ * When a drawing's revision string genuinely matches that strict format for
+ * every competing file, the numeric comparison is real and deterministic,
+ * so it wins. The moment any competing file's revision string doesn't
+ * match, this falls back to the existing upload-recency rule (first in
+ * createdAt-desc order) for that drawing number specifically — never a
+ * guessed semantic ordering between arbitrary revision strings.
+ */
+export function pickLatestRevisionFileIdPerDrawing(
+  filesNewestFirst: readonly { id: string; drawingNumber: string | null; revisionNumber: string | null }[],
+): Map<string, string> {
+  const groups = new Map<string, Array<(typeof filesNewestFirst)[number]>>();
+  for (const file of filesNewestFirst) {
+    const drawingNumber = file.drawingNumber?.trim();
+    if (!drawingNumber) continue;
+    const group = groups.get(drawingNumber) ?? [];
+    group.push(file);
+    groups.set(drawingNumber, group);
+  }
+
+  const winnerIdByDrawingNumber = new Map<string, string>();
+  for (const [drawingNumber, group] of groups) {
+    // group preserves the same newest-first order as filesNewestFirst.
+    const parsed = group.map((file) => {
+      try {
+        return { file, revision: parseRevisionNumber(file.revisionNumber ?? "") as number | null };
+      } catch {
+        return { file, revision: null as number | null };
+      }
+    });
+
+    const allParsed = parsed.every((entry) => entry.revision !== null);
+    const winner = allParsed
+      ? parsed.reduce((best, entry) => (entry.revision! > best.revision! ? entry : best))
+      : parsed[0]!;
+    winnerIdByDrawingNumber.set(drawingNumber, winner.file.id);
+  }
+  return winnerIdByDrawingNumber;
+}
+
 async function sourceRequirements(
   actor: CurrentActor,
   order: Awaited<ReturnType<typeof loadOrder>>,
@@ -927,6 +974,9 @@ async function sourceRequirements(
     && context.authoritativeSourcePolicy
       === "USE_LATEST_REVISION"
   ) {
+    const winnerIdByDrawingNumber =
+      pickLatestRevisionFileIdPerDrawing(allFiles);
+
     const seenDrawings =
       new Set<string>();
 
@@ -950,13 +1000,7 @@ async function sourceRequirements(
         drawingNumber,
       );
 
-      // Because allFiles is newest-first, the
-      // first file for a drawing number is the
-      // latest uploaded source. We choose this
-      // deterministic rule instead of guessing
-      // semantic ordering between arbitrary
-      // revision strings.
-      return true;
+      return file.id === winnerIdByDrawingNumber.get(drawingNumber);
     });
   }
 
@@ -1232,7 +1276,17 @@ async function advanceSourceProcessing(actor: CurrentActor, projectSlug: string,
 
         const measurement = await prepareTayqanMeasurementProposals(
           actor, projectSlug,
-          { projectId: leasedOrder.projectId, sourceFileIds: sourceFileIdsFromProgress(leasedOrder), governingContext: leasedProgress.instructionContext ?? null },
+          {
+            projectId: leasedOrder.projectId,
+            sourceFileIds: sourceFileIdsFromProgress(leasedOrder),
+            governingContext: leasedProgress.instructionContext ?? null,
+            // PR2 gap 2: leasedOrder.boqId is already frozen for
+            // UPDATE_EXISTING_BOQ — the intake flow blocks work-order
+            // creation until a target BOQ is selected (deliverableNeedsExistingBoq
+            // in tayqan-hire-service.ts), so this is stable for the whole
+            // measurement pass, exactly like sourceFileIds.
+            targetBoqId: leasedOrder.desiredDeliverable === "UPDATE_EXISTING_BOQ" ? leasedOrder.boqId : null,
+          },
           { onProgress: async () => heartbeatTayqanMeasurementLease(actor, order.id, leaseToken) },
         );
         const measurementExceptions = measurement.exceptions.slice(0, 50).map((exception) => ({ kind: exception.kind, message: exception.message, pageIds: exception.pageIds }));

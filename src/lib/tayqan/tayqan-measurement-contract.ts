@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import {
   ExtractedEntityType,
   QuantityCalculationType,
@@ -32,6 +33,56 @@ export const TAYQAN_MEASUREMENT_EXCEPTION_KINDS = [
 export const tayqanMeasurementExceptionKindSchema = z.enum(
   TAYQAN_MEASUREMENT_EXCEPTION_KINDS,
 );
+
+/**
+ * PR1 (C/D): exception kinds that describe a genuine measurement-integrity
+ * risk rather than a merely-incomplete evidence gap. These can never be
+ * "ignore and finish" waived by an engineer — TAYQAN measures, the engineer
+ * reviews, but a professional cannot wave away a revision conflict, an
+ * uncertain method choice, a supporting-check mismatch, a composite scope
+ * that needs splitting, a schedule/plan mismatch, or a spec/drawing
+ * conflict. Those require a governed remeasurement (RERUN_TAYQAN_MEASUREMENT),
+ * never a written-reason waiver.
+ */
+export const TAYQAN_MEASUREMENT_EXCEPTION_KINDS_REQUIRING_REMEASUREMENT = new Set<
+  (typeof TAYQAN_MEASUREMENT_EXCEPTION_KINDS)[number]
+>([
+  "REVISION_CONFLICT",
+  "METHOD_SELECTION_UNCERTAIN",
+  "SUPPORTING_CHECK_MISMATCH",
+  "COMPOSITE_SCOPE_REQUIRES_SPLIT",
+  "PLAN_SCHEDULE_MISMATCH",
+  "SPEC_DRAWING_CONFLICT",
+]);
+
+export function tayqanMeasurementExceptionCanBeWaived(kind: string): boolean {
+  return !TAYQAN_MEASUREMENT_EXCEPTION_KINDS_REQUIRING_REMEASUREMENT.has(
+    kind as (typeof TAYQAN_MEASUREMENT_EXCEPTION_KINDS)[number],
+  );
+}
+
+/**
+ * Stable, content-addressable identity for a measurement exception so an
+ * engineer's resolution (see WorkProgress.tayqanMeasurement.resolutions in
+ * tayqan-work-order-service.ts) survives being re-serialized into the
+ * preview array, without needing a database row of its own.
+ */
+export function tayqanMeasurementExceptionKey(exception: {
+  kind: string;
+  message: string;
+  pageIds: readonly string[];
+}): string {
+  return createHash("sha256")
+    .update(
+      JSON.stringify({
+        kind: exception.kind,
+        message: exception.message.trim(),
+        pageIds: [...exception.pageIds].sort(),
+      }),
+    )
+    .digest("hex")
+    .slice(0, 20);
+}
 
 export const TAYQAN_MEASUREMENT_METHODS = [
   "COUNT",

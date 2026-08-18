@@ -475,6 +475,38 @@ export async function prepareTayqanMeasurementProposals(
     evaluateTayqanMeasurementSubject(subject, { allowedEntityIds, roomsById, pagesById }),
   );
 
+  /**
+   * PR1 correctness (B): an active extracted entity within the frozen TAYQAN
+   * source set must never silently disappear. If TAYQAN's reasoner produced
+   * neither a measurement subject for it (existingEntityId) nor an exception
+   * that names it (relatedEntityId), synthesize an explicit SCOPE_GAP
+   * exception so the work order's exception gate surfaces it instead of the
+   * item quietly vanishing from the eventual draft. Entities already covered
+   * by a real measurement or a real reasoner exception are never duplicated.
+   */
+  const measuredExistingEntityIds = new Set(
+    evaluated
+      .map((measurement) => measurement.subject.existingEntityId)
+      .filter((id): id is string => id !== null),
+  );
+  const exceptionRelatedEntityIds = new Set(
+    result.plan.exceptions
+      .map((exception) => exception.relatedEntityId)
+      .filter((id): id is string => id !== null),
+  );
+  const scopeGapExceptions: TayqanMeasurementException[] = bundle.existingEntities
+    .filter((entity) =>
+      !measuredExistingEntityIds.has(entity.id)
+      && !exceptionRelatedEntityIds.has(entity.id),
+    )
+    .map((entity) => ({
+      kind: "SCOPE_GAP" as const,
+      message: `TAYQAN produced neither a measurement nor an exception for extracted item "${entity.label}" within the frozen source scope. Explicit professional disposition is required before this scope item can be considered addressed.`,
+      pageIds: entity.drawingPageId ? [entity.drawingPageId] : [],
+      relatedEntityId: entity.id,
+    }));
+  const allExceptions = [...result.plan.exceptions, ...scopeGapExceptions];
+
   let createdEntityCount = 0;
   let reusedEntityCount = 0;
   let createdCalculationCount = 0;
@@ -598,7 +630,8 @@ export async function prepareTayqanMeasurementProposals(
       reusedEntityCount,
       createdCalculationCount,
       reusedCalculationCount,
-      exceptionCount: result.plan.exceptions.length,
+      exceptionCount: allExceptions.length,
+      scopeGapExceptionCount: scopeGapExceptions.length,
       provider: result.provider,
       model: result.model,
       seniorReview: result.seniorReview,
@@ -613,8 +646,8 @@ export async function prepareTayqanMeasurementProposals(
     reusedEntityCount,
     createdCalculationCount,
     reusedCalculationCount,
-    exceptionCount: result.plan.exceptions.length,
-    exceptions: result.plan.exceptions,
+    exceptionCount: allExceptions.length,
+    exceptions: allExceptions,
     provider: result.provider,
     model: result.model,
     seniorReview: result.seniorReview,

@@ -32,7 +32,12 @@ export const tayqanWorkOrderAdvanceSchema = z.object({ workOrderId: z.string().u
 
 export const tayqanWorkOrderAnswerSchema = z.object({
   workOrderId: z.string().uuid(),
-  action: z.enum(["CONFIRM_ENTITY", "CORRECT_ENTITY", "REJECT_ENTITY", "SET_QUANTITY", "SET_RATE", "ANSWER_QA", "RETRY"]),
+  action: z.enum([
+    "CONFIRM_ENTITY", "CORRECT_ENTITY", "REJECT_ENTITY", "SET_QUANTITY", "SET_RATE", "ANSWER_QA", "RETRY",
+    // PR1 correctness closeout (C/D/E/H): governed exception resolution,
+    // safe re-measurement, and explicit final professional acceptance.
+    "RESOLVE_MEASUREMENT_EXCEPTION", "RERUN_TAYQAN_MEASUREMENT", "ACCEPT_DELIVERABLE",
+  ]),
   entityId: z.string().uuid().optional(),
   quantity: z.number().finite().min(0).optional(),
   unit: z.string().trim().min(1).max(50).optional(),
@@ -40,6 +45,8 @@ export const tayqanWorkOrderAnswerSchema = z.object({
   note: z.string().trim().max(4000).optional(),
   label: z.string().trim().max(1000).optional(),
   qaAnswerType: z.enum(["ACKNOWLEDGED", "WILL_CORRECT_SOURCE", "EXPLAINED_WITH_NOTE"]).optional(),
+  /** Required for RESOLVE_MEASUREMENT_EXCEPTION; see tayqanMeasurementExceptionKey(). */
+  exceptionKey: z.string().trim().min(1).max(64).optional(),
 }).strict();
 
 export type TayqanCheckoutInput = z.output<typeof tayqanCheckoutSchema>;

@@ -52,6 +52,25 @@ function extractionMarker(entityId: string): string {
   return `EXTRACTED_ENTITY:${entityId}`;
 }
 
+/**
+ * TAYQAN PR1 correctness gate (A): the single admission rule for whether a
+ * TAYQAN QuantityCalculation is genuine enough to let its candidate into a
+ * TAYQAN-mode draft. A raw extracted candidate must never silently
+ * substitute for this — see the TAYQAN_MEASUREMENT_PROPOSAL filter below,
+ * the only caller. Exported (and taking plain numbers rather than a Prisma
+ * Decimal) purely so this exact rule is unit-testable without a database.
+ */
+export function isValidTayqanMeasurementCandidate(
+  measurement: { resultValue: number; resultUnit: string | null } | null,
+): boolean {
+  return (
+    measurement !== null
+    && Number.isFinite(measurement.resultValue)
+    && measurement.resultValue > 0
+    && Boolean(measurement.resultUnit?.trim())
+  );
+}
+
 function jsonRecord(value: unknown): Record<string, unknown> | null {
   return value !== null && typeof value === "object" && !Array.isArray(value)
     ? value as Record<string, unknown>
@@ -353,6 +372,28 @@ export async function generateAiDraftBoq(
           )
       );
 
+    /**
+     * TAYQAN PR1 correctness gate: in TAYQAN_MEASUREMENT_PROPOSAL mode, a raw
+     * extracted candidate must NEVER silently substitute for a missing TAYQAN
+     * measurement. "TAYQAN measures. The engineer prices and professionally
+     * reviews." — a row without a genuine, positive, unit-bearing TAYQAN
+     * QuantityCalculation is withheld from the draft rather than added with an
+     * unmeasured/zero quantity. Normal Quantara (EXTRACTION_ONLY/default) is
+     * completely unaffected: isTayqanMode is false there, so this check never
+     * runs and existing behavior is unchanged.
+     */
+    const isTayqanMode = options.quantityMode === "TAYQAN_MEASUREMENT_PROPOSAL";
+    const hasValidTayqanMeasurement = (
+      measurement: (typeof tayqanMeasurements)[number] | null,
+    ): boolean =>
+      isValidTayqanMeasurementCandidate(
+        measurement
+          ? { resultValue: measurement.resultValue.toNumber(), resultUnit: measurement.resultUnit }
+          : null,
+      );
+
+    let tayqanWithheldCount = 0;
+
     const toAdd = rows
       .map((row) => {
         const candidate =
@@ -386,10 +427,15 @@ export async function generateAiDraftBoq(
               : null,
         };
       })
-      .filter(({ row, candidate }) =>
-        !alreadyPresentIds.has(row.id)
-        && isAiDraftCandidateUsable(candidate)
-      );
+      .filter(({ row, candidate, tayqanMeasurement }) => {
+        if (alreadyPresentIds.has(row.id)) return false;
+        if (!isAiDraftCandidateUsable(candidate)) return false;
+        if (isTayqanMode && !hasValidTayqanMeasurement(tayqanMeasurement)) {
+          tayqanWithheldCount += 1;
+          return false;
+        }
+        return true;
+      });
 
     if (toAdd.length === 0) {
       return {
@@ -401,6 +447,7 @@ export async function generateAiDraftBoq(
         reviewedAddedCount: 0,
         measurementIncompleteAddedCount: 0,
         inferredMeasurementAddedCount: 0,
+        tayqanWithheldCount,
       };
     }
 
@@ -726,6 +773,7 @@ export async function generateAiDraftBoq(
         unreviewedAddedCount,
         measurementIncompleteAddedCount,
         inferredMeasurementAddedCount,
+        tayqanWithheldCount,
         ratesAutomaticallyApplied: false,
       },
     }, tx);
@@ -739,6 +787,7 @@ export async function generateAiDraftBoq(
       reviewedAddedCount,
       measurementIncompleteAddedCount,
       inferredMeasurementAddedCount,
+      tayqanWithheldCount,
     };
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 }

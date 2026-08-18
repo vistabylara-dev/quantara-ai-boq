@@ -61,8 +61,8 @@ export function generateHtml(input: GenerateHtmlInput): string {
             <td class="num">${item.quantity.toLocaleString("en-US", { maximumFractionDigits: 2 })}</td>
             ${showInternal ? `<td class="num">${(item.landedCost ?? 0).toLocaleString("en-US", { maximumFractionDigits: 2 })}</td>` : ""}
             ${showInternal ? `<td class="num">${(item.marginPercentage ?? 0).toLocaleString("en-US", { maximumFractionDigits: 1 })}%</td>` : ""}
-            <td class="num">${item.sellingRate.toLocaleString("en-US", { maximumFractionDigits: 2 })}</td>
-            <td class="num">${item.totalAmount.toLocaleString("en-US", { maximumFractionDigits: 2 })}</td>
+            <td class="num">${(item.sellingRate ?? 0).toLocaleString("en-US", { maximumFractionDigits: 2 })}</td>
+            <td class="num">${(item.totalAmount ?? 0).toLocaleString("en-US", { maximumFractionDigits: 2 })}</td>
           </tr>`,
         )
         .join("");
@@ -72,11 +72,15 @@ export function generateHtml(input: GenerateHtmlInput): string {
     })
     .join("");
 
+  // HTML generation only ever receives WITH_PRICES data today (QUANTITIES_ONLY
+  // is DOCX-only per this mission) — totals is always populated here; the
+  // fallback only satisfies the now-optional shared type, it changes nothing.
+  const htmlTotals = data.boq.totals ?? { subtotal: 0, discountAmount: 0, taxableAmount: 0, taxAmount: 0, grandTotal: 0 };
   const totalsHtml = [
-    ["Subtotal", data.boq.totals.subtotal],
-    ["Discount", data.boq.totals.discountAmount],
-    ["Taxable Amount", data.boq.totals.taxableAmount],
-    [`VAT (${data.project.taxRate}%)`, data.boq.totals.taxAmount],
+    ["Subtotal", htmlTotals.subtotal],
+    ["Discount", htmlTotals.discountAmount],
+    ["Taxable Amount", htmlTotals.taxableAmount],
+    [`VAT (${data.project.taxRate}%)`, htmlTotals.taxAmount],
   ]
     .map(([label, value]) => `<div class="totals-row"><span>${label}</span><span>${formatCurrency(value as number, data.project.currency)}</span></div>`)
     .join("");
@@ -148,7 +152,7 @@ export function generateHtml(input: GenerateHtmlInput): string {
 
   <div class="totals">
     ${totalsHtml}
-    <div class="totals-row grand"><span>Grand Total</span><span>${formatCurrency(data.boq.totals.grandTotal, data.project.currency)}</span></div>
+    <div class="totals-row grand"><span>Grand Total</span><span>${formatCurrency(htmlTotals.grandTotal, data.project.currency)}</span></div>
   </div>
 
   ${content.showTermsSection ? `<div class="section-block"><h2>Terms &amp; Payment</h2><p>${escapeHtml(data.boq.termsText)}</p></div>` : ""}

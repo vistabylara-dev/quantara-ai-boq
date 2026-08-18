@@ -79,6 +79,8 @@ export type GenerateDocumentInput = {
   documentType: GeneratedDocumentType;
   audience: DocumentAudience;
   acknowledgedWarnings?: boolean;
+  /** TAYQAN Draft BOQ Word export. Defaults to today's existing (priced) behavior. */
+  pricingMode?: "WITH_PRICES" | "QUANTITIES_ONLY";
 };
 
 function assertCompanyProfileComplete(company: {
@@ -197,7 +199,15 @@ export async function generateDocument(actor: CurrentActor, projectIdentifier: s
     throw new AppError("TRIAL_EXPORT_LIMIT_REACHED", documentCheck.reason ?? "Document generation limit reached.", 403);
   }
 
-  if (FINAL_ONLY_TYPES.includes(input.documentType) && isDraft) {
+  // TAYQAN Draft BOQ Word export: a customer needs to review TAYQAN's
+  // measured quantities before an engineer has priced (and therefore
+  // locked) anything — the whole point is reviewing scope BEFORE pricing.
+  // QUANTITIES_ONLY DOCX carries no commercial data at all, so the
+  // locked-snapshot integrity concern FINAL_ONLY_TYPES exists for doesn't
+  // apply to it. Every other FINAL_ONLY_TYPES case (including WITH_PRICES
+  // DOCX) is unchanged.
+  const isQuantitiesOnlyDraftDocx = input.documentType === GeneratedDocumentType.DOCX && input.pricingMode === "QUANTITIES_ONLY";
+  if (FINAL_ONLY_TYPES.includes(input.documentType) && isDraft && !isQuantitiesOnlyDraftDocx) {
     throw new AppError(
       "LOCKED_REVISION_REQUIRED",
       `${input.documentType} generation requires a locked BOQ revision. Lock this revision first, or generate a CSV or HTML draft instead.`,
@@ -290,6 +300,7 @@ export async function generateDocument(actor: CurrentActor, projectIdentifier: s
     generatedByName: actor.fullName,
     isDraft,
     showInternalCostFieldsToClient: effectiveContentConfig.showInternalCostFieldsToClient,
+    pricingMode: input.pricingMode ?? "WITH_PRICES",
     watermarkText: applyTrialWatermark ? TRIAL_WATERMARK_TEXT : null,
   });
 

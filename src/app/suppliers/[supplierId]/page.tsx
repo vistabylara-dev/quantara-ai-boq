@@ -8,6 +8,7 @@ import { formatDate } from "@/lib/formatting/dates";
 import { formatCurrency } from "@/lib/formatting/currency";
 import { ApiClientError, apiClient, getApiErrorMessage } from "@/lib/api/client";
 import SupplierForm from "@/components/suppliers/supplier-form";
+import { useTranslations } from "@/lib/i18n/locale-provider";
 
 type PageProps = {
   params: Promise<{ supplierId: string }>;
@@ -15,6 +16,7 @@ type PageProps = {
 
 export default function SupplierDetailPage(props: PageProps) {
   const params = use(props.params);
+  const t = useTranslations();
   const [supplier, setSupplier] = useState<SupplierWithCatalogueCount | null>(null);
   const [catalogueItems, setCatalogueItems] = useState<CatalogueListResult["items"]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -55,7 +57,7 @@ export default function SupplierDetailPage(props: PageProps) {
 
   const handleDeactivate = async () => {
     if (!supplier || !supplier.isActive) return;
-    if (!window.confirm(`Deactivate ${supplier.name}? Existing catalogue rates will remain but the supplier will no longer be selectable for new rates.`)) return;
+    if (!window.confirm(t("suppliers.detail.deactivateConfirm", { name: supplier.name }))) return;
     setIsDeactivating(true);
     setDeactivateError(null);
     try {
@@ -71,8 +73,8 @@ export default function SupplierDetailPage(props: PageProps) {
   if (isLoading) {
     return (
       <div className="rounded-[32px] border border-slate-800 bg-slate-950 p-8 text-slate-300">
-        <p className="text-lg font-semibold text-white">Loading supplier</p>
-        <p className="mt-2 text-sm text-slate-400">Fetching supplier details...</p>
+        <p className="text-lg font-semibold text-white">{t("suppliers.detail.loadingTitle")}</p>
+        <p className="mt-2 text-sm text-slate-400">{t("suppliers.detail.loadingBody")}</p>
       </div>
     );
   }
@@ -80,10 +82,10 @@ export default function SupplierDetailPage(props: PageProps) {
   if (notFound || !supplier) {
     return (
       <div className="rounded-[32px] border border-slate-800 bg-slate-950 p-8 text-slate-300">
-        <p className="text-lg font-semibold text-white">{error ? "Supplier unavailable" : "Supplier not found"}</p>
-        <p className="mt-2 text-sm text-rose-300">{error ?? "This supplier does not exist in the current company workspace."}</p>
+        <p className="text-lg font-semibold text-white">{error ? t("suppliers.detail.unavailableTitle") : t("suppliers.detail.notFoundTitle")}</p>
+        <p className="mt-2 text-sm text-rose-300">{error ?? t("suppliers.detail.notFoundBody")}</p>
         <Link href="/suppliers" className="mt-6 inline-flex rounded-2xl border border-slate-700 bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-500">
-          Back to suppliers
+          {t("suppliers.detail.backToSuppliers")}
         </Link>
       </div>
     );
@@ -94,7 +96,7 @@ export default function SupplierDetailPage(props: PageProps) {
       <div className="rounded-[32px] border border-slate-800 bg-slate-950 p-8">
         <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
           <div>
-            <p className="text-sm uppercase tracking-[0.28em] text-slate-500">Supplier</p>
+            <p className="text-sm uppercase tracking-[0.28em] text-slate-500">{t("suppliers.detail.eyebrow")}</p>
             <h1 className="mt-2 text-3xl font-semibold text-white">{supplier.name}</h1>
             {supplier.legalName && <p className="mt-1 text-slate-400">{supplier.legalName}</p>}
             <span
@@ -104,19 +106,19 @@ export default function SupplierDetailPage(props: PageProps) {
                   : "border-slate-700 bg-slate-900 text-slate-400"
               }`}
             >
-              {supplier.isActive ? "Active" : "Inactive"}
+              {supplier.isActive ? t("suppliers.detail.active") : t("suppliers.detail.inactive")}
             </span>
           </div>
           <div className="flex gap-3">
             <Link href="/suppliers" className="inline-flex rounded-2xl border border-slate-700 bg-slate-900 px-4 py-2 text-sm text-slate-200 hover:bg-slate-800">
-              Back to suppliers
+              {t("suppliers.detail.backToSuppliers")}
             </Link>
             <button
               type="button"
               onClick={() => setIsEditing((current) => !current)}
               className="inline-flex rounded-2xl border border-slate-700 bg-slate-900 px-4 py-2 text-sm text-slate-200 hover:bg-slate-800"
             >
-              {isEditing ? "Close" : "Edit"}
+              {isEditing ? t("suppliers.detail.close") : t("suppliers.detail.edit")}
             </button>
             {supplier.isActive && (
               <button
@@ -125,7 +127,7 @@ export default function SupplierDetailPage(props: PageProps) {
                 disabled={isDeactivating}
                 className="inline-flex rounded-2xl border border-rose-800 bg-rose-950/40 px-4 py-2 text-sm text-rose-300 hover:bg-rose-950 disabled:opacity-60"
               >
-                {isDeactivating ? "Deactivating..." : "Deactivate"}
+                {isDeactivating ? t("suppliers.detail.deactivating") : t("suppliers.detail.deactivate")}
               </button>
             )}
           </div>
@@ -145,39 +147,39 @@ export default function SupplierDetailPage(props: PageProps) {
       ) : (
         <div className="grid gap-6 md:grid-cols-2">
           <div className="rounded-[32px] border border-slate-800 bg-slate-950 p-8">
-            <h2 className="text-xl font-semibold text-white">Contact details</h2>
+            <h2 className="text-xl font-semibold text-white">{t("suppliers.detail.contactDetailsTitle")}</h2>
             <dl className="mt-4 space-y-3 text-sm">
-              <div><dt className="text-slate-500">Contact person</dt><dd className="text-slate-200">{supplier.contactPerson ?? "—"}</dd></div>
-              <div><dt className="text-slate-500">Email</dt><dd className="text-slate-200">{supplier.email ?? "—"}</dd></div>
-              <div><dt className="text-slate-500">Phone</dt><dd className="text-slate-200">{supplier.phone ?? "—"}</dd></div>
-              <div><dt className="text-slate-500">Website</dt><dd className="text-slate-200">{supplier.website ?? "—"}</dd></div>
-              <div><dt className="text-slate-500">Address</dt><dd className="text-slate-200">{supplier.address ?? "—"}</dd></div>
+              <div><dt className="text-slate-500">{t("suppliers.detail.contactPerson")}</dt><dd className="text-slate-200">{supplier.contactPerson ?? "—"}</dd></div>
+              <div><dt className="text-slate-500">{t("suppliers.detail.email")}</dt><dd className="text-slate-200">{supplier.email ?? "—"}</dd></div>
+              <div><dt className="text-slate-500">{t("suppliers.detail.phone")}</dt><dd className="text-slate-200">{supplier.phone ?? "—"}</dd></div>
+              <div><dt className="text-slate-500">{t("suppliers.detail.website")}</dt><dd className="text-slate-200">{supplier.website ?? "—"}</dd></div>
+              <div><dt className="text-slate-500">{t("suppliers.detail.address")}</dt><dd className="text-slate-200">{supplier.address ?? "—"}</dd></div>
             </dl>
           </div>
           <div className="rounded-[32px] border border-slate-800 bg-slate-950 p-8">
-            <h2 className="text-xl font-semibold text-white">Commercial terms</h2>
+            <h2 className="text-xl font-semibold text-white">{t("suppliers.detail.commercialTermsTitle")}</h2>
             <dl className="mt-4 space-y-3 text-sm">
-              <div><dt className="text-slate-500">Tax registration number</dt><dd className="text-slate-200">{supplier.taxRegistrationNumber ?? "—"}</dd></div>
-              <div><dt className="text-slate-500">Default currency</dt><dd className="text-slate-200">{supplier.defaultCurrency}</dd></div>
-              <div><dt className="text-slate-500">Payment terms</dt><dd className="text-slate-200">{supplier.paymentTerms ?? "—"}</dd></div>
-              <div><dt className="text-slate-500">Lead time</dt><dd className="text-slate-200">{supplier.leadTimeDays !== null ? `${supplier.leadTimeDays} days` : "—"}</dd></div>
-              <div><dt className="text-slate-500">Catalogue items</dt><dd className="text-slate-200">{supplier.catalogueItemCount}</dd></div>
+              <div><dt className="text-slate-500">{t("suppliers.detail.taxRegistrationNumber")}</dt><dd className="text-slate-200">{supplier.taxRegistrationNumber ?? "—"}</dd></div>
+              <div><dt className="text-slate-500">{t("suppliers.detail.defaultCurrency")}</dt><dd className="text-slate-200">{supplier.defaultCurrency}</dd></div>
+              <div><dt className="text-slate-500">{t("suppliers.detail.paymentTerms")}</dt><dd className="text-slate-200">{supplier.paymentTerms ?? "—"}</dd></div>
+              <div><dt className="text-slate-500">{t("suppliers.detail.leadTime")}</dt><dd className="text-slate-200">{supplier.leadTimeDays !== null ? t("suppliers.detail.leadTimeDaysFull", { days: supplier.leadTimeDays }) : "—"}</dd></div>
+              <div><dt className="text-slate-500">{t("suppliers.detail.catalogueItemCount")}</dt><dd className="text-slate-200">{supplier.catalogueItemCount}</dd></div>
             </dl>
           </div>
         </div>
       )}
 
       <div className="rounded-[32px] border border-slate-800 bg-slate-950 p-8">
-        <h2 className="text-xl font-semibold text-white">Catalogue items</h2>
+        <h2 className="text-xl font-semibold text-white">{t("suppliers.detail.catalogueItemsTitle")}</h2>
         <div className="mt-4 overflow-x-auto rounded-3xl border border-slate-800">
-          <table className="min-w-full text-left text-sm text-slate-300">
+          <table className="min-w-full text-start text-sm text-slate-300">
             <thead className="bg-slate-900 text-slate-400">
               <tr>
-                <th className="px-6 py-4">Code</th>
-                <th className="px-6 py-4">Description</th>
-                <th className="px-6 py-4">Selling rate</th>
-                <th className="px-6 py-4">Status</th>
-                <th className="px-6 py-4">Action</th>
+                <th className="px-6 py-4">{t("suppliers.detail.columnCode")}</th>
+                <th className="px-6 py-4">{t("suppliers.detail.columnDescription")}</th>
+                <th className="px-6 py-4">{t("suppliers.detail.columnSellingRate")}</th>
+                <th className="px-6 py-4">{t("suppliers.detail.columnStatus")}</th>
+                <th className="px-6 py-4">{t("suppliers.detail.columnAction")}</th>
               </tr>
             </thead>
             <tbody>
@@ -189,14 +191,14 @@ export default function SupplierDetailPage(props: PageProps) {
                   <td className="px-6 py-4 text-slate-300">{item.status}</td>
                   <td className="px-6 py-4">
                     <Link href={`/catalogue?itemId=${item.id}`} className="inline-flex rounded-2xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-200 hover:bg-slate-800">
-                      Open
+                      {t("suppliers.detail.open")}
                     </Link>
                   </td>
                 </tr>
               ))}
               {catalogueItems.length === 0 && (
                 <tr>
-                  <td colSpan={5} className="px-6 py-10 text-center text-slate-400">No catalogue items from this supplier yet.</td>
+                  <td colSpan={5} className="px-6 py-10 text-center text-slate-400">{t("suppliers.detail.emptyCatalogueItems")}</td>
                 </tr>
               )}
             </tbody>

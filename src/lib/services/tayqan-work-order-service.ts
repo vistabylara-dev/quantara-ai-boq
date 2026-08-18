@@ -25,7 +25,11 @@ import {
 import { getProjectRecord } from "@/lib/repositories/project-repository";
 import { generateAiDraftBoq } from "@/lib/services/ai-draft-boq-service";
 import { prepareTayqanMeasurementProposals } from "@/lib/services/tayqan-measurement-service";
-import { TAYQAN_MEASUREMENT_VERSION } from "@/lib/tayqan/tayqan-measurement-contract";
+import {
+  TAYQAN_MEASUREMENT_VERSION,
+  tayqanMeasurementExceptionIsDangerous,
+  tayqanMeasurementExceptionKey,
+} from "@/lib/tayqan/tayqan-measurement-contract";
 import {
   confirmExtractedEntity,
   correctExtractedEntity,
@@ -54,7 +58,7 @@ type GoverningInstructionContext = {
   authoritativeSourcePolicy: string | null;
 };
 
-type WorkProgress = {
+export type WorkProgress = {
   quantityOverrides?: Record<string, { quantity: number; unit: string; note: string }>;
   rateOverrides?: Record<string, { unitCost: number; sourceNote: string }>;
 
@@ -113,10 +117,36 @@ type WorkProgress = {
     exceptionRegisterBatchCount: number;
     exceptionPreviewTruncated: boolean;
   };
+
+  /**
+   * PR1 correctness/completion-safety mission 2: the unified, queryable
+   * measurement-exception ledger. Populated from two sources — mirrored from
+   * the TAYQAN reasoner's own exceptions (draft-first pipeline, see
+   * tayqanMeasurement.exceptions above) and synthesized directly by
+   * advanceQuantityPreparation for entities that reach QUANTITY_PREPARATION
+   * with no genuine quantity source (mission 1's SCOPE_GAP). This is the
+   * single structure unresolvedDangerousMeasurementExceptions() reads to
+   * gate progression — see that function for the gate itself.
+   */
+  measurementExceptions?: Array<{
+    key: string;
+    kind: string;
+    message: string;
+    pageIds: string[];
+    relatedEntityId: string | null;
+    createdAt: string;
+  }>;
+  /** Governed, audited resolutions keyed by measurementExceptions[].key. */
+  measurementExceptionResolutions?: Record<string, {
+    reason: string;
+    actorUserId: string;
+    actorName: string;
+    resolvedAt: string;
+  }>;
 };
 
 type WorkBlocker = {
-  kind: "ACTION" | "ENTITY_REVIEW" | "QUANTITY_REQUIRED" | "RATE_REQUIRED" | "QA_QUESTION" | "ERROR";
+  kind: "ACTION" | "ENTITY_REVIEW" | "QUANTITY_REQUIRED" | "RATE_REQUIRED" | "QA_QUESTION" | "MEASUREMENT_EXCEPTIONS" | "ERROR";
   i18nKey: string;
   actionHref?: string;
   entity?: {
@@ -150,6 +180,50 @@ function instructionContextFromProgress(
   progress: WorkProgress,
 ): GoverningInstructionContext | null {
   return progress.instructionContext ?? null;
+}
+
+/**
+ * PR1 mission 2: idempotently records a measurement exception into the
+ * unified ledger, keyed by content so the same underlying gap is never
+ * duplicated across repeated advance passes. Returns the SAME progress
+ * object (by reference) when the exception is already present, so callers
+ * can cheaply detect "did anything change" via reference equality.
+ */
+function withMeasurementException(
+  progress: WorkProgress,
+  exception: { kind: string; message: string; pageIds: string[]; relatedEntityId: string | null },
+): WorkProgress {
+  const key = tayqanMeasurementExceptionKey(exception);
+  const existing = progress.measurementExceptions ?? [];
+  if (existing.some((item) => item.key === key)) return progress;
+  return {
+    ...progress,
+    measurementExceptions: [
+      ...existing,
+      { ...exception, key, createdAt: new Date().toISOString() },
+    ],
+  };
+}
+
+/**
+ * PR1 mission 2: the single source of truth for "can this work order
+ * advance". Every dangerous-kind exception in the ledger (see
+ * TAYQAN_DANGEROUS_MEASUREMENT_EXCEPTION_KINDS) blocks until a governed
+ * resolution exists for its exact key — resolving is never a silent status
+ * flip, see resolveTayqanMeasurementException below.
+ */
+export function unresolvedDangerousMeasurementExceptions(
+  progress: WorkProgress,
+): {
+  exceptions: NonNullable<WorkProgress["measurementExceptions"]>;
+  blocking: boolean;
+} {
+  const exceptions = progress.measurementExceptions ?? [];
+  const resolutions = progress.measurementExceptionResolutions ?? {};
+  const unresolved = exceptions.filter(
+    (exception) => tayqanMeasurementExceptionIsDangerous(exception.kind) && !resolutions[exception.key],
+  );
+  return { exceptions: unresolved, blocking: unresolved.length > 0 };
 }
 
 type InstructionSession = {
@@ -509,6 +583,34 @@ async function updateOrder(
   return updated;
 }
 
+/**
+ * PR1 mission 3: the exception-ledger view the work-order panel renders.
+ * Every entry carries whether it's dangerous (gates progression, see
+ * unresolvedDangerousMeasurementExceptions) and its resolution if any, so
+ * the UI can distinguish "informational" from "must act" without
+ * duplicating the gating logic itself.
+ */
+function measurementExceptionsSummary(progress: WorkProgress) {
+  const exceptions = progress.measurementExceptions ?? [];
+  const resolutions = progress.measurementExceptionResolutions ?? {};
+  const dangerous = exceptions.filter((exception) => tayqanMeasurementExceptionIsDangerous(exception.kind));
+  const unresolvedDangerous = dangerous.filter((exception) => !resolutions[exception.key]);
+  return {
+    totalCount: exceptions.length,
+    dangerousCount: dangerous.length,
+    unresolvedDangerousCount: unresolvedDangerous.length,
+    exceptions: exceptions.map((exception) => ({
+      key: exception.key,
+      kind: exception.kind,
+      message: exception.message,
+      pageIds: exception.pageIds,
+      relatedEntityId: exception.relatedEntityId,
+      dangerous: tayqanMeasurementExceptionIsDangerous(exception.kind),
+      resolution: resolutions[exception.key] ?? null,
+    })),
+  };
+}
+
 function toState(order: Awaited<ReturnType<typeof loadOrder>>) {
   return {
     id: order.id,
@@ -525,6 +627,7 @@ function toState(order: Awaited<ReturnType<typeof loadOrder>>) {
     blockerMessage: order.blockerMessage,
     blocker: blockerFromJson(order.blockerJson),
     qaWorkerRunId: order.qaWorkerRunId,
+    measurementExceptions: measurementExceptionsSummary(parseProgress(order.progressJson)),
     startedAt: order.startedAt.toISOString(),
     lastAdvancedAt: order.lastAdvancedAt.toISOString(),
     completedAt: order.completedAt?.toISOString() ?? null,
@@ -1133,6 +1236,20 @@ async function advanceSourceProcessing(actor: CurrentActor, projectSlug: string,
           { onProgress: async () => heartbeatTayqanMeasurementLease(actor, order.id, leaseToken) },
         );
         const measurementExceptions = measurement.exceptions.slice(0, 50).map((exception) => ({ kind: exception.kind, message: exception.message, pageIds: exception.pageIds }));
+        // PR1 mission 2: mirror every reasoner exception into the unified,
+        // gateable ledger (not just the truncated UI preview above) so
+        // dangerous-kind exceptions from the draft-first pipeline gate
+        // Draft handoff and final QA exactly like mission 1's SCOPE_GAP
+        // exceptions do for the non-draft-first pipeline.
+        const ledgerExceptions = measurement.exceptions.map((exception) => {
+          const key = tayqanMeasurementExceptionKey(exception);
+          return { key, kind: exception.kind, message: exception.message, pageIds: exception.pageIds, relatedEntityId: exception.relatedEntityId, createdAt: new Date().toISOString() };
+        });
+        const existingLedgerKeys = new Set((leasedProgress.measurementExceptions ?? []).map((exception) => exception.key));
+        const mergedLedger = [
+          ...(leasedProgress.measurementExceptions ?? []),
+          ...ledgerExceptions.filter((exception) => !existingLedgerKeys.has(exception.key)),
+        ];
         const exceptionBatches = Array.from(
           { length: Math.ceil(measurement.exceptions.length / TAYQAN_EXCEPTION_EVENT_BATCH_SIZE) },
           (_, index) => measurement.exceptions.slice(index * TAYQAN_EXCEPTION_EVENT_BATCH_SIZE, (index + 1) * TAYQAN_EXCEPTION_EVENT_BATCH_SIZE),
@@ -1154,7 +1271,7 @@ async function advanceSourceProcessing(actor: CurrentActor, projectSlug: string,
           const completed = await tx.tayqanWorkOrder.updateMany({
             where: { id: order.id, companyId: actor.companyId, blockerCode: TAYQAN_MEASUREMENT_LEASE_CODE, blockerMessage: leaseToken },
             data: {
-              progressJson: jsonObject({ ...leasedProgress, tayqanMeasurement: {
+              progressJson: jsonObject({ ...leasedProgress, measurementExceptions: mergedLedger, tayqanMeasurement: {
                 version: TAYQAN_MEASUREMENT_VERSION, measuredSubjectCount: measurement.measuredSubjectCount, createdCalculationCount: measurement.createdCalculationCount, reusedCalculationCount: measurement.reusedCalculationCount,
                 exceptionCount: measurement.exceptionCount, provider: measurement.provider, model: measurement.model, seniorReview: measurement.seniorReview, exceptions: measurementExceptions,
                 exceptionRegisterRunId: leaseToken, exceptionRegisterBatchCount: exceptionBatches.length, exceptionPreviewTruncated: measurement.exceptions.length > measurementExceptions.length,
@@ -1245,6 +1362,17 @@ async function prepareTayqanAiDraft(
   projectSlug: string,
   order: Awaited<ReturnType<typeof loadOrder>>,
 ) {
+  // PR1 mission 2: real exception gate before Draft handoff — no call path
+  // may reach generateAiDraftBoq() while a dangerous-kind TAYQAN measurement
+  // exception remains unresolved.
+  const gate = unresolvedDangerousMeasurementExceptions(parseProgress(order.progressJson));
+  if (gate.blocking) {
+    return block(actor, order, "MEASUREMENT_EXCEPTIONS_UNRESOLVED", "tayqan.hire.workflow.measurementExceptionsUnresolved", {
+      kind: "MEASUREMENT_EXCEPTIONS",
+      i18nKey: "tayqan.hire.workflow.measurementExceptionsUnresolved",
+    });
+  }
+
   const boqId =
     await ensureWorkingBoq(
       actor,
@@ -1639,18 +1767,42 @@ async function activeEvidence(
 async function advanceQuantityPreparation(actor: CurrentActor, projectSlug: string, order: Awaited<ReturnType<typeof loadOrder>>) {
   const progress = parseProgress(order.progressJson);
   const entities = await activeEvidence(actor, order);
+  let nextProgress = progress;
   for (const entity of entities) {
     const confirmedCalculation = await prisma.quantityCalculation.findFirst({
       where: { companyId: actor.companyId, projectId: order.projectId, extractedEntityId: entity.id, status: "CONFIRMED" },
       orderBy: { updatedAt: "desc" },
     });
     if (confirmedCalculation) continue;
-    if (entity.quantity && entity.unit) continue;
-    if (progress.quantityOverrides?.[entity.id]) continue;
-    return block(actor, order, "QUANTITY_REQUIRED", "tayqan.hire.workflow.quantityRequired", {
-      kind: "QUANTITY_REQUIRED",
-      i18nKey: "tayqan.hire.workflow.quantityRequired",
-      entity: entityBlocker(entity),
+    if (nextProgress.quantityOverrides?.[entity.id]) continue;
+    if (!entity.quantity || !entity.unit) {
+      return block(actor, order, "QUANTITY_REQUIRED", "tayqan.hire.workflow.quantityRequired", {
+        kind: "QUANTITY_REQUIRED",
+        i18nKey: "tayqan.hire.workflow.quantityRequired",
+        entity: entityBlocker(entity),
+      });
+    }
+    // PR1 mission 1: raw entity.quantity/entity.unit alone is extraction
+    // output, never a genuine measurement. It no longer silently satisfies
+    // quantity preparation — it becomes a visible, gating SCOPE_GAP
+    // exception (mission 2) instead of a fabricated BOQ row.
+    nextProgress = withMeasurementException(nextProgress, {
+      kind: "SCOPE_GAP",
+      message: `TAYQAN found no confirmed quantity calculation or professional override for "${entity.label}". Raw extracted values alone are not a genuine measurement.`,
+      pageIds: [],
+      relatedEntityId: entity.id,
+    });
+  }
+
+  if (nextProgress !== progress) {
+    await prisma.tayqanWorkOrder.update({ where: { id: order.id }, data: { progressJson: jsonObject(nextProgress) } });
+  }
+
+  const gate = unresolvedDangerousMeasurementExceptions(nextProgress);
+  if (gate.blocking) {
+    return block(actor, order, "MEASUREMENT_EXCEPTIONS_UNRESOLVED", "tayqan.hire.workflow.measurementExceptionsUnresolved", {
+      kind: "MEASUREMENT_EXCEPTIONS",
+      i18nKey: "tayqan.hire.workflow.measurementExceptionsUnresolved",
     });
   }
 
@@ -1753,19 +1905,37 @@ async function getOrCreateTayqanSection(actor: CurrentActor, boqId: string) {
   }
 }
 
+/**
+ * PR1 mission 1: raw entity.quantity/entity.unit alone is no longer a valid
+ * resolution — only a CONFIRMED QuantityCalculation or an explicit human
+ * quantityOverrides entry counts as a genuine quantity source. Returns null
+ * (never fabricates) when neither exists; advanceBoqAssembly's caller must
+ * skip the entity rather than import a bare-extraction row.
+ */
 async function resolveQuantity(actor: CurrentActor, order: Awaited<ReturnType<typeof loadOrder>>, entity: Awaited<ReturnType<typeof activeEvidence>>[number], progress: WorkProgress) {
   const calculation = await prisma.quantityCalculation.findFirst({
     where: { companyId: actor.companyId, projectId: order.projectId, extractedEntityId: entity.id, status: "CONFIRMED" },
     orderBy: { updatedAt: "desc" },
   });
   if (calculation) return { quantity: calculation.resultValue.toNumber(), unit: calculation.resultUnit, calculationId: calculation.id };
-  if (entity.quantity && entity.unit) return { quantity: entity.quantity.toNumber(), unit: entity.unit, calculationId: undefined };
   const override = progress.quantityOverrides?.[entity.id];
   if (override) return { quantity: override.quantity, unit: override.unit, calculationId: undefined };
-  throw new ConflictError("QUANTITY_REQUIRED", "A reviewed quantity is required before BOQ assembly.");
+  return null;
 }
 
 async function advanceBoqAssembly(actor: CurrentActor, projectSlug: string, order: Awaited<ReturnType<typeof loadOrder>>) {
+  // PR1 mission 2: real exception gate before BOQ_ASSEMBLY too — defense in
+  // depth alongside the gate in advanceQuantityPreparation, in case this
+  // stage is ever re-entered directly (e.g. RATE_PREPARATION -> here) after
+  // a dangerous exception appeared.
+  const gate = unresolvedDangerousMeasurementExceptions(parseProgress(order.progressJson));
+  if (gate.blocking) {
+    return block(actor, order, "MEASUREMENT_EXCEPTIONS_UNRESOLVED", "tayqan.hire.workflow.measurementExceptionsUnresolved", {
+      kind: "MEASUREMENT_EXCEPTIONS",
+      i18nKey: "tayqan.hire.workflow.measurementExceptionsUnresolved",
+    });
+  }
+
   const boqId = await ensureWorkingBoq(actor, projectSlug, order);
   const section = await getOrCreateTayqanSection(actor, boqId);
   const progress = parseProgress(order.progressJson);
@@ -1779,6 +1949,12 @@ async function advanceBoqAssembly(actor: CurrentActor, projectSlug: string, orde
     if (alreadyImported) continue;
 
     const quantity = await resolveQuantity(actor, order, entity, progress);
+    if (!quantity) {
+      // Should not normally be reached — the QUANTITY_PREPARATION gate
+      // already stops ungrounded entities here — but never fabricate or
+      // crash the whole assembly loop over one still-ungrounded item.
+      continue;
+    }
     const rate =
       order.includeRates
         ? await resolvedRate(
@@ -1827,11 +2003,43 @@ async function advanceBoqAssembly(actor: CurrentActor, projectSlug: string, orde
 }
 
 async function advanceValidation(actor: CurrentActor, _projectSlug: string, order: Awaited<ReturnType<typeof loadOrder>>) {
+  // PR1 mission 2: real exception gate before final QA too — mirrors the
+  // gate in prepareTayqanAiDraft. A dangerous exception discovered (or left
+  // unresolved) after the BOQ was assembled must still block advancement
+  // into/through final QA, not just the earlier assembly gates.
+  const gate = unresolvedDangerousMeasurementExceptions(parseProgress(order.progressJson));
+  if (gate.blocking) {
+    return block(actor, order, "MEASUREMENT_EXCEPTIONS_UNRESOLVED", "tayqan.hire.workflow.measurementExceptionsUnresolved", {
+      kind: "MEASUREMENT_EXCEPTIONS",
+      i18nKey: "tayqan.hire.workflow.measurementExceptionsUnresolved",
+    });
+  }
+
   if (!order.boqId) throw new ConflictError("TAYQAN_BOQ_REQUIRED", "TAYQAN needs a working BOQ before final QA.");
+  const boq = await prisma.bOQ.findFirst({ where: { id: order.boqId, companyId: actor.companyId } });
+  if (!boq) throw new NotFoundError("TAYQAN working BOQ not found.");
+
   let qaRunId = order.qaWorkerRunId;
+  if (qaRunId) {
+    // PR1 mission 4: never trust an existing QA run without first checking
+    // it still reviewed the CURRENT BOQ. If the BOQ changed since this run
+    // was enqueued, the result is stale — drop it and re-enqueue fresh
+    // against the current version rather than accepting stale QA.
+    const existingRun = await getWorkerRunForCompany(actor.companyId, qaRunId);
+    if (existingRun.source.boqVersion !== boq.version || existingRun.source.revisionNumber !== boq.revisionNumber) {
+      await updateOrder(actor, order.id, { qaWorkerRunId: null }, "FINAL_QA_INVALIDATED_STALE_BOQ", {
+        previousQaWorkerRunId: qaRunId,
+        qaReviewedBoqVersion: existingRun.source.boqVersion,
+        qaReviewedRevisionNumber: existingRun.source.revisionNumber,
+        currentBoqVersion: boq.version,
+        currentRevisionNumber: boq.revisionNumber,
+      });
+      await persistConversationStatus(actor.companyId, order.intakeSessionId, "tayqan.hire.workflow.finalQaStaleBoqChanged");
+      qaRunId = null;
+    }
+  }
+
   if (!qaRunId) {
-    const boq = await prisma.bOQ.findFirst({ where: { id: order.boqId, companyId: actor.companyId } });
-    if (!boq) throw new NotFoundError("TAYQAN working BOQ not found.");
     const run = await enqueueWorkerReview(
       actor,
       order.boqId,
@@ -1884,6 +2092,11 @@ async function advanceValidation(actor: CurrentActor, _projectSlug: string, orde
     });
   }
 
+  // PR1 mission 5: reaching READY_FOR_ACCEPTANCE means "ready for a human to
+  // review and decide" — it is NOT completion. The work order's completedAt
+  // and the intake session's own completion status are set only by explicit
+  // acceptance (see acceptTayqanWorkOrderDeliverable below), never as a side
+  // effect of QA passing.
   await updateOrder(
     actor,
     order.id,
@@ -1893,16 +2106,11 @@ async function advanceValidation(actor: CurrentActor, _projectSlug: string, orde
       blockerCode: null,
       blockerMessage: null,
       blockerJson: Prisma.DbNull,
-      completedAt: new Date(),
       lastAdvancedAt: new Date(),
     },
     "READY_FOR_ACCEPTANCE",
     { boqId: order.boqId, qaWorkerRunId: qaRunId },
   );
-  await prisma.tayqanIntakeSession.update({
-    where: { id: order.intakeSessionId },
-    data: { status: TayqanIntakeStatus.COMPLETED, completedAt: new Date() },
-  });
   await persistConversationStatus(actor.companyId, order.intakeSessionId, "tayqan.hire.workflow.readyForAcceptance");
   return toState(await loadOrder(actor.companyId, order.id));
 }
@@ -1974,12 +2182,90 @@ function mergeProgress(progress: WorkProgress, patch: WorkProgress): WorkProgres
   };
 }
 
+/**
+ * PR1 mission 3: governed, audited resolution for a single measurement
+ * exception. Never a silent status flip — requires a written reason and
+ * records actor identity + timestamp as a durable TayqanWorkEvent, using the
+ * existing progressJson/TayqanWorkEvent pattern (no new Prisma fields).
+ * Reachable even when the work order isn't currently blocked on this
+ * specific exception, since exceptions are always visible via
+ * toState().measurementExceptions, not only while actively blocking.
+ */
+async function resolveTayqanMeasurementException(
+  actor: CurrentActor,
+  projectSlug: string,
+  order: Awaited<ReturnType<typeof loadOrder>>,
+  input: { exceptionKey?: string; note?: string },
+) {
+  const progress = parseProgress(order.progressJson);
+  const exceptionKey = input.exceptionKey?.trim();
+  const reason = input.note?.trim();
+  if (!exceptionKey) {
+    throw new AppError("TAYQAN_EXCEPTION_KEY_REQUIRED", "A measurement exception key is required.", 400);
+  }
+  if (!reason) {
+    throw new AppError("TAYQAN_EXCEPTION_REASON_REQUIRED", "A written professional reason is required to resolve a TAYQAN measurement exception.", 400);
+  }
+  const exception = (progress.measurementExceptions ?? []).find((item) => item.key === exceptionKey);
+  if (!exception) {
+    throw new NotFoundError("TAYQAN measurement exception not found in the current ledger.");
+  }
+  if (progress.measurementExceptionResolutions?.[exceptionKey]) {
+    throw new ConflictError("TAYQAN_EXCEPTION_ALREADY_RESOLVED", "This measurement exception has already been resolved.");
+  }
+
+  const resolvedAt = new Date();
+  const nextProgress: WorkProgress = {
+    ...progress,
+    measurementExceptionResolutions: {
+      ...(progress.measurementExceptionResolutions ?? {}),
+      [exceptionKey]: { reason, actorUserId: actor.userId, actorName: actor.fullName, resolvedAt: resolvedAt.toISOString() },
+    },
+  };
+  await prisma.tayqanWorkOrder.update({ where: { id: order.id }, data: { progressJson: jsonObject(nextProgress) } });
+  await appendWorkEvent(actor.companyId, order.id, order.stage, "TAYQAN_MEASUREMENT_EXCEPTION_RESOLVED", {
+    exceptionKey,
+    kind: exception.kind,
+    reason,
+    actorUserId: actor.userId,
+    actorName: actor.fullName,
+    resolvedAt: resolvedAt.toISOString(),
+  });
+  await prisma.tayqanIntakeMessage.create({
+    data: {
+      companyId: actor.companyId,
+      sessionId: order.intakeSessionId,
+      role: TayqanIntakeMessageRole.USER,
+      message: reason,
+      structuredDataJson: jsonObject({ kind: "MEASUREMENT_EXCEPTION_RESOLVED", exceptionKey, exceptionKind: exception.kind }),
+    },
+  });
+
+  const reloaded = await loadOrder(actor.companyId, order.id);
+  const blocker = blockerFromJson(reloaded.blockerJson);
+  if (reloaded.status === TayqanWorkStatus.NEEDS_INPUT && blocker?.kind === "MEASUREMENT_EXCEPTIONS") {
+    const gate = unresolvedDangerousMeasurementExceptions(parseProgress(reloaded.progressJson));
+    if (!gate.blocking) {
+      await updateOrder(actor, reloaded.id, {
+        status: TayqanWorkStatus.RUNNING,
+        blockerCode: null,
+        blockerMessage: null,
+        blockerJson: Prisma.DbNull,
+        lastAdvancedAt: new Date(),
+      }, "WORK_BLOCKER_RESOLVED", { action: "RESOLVE_MEASUREMENT_EXCEPTION" });
+      const running = await loadOrder(actor.companyId, reloaded.id);
+      return advanceTayqanWorkOrder(actor, projectSlug, running.id);
+    }
+  }
+  return toState(reloaded);
+}
+
 export async function answerTayqanWorkOrderBlocker(
   actor: CurrentActor,
   projectIdentifier: string,
   input: {
     workOrderId: string;
-    action: "CONFIRM_ENTITY" | "CORRECT_ENTITY" | "REJECT_ENTITY" | "SET_QUANTITY" | "SET_RATE" | "ANSWER_QA" | "RETRY";
+    action: "CONFIRM_ENTITY" | "CORRECT_ENTITY" | "REJECT_ENTITY" | "SET_QUANTITY" | "SET_RATE" | "ANSWER_QA" | "RETRY" | "RESOLVE_MEASUREMENT_EXCEPTION";
     entityId?: string;
     quantity?: number;
     unit?: string;
@@ -1987,12 +2273,18 @@ export async function answerTayqanWorkOrderBlocker(
     note?: string;
     label?: string;
     qaAnswerType?: "ACKNOWLEDGED" | "WILL_CORRECT_SOURCE" | "EXPLAINED_WITH_NOTE";
+    exceptionKey?: string;
   },
 ) {
   await assertTayqanAccessEntitlement(actor);
   const project = await getProjectRecord(actor.companyId, projectIdentifier);
   let order = await loadOrder(actor.companyId, input.workOrderId);
   if (order.projectId !== project.id) throw new AppError("TAYQAN_WORK_PROJECT_MISMATCH", "This work order belongs to another project.", 403);
+
+  if (input.action === "RESOLVE_MEASUREMENT_EXCEPTION") {
+    return resolveTayqanMeasurementException(actor, project.slug, order, input);
+  }
+
   if (order.status !== TayqanWorkStatus.NEEDS_INPUT && input.action !== "RETRY") {
     throw new ConflictError("TAYQAN_WORK_NOT_WAITING", "TAYQAN is not waiting for this answer.");
   }
@@ -2056,4 +2348,109 @@ export async function answerTayqanWorkOrderBlocker(
   }, "WORK_BLOCKER_RESOLVED", { action: input.action });
   order = await loadOrder(actor.companyId, order.id);
   return advanceTayqanWorkOrder(actor, project.slug, order.id);
+}
+
+/**
+ * PR1 mission 5: explicit final professional acceptance of TAYQAN's
+ * deliverable. Deliberately NOT equivalent to locking, issuing, approving,
+ * or certifying the BOQ — this route only records that a human engineer
+ * reviewed and accepted TAYQAN's work at a specific, verified BOQ version.
+ * BOQ.status/locked/verifiedVersion are never touched here.
+ */
+export async function acceptTayqanWorkOrderDeliverable(
+  actor: CurrentActor,
+  projectIdentifier: string,
+  workOrderId: string,
+) {
+  await assertTayqanAccessEntitlement(actor);
+  const project = await getProjectRecord(actor.companyId, projectIdentifier);
+  const order = await loadOrder(actor.companyId, workOrderId);
+  if (order.projectId !== project.id) {
+    throw new AppError("TAYQAN_WORK_PROJECT_MISMATCH", "This work order belongs to another project.", 403);
+  }
+  if (order.status !== TayqanWorkStatus.READY_FOR_ACCEPTANCE) {
+    throw new ConflictError("TAYQAN_NOT_READY_FOR_ACCEPTANCE", "TAYQAN's deliverable is not yet ready for professional acceptance.");
+  }
+  if (!order.boqId) {
+    throw new ConflictError("TAYQAN_BOQ_REQUIRED", "TAYQAN needs a working BOQ before acceptance.");
+  }
+  if (!order.qaWorkerRunId) {
+    throw new ConflictError("TAYQAN_FINAL_QA_REQUIRED", "TAYQAN's final QA has not run for this work order.");
+  }
+
+  const gate = unresolvedDangerousMeasurementExceptions(parseProgress(order.progressJson));
+  if (gate.blocking) {
+    throw new ConflictError("TAYQAN_MEASUREMENT_EXCEPTIONS_UNRESOLVED", "Unresolved TAYQAN measurement exceptions remain; acceptance is blocked.");
+  }
+
+  const boq = await prisma.bOQ.findFirst({ where: { id: order.boqId, companyId: actor.companyId } });
+  if (!boq) throw new NotFoundError("TAYQAN working BOQ not found.");
+
+  const run = await getWorkerRunForCompany(actor.companyId, order.qaWorkerRunId);
+  if (run.status !== WorkerRunStatus.COMPLETED || !run.resultAssignment) {
+    throw new ConflictError("TAYQAN_FINAL_QA_NOT_COMPLETE", "TAYQAN's final QA has not completed successfully.");
+  }
+  // PR1 mission 5: re-check freshness at the moment of acceptance, not just
+  // at the earlier READY_FOR_ACCEPTANCE transition — the BOQ could have
+  // changed in between.
+  if (run.source.boqVersion !== boq.version || run.source.revisionNumber !== boq.revisionNumber) {
+    throw new ConflictError(
+      "TAYQAN_FINAL_QA_STALE",
+      "The BOQ changed after final QA reviewed it. Re-run final QA against the current BOQ before accepting.",
+    );
+  }
+
+  const acceptedAt = new Date();
+  try {
+    await prisma.$transaction(async (tx) => {
+      await tx.tayqanDeliverableAcceptance.create({
+        data: {
+          companyId: actor.companyId,
+          projectId: order.projectId,
+          boqId: order.boqId!,
+          workOrderId: order.id,
+          boqVersion: boq.version,
+          boqRevisionNumber: boq.revisionNumber,
+          qaWorkerRunId: order.qaWorkerRunId!,
+          acceptedByUserId: actor.userId,
+          acceptedByName: actor.fullName,
+          acceptedAt,
+        },
+      });
+      await tx.tayqanWorkOrder.update({
+        where: { id: order.id },
+        data: { status: TayqanWorkStatus.COMPLETED, completedAt: acceptedAt, lastAdvancedAt: acceptedAt },
+      });
+      await tx.tayqanIntakeSession.update({
+        where: { id: order.intakeSessionId },
+        data: { status: TayqanIntakeStatus.COMPLETED, completedAt: acceptedAt },
+      });
+      await tx.tayqanWorkEvent.create({
+        data: {
+          companyId: actor.companyId,
+          workOrderId: order.id,
+          stage: order.stage,
+          eventType: "TAYQAN_DELIVERABLE_ACCEPTED",
+          payloadJson: jsonObject({
+            workOrderId: order.id,
+            boqId: order.boqId,
+            boqVersion: boq.version,
+            revisionNumber: boq.revisionNumber,
+            qaWorkerRunId: order.qaWorkerRunId,
+            acceptedByUserId: actor.userId,
+            acceptedByName: actor.fullName,
+            acceptedAt: acceptedAt.toISOString(),
+          }),
+        },
+      });
+    });
+  } catch (error) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+      throw new ConflictError("TAYQAN_ALREADY_ACCEPTED", "This TAYQAN deliverable has already been accepted.");
+    }
+    throw error;
+  }
+
+  await persistConversationStatus(actor.companyId, order.intakeSessionId, "tayqan.hire.workflow.deliverableAccepted");
+  return toState(await loadOrder(actor.companyId, order.id));
 }

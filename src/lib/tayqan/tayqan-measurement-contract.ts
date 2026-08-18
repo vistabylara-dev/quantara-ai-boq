@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import {
   ExtractedEntityType,
   QuantityCalculationType,
@@ -32,6 +33,64 @@ export const TAYQAN_MEASUREMENT_EXCEPTION_KINDS = [
 export const tayqanMeasurementExceptionKindSchema = z.enum(
   TAYQAN_MEASUREMENT_EXCEPTION_KINDS,
 );
+
+/**
+ * PR1 correctness/completion-safety mission 2: exception kinds that describe
+ * a genuine measurement-integrity risk, not just an informational note. A
+ * work order may not proceed into BOQ_ASSEMBLY, complete VALIDATION, reach
+ * READY_FOR_ACCEPTANCE, or be accepted while any of these is unresolved.
+ *
+ * The suggested minimum from the mission brief is REVISION_CONFLICT,
+ * PLAN_SCHEDULE_MISMATCH, METHOD_SELECTION_UNCERTAIN,
+ * SUPPORTING_CHECK_MISMATCH, and COMPOSITE_SCOPE_REQUIRES_SPLIT. SCOPE_GAP is
+ * added here: mission 1 closes the raw-extraction bypass by turning an
+ * ungrounded quantity into a SCOPE_GAP exception instead of a fabricated BOQ
+ * row, and if SCOPE_GAP were only informational, a work order could still
+ * sail to acceptance with scope items that were never genuinely measured —
+ * exactly the "completion safety" failure this PR exists to close. All other
+ * kinds remain informational (visible, not blocking) by default.
+ */
+export const TAYQAN_DANGEROUS_MEASUREMENT_EXCEPTION_KINDS = new Set<
+  (typeof TAYQAN_MEASUREMENT_EXCEPTION_KINDS)[number]
+>([
+  "REVISION_CONFLICT",
+  "PLAN_SCHEDULE_MISMATCH",
+  "METHOD_SELECTION_UNCERTAIN",
+  "SUPPORTING_CHECK_MISMATCH",
+  "COMPOSITE_SCOPE_REQUIRES_SPLIT",
+  "SCOPE_GAP",
+]);
+
+export function tayqanMeasurementExceptionIsDangerous(kind: string): boolean {
+  return TAYQAN_DANGEROUS_MEASUREMENT_EXCEPTION_KINDS.has(
+    kind as (typeof TAYQAN_MEASUREMENT_EXCEPTION_KINDS)[number],
+  );
+}
+
+/**
+ * Stable, content-addressable identity for a measurement exception so the
+ * same underlying gap is never recorded twice in the work order's exception
+ * ledger, and so an engineer's resolution survives the ledger being
+ * re-derived on a later advance pass.
+ */
+export function tayqanMeasurementExceptionKey(exception: {
+  kind: string;
+  message: string;
+  pageIds: readonly string[];
+  relatedEntityId?: string | null;
+}): string {
+  return createHash("sha256")
+    .update(
+      JSON.stringify({
+        kind: exception.kind,
+        message: exception.message.trim(),
+        pageIds: [...exception.pageIds].sort(),
+        relatedEntityId: exception.relatedEntityId ?? null,
+      }),
+    )
+    .digest("hex")
+    .slice(0, 20);
+}
 
 export const TAYQAN_MEASUREMENT_METHODS = [
   "COUNT",

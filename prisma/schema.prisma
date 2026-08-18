@@ -4707,6 +4707,7 @@ model TayqanWorkOrder {
   createdAt                 DateTime         @default(now())
   updatedAt                 DateTime         @updatedAt
   events                    TayqanWorkEvent[]
+  deliverableAcceptance     TayqanDeliverableAcceptance?
 
   @@index([companyId])
   @@index([companyId, projectId])
@@ -4728,4 +4729,28 @@ model TayqanWorkEvent {
   @@index([companyId])
   @@index([workOrderId, createdAt])
   @@index([stage])
+}
+
+// PR1 (mission 5): a durable, queryable record of professional acceptance of
+// a TAYQAN deliverable — distinct from BOQ.status/locked/verifiedVersion,
+// which this record never touches. Mirrors the point-in-time-snapshot shape
+// of BOQRevisionSnapshot (companyId/projectId/boqId-scoped, createdAt,
+// accepting identity), one row per accepted work order.
+model TayqanDeliverableAcceptance {
+  id                String          @id @default(uuid()) @db.Uuid
+  companyId         String          @db.Uuid
+  projectId         String          @db.Uuid
+  boqId             String          @db.Uuid
+  workOrderId       String          @unique @db.Uuid
+  boqVersion        Int
+  boqRevisionNumber Int
+  qaWorkerRunId     String          @db.Uuid
+  acceptedByUserId  String          @db.Uuid
+  acceptedByName    String
+  acceptedAt        DateTime        @default(now())
+  workOrder         TayqanWorkOrder @relation(fields: [workOrderId], references: [id], onDelete: Cascade)
+
+  @@index([companyId])
+  @@index([projectId])
+  @@index([boqId])
 }

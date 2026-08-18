@@ -32,7 +32,7 @@ export default function MetricCard({
   if (variant === "primary") {
     return (
       <div className="group relative overflow-hidden cyber-panel cyber-border p-6 transition-all hover:border-[#00F0FF]/50 hover:shadow-[0_0_15px_rgba(0,240,255,0.15)] rounded-sm">
-        <span className="absolute -right-6 -top-6 h-24 w-24 rounded-full bg-[#00F0FF]/10 group-hover:bg-[#00F0FF]/20 transition-colors blur-xl" aria-hidden="true" />
+        <span className="absolute -end-6 -top-6 h-24 w-24 rounded-full bg-[#00F0FF]/10 group-hover:bg-[#00F0FF]/20 transition-colors blur-xl" aria-hidden="true" />
         <div className="relative flex items-center justify-between border-b border-white/5 pb-4 mb-4">
           <p className="terminal-text text-[10px] uppercase tracking-[0.3em] text-[#00F0FF]">{label}</p>
           <span className={`flex h-10 w-10 items-center justify-center rounded-sm border ${toneBadgeClasses[tone]}`}>

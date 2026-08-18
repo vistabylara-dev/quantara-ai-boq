@@ -1,3 +1,8 @@
+"use client";
+
+import { useTranslations } from "@/lib/i18n/locale-provider";
+import type { TranslationKey } from "@/lib/i18n/translate";
+
 export type StatusTone = "success" | "warning" | "error" | "info" | "default";
 
 const toneClasses: Record<StatusTone, string> = {
@@ -12,10 +17,49 @@ export function formatStatusLabel(value: string): string {
   return value.replace(/_/g, " ").toLowerCase().replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
+/**
+ * Every raw status enum value that this badge is known to render across the app (Project, BOQ,
+ * Document and File statuses, plus the "Locked" literal) — covers the full set defined in the
+ * dashboard's own PROJECT_STATUS_TONE / BOQ_STATUS_TONE / DOCUMENT_STATUS_TONE / FILE_STATUS_TONE
+ * maps. Anything not in this map (e.g. a raw file format like "PDF", or a status value owned by a
+ * page outside src/components/dashboard) safely falls back to the existing formatStatusLabel
+ * transform below — unchanged, untranslated behavior, never a blank or broken badge.
+ */
+const STATUS_LABEL_KEYS: Record<string, TranslationKey> = {
+  DRAFT: "dashboardComponents.status.draft",
+  CALCULATED: "dashboardComponents.status.calculated",
+  NEEDS_VERIFICATION: "dashboardComponents.status.needsVerification",
+  LOCKED: "dashboardComponents.status.locked",
+  ISSUED: "dashboardComponents.status.issued",
+  APPROVED: "dashboardComponents.status.approved",
+  QUEUED: "dashboardComponents.status.queued",
+  GENERATING: "dashboardComponents.status.generating",
+  COMPLETED: "dashboardComponents.status.completed",
+  FAILED: "dashboardComponents.status.failed",
+  UPLOADED: "dashboardComponents.status.uploaded",
+  CLASSIFYING: "dashboardComponents.status.classifying",
+  CLASSIFIED: "dashboardComponents.status.classified",
+  PREPROCESSING: "dashboardComponents.status.preprocessing",
+  READY_FOR_PROCESSING: "dashboardComponents.status.readyForProcessing",
+  PROCESSING: "dashboardComponents.status.processing",
+  NEEDS_REVIEW: "dashboardComponents.status.needsReview",
+  CANCELLED: "dashboardComponents.status.cancelled",
+  ARCHIVED: "dashboardComponents.status.archived",
+  ACTIVE: "dashboardComponents.status.active",
+  INTERNALLY_APPROVED: "dashboardComponents.status.internallyApproved",
+  SENT: "dashboardComponents.status.sent",
+  CLIENT_APPROVED: "dashboardComponents.status.clientApproved",
+  REVISION_REQUESTED: "dashboardComponents.status.revisionRequested",
+  REJECTED: "dashboardComponents.status.rejected",
+};
+
 export default function StatusBadge({ label, tone = "default" }: { label: string; tone?: StatusTone }) {
+  const t = useTranslations();
+  const translationKey = STATUS_LABEL_KEYS[label.toUpperCase()];
+  const displayLabel = translationKey ? t(translationKey) : formatStatusLabel(label);
   return (
     <span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-medium ${toneClasses[tone]}`}>
-      {formatStatusLabel(label)}
+      {displayLabel}
     </span>
   );
 }

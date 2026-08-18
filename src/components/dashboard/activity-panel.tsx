@@ -1,17 +1,22 @@
-const activities = [
-  { time: "Just now", message: "New project workspace created for Executive Corporate Office Fit-Out." },
-  { time: "1h ago", message: "BOQ draft saved for Dubai Residential Villa Structural Works." },
-  { time: "3h ago", message: "Furniture BOQ revision R01 locked for review." },
-  { time: "Yesterday", message: "Catalogue item F-201 updated with new supplier rate." },
-];
+"use client";
+
+import { useTranslations } from "@/lib/i18n/locale-provider";
 
 export default function ActivityPanel() {
+  const t = useTranslations();
+  const activities = [
+    { time: t("dashboardComponents.activityPanel.time1"), message: t("dashboardComponents.activityPanel.activity1") },
+    { time: t("dashboardComponents.activityPanel.time2"), message: t("dashboardComponents.activityPanel.activity2") },
+    { time: t("dashboardComponents.activityPanel.time3"), message: t("dashboardComponents.activityPanel.activity3") },
+    { time: t("dashboardComponents.activityPanel.time4"), message: t("dashboardComponents.activityPanel.activity4") },
+  ];
+
   return (
     <section className="rounded-[32px] border border-slate-800 bg-slate-950 p-6">
       <div className="flex items-center justify-between gap-4">
         <div>
-          <p className="text-sm uppercase tracking-[0.28em] text-slate-500">Activity log</p>
-          <h2 className="mt-2 text-xl font-semibold text-white">Recent workspace activity</h2>
+          <p className="text-sm uppercase tracking-[0.28em] text-slate-500">{t("dashboardComponents.activityPanel.eyebrow")}</p>
+          <h2 className="mt-2 text-xl font-semibold text-white">{t("dashboardComponents.activityPanel.title")}</h2>
         </div>
       </div>
       <div className="mt-6 space-y-4">

@@ -7,6 +7,16 @@ import { useTranslations } from "@/lib/i18n/locale-provider";
 import type { TranslationKey } from "@/lib/i18n/translate";
 import { TAYQAN_WORK_STAGE_ORDER } from "@/lib/tayqan/tayqan-workflow-contract";
 
+export type TayqanMeasurementExceptionState = {
+  key: string;
+  kind: string;
+  message: string;
+  pageIds: string[];
+  relatedEntityId: string | null;
+  dangerous: boolean;
+  resolution: { reason: string; actorUserId: string; actorName: string; resolvedAt: string } | null;
+};
+
 export type TayqanWorkOrderState = {
   id: string;
   status: "RUNNING" | "NEEDS_INPUT" | "READY_FOR_ACCEPTANCE" | "COMPLETED" | "FAILED" | "CANCELLED";
@@ -21,13 +31,19 @@ export type TayqanWorkOrderState = {
   blockerCode: string | null;
   blockerMessage: string | null;
   blocker: {
-    kind: "ACTION" | "ENTITY_REVIEW" | "QUANTITY_REQUIRED" | "RATE_REQUIRED" | "QA_QUESTION" | "ERROR";
+    kind: "ACTION" | "ENTITY_REVIEW" | "QUANTITY_REQUIRED" | "RATE_REQUIRED" | "QA_QUESTION" | "MEASUREMENT_EXCEPTIONS" | "ERROR";
     i18nKey: string;
     actionHref?: string;
     entity?: { id: string; label: string; quantity: number | null; unit: string | null; sourceReference: string | null; confidence: number };
     qa?: { assignmentId: string; questionId: string; questionType: string; prompt: string; whyMaterial: string; recommendedAction: string };
   } | null;
   qaWorkerRunId: string | null;
+  measurementExceptions: {
+    totalCount: number;
+    dangerousCount: number;
+    unresolvedDangerousCount: number;
+    exceptions: TayqanMeasurementExceptionState[];
+  };
   startedAt: string;
   lastAdvancedAt: string;
   completedAt: string | null;
@@ -57,6 +73,8 @@ export function TayqanWorkOrderPanel({
   const [unit, setUnit] = useState("");
   const [rate, setRate] = useState("");
   const [note, setNote] = useState("");
+  const [resolutionReasons, setResolutionReasons] = useState<Record<string, string>>({});
+  const [confirmingAccept, setConfirmingAccept] = useState(false);
   const qaNotified = useRef<string | null>(null);
   // Senior QS can outlive the poll interval; never overlap expensive /advance calls.
   const advanceInFlight = useRef(false);
@@ -121,7 +139,25 @@ export function TayqanWorkOrderPanel({
         { workOrderId: state.id, ...payload },
       );
       setState(next);
-      setQuantity(""); setUnit(""); setRate(""); setNote("");
+      setQuantity(""); setUnit(""); setRate(""); setNote(""); setResolutionReasons({});
+    } catch (err) {
+      setError(getApiErrorMessage(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const acceptDeliverable = async () => {
+    if (!state) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const next = await apiClient.post<TayqanWorkOrderState>(
+        `/api/projects/${encodeURIComponent(projectId)}/tayqan/work-order/accept`,
+        { workOrderId: state.id },
+      );
+      setState(next);
+      setConfirmingAccept(false);
     } catch (err) {
       setError(getApiErrorMessage(err));
     } finally {
@@ -169,7 +205,81 @@ export function TayqanWorkOrderPanel({
         <div className="rounded-2xl border border-emerald-700 bg-emerald-950/20 p-4">
           <p className="font-semibold text-emerald-200">{t("tayqan.hire.workflow.readyForAcceptance")}</p>
           <p className="mt-1 text-sm text-slate-300">{t("tayqan.hire.workflow.acceptanceNote")}</p>
-          {state.boqId && <Link href={`/projects/${encodeURIComponent(projectId)}/boq`} className="mt-3 inline-block text-sm font-semibold text-cyan-300 underline">{t("tayqan.hire.openBoq")}</Link>}
+          <div className="mt-3 flex flex-wrap items-center gap-3">
+            {state.boqId && <Link href={`/projects/${encodeURIComponent(projectId)}/boq`} className="inline-block text-sm font-semibold text-cyan-300 underline">{t("tayqan.hire.openBoq")}</Link>}
+            {!confirmingAccept ? (
+              <button
+                disabled={busy || state.measurementExceptions.unresolvedDangerousCount > 0}
+                onClick={() => setConfirmingAccept(true)}
+                className="rounded-xl bg-emerald-600 px-4 py-2 text-xs font-semibold text-white hover:bg-emerald-500 disabled:opacity-60"
+              >
+                {t("tayqan.hire.workflow.acceptDeliverable")}
+              </button>
+            ) : (
+              <div className="flex flex-wrap items-center gap-2 rounded-xl border border-emerald-700 bg-slate-950 p-3">
+                <p className="text-xs text-slate-300">{t("tayqan.hire.workflow.acceptDeliverableConfirm")}</p>
+                <button disabled={busy} onClick={() => void acceptDeliverable()} className="rounded-xl bg-emerald-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-60">
+                  {busy ? t("tayqan.hire.workflow.accepting") : t("tayqan.hire.workflow.acceptDeliverableConfirmYes")}
+                </button>
+                <button disabled={busy} onClick={() => setConfirmingAccept(false)} className="rounded-xl border border-slate-700 px-3 py-2 text-xs text-slate-200">
+                  {t("tayqan.hire.workflow.cancel")}
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {state.measurementExceptions.totalCount > 0 && (
+        <div className="rounded-2xl border border-amber-800 bg-amber-950/10 p-4">
+          <p className="font-semibold text-amber-100">{t("tayqan.hire.workflow.measurementExceptionsTitle")}</p>
+          <p className="mt-1 text-xs text-slate-400">
+            {t("tayqan.hire.workflow.measurementExceptionsSummary", {
+              unresolved: state.measurementExceptions.unresolvedDangerousCount,
+              total: state.measurementExceptions.totalCount,
+            })}
+          </p>
+          <div className="mt-3 space-y-2">
+            {state.measurementExceptions.exceptions.map((exception) => (
+              <div key={exception.key} className="rounded-xl border border-slate-800 bg-slate-950 p-3">
+                <p className="text-xs font-semibold uppercase tracking-wide text-amber-200">{exception.kind}</p>
+                <p className="mt-1 text-sm text-slate-200">{exception.message}</p>
+                {exception.resolution ? (
+                  <p className="mt-2 text-xs text-emerald-300">
+                    {t("tayqan.hire.workflow.measurementExceptionResolved", {
+                      name: exception.resolution.actorName,
+                      reason: exception.resolution.reason,
+                    })}
+                  </p>
+                ) : (
+                  <div className="mt-2 space-y-2">
+                    <p className="text-[11px] text-slate-500">
+                      {exception.dangerous ? t("tayqan.hire.workflow.measurementExceptionDangerous") : t("tayqan.hire.workflow.measurementExceptionInformational")}
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      <input
+                        value={resolutionReasons[exception.key] ?? ""}
+                        onChange={(e) => setResolutionReasons((current) => ({ ...current, [exception.key]: e.target.value }))}
+                        placeholder={t("tayqan.hire.workflow.resolutionReasonPlaceholder")}
+                        className="min-w-[220px] flex-1 rounded-xl border border-slate-700 bg-slate-900 px-3 py-2 text-xs text-white"
+                      />
+                      <button
+                        disabled={busy || !resolutionReasons[exception.key]?.trim()}
+                        onClick={() => void answer({
+                          action: "RESOLVE_MEASUREMENT_EXCEPTION",
+                          exceptionKey: exception.key,
+                          note: resolutionReasons[exception.key],
+                        })}
+                        className="rounded-xl bg-cyan-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-60"
+                      >
+                        {t("tayqan.hire.workflow.resolveException")}
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
         </div>
       )}
 

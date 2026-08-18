@@ -3,6 +3,7 @@
 import { useState, type FormEvent } from "react";
 import type { Client, ClientListResult } from "@/types/client";
 import { ApiClientError, apiClient, getApiErrorMessage } from "@/lib/api/client";
+import { useTranslations } from "@/lib/i18n/locale-provider";
 
 type ClientFormValues = {
   name: string;
@@ -52,6 +53,7 @@ export default function ClientForm({
   compact = false,
   editingClient,
 }: ClientFormProps) {
+  const t = useTranslations();
   const [values, setValues] = useState<ClientFormValues>(() => valuesFromClient(editingClient));
   const [fieldErrors, setFieldErrors] = useState<Record<string, string[]>>({});
   const [formError, setFormError] = useState<string | null>(null);
@@ -78,7 +80,7 @@ export default function ClientForm({
       if (submitError instanceof ApiClientError) {
         if (submitError.fieldErrors) setFieldErrors(submitError.fieldErrors);
         if (submitError.code === "CLIENT_ALREADY_EXISTS") {
-          setFormError("A client matching this email already exists.");
+          setFormError(t("clients.form.alreadyExists"));
           if (values.email.trim()) {
             try {
               const matches = await apiClient.get<ClientListResult>(
@@ -102,47 +104,47 @@ export default function ClientForm({
 
   const inputClass =
     "mt-2 w-full rounded-2xl border border-slate-800 bg-slate-900 px-4 py-3 text-white outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20";
-  const resolvedSubmitLabel = submitLabel ?? (editingClient ? "Save changes" : "Save client");
+  const resolvedSubmitLabel = submitLabel ?? (editingClient ? t("clients.form.saveChanges") : t("clients.form.saveClient"));
 
   return (
     <form onSubmit={handleSubmit} className={compact ? "space-y-4" : "space-y-6 rounded-[32px] border border-slate-800 bg-slate-950 p-6"}>
       <div className="grid gap-4 sm:grid-cols-2">
         <label className="block text-sm text-slate-300">
-          <span className="text-slate-400">Client name</span>
+          <span className="text-slate-400">{t("clients.form.clientNameLabel")}</span>
           <input className={inputClass} value={values.name} onChange={update("name")} required />
           {fieldErrors.name && <p className="mt-2 text-xs text-rose-400">{fieldErrors.name[0]}</p>}
         </label>
         <label className="block text-sm text-slate-300">
-          <span className="text-slate-400">Company name</span>
+          <span className="text-slate-400">{t("clients.form.companyNameLabel")}</span>
           <input className={inputClass} value={values.companyName} onChange={update("companyName")} />
         </label>
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2">
         <label className="block text-sm text-slate-300">
-          <span className="text-slate-400">Email</span>
+          <span className="text-slate-400">{t("clients.form.emailLabel")}</span>
           <input type="email" className={inputClass} value={values.email} onChange={update("email")} />
           {fieldErrors.email && <p className="mt-2 text-xs text-rose-400">{fieldErrors.email[0]}</p>}
         </label>
         <label className="block text-sm text-slate-300">
-          <span className="text-slate-400">Phone</span>
+          <span className="text-slate-400">{t("clients.form.phoneLabel")}</span>
           <input className={inputClass} value={values.phone} onChange={update("phone")} />
         </label>
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2">
         <label className="block text-sm text-slate-300">
-          <span className="text-slate-400">Address</span>
+          <span className="text-slate-400">{t("clients.form.addressLabel")}</span>
           <input className={inputClass} value={values.address} onChange={update("address")} />
         </label>
         <label className="block text-sm text-slate-300">
-          <span className="text-slate-400">Tax registration number</span>
+          <span className="text-slate-400">{t("clients.form.taxRegistrationNumberLabel")}</span>
           <input className={inputClass} value={values.taxRegistrationNumber} onChange={update("taxRegistrationNumber")} />
         </label>
       </div>
 
       <label className="block text-sm text-slate-300">
-        <span className="text-slate-400">Notes</span>
+        <span className="text-slate-400">{t("clients.form.notesLabel")}</span>
         <textarea className={`${inputClass} min-h-[100px]`} value={values.notes} onChange={update("notes")} />
       </label>
 
@@ -155,7 +157,7 @@ export default function ClientForm({
               onClick={() => onCreated(existingClient)}
               className="mt-2 inline-flex rounded-2xl border border-rose-700 bg-rose-900/40 px-4 py-2 text-xs font-semibold text-rose-100 hover:bg-rose-900"
             >
-              Use {existingClient.name} instead
+              {t("clients.form.useInstead", { name: existingClient.name })}
             </button>
           )}
         </div>
@@ -168,7 +170,7 @@ export default function ClientForm({
             onClick={onCancel}
             className="inline-flex rounded-2xl border border-slate-700 bg-slate-900 px-6 py-3 text-sm font-semibold text-slate-200 hover:bg-slate-800"
           >
-            Cancel
+            {t("clients.form.cancel")}
           </button>
         )}
         <button
@@ -176,7 +178,7 @@ export default function ClientForm({
           disabled={isSubmitting}
           className="inline-flex rounded-2xl bg-blue-600 px-6 py-3 text-sm font-semibold text-white transition hover:bg-blue-500 disabled:opacity-60"
         >
-          {isSubmitting ? "Saving..." : resolvedSubmitLabel}
+          {isSubmitting ? t("clients.form.saving") : resolvedSubmitLabel}
         </button>
       </div>
     </form>

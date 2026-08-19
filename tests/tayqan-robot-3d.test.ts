@@ -153,7 +153,15 @@ describe("TAYQAN-2A scope — no changes outside the 3D visual foundation", () =
 });
 
 describe("TAYQAN global workspace hover bubble", () => {
-  it("keeps the robot click-through while exposing only the visible bubble as interactive", () => {
+  // Updated for fix/tayqan-companion-touch-keyboard-access (PR #84): the
+  // robot and its speech bubble are now ONE always-interactive link (a real
+  // <a href>, reachable and clickable/tappable on every input method, not
+  // gated behind prior mouse hover) rather than an interactive-only-when-
+  // visible bubble — that was the entire point of the fix (touch/keyboard
+  // users could never reach the old hover-gated bubble at all). The
+  // pointer-events-none outer wrapper and the underlying hover-detection
+  // listener are both unchanged and still asserted below.
+  it("keeps the robot area click-through outside its own bounding box, while the robot itself is always a real, clickable/focusable link", () => {
     const source = readSource(
       "src",
       "components",
@@ -162,7 +170,7 @@ describe("TAYQAN global workspace hover bubble", () => {
     );
 
     expect(source).toContain("pointer-events-none fixed");
-    expect(source).toContain("pointer-events-auto scale-100 opacity-100");
+    expect(source).toContain("pointer-events-auto relative block h-full w-full");
     expect(source).toContain('window.addEventListener("pointermove"');
   });
 

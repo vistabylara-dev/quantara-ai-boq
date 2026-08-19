@@ -173,6 +173,14 @@ type WorkBlocker = {
    * advanceAiDraftProfessionalReview) — never the full list on a large BOQ.
    */
   pendingItems?: Array<{ id: string; itemCode: string; description: string }>;
+  /**
+   * TAYQAN AUDIT FIX 3: populated only on a genuine FAILED transition (see
+   * fail() below) — the real, specific cause behind the generic ERROR-kind
+   * i18n message, interpolated into it via {reason}. `code` is the
+   * originating AppError's machine-readable code, kept alongside for
+   * support/debugging.
+   */
+  error?: { code: string; reason: string };
 };
 
 function jsonObject(value: unknown): Prisma.InputJsonObject {
@@ -789,6 +797,94 @@ async function block(
   return toState(await loadOrder(actor.companyId, updated.id));
 }
 
+/**
+ * TAYQAN AUDIT FIX 3 — a narrow, evidence-based allowlist of AppError codes
+ * thrown by prepareTayqanMeasurementProposals's buildEvidenceBundle/
+ * AI-configuration check (tayqan-measurement-service.ts), all read directly
+ * rather than guessed. Every one of these fires BEFORE the AI reasoner call
+ * and is deterministic given the work order's already-FROZEN state
+ * (selectedSourceFileIds, boqId, project.id): a retry against unchanged
+ * persisted state reproduces the identical error every time.
+ *
+ * Deliberately EXCLUDED (left transient/ambiguous, unchanged propagate/retry
+ * behavior — see the PR description for the full reasoning):
+ * - Anything the reasoner call itself throws (rate limits, timeouts,
+ *   network — openai-tayqan-measurement-reasoner.ts is a protected,
+ *   unmodified file; these must stay retryable per this mission's own
+ *   example).
+ * - Errors from evaluateTayqanMeasurementSubject (plain Error, no code) —
+ *   these validate the AI's PROPOSED subject, which differs per call, so a
+ *   retry can plausibly get a different, valid result next time.
+ * - TAYQAN_MEASUREMENT_LEASE_LOST — a genuine concurrent-execution race,
+ *   not a permanent failure.
+ * - Every AppError code thrown by generateAiDraftBoq/importExtractedEntityToBoq
+ *   (ai-draft-boq-service.ts / extraction-to-boq-service.ts) — reading both
+ *   files found their error surface is a genuine mix of "reload and try
+ *   again" optimistic-concurrency conflicts (e.g. CONCURRENT_WRITE_CONFLICT,
+ *   AI_DRAFT_ENTITY_IMPORT_CONFLICT) and human-actionable preconditions
+ *   (e.g. AI_DRAFT_REQUIRES_EDITABLE_BOQ — fixed by creating a new editable
+ *   revision, not "broken forever"), with no signal as clean as the AI
+ *   NOT_CONFIGURED / frozen-scope-precondition split found here. Confidently
+ *   separating those in the time available for this pass was not possible —
+ *   reported as an explicit scoping decision in the PR rather than guessed.
+ */
+const TAYQAN_TERMINAL_MEASUREMENT_ERROR_CODES = new Set([
+  "TAYQAN_MEASUREMENT_PROJECT_MISMATCH",
+  "TAYQAN_MEASUREMENT_SOURCES_REQUIRED",
+  "TAYQAN_MEASUREMENT_SOURCE_SCOPE_INVALID",
+  "TAYQAN_MEASUREMENT_PAGES_REQUIRED",
+  "TAYQAN_MEASUREMENT_AI_NOT_CONFIGURED",
+  "TAYQAN_MEASUREMENT_PAGE_TOO_LARGE",
+]);
+
+function isTerminalTayqanMeasurementError(error: unknown): error is AppError {
+  return error instanceof AppError && TAYQAN_TERMINAL_MEASUREMENT_ERROR_CODES.has(error.code);
+}
+
+/**
+ * TAYQAN AUDIT FIX 3 — the terminal counterpart to block(): transitions the
+ * work order to FAILED, a real TAYQAN_TERMINAL_WORK_STATUSES member that,
+ * until this fix, was declared but never assigned anywhere (see
+ * advanceTayqanWorkOrder's existing FAILED early-return, now actually
+ * reachable). Only ever called for errors classified genuinely terminal by
+ * isTerminalTayqanMeasurementError — never a blanket catch-all. Mirrors
+ * block()'s i18n-key message pattern exactly (blockerMessage is a
+ * translation KEY, not literal text) and additionally logs the real
+ * underlying error via console.error and the WORK_FAILED event payload, so
+ * support can find the actual cause without it ever having to appear in the
+ * customer-facing message itself.
+ */
+async function fail(
+  actor: CurrentActor,
+  order: Awaited<ReturnType<typeof loadOrder>>,
+  code: string,
+  i18nKey: string,
+  blocker: WorkBlocker,
+  error: AppError,
+) {
+  console.error(
+    `[TAYQAN-WORK-ORDER] work order ${order.id} FAILED at stage ${order.stage}: ${error.code} — ${error.message}`,
+  );
+  const updated = await updateOrder(
+    actor,
+    order.id,
+    {
+      status: TayqanWorkStatus.FAILED,
+      blockerCode: code,
+      blockerMessage: i18nKey,
+      blockerJson: jsonObject(blocker),
+      completedAt: new Date(),
+      lastAdvancedAt: new Date(),
+    },
+    "WORK_FAILED",
+    { code, i18nKey, errorCode: error.code, errorMessage: error.message },
+  );
+  await persistConversationStatus(actor.companyId, order.intakeSessionId, i18nKey, {
+    reason: error.message.slice(0, 300),
+  });
+  return toState(await loadOrder(actor.companyId, updated.id));
+}
+
 async function moveStage(
   actor: CurrentActor,
   order: Awaited<ReturnType<typeof loadOrder>>,
@@ -1347,6 +1443,20 @@ async function advanceSourceProcessing(actor: CurrentActor, projectSlug: string,
         measuredOrder = await loadOrder(actor.companyId, order.id);
       } catch (error) {
         await releaseTayqanMeasurementLease(actor, order.id, leaseToken);
+        if (isTerminalTayqanMeasurementError(error)) {
+          return fail(
+            actor,
+            order,
+            "TAYQAN_MEASUREMENT_TERMINAL_ERROR",
+            "tayqan.hire.workflow.workOrderFailed",
+            {
+              kind: "ERROR",
+              i18nKey: "tayqan.hire.workflow.workOrderFailed",
+              error: { code: error.code, reason: error.message.slice(0, 300) },
+            },
+            error,
+          );
+        }
         throw error;
       }
     }

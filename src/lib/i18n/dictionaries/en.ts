@@ -2124,6 +2124,8 @@ const en = {
         rateRequired: "This item has no approved rate source. Confirm the unit cost and rate source; I will not invent a commercial rate.",
         finalQaRunning: "The working BOQ is assembled. I’m running the governed final TAYQAN QA before I mark it ready for you.",
         finalQaFailed: "The final QA run could not complete. I have stopped rather than marking the BOQ ready incorrectly.",
+        workOrderFailed: "TAYQAN could not continue with this work order: {reason}. This work order has stopped — contact support if this persists.",
+        workOrderFailedNote: "Your work and evidence are saved exactly as they were. This specific work order will not continue automatically — contact support for help resolving it.",
         qaQuestion: "Final QA found a material question that needs your decision before I can finish.",
         readyForAcceptance: "The TAYQAN work order is complete and the BOQ is ready for your final acceptance.",
         acceptanceNote: "TAYQAN does not automatically lock, issue, approve or submit the BOQ. Review it and perform the final professional acceptance action yourself.",

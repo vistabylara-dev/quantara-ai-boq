@@ -71,6 +71,7 @@ export type TayqanWorkOrderState = {
     entity?: { id: string; label: string; quantity: number | null; unit: string | null; sourceReference: string | null; confidence: number };
     qa?: { assignmentId: string; questionId: string; questionType: string; prompt: string; whyMaterial: string; recommendedAction: string };
     pendingItems?: Array<{ id: string; itemCode: string; description: string }>;
+    error?: { code: string; reason: string };
   } | null;
   qaWorkerRunId: string | null;
   measurementExceptions: {
@@ -354,6 +355,15 @@ export function TayqanWorkOrderPanel({
               </div>
             )}
           </div>
+        </div>
+      )}
+
+      {state.status === "FAILED" && (
+        <div className="rounded-2xl border border-rose-800 bg-rose-950/10 p-4">
+          <p className="font-semibold text-rose-200">
+            {t("tayqan.hire.workflow.workOrderFailed", { reason: blocker?.error?.reason ?? "" })}
+          </p>
+          <p className="mt-1 text-xs text-slate-400">{t("tayqan.hire.workflow.workOrderFailedNote")}</p>
         </div>
       )}
 

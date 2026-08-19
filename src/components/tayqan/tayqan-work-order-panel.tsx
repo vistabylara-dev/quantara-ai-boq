@@ -54,6 +54,9 @@ function idempotencyKey() {
   return typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `tayqan-work-${Date.now()}`;
 }
 
+type DocumentTemplateSummary = { id: string; isDefault: boolean; isActive: boolean };
+type GeneratedDocumentView = { id: string; status: string };
+
 export function TayqanWorkOrderPanel({
   projectId,
   sessionId,
@@ -73,6 +76,9 @@ export function TayqanWorkOrderPanel({
   const [unit, setUnit] = useState("");
   const [rate, setRate] = useState("");
   const [note, setNote] = useState("");
+  const [exportingDraftBoq, setExportingDraftBoq] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
+  const [exportedDocumentId, setExportedDocumentId] = useState<string | null>(null);
   const [resolutionReasons, setResolutionReasons] = useState<Record<string, string>>({});
   const [confirmingAccept, setConfirmingAccept] = useState(false);
   const qaNotified = useRef<string | null>(null);
@@ -165,6 +171,32 @@ export function TayqanWorkOrderPanel({
     }
   };
 
+  const exportDraftBoqWord = async () => {
+    if (!state?.boqId) return;
+    setExportingDraftBoq(true);
+    setExportError(null);
+    setExportedDocumentId(null);
+    try {
+      // Reuses the existing document-generation infra end to end (same
+      // pattern as the project documents page) — no second export pipeline.
+      const templates = await apiClient.get<DocumentTemplateSummary[]>("/api/templates");
+      const template = templates.find((candidate) => candidate.isDefault && candidate.isActive) ?? templates.find((candidate) => candidate.isActive);
+      if (!template) {
+        setExportError(t("tayqan.hire.workflow.exportDraftBoqNoTemplate"));
+        return;
+      }
+      const generated = await apiClient.post<GeneratedDocumentView>(
+        `/api/projects/${encodeURIComponent(projectId)}/documents/generate`,
+        { boqId: state.boqId, templateId: template.id, documentType: "DOCX", audience: "CLIENT", pricingMode: "QUANTITIES_ONLY" },
+      );
+      setExportedDocumentId(generated.id);
+    } catch (err) {
+      setExportError(getApiErrorMessage(err));
+    } finally {
+      setExportingDraftBoq(false);
+    }
+  };
+
   if (!state) {
     return <div className="rounded-2xl border border-slate-800 p-4 text-sm text-slate-400">{error ?? t("tayqan.hire.workflow.loading")}</div>;
   }
@@ -194,6 +226,31 @@ export function TayqanWorkOrderPanel({
       </div>
 
       {error && <p className="text-sm text-rose-300">{error}</p>}
+
+      {state.boqId && (
+        <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-4">
+          <p className="text-sm font-semibold text-slate-200">{t("tayqan.hire.workflow.exportDraftBoqTitle")}</p>
+          <p className="mt-1 text-xs text-slate-400">{t("tayqan.hire.workflow.exportDraftBoqNote")}</p>
+          <div className="mt-3 flex flex-wrap items-center gap-3">
+            <button
+              disabled={exportingDraftBoq}
+              onClick={() => void exportDraftBoqWord()}
+              className="rounded-xl border border-cyan-700 bg-cyan-950/40 px-4 py-2 text-xs font-semibold text-cyan-200 hover:bg-cyan-900/40 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {exportingDraftBoq ? t("tayqan.hire.workflow.exportingDraftBoq") : t("tayqan.hire.workflow.exportDraftBoqWord")}
+            </button>
+            {exportedDocumentId && (
+              <a
+                href={`/api/documents/${encodeURIComponent(exportedDocumentId)}/download`}
+                className="text-xs font-semibold text-emerald-300 underline"
+              >
+                {t("tayqan.hire.workflow.exportDraftBoqDownload")}
+              </a>
+            )}
+          </div>
+          {exportError && <p className="mt-2 text-xs text-rose-300">{exportError}</p>}
+        </div>
+      )}
 
       {state.status === "RUNNING" && (
         <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-4 text-sm text-slate-300">

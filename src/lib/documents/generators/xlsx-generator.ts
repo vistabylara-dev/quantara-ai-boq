@@ -161,11 +161,15 @@ export async function generateXlsx(data: CanonicalDocumentData): Promise<Buffer>
     rowCursor += 1;
   }
 
+  // XLSX generation is a FINAL_ONLY (locked-revision) type and only ever
+  // receives WITH_PRICES data — totals is always populated here; the
+  // fallback only satisfies the now-optional shared type, it changes nothing.
+  const xlsxTotals = data.boq.totals ?? { subtotal: 0, discountAmount: 0, taxableAmount: 0, taxAmount: 0, grandTotal: 0 };
   totalsRow("Subtotal", { formula: `SUM(${totalColLetter}${firstDataRow}:${totalColLetter}${lastDataRow})` });
-  totalsRow("Discount", data.boq.totals.discountAmount);
-  totalsRow("Taxable Amount", data.boq.totals.taxableAmount);
-  totalsRow(`VAT (${data.project.taxRate}%)`, data.boq.totals.taxAmount);
-  totalsRow("Grand Total", data.boq.totals.grandTotal);
+  totalsRow("Discount", xlsxTotals.discountAmount);
+  totalsRow("Taxable Amount", xlsxTotals.taxableAmount);
+  totalsRow(`VAT (${data.project.taxRate}%)`, xlsxTotals.taxAmount);
+  totalsRow("Grand Total", xlsxTotals.grandTotal);
 
   return Buffer.from(await workbook.xlsx.writeBuffer());
 }

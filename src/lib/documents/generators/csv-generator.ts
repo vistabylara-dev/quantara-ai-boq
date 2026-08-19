@@ -65,8 +65,8 @@ export function generateCsv(data: CanonicalDocumentData): Buffer {
               item.marginPercentage ?? 0,
             ]
           : []),
-        item.sellingRate,
-        item.totalAmount,
+        item.sellingRate ?? 0,
+        item.totalAmount ?? 0,
         item.roomOrZone,
         item.drawingReference,
         item.notes,
@@ -79,10 +79,16 @@ export function generateCsv(data: CanonicalDocumentData): Buffer {
     output += row([data.meta.watermarkText]);
     output += row([]);
   }
-  output += row(["", "", "", "", "", "", "", ...(showInternal ? ["", "", "", "", "", ""] : []), "Subtotal", data.boq.totals.subtotal, "", "", ""]);
-  output += row(["", "", "", "", "", "", "", ...(showInternal ? ["", "", "", "", "", ""] : []), "Discount", data.boq.totals.discountAmount, "", "", ""]);
-  output += row(["", "", "", "", "", "", "", ...(showInternal ? ["", "", "", "", "", ""] : []), "VAT", data.boq.totals.taxAmount, "", "", ""]);
-  output += row(["", "", "", "", "", "", "", ...(showInternal ? ["", "", "", "", "", ""] : []), "Grand Total", data.boq.totals.grandTotal, "", "", ""]);
+  // CSV generation only ever receives WITH_PRICES data today (QUANTITIES_ONLY
+  // is DOCX-only per this mission) — totals is always populated here; the
+  // fallback only satisfies the now-optional shared type, it changes nothing.
+  const totals = data.boq.totals;
+  if (totals) {
+    output += row(["", "", "", "", "", "", "", ...(showInternal ? ["", "", "", "", "", ""] : []), "Subtotal", totals.subtotal, "", "", ""]);
+    output += row(["", "", "", "", "", "", "", ...(showInternal ? ["", "", "", "", "", ""] : []), "Discount", totals.discountAmount, "", "", ""]);
+    output += row(["", "", "", "", "", "", "", ...(showInternal ? ["", "", "", "", "", ""] : []), "VAT", totals.taxAmount, "", "", ""]);
+    output += row(["", "", "", "", "", "", "", ...(showInternal ? ["", "", "", "", "", ""] : []), "Grand Total", totals.grandTotal, "", "", ""]);
+  }
 
   return Buffer.from(output, "utf-8");
 }

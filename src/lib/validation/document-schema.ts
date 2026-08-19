@@ -8,6 +8,12 @@ export const generateDocumentSchema = z
     documentType: z.enum(["CSV", "XLSX", "PDF", "DOCX", "HTML"]),
     audience: z.enum(["INTERNAL", "CLIENT"]),
     acknowledgedWarnings: z.boolean().default(false),
+    /**
+     * TAYQAN Draft BOQ Word export: QUANTITIES_ONLY omits all pricing data
+     * upstream in buildDocumentData, not just in template rendering. Default
+     * preserves every existing caller's current (priced) behavior exactly.
+     */
+    pricingMode: z.enum(["WITH_PRICES", "QUANTITIES_ONLY"]).default("WITH_PRICES"),
   })
   .strict();
 

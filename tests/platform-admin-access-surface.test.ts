@@ -76,9 +76,14 @@ describe("platform administration access surface", () => {
     };
     requirePlatformActorMock.mockResolvedValue(platformActor);
 
-    await expect(AdminLayout({ children: "protected admin content" })).resolves.toBe(
-      "protected admin content",
-    );
+    // EMAIL-SAFETY-GUARD — the layout now wraps children in a Fragment
+    // alongside the persistent EnvironmentSafetyBanner (rendered on every
+    // admin page, not just the dashboard), so this no longer resolves to
+    // children verbatim; the real assertion — children only render after
+    // authorization succeeds, and no redirect happens — still holds.
+    const result = await AdminLayout({ children: "protected admin content" });
+    const fragmentChildren = (result as { props: { children: unknown[] } }).props.children;
+    expect(fragmentChildren).toContain("protected admin content");
     expect(requirePlatformActorMock).toHaveBeenCalledOnce();
     expect(redirectMock).not.toHaveBeenCalled();
   });

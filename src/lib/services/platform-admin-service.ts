@@ -1,6 +1,7 @@
 import { PlatformRole } from "@prisma/client";
 import type { PlatformActor } from "@/lib/auth/platform-authorization";
 import { AppError } from "@/lib/errors/app-error";
+import { applicationEnvironment } from "@/lib/runtime/application-environment";
 import {
   platformGetOverviewMetrics,
   platformListAuditLogs,
@@ -61,19 +62,6 @@ function assertPlatformOwner(actor: PlatformActor): void {
   }
 }
 
-function applicationEnvironment(): "production" | "preview" | "development" | "test" | "unknown" {
-  const candidate = process.env.VERCEL_ENV ?? process.env.NODE_ENV;
-  if (
-    candidate === "production" ||
-    candidate === "preview" ||
-    candidate === "development" ||
-    candidate === "test"
-  ) {
-    return candidate;
-  }
-  return "unknown";
-}
-
 /**
  * Reports only whether STORAGE_PROVIDER is configured, never a live
  * connectivity check — an actual Blob call from a dashboard page load would
@@ -93,6 +81,24 @@ function deployedVersion(): string {
 /** Whether real SMTP delivery is opted into — never a live send/connectivity check. */
 function emailProviderStatus(): "smtp" | "development" {
   return process.env.EMAIL_PROVIDER === "smtp" ? "smtp" : "development";
+}
+
+/**
+ * EMAIL-SAFETY-GUARD — a pure, synchronous env-var read, same cost as
+ * applicationEnvironment()/emailProviderStatus() above. Deliberately does
+ * NOT call platformRecordReadAudit (unlike getPlatformOverview): it runs on
+ * every admin page navigation via the (protected) layout, and writing an
+ * audit-log row on every page load would spam the audit trail with a
+ * non-event.
+ */
+export function getPlatformEnvironmentBanner(): {
+  applicationEnvironment: ReturnType<typeof applicationEnvironment>;
+  emailProvider: "smtp" | "development";
+} {
+  return {
+    applicationEnvironment: applicationEnvironment(),
+    emailProvider: emailProviderStatus(),
+  };
 }
 
 export function buildPlatformRequestMetadata(request: Request): PlatformRequestMetadata {

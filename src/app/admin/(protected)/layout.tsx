@@ -6,6 +6,8 @@ import {
   PlatformAuthorizationError,
   requirePlatformActor,
 } from "@/lib/auth/platform-authorization";
+import { EnvironmentSafetyBanner } from "@/components/admin/environment-safety-banner";
+import { getPlatformEnvironmentBanner } from "@/lib/services/platform-admin-service";
 
 export const dynamic = "force-dynamic";
 
@@ -22,5 +24,10 @@ export default async function AdminLayout({ children }: { children: ReactNode })
     throw error;
   }
 
-  return children;
+  return (
+    <>
+      <EnvironmentSafetyBanner {...getPlatformEnvironmentBanner()} />
+      {children}
+    </>
+  );
 }

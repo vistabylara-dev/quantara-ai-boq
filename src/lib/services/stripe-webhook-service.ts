@@ -398,6 +398,19 @@ const HANDLED_EVENT_TYPES = new Set<string>([
   "checkout.session.completed",
   "checkout.session.async_payment_succeeded",
   "checkout.session.async_payment_failed",
+  // TAYQAN-AUDIT-FIX-2 mission 3 — a TAYQAN checkout session that expires
+  // unpaid (abandoned) previously left its PENDING TayqanHireEntitlement row
+  // stale forever. applyTayqanCheckoutSession's existing oneTimeStatus()
+  // already checks `session.status === "expired"` (a real Stripe field on
+  // this event's session object) and resolves it to PAYMENT_FAILED for
+  // DAY/WEEK one-time plans — this event type just needed to reach that
+  // already-correct logic. MONTHLY-plan sessions still don't transition on
+  // expiry: reconcileMonthlyCheckoutRow (protected, tayqan-stripe-
+  // fulfillment-service.ts) never touches `status` at all, only Stripe id
+  // linkage. Fixing that would mean modifying a protected file, so it's
+  // explicitly out of scope here and left as a known follow-up rather than
+  // worked around with parallel logic in this file.
+  "checkout.session.expired",
   "customer.subscription.created",
   "customer.subscription.updated",
   "customer.subscription.deleted",
@@ -481,7 +494,8 @@ export async function processStripeWebhookEvent(event: Stripe.Event, overrideCli
         if (
           event.type === "checkout.session.completed" ||
           event.type === "checkout.session.async_payment_succeeded" ||
-          event.type === "checkout.session.async_payment_failed"
+          event.type === "checkout.session.async_payment_failed" ||
+          event.type === "checkout.session.expired"
         ) {
           // General Quantara checkout remains ledger-only here. The TAYQAN
           // helper acts only when quantara_product_family=tayqan and never

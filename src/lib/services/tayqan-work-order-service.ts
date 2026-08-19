@@ -166,6 +166,13 @@ type WorkBlocker = {
     whyMaterial: string;
     recommendedAction: string;
   };
+  /**
+   * TAYQAN-AI-DRAFT-LOOP-FIX: names which specific BOQ item(s) are still
+   * blocking AI_DRAFT_REVIEW_REQUIRED, so "Check again" never repeats the
+   * same generic message with zero indication of what to fix. Bounded (see
+   * advanceAiDraftProfessionalReview) — never the full list on a large BOQ.
+   */
+  pendingItems?: Array<{ id: string; itemCode: string; description: string }>;
 };
 
 function jsonObject(value: unknown): Prisma.InputJsonObject {
@@ -1579,7 +1586,7 @@ async function advanceAiDraftProfessionalReview(
     );
   }
 
-  const pendingQuantityCount =
+  const pendingAiDraftItems =
     aiDraftItems.filter((item) => {
       const provenance =
         item.quantityProvenance;
@@ -1591,7 +1598,9 @@ async function advanceAiDraftProfessionalReview(
             .LEGACY_UNVERIFIED
         || provenance.confirmedAt === null
       );
-    }).length;
+    });
+
+  const pendingQuantityCount = pendingAiDraftItems.length;
 
   if (pendingQuantityCount > 0) {
     return block(
@@ -1609,6 +1618,15 @@ async function advanceAiDraftProfessionalReview(
             parseProgress(order.progressJson)
               .aiDraft,
           ),
+        // TAYQAN-AI-DRAFT-LOOP-FIX: name which item(s), not just a count —
+        // bounded the same way confirmAiDraftQuantities's skippedItems is.
+        pendingItems: pendingAiDraftItems
+          .slice(0, 10)
+          .map((item) => ({
+            id: item.id,
+            itemCode: item.itemCode,
+            description: item.description,
+          })),
       },
     );
   }

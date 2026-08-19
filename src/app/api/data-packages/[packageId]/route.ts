@@ -4,6 +4,7 @@ import { setActorContext, withActorRequestContext } from "@/lib/auth/request-con
 import { getPackage } from "@/lib/repositories/industry-package-repository";
 import { companyHasPackageAccess } from "@/lib/entitlements/package-entitlement-service";
 import { packageIdParamsSchema } from "@/lib/validation/route-params";
+import { resolvePackagePurchaseOptions } from "@/lib/services/package-purchase-options";
 
 export const dynamic = "force-dynamic";
 
@@ -17,7 +18,8 @@ async function GETHandler(_request: Request, context: RouteContext) {
     const { packageId } = packageIdParamsSchema.parse(params);
     const pkg = await getPackage(packageId);
     const hasAccess = await companyHasPackageAccess(actor.companyId, pkg.id);
-    return apiSuccess({ ...pkg, hasAccess });
+    const purchaseByPackageId = await resolvePackagePurchaseOptions(actor, [pkg.id]);
+    return apiSuccess({ ...pkg, hasAccess, purchase: purchaseByPackageId.get(pkg.id) ?? null });
   } catch (error) {
     return handleApiError(error);
   }

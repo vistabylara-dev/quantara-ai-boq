@@ -849,6 +849,12 @@ const ar: Dictionary = {
     showingItems: "عرض {shown} من أصل {total} بند",
     previous: "السابق",
     next: "التالي",
+    buyAccess: "شراء الوصول",
+    redirecting: "جارٍ التحويل…",
+    notAvailableForPurchase: "غير متاح للشراء بعد",
+    purchaseSetupPending: "الإعداد قيد المراجعة",
+    alreadySubscribed: "مشترك بالفعل",
+    purchaseUnavailable: "غير متاح",
   },
   integrations: {
     marketplaceAvailability: "تصفّح التكاملات المخطط لها، واستخدم استيراد Google Drive التجريبي عندما يكون مهيأً ومصرحًا به. ولا تتوفر موصلات التصميم وBIM وأنظمة الإنشاءات الأخرى للاستخدام الإنتاجي حاليًا.",

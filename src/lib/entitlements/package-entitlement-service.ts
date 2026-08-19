@@ -3,6 +3,7 @@ import { prisma } from "@/lib/db/prisma";
 import { AppError, NotFoundError, PermissionDeniedError } from "@/lib/errors/app-error";
 import { createAuditLog } from "@/lib/repositories/audit-repository";
 import type { CurrentActor } from "@/lib/auth/current-actor";
+import { resolveCheckoutEnvironment } from "@/lib/services/commerce-checkout-service";
 
 /**
  * Industry-package-level entitlement (does this company have paid access to
@@ -120,8 +121,31 @@ export async function assertMasterItemAccess(companyId: string, masterItemId: st
   }
 }
 
-/** Development-only activation — never a real payment flow (spec sections 6/11/25). */
+/**
+ * Development-only activation — never a real payment flow (spec sections 6/11/25).
+ *
+ * MARKETPLACE-FIX-2 — this used to be reachable by any COMPANY_OWNER/
+ * ADMINISTRATOR (both hold entitlements:manage) in every environment,
+ * including production: a free, permanent, full package unlock with no
+ * payment. Gated here — not just in the route or the UI, matching this
+ * file's own assertMasterItemAccess precedent of never trusting a caller
+ * layer above the service — on the same LIVE/TEST distinction
+ * commerce-checkout-service.ts already uses for real money (STRIPE_MODE).
+ * A genuine production deploy configures STRIPE_MODE=live and this throws;
+ * local dev, CI, and the test suite (which calls this function directly to
+ * seed package-access fixtures, e.g. tests/admin-data-access-1.test.ts and
+ * tests/phase7-entitlements-and-library.test.ts) never set STRIPE_MODE=live,
+ * so getConfiguredStripeMode()'s documented safe default ("test" when unset)
+ * keeps this working unchanged there.
+ */
+function assertNotLiveEnvironment(): void {
+  if (resolveCheckoutEnvironment() === "LIVE") {
+    throw new PermissionDeniedError("Development package activation is not available in this environment.");
+  }
+}
+
 export async function activateDevelopmentPackage(actor: CurrentActor, packageKeyOrId: string): Promise<void> {
+  assertNotLiveEnvironment();
   const pkg = await resolvePackage(packageKeyOrId);
   if (!pkg) throw new NotFoundError("Package not found.");
 
@@ -141,6 +165,7 @@ export async function activateDevelopmentPackage(actor: CurrentActor, packageKey
 }
 
 export async function expireDevelopmentPackage(actor: CurrentActor, packageKeyOrId: string): Promise<void> {
+  assertNotLiveEnvironment();
   const pkg = await resolvePackage(packageKeyOrId);
   if (!pkg) throw new NotFoundError("Package not found.");
 

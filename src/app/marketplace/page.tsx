@@ -5,6 +5,23 @@ import Link from "next/link";
 import { apiClient, getApiErrorMessage } from "@/lib/api/client";
 import { CATALOGUE_LIBRARIES } from "@/config/libraries";
 
+type PackagePurchaseUnavailableReason =
+  | "PRICE_NOT_APPROVED"
+  | "PROVIDER_MAPPING_MISSING"
+  | "PROVIDER_MAPPING_NOT_SYNCED"
+  | "EXISTING_SUBSCRIPTION";
+
+type PackagePurchasePrice = {
+  priceCode: string;
+  billingInterval: "MONTH" | "YEAR";
+  amountMinor: number;
+  currency: string;
+  available: boolean;
+  unavailableReason: PackagePurchaseUnavailableReason | null;
+};
+
+type PackagePurchase = { available: boolean; prices: PackagePurchasePrice[] } | null;
+
 type PackageListing = {
   id: string;
   key: string;
@@ -18,7 +35,21 @@ type PackageListing = {
   currency: string;
   isFeatured: boolean;
   hasAccess: boolean;
+  purchase: PackagePurchase;
 };
+
+function purchaseUnavailableLabel(reason: PackagePurchaseUnavailableReason | null): string {
+  switch (reason) {
+    case "EXISTING_SUBSCRIPTION":
+      return "Already subscribed";
+    case "PRICE_NOT_APPROVED":
+    case "PROVIDER_MAPPING_MISSING":
+    case "PROVIDER_MAPPING_NOT_SYNCED":
+      return "Setup pending";
+    default:
+      return "Unavailable";
+  }
+}
 
 type PublicCommercePrice = {
   code: string;
@@ -108,20 +139,21 @@ export default function MarketplacePage() {
     return () => controller.abort();
   }, [load]);
 
-  const activate = useCallback(async (packageKeyOrId: string) => {
-    setBusyKey(packageKeyOrId);
+  const checkout = useCallback(async (priceCode: string) => {
+    setBusyKey(priceCode);
     setActionError(null);
     setActionMessage(null);
     try {
-      await apiClient.post("/api/entitlements/activate-development-package", { packageKeyOrId });
-      setActionMessage("Package activated (development).");
-      await load();
+      const result = await apiClient.post<{ checkoutUrl: string; checkoutSessionId: string }>(
+        "/api/commerce/checkout",
+        { priceCode },
+      );
+      window.location.href = result.checkoutUrl;
     } catch (error) {
       setActionError(getApiErrorMessage(error));
-    } finally {
       setBusyKey(null);
     }
-  }, [load]);
+  }, []);
 
   if (isLoading) {
     return (
@@ -146,8 +178,8 @@ export default function MarketplacePage() {
         <p className="text-sm uppercase tracking-[0.28em] text-slate-500">Marketplace</p>
         <h1 className="mt-2 text-3xl font-semibold text-white">Industry data packages</h1>
         <p className="mt-2 max-w-2xl text-sm text-slate-400">
-          Full searchable technical libraries by discipline. Billing is not connected — activation below is a development
-          control for evaluation, and enterprise packages route to contact sales.
+          Full searchable technical libraries by discipline. Buy a package below to unlock it immediately, or contact
+          sales for enterprise packages.
         </p>
         {(actionMessage || actionError) && (
           <div className={`mt-4 rounded-2xl border p-3 text-xs ${actionError ? "border-rose-900 bg-rose-950/30 text-rose-300" : "border-emerald-900 bg-emerald-950/30 text-emerald-300"}`}>
@@ -297,16 +329,39 @@ export default function MarketplacePage() {
                       <span className="flex-1 text-center rounded-xl border border-slate-700 bg-slate-900 px-3 py-2.5 text-xs font-bold text-slate-400">
                         Contact sales
                       </span>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={() => void activate(pkg.key)}
-                        disabled={busyKey === pkg.key}
-                        className="flex-1 rounded-xl border border-blue-600 bg-blue-600 hover:bg-blue-500 transition-colors px-3 py-2.5 text-xs font-bold text-white disabled:opacity-50"
-                      >
-                        {busyKey === pkg.key ? "Requesting…" : "Request access"}
-                      </button>
-                    )}
+                    ) : (() => {
+                      const price = pkg.purchase?.prices.find((candidate) => candidate.billingInterval === "MONTH");
+                      if (!price) {
+                        return (
+                          <span
+                            className="flex-1 text-center rounded-xl border border-slate-700 bg-slate-900 px-3 py-2.5 text-xs font-bold text-slate-400"
+                            title="This package has no purchase configured yet."
+                          >
+                            Not yet available for purchase
+                          </span>
+                        );
+                      }
+                      if (!price.available) {
+                        return (
+                          <span
+                            className="flex-1 text-center rounded-xl border border-slate-700 bg-slate-900 px-3 py-2.5 text-xs font-bold text-slate-400"
+                            title={purchaseUnavailableLabel(price.unavailableReason)}
+                          >
+                            {purchaseUnavailableLabel(price.unavailableReason)}
+                          </span>
+                        );
+                      }
+                      return (
+                        <button
+                          type="button"
+                          onClick={() => void checkout(price.priceCode)}
+                          disabled={busyKey === price.priceCode}
+                          className="flex-1 rounded-xl border border-blue-600 bg-blue-600 hover:bg-blue-500 transition-colors px-3 py-2.5 text-xs font-bold text-white disabled:opacity-50"
+                        >
+                          {busyKey === price.priceCode ? "Redirecting…" : "Buy access"}
+                        </button>
+                      );
+                    })()}
                   </div>
                 </>
               ) : (

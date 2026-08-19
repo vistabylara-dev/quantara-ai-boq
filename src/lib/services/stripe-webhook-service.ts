@@ -290,7 +290,20 @@ async function applyCurrentSubscriptionState(tx: TxClient, subscription: Stripe.
 
     const product = commercePrice.product;
 
-    if (product.type === "SUBSCRIPTION" || product.type === "AI_CREDIT_PACK" || !product.industryPackageId) {
+    // MARKETPLACE-FIX-2 — industryPackageId must take priority over type here.
+    // Industry-access products are seeded with type: "SUBSCRIPTION" (see
+    // prisma/seed-data/commerce-products.ts's INDUSTRY_ACCESS_CANDIDATES loop)
+    // so they can flow through commerce-checkout-service.ts's SUBSCRIPTION-only
+    // eligibility check — but that means the old `type === "SUBSCRIPTION" || ...`
+    // condition below always matched them too, routing every industry-package
+    // purchase into the software-subscription branch. resolveSoftwarePlanFor-
+    // CommerceProductCode has no mapping for an industry product code, so
+    // softwarePlanId came back null and NOTHING was ever created: the
+    // customer paid, Stripe confirmed, and no CompanyPackageSubscription (or
+    // any other row) was written. Branching on industryPackageId first fixes
+    // this without changing behavior for real software-plan/AI-credit-pack
+    // products, which never have industryPackageId set.
+    if (!product.industryPackageId) {
       // Treat as software/platform subscription
       const softwarePlan = await resolveSoftwarePlanForCommerceProductCode(product.code, tx);
       const softwarePlanId = softwarePlan?.id ?? null;

@@ -32,6 +32,7 @@ jobs:
       DATABASE_URL: postgresql://quantara:quantara_ci_password@localhost:5432/quantara_ai_boq_test?schema=public
       PROPOSAL_ACCESS_SECRET: ci-only-proposal-secret-with-more-than-thirty-two-bytes
       INTEGRATION_CREDENTIALS_ENCRYPTION_KEY: ci-only-integration-key-with-more-than-thirty-two-bytes
+      APP_BASE_URL: http://localhost:3000
     steps:
       - name: Check out repository
         uses: actions/checkout@v4

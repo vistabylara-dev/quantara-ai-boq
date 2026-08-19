@@ -1,6 +1,8 @@
 import type Stripe from "stripe";
 import {
   CommerceProviderEnvironment,
+  type Prisma,
+  type PrismaClient,
   TayqanHirePlan,
   TayqanHireStatus,
 } from "@prisma/client";
@@ -61,15 +63,51 @@ function validateBaseUrl(liveMode: boolean): string {
   return raw.replace(/\/+$/, "");
 }
 
+/**
+ * TAYQAN-AUDIT-FIX-2 — a per-company Postgres advisory lock around TAYQAN
+ * checkout session creation, mirroring commerce-checkout-service.ts's
+ * acquireCompanyCheckoutLock pattern exactly. A DISTINCT namespace constant
+ * from every other advisory lock already in this codebase (CHECKOUT_LOCK_
+ * NAMESPACE=419628331, REFUND_REQUEST_LOCK_NAMESPACE=552014763, LIVE_SYNC_
+ * LOCK_NAMESPACE=231874509, STRIPE_WEBHOOK_LOCK_NAMESPACE=875309417) so
+ * TAYQAN checkout never contends on the same lock key space as any of them
+ * for the same company — two independent checkout flows for one company
+ * (e.g. a TAYQAN hire and a software-plan upgrade) must never block each
+ * other.
+ *
+ * Before this lock, two near-simultaneous "hire TAYQAN" requests for the
+ * same company could both observe "no active entitlement" and both survive
+ * expireOtherTayqanSessions (which only inspects Stripe's live session
+ * list — with neither request having committed anything yet for the other
+ * to see), then both create separate, both-payable Stripe checkout
+ * sessions. Serializing on this lock — with the real eligibility check
+ * (getActiveTayqanEntitlement) and expireOtherTayqanSessions both re-run
+ * strictly AFTER acquiring it — closes this: whichever request acquires
+ * the lock second waits for the first to fully commit (including its real
+ * `stripe.checkout.sessions.create` call, which happens before commit), so
+ * its own fresh expireOtherTayqanSessions call is guaranteed to see the
+ * first request's now-real Stripe session and reuse or expire it instead
+ * of creating a genuinely independent duplicate.
+ */
+const TAYQAN_CHECKOUT_LOCK_NAMESPACE = 694_213_580;
+
+async function acquireTayqanCheckoutLock(tx: Prisma.TransactionClient, companyId: string): Promise<void> {
+  await tx.$executeRaw`SELECT pg_advisory_xact_lock(${TAYQAN_CHECKOUT_LOCK_NAMESPACE}, hashtext(${companyId}))`;
+}
+
+type TayqanHireEntitlementClient = Pick<PrismaClient, "tayqanHireEntitlement">;
+type TayqanCheckoutCustomerClient = Pick<PrismaClient, "company" | "stripeBillingCustomer">;
+
 async function getOrCreateCustomer(
   stripe: Stripe,
   actor: CurrentActor,
   livemode: boolean,
+  client: TayqanCheckoutCustomerClient = prisma,
 ): Promise<string> {
-  const existing = await findStripeBillingCustomer(actor.companyId, livemode);
+  const existing = await findStripeBillingCustomer(actor.companyId, livemode, client);
   if (existing) return existing.stripeCustomerId;
 
-  const company = await prisma.company.findUniqueOrThrow({ where: { id: actor.companyId } });
+  const company = await client.company.findUniqueOrThrow({ where: { id: actor.companyId } });
   const customer = await stripe.customers.create(
     {
       name: company.legalName,
@@ -84,6 +122,7 @@ async function getOrCreateCustomer(
     actor.companyId,
     customer.id,
     livemode,
+    client,
   );
   return row.stripeCustomerId;
 }
@@ -134,8 +173,9 @@ async function persistPendingHire(
   session: Stripe.Checkout.Session,
   priceCode: string,
   plan: "DAY" | "WEEK" | "MONTHLY",
+  client: TayqanHireEntitlementClient = prisma,
 ) {
-  const existing = await prisma.tayqanHireEntitlement.findUnique({
+  const existing = await client.tayqanHireEntitlement.findUnique({
     where: { stripeCheckoutSessionId: session.id },
   });
 
@@ -148,7 +188,7 @@ async function persistPendingHire(
       );
     }
 
-    return prisma.tayqanHireEntitlement.update({
+    return client.tayqanHireEntitlement.update({
       where: { id: existing.id },
       data: {
         purchasedByUserId: actor.userId,
@@ -158,7 +198,7 @@ async function persistPendingHire(
     });
   }
 
-  return prisma.tayqanHireEntitlement.create({
+  return client.tayqanHireEntitlement.create({
     data: {
       companyId: actor.companyId,
       purchasedByUserId: actor.userId,
@@ -191,14 +231,11 @@ export async function createTayqanCheckoutSession(
     if (!boq) throw new AppError("TAYQAN_BOQ_PROJECT_MISMATCH", "The selected BOQ does not belong to this project.", 400);
   }
 
-  const active = await getActiveTayqanEntitlement(actor.companyId);
-  if (active) {
-    throw new ConflictError(
-      "TAYQAN_ALREADY_HIRED",
-      "TAYQAN is already hired for this company. Open the TAYQAN workspace to continue.",
-    );
-  }
-
+  // Global catalog validation — not company-specific, so it doesn't need the
+  // per-company lock below (mirrors commerce-checkout-service.ts's own
+  // "global catalog validation" comment ahead of its lock). The real,
+  // company-specific eligibility check (an active/pending TAYQAN hire) is
+  // re-run AFTER acquiring the lock, below.
   const price = await prisma.commercePrice.findUnique({
     where: { code: plan.priceCode },
     include: { product: true },
@@ -234,61 +271,91 @@ export async function createTayqanCheckoutSession(
       409,
     );
   }
+  // Narrowed to a plain string here — mapping.providerPriceId's null-check
+  // above doesn't survive being read from inside the nested transaction
+  // closure below.
+  const providerPriceId = mapping.providerPriceId;
 
   const stripe = resolveStripe(overrideClient);
   const baseUrl = validateBaseUrl(livemode);
-  const customerId = await getOrCreateCustomer(stripe, actor, livemode);
-  const reusable = await expireOtherTayqanSessions(
-    stripe,
-    customerId,
-    plan.priceCode,
-    project.id,
+
+  /**
+   * TAYQAN-AUDIT-FIX-2 — everything from here is serialized per company by
+   * acquireTayqanCheckoutLock, and the real eligibility check
+   * (getActiveTayqanEntitlement) is RE-RUN after acquiring the lock, never
+   * trusting a pre-lock read — this is the actual race fix (mission 2).
+   */
+  return prisma.$transaction(
+    async (tx) => {
+      await acquireTayqanCheckoutLock(tx, actor.companyId);
+
+      const active = await getActiveTayqanEntitlement(actor.companyId);
+      if (active) {
+        throw new ConflictError(
+          "TAYQAN_ALREADY_HIRED",
+          "TAYQAN is already hired for this company. Open the TAYQAN workspace to continue.",
+        );
+      }
+
+      const customerId = await getOrCreateCustomer(stripe, actor, livemode, tx);
+      const reusable = await expireOtherTayqanSessions(
+        stripe,
+        customerId,
+        plan.priceCode,
+        project.id,
+      );
+
+      if (reusable?.url) {
+        await persistPendingHire(actor, reusable, plan.priceCode, plan.plan, tx);
+        return {
+          checkoutSessionId: reusable.id,
+          checkoutUrl: reusable.url,
+        };
+      }
+
+      const metadata: Stripe.MetadataParam = {
+        quantara_company_id: actor.companyId,
+        quantara_product_family: TAYQAN_PRODUCT_FAMILY,
+        quantara_tayqan_plan: plan.plan,
+        quantara_tayqan_price_code: plan.priceCode,
+        quantara_project_id: project.id,
+        quantara_project_slug: project.slug,
+        quantara_tayqan_purchased_by_user_id: actor.userId,
+        ...(input.boqId ? { quantara_boq_id: input.boqId } : {}),
+      };
+
+      const common: Stripe.Checkout.SessionCreateParams = {
+        mode: plan.checkoutMode,
+        customer: customerId,
+        line_items: [{ price: providerPriceId, quantity: 1 }],
+        success_url: `${baseUrl}/projects/${encodeURIComponent(project.slug)}/tayqan?checkout=success&session_id={CHECKOUT_SESSION_ID}`,
+        cancel_url: `${baseUrl}/projects/${encodeURIComponent(project.slug)}/tayqan?checkout=cancelled`,
+        client_reference_id: actor.companyId,
+        metadata,
+      };
+
+      if (plan.checkoutMode === "subscription") {
+        common.subscription_data = { metadata };
+      } else {
+        common.payment_intent_data = { metadata };
+      }
+
+      const session = await stripe.checkout.sessions.create(common);
+      if (!session.url) {
+        throw new AppError("TAYQAN_CHECKOUT_NO_URL", "Stripe did not return a TAYQAN checkout URL.", 502);
+      }
+
+      await persistPendingHire(actor, session, plan.priceCode, plan.plan, tx);
+
+      return {
+        checkoutSessionId: session.id,
+        checkoutUrl: session.url,
+      };
+    },
+    // Generous timeout: this transaction holds a per-company advisory lock
+    // and makes several real Stripe API calls while open, not just DB
+    // writes — same reasoning as commerce-checkout-service.ts's own
+    // createCommerceCheckoutSession transaction.
+    { maxWait: 10_000, timeout: 30_000 },
   );
-
-  if (reusable?.url) {
-    await persistPendingHire(actor, reusable, plan.priceCode, plan.plan);
-    return {
-      checkoutSessionId: reusable.id,
-      checkoutUrl: reusable.url,
-    };
-  }
-
-  const metadata: Stripe.MetadataParam = {
-    quantara_company_id: actor.companyId,
-    quantara_product_family: TAYQAN_PRODUCT_FAMILY,
-    quantara_tayqan_plan: plan.plan,
-    quantara_tayqan_price_code: plan.priceCode,
-    quantara_project_id: project.id,
-    quantara_project_slug: project.slug,
-    quantara_tayqan_purchased_by_user_id: actor.userId,
-    ...(input.boqId ? { quantara_boq_id: input.boqId } : {}),
-  };
-
-  const common: Stripe.Checkout.SessionCreateParams = {
-    mode: plan.checkoutMode,
-    customer: customerId,
-    line_items: [{ price: mapping.providerPriceId, quantity: 1 }],
-    success_url: `${baseUrl}/projects/${encodeURIComponent(project.slug)}/tayqan?checkout=success&session_id={CHECKOUT_SESSION_ID}`,
-    cancel_url: `${baseUrl}/projects/${encodeURIComponent(project.slug)}/tayqan?checkout=cancelled`,
-    client_reference_id: actor.companyId,
-    metadata,
-  };
-
-  if (plan.checkoutMode === "subscription") {
-    common.subscription_data = { metadata };
-  } else {
-    common.payment_intent_data = { metadata };
-  }
-
-  const session = await stripe.checkout.sessions.create(common);
-  if (!session.url) {
-    throw new AppError("TAYQAN_CHECKOUT_NO_URL", "Stripe did not return a TAYQAN checkout URL.", 502);
-  }
-
-  await persistPendingHire(actor, session, plan.priceCode, plan.plan);
-
-  return {
-    checkoutSessionId: session.id,
-    checkoutUrl: session.url,
-  };
 }

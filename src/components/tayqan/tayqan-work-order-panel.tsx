@@ -36,6 +36,7 @@ export type TayqanWorkOrderState = {
     actionHref?: string;
     entity?: { id: string; label: string; quantity: number | null; unit: string | null; sourceReference: string | null; confidence: number };
     qa?: { assignmentId: string; questionId: string; questionType: string; prompt: string; whyMaterial: string; recommendedAction: string };
+    pendingItems?: Array<{ id: string; itemCode: string; description: string }>;
   } | null;
   qaWorkerRunId: string | null;
   measurementExceptions: {
@@ -377,6 +378,19 @@ export function TayqanWorkOrderPanel({
               <p className="text-xs text-slate-500">{blocker.qa.whyMaterial}</p>
               <textarea value={note} onChange={(e) => setNote(e.target.value)} placeholder={t("tayqan.hire.workflow.notePlaceholder")} className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white" />
               <button disabled={busy} onClick={() => void answer({ action: "ANSWER_QA", qaAnswerType: "EXPLAINED_WITH_NOTE", note })} className="rounded-xl bg-cyan-600 px-3 py-2 text-xs font-semibold text-white">{t("tayqan.hire.send")}</button>
+            </div>
+          )}
+          {blocker.pendingItems && blocker.pendingItems.length > 0 && (
+            <div className="mt-3 rounded-xl border border-slate-800 bg-slate-950 p-3">
+              <p className="text-xs font-semibold text-amber-200">{t("tayqan.hire.workflow.aiDraftPendingItemsLabel")}</p>
+              <ul className="mt-2 space-y-1 text-xs text-slate-300">
+                {blocker.pendingItems.map((item) => (
+                  <li key={item.id}>
+                    <span className="font-mono text-slate-500">{item.itemCode}</span>{" "}
+                    <span>{item.description}</span>
+                  </li>
+                ))}
+              </ul>
             </div>
           )}
           {blocker.kind === "ACTION" && blocker.actionHref && (

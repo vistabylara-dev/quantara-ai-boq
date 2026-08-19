@@ -2108,6 +2108,8 @@ const en = {
         sourceFailed: "A project source could not be processed. Resolve that source and I will resume the same work order.",
         reviewEvidence: "I found extracted project evidence that requires a professional decision before I can use it in the BOQ.",
         draftReadyForReview: "Your AI Draft BOQ is ready. I prepared everything I could use safely without pretending you already approved it. Review or correct the draft quantities in the BOQ, then ask me to check again and I will continue to final QA.",
+        aiDraftPendingItemsLabel: "Still pending review — open each item below and enter a real quantity, then save:",
+        aiDraftSkippedItemsHint: "Still pending: {items}. Open each item above and enter its real quantity, then save.",
         draftExceptionsRemain: "Your AI Draft BOQ is already prepared. Some remaining extraction exceptions still need a professional decision before I can complete final QA. Review only those exceptions, then ask me to check again.",
         draftRatesRemain: "Your AI Draft BOQ is ready, but one or more required rates are still unverified. Complete the missing or unconfirmed pricing in the BOQ; I will not invent a commercial rate. Then ask me to check again.",
         draftNoUsableItems: "I processed the selected project sources but could not safely create a BOQ row from the remaining candidates because required quantity or unit evidence is incomplete. Review the extraction exceptions; I will not invent missing values.",

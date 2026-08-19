@@ -30,6 +30,7 @@ type AiDraftConfirmationResult = {
   confirmedCount: number;
   skippedCount: number;
   remainingCount: number;
+  skippedItems: Array<{ id: string; itemCode: string; description: string }>;
 };
 
 const WORKFLOW_FACT_TRANSLATION_KEYS = {
@@ -422,11 +423,21 @@ export default function ProjectBOQPage(props: PageProps) {
         `/api/boqs/${encodeURIComponent(activeRevision.id)}/ai-draft/confirm-quantities`,
         {},
       );
-      setAiDraftMessage(
+      const summary =
         result.confirmedCount > 0
           ? `${result.confirmedCount} AI Draft ${result.confirmedCount === 1 ? "quantity was" : "quantities were"} professionally confirmed. ${result.remainingCount} remain for review.`
-          : "No additional AI Draft quantities were confirmed. Review any remaining exceptions before finalizing.",
-      );
+          : "No additional AI Draft quantities were confirmed. Review any remaining exceptions before finalizing.";
+      // TAYQAN-AI-DRAFT-LOOP-FIX: name the specific item(s) this button
+      // could not auto-confirm (e.g. no measured quantity was ever extracted
+      // for them) instead of leaving the customer with only a generic count
+      // and no way to know which row still needs a manual quantity typed in.
+      const skippedHint =
+        result.skippedItems.length > 0
+          ? " " + t("tayqan.hire.workflow.aiDraftSkippedItemsHint", {
+              items: result.skippedItems.map((item) => item.itemCode).join(", "),
+            })
+          : "";
+      setAiDraftMessage(summary + skippedHint);
       await loadWorkspace();
     } catch (error) {
       setActionError(getLocalizedApiErrorMessage(error, t, locale));

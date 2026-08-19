@@ -784,7 +784,7 @@ export async function confirmAiDraftQuantities(actor: CurrentActor, boqId: strin
       });
 
     if (linkedItems.length === 0) {
-      return { confirmedCount: 0, skippedCount: 0, remainingCount: 0 };
+      return { confirmedCount: 0, skippedCount: 0, remainingCount: 0, skippedItems: [] };
     }
 
     const entityIds = linkedItems.map((entry) => entry.extractedEntityId);
@@ -843,6 +843,15 @@ export async function confirmAiDraftQuantities(actor: CurrentActor, boqId: strin
     const now = new Date();
     let confirmedCount = 0;
     let skippedCount = 0;
+    // TAYQAN-AI-DRAFT-LOOP-FIX: without this, an item this function can never
+    // auto-confirm (e.g. its extracted entity has quantity===null, no AI
+    // measurement suggestion, no TAYQAN calculation) was silently counted
+    // into skippedCount with zero indication of which item, or that a direct
+    // manual edit+save of that exact row (which DOES correctly clear it via
+    // syncSectionItems -> confirmManualQuantityProvenance) is the only way
+    // out. The "Check again" loop then repeats the same generic blocker
+    // message forever. Bounded the same way pendingItems is bounded below.
+    const skippedItems: Array<{ id: string; itemCode: string; description: string }> = [];
 
     for (const {
       item,
@@ -856,6 +865,7 @@ export async function confirmAiDraftQuantities(actor: CurrentActor, boqId: strin
 
       if (!entity) {
         skippedCount += 1;
+        skippedItems.push({ id: item.id, itemCode: item.itemCode, description: item.description });
         continue;
       }
 
@@ -897,7 +907,13 @@ export async function confirmAiDraftQuantities(actor: CurrentActor, boqId: strin
         && !tayqanCalculatedQuantity
         && !quantityMatchesExtraction
       ) {
+        // This item structurally cannot be auto-confirmed by this button —
+        // e.g. its extracted entity never had a measured quantity, and
+        // nothing (AI suggestion, TAYQAN calculation) has proposed one
+        // since. The only way to clear it is a genuine manual edit+save of
+        // this exact row in the BOQ editor.
         skippedCount += 1;
+        skippedItems.push({ id: item.id, itemCode: item.itemCode, description: item.description });
         continue;
       }
 
@@ -910,6 +926,7 @@ export async function confirmAiDraftQuantities(actor: CurrentActor, boqId: strin
         && !boqMeasurementComplete
       ) {
         skippedCount += 1;
+        skippedItems.push({ id: item.id, itemCode: item.itemCode, description: item.description });
         continue;
       }
 
@@ -1065,6 +1082,7 @@ export async function confirmAiDraftQuantities(actor: CurrentActor, boqId: strin
         }, tx);
       } else if (!REVIEWED_ENTITY_STATUSES.has(entity.status)) {
         skippedCount += 1;
+        skippedItems.push({ id: item.id, itemCode: item.itemCode, description: item.description });
         continue;
       }
 
@@ -1166,6 +1184,9 @@ export async function confirmAiDraftQuantities(actor: CurrentActor, boqId: strin
       confirmedCount,
       skippedCount,
       remainingCount: linkedItems.length - confirmedCount,
+      // Bounded so a large BOQ never balloons this response — enough to name
+      // the first handful of items a human needs to go edit directly.
+      skippedItems: skippedItems.slice(0, 10),
     };
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 }

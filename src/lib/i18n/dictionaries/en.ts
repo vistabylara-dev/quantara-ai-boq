@@ -795,6 +795,12 @@ const en = {
     showingItems: "Showing {shown} of {total} items",
     previous: "Previous",
     next: "Next",
+    buyAccess: "Buy Access",
+    redirecting: "Redirecting…",
+    notAvailableForPurchase: "Not yet available for purchase",
+    purchaseSetupPending: "Setup pending",
+    alreadySubscribed: "Already subscribed",
+    purchaseUnavailable: "Unavailable",
   },
   integrations: {
     marketplaceAvailability: "Browse planned integrations and use the Google Drive beta import when it is configured and authorized. Other design, BIM and construction-system connectors are not currently available for production use.",

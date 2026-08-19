@@ -66,6 +66,30 @@ export type TayqanMeasurementExistingEntityEvidence = {
   sourceText: string | null;
   sourceReference: string | null;
   technicalData: Prisma.JsonValue | null;
+  /**
+   * PR2 gap 1: how this entity was extracted. TABLE_PARSER entities from
+   * schedule/CSV/XLSX files never get a drawingPageId (those files produce
+   * no rendered DrawingPage rows) — this is the reliable signal the reasoner
+   * uses to attach schedule evidence project-wide instead of dropping it.
+   */
+  extractionMethod: string;
+};
+
+/**
+ * PR2 gap 2: the target BOQ's current items, supplied only for
+ * UPDATE_EXISTING_BOQ assignments (see tayqan-measurement-service.ts's
+ * buildEvidenceBundle). Lets the reasoner reconcile against what's already
+ * there before proposing a measurement, instead of only deduping after the
+ * fact in ai-draft-boq-service.ts.
+ */
+export type TayqanMeasurementExistingBoqItemEvidence = {
+  id: string;
+  sectionCode: string;
+  sectionTitle: string;
+  itemCode: string;
+  description: string;
+  quantity: number;
+  unit: string;
 };
 
 export type TayqanMeasurementRoomEvidence = {
@@ -94,6 +118,8 @@ export type TayqanMeasurementEvidenceBundle = {
   pages: TayqanMeasurementPageEvidence[];
   existingEntities: TayqanMeasurementExistingEntityEvidence[];
   rooms: TayqanMeasurementRoomEvidence[];
+  /** PR2 gap 2: empty unless this is an UPDATE_EXISTING_BOQ assignment. */
+  existingBoqItems: TayqanMeasurementExistingBoqItemEvidence[];
 };
 
 export type TayqanMeasurementCluster = {

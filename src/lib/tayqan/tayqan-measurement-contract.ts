@@ -446,7 +446,35 @@ function derivationConfidenceCap(derivation: TayqanMeasurementDerivation): numbe
   }
 }
 
+/**
+ * PR2 gap 3: prior behavior confirmed by reading every call site — this was
+ * the ONLY caller (evaluateTayqanMeasurementSubject, below), invoked from a
+ * plain .map() in tayqan-measurement-service.ts with no try/catch around
+ * each subject. A plain Error here aborted the entire measurement pass with
+ * an unhandled 500, not a visible, gating exception. Throwing this typed
+ * error instead lets the caller catch specifically this failure per-subject
+ * (skipping just that one subject) while every other thrown Error in
+ * evaluateTayqanMeasurementSubject keeps aborting the pass exactly as
+ * before — this class exists so the caller can distinguish "a real,
+ * structured revision conflict" from "the AI's output was invalid," which
+ * must never be silently downgraded into a soft exception.
+ */
+export class TayqanRevisionConflictError extends Error {
+  constructor(readonly exception: TayqanMeasurementException) {
+    super(exception.message);
+    this.name = "TayqanRevisionConflictError";
+  }
+}
+
+/**
+ * Detection logic is unchanged from before PR2 — only the failure mode
+ * changed, from throwing a plain Error (unhandled crash) to throwing
+ * TayqanRevisionConflictError (caught per-subject by the caller and
+ * recorded as a structured REVISION_CONFLICT measurement exception, which
+ * PR1's TAYQAN_DANGEROUS_MEASUREMENT_EXCEPTION_KINDS already gates on).
+ */
 function assertNoRevisionMix(
+  subject: { existingEntityId: string | null },
   evidencePageIds: readonly string[],
   pagesById: ReadonlyMap<string, TayqanMeasurementPageGuard>,
 ) {
@@ -463,9 +491,12 @@ function assertNoRevisionMix(
 
   for (const [drawingNumber, revisions] of revisionsByDrawing) {
     if (revisions.size > 1) {
-      throw new Error(
-        `TAYQAN measurement mixed revisions of drawing ${drawingNumber}; resolve revision authority before measurement.`,
-      );
+      throw new TayqanRevisionConflictError({
+        kind: "REVISION_CONFLICT",
+        message: `TAYQAN measurement mixed revisions of drawing ${drawingNumber}; resolve revision authority before measurement.`,
+        pageIds: [...evidencePageIds],
+        relatedEntityId: subject.existingEntityId,
+      });
     }
   }
 }
@@ -499,7 +530,7 @@ export function evaluateTayqanMeasurementSubject(
     }
   }
 
-  assertNoRevisionMix(subject.evidencePageIds, context.pagesById);
+  assertNoRevisionMix(subject, subject.evidencePageIds, context.pagesById);
 
   const expectedMeasurementMethod =
     tayqanMeasurementMethodForCalculationType(subject.calculationType);

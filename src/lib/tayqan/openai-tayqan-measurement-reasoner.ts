@@ -27,6 +27,10 @@ const MAX_CLUSTER_CONCURRENCY = 2;
 const MAX_PAGES_PER_CLUSTER = 8;
 const REQUEST_RETRY_COUNT = 2;
 const GLOBAL_REVIEW_BATCH_SIZE = 200;
+/** PR2 gap 1: table/schedule entities have no page to cluster by, so they're attached project-wide instead — capped so one huge schedule file can't blow out every cluster's prompt. */
+const MAX_TABLE_SCHEDULE_ENTITIES = 200;
+/** PR2 gap 2: bounds the existing-BOQ reconciliation context the same way entity/room evidence is already bounded. */
+const MAX_EXISTING_BOQ_ITEMS = 400;
 
 type OpenAITayqanMeasurementConfig = {
   apiKey: string;
@@ -286,6 +290,38 @@ const seniorReviewJsonSchema = {
   },
 } as const;
 
+/**
+ * PR2 gap 1: entities from schedule/CSV/XLSX files (extractionMethod
+ * TABLE_PARSER, no drawingPageId — those files produce no rendered
+ * DrawingPage) can't be matched to a cluster by page or file, since
+ * clustering itself is page-based. Rather than guess a discipline mapping
+ * that doesn't exist for these files, they're treated as relevant to every
+ * cluster in the frozen source scope — capped, and always project-wide, not
+ * silently dropped.
+ */
+function isTableScheduleEntity(
+  entity: TayqanMeasurementEvidenceBundle["existingEntities"][number],
+): boolean {
+  return entity.extractionMethod === "TABLE_PARSER" && !entity.drawingPageId;
+}
+
+function toPromptEntity(entity: TayqanMeasurementEvidenceBundle["existingEntities"][number]) {
+  return {
+    ...entity,
+    sourceText: entity.sourceText?.slice(0, MAX_ENTITY_TEXT) ?? null,
+    technicalData: entity.technicalData,
+    // Explicit so the model never mistakes schedule/table data for
+    // something read off a drawing sheet — it must reason about each
+    // differently (e.g. a WEIGHT/reinforcement measurement needs sufficient
+    // schedule/bar evidence specifically, not just a page reference).
+    evidenceSource: isTableScheduleEntity(entity) ? "TABLE_SCHEDULE" : "DRAWING_PAGE",
+  };
+}
+
+function toPromptBoqItem(item: TayqanMeasurementEvidenceBundle["existingBoqItems"][number]) {
+  return item;
+}
+
 function clusterContext(
   bundle: TayqanMeasurementEvidenceBundle,
   pageIds: readonly string[],
@@ -317,17 +353,17 @@ function clusterContext(
     }));
 
   const fileIds = new Set(pages.map((page) => page.projectFileId));
-  const entities = bundle.existingEntities
-    .filter((entity) =>
-      (entity.drawingPageId && pageSet.has(entity.drawingPageId))
-      || fileIds.has(entity.projectFileId),
-    )
-    .slice(0, 160)
-    .map((entity) => ({
-      ...entity,
-      sourceText: entity.sourceText?.slice(0, MAX_ENTITY_TEXT) ?? null,
-      technicalData: entity.technicalData,
-    }));
+  const pageMatchedEntities = bundle.existingEntities.filter((entity) =>
+    (entity.drawingPageId && pageSet.has(entity.drawingPageId))
+    || fileIds.has(entity.projectFileId),
+  );
+  const tableScheduleEntities = bundle.existingEntities
+    .filter(isTableScheduleEntity)
+    .slice(0, MAX_TABLE_SCHEDULE_ENTITIES);
+  const entities = [...pageMatchedEntities, ...tableScheduleEntities]
+    .filter((entity, index, all) => all.findIndex((candidate) => candidate.id === entity.id) === index)
+    .slice(0, 160 + MAX_TABLE_SCHEDULE_ENTITIES)
+    .map(toPromptEntity);
 
   const rooms = bundle.rooms
     .filter((room) => !room.drawingPageId || pageSet.has(room.drawingPageId))
@@ -339,6 +375,11 @@ function clusterContext(
     pages,
     existingEntities: entities,
     rooms,
+    // PR2 gap 2: reconciliation context — only ever non-empty for an
+    // UPDATE_EXISTING_BOQ assignment (buildEvidenceBundle leaves it empty
+    // otherwise), attached to every cluster for the same reason table
+    // evidence is: any cluster's proposed scope could overlap existing rows.
+    existingBoqItems: bundle.existingBoqItems.slice(0, MAX_EXISTING_BOQ_ITEMS).map(toPromptBoqItem),
   };
 }
 
@@ -361,6 +402,17 @@ function compactProjectContext(bundle: TayqanMeasurementEvidenceBundle) {
       technicalLines: page.technicalLines.slice(0, 20),
       text: page.text?.slice(0, 1_200) ?? null,
     })),
+    // PR2 gap 1: the final cross-cluster reconciliation pass explicitly
+    // checks for duplicate scope and schedule-plan mismatches (see
+    // seniorCheckerInstruction's globalReview branch) — it cannot do that
+    // job for schedule-sourced scope without seeing the schedule evidence.
+    scheduleEvidence: bundle.existingEntities
+      .filter(isTableScheduleEntity)
+      .slice(0, MAX_TABLE_SCHEDULE_ENTITIES)
+      .map(toPromptEntity),
+    // PR2 gap 2: same reconciliation context as clusterContext, for the
+    // global pass's own duplicate/consistency checking.
+    existingBoqItems: bundle.existingBoqItems.slice(0, MAX_EXISTING_BOQ_ITEMS).map(toPromptBoqItem),
   };
 }
 
@@ -532,6 +584,8 @@ function measurementInstruction(): string {
     "Autonomously choose the PRIMARY measurementMethod for every payable BOQ scope: COUNT, LINEAR, AREA, VOLUME or WEIGHT. The user must not be asked to choose a calculator.",
     "Then choose the specific deterministic calculationType that implements that method. measurementMethod and calculationType must agree with the server mapping.",
     "Choose the method from the PAYABLE BOQ INTENT, not merely the physical object. Example: concrete in F1 footings is VOLUME/CONCRETE_VOLUME; a door is COUNT/COUNT; floor finish is AREA/FLOOR_AREA; pipe/cable route is LINEAR; reinforcement is WEIGHT only when evidence is sufficient.",
+    "existingEntities entries carry evidenceSource: DRAWING_PAGE or TABLE_SCHEDULE. TABLE_SCHEDULE entries come from a parsed schedule/CSV/XLSX file, not a rendered drawing page — treat their rows as SCHEDULE_VALUE derivation, not something you visually inspected. A WEIGHT/REINFORCEMENT_WEIGHT measurement needs sufficient schedule/bar evidence specifically; do not propose one from a plan symbol alone when no TABLE_SCHEDULE bar schedule evidence is present.",
+    "When existingBoqItems is non-empty, this is an update to an already-priced BOQ: check it before proposing a subject. Do not propose a new subject for scope an existing item already measures. If new evidence contradicts an existing item's quantity or description, do not silently overwrite it — create an exception (SCOPE_GAP for scope the existing item misses, PLAN_SCHEDULE_MISMATCH or the most specific applicable kind for a contradiction) so a human reconciles it.",
     "A physical object can support more than one measurement. supportingChecks never create extra BOQ rows.",
     "Use application=CROSS_CHECK when the supporting calculation only corroborates the primary quantity.",
     "Use application=REPETITION_MULTIPLIER only for an evidence-backed COUNT/COUNT that deterministically repeats one identical primary geometry. The server, not the model, multiplies base geometry by the verified count.",
@@ -567,8 +621,8 @@ function seniorCheckerInstruction(globalReview: boolean): string {
   return [
     "Act as an independent Chief Quantity Surveyor checking another estimator's measurement proposals with the judgement expected of a senior QS with decades of project experience.",
     globalReview
-      ? "This is the final cross-cluster reconciliation. Look especially for duplicate scope across disciplines/pages, revision conflicts, inconsistent units, schedule-plan mismatches and missing coordination."
-      : "This is a bounded cluster peer-check. Use the supplied drawing images and context to verify every proposal against its actual evidence.",
+      ? "This is the final cross-cluster reconciliation. Look especially for duplicate scope across disciplines/pages, revision conflicts, inconsistent units, schedule-plan mismatches and missing coordination. projectContext.scheduleEvidence holds schedule/table entities that don't belong to any single cluster — use it to catch a schedule-only scope that no cluster proposal covers. projectContext.existingBoqItems, when non-empty, is the already-priced BOQ this assignment updates — reject a proposal that duplicates an existing item's scope."
+      : "This is a bounded cluster peer-check. Use the supplied drawing images and context to verify every proposal against its actual evidence. context.existingBoqItems, when non-empty, is the already-priced BOQ this assignment updates — check it the same way.",
     "You are a checker, not a second estimator: do not invent replacement quantities or rates.",
     "ACCEPT a proposal only when the physical scope, primary measurement method, calculator/formula type, inputs, units, deductions and page provenance are adequately supported.",
     "Independently challenge whether the selected measurementMethod matches the payable BOQ intent. A technically valid formula is still wrong if it measures the wrong commercial/measurement scope.",

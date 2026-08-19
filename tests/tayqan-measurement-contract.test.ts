@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { ExtractedEntityType, QuantityCalculationType } from "@prisma/client";
 import {
+  derivationConfidenceCap,
   evaluateTayqanMeasurementSubject,
   normalizeTayqanMeasurementValue,
   tayqanMeasurementMethodForCalculationType,
@@ -148,7 +149,11 @@ describe("TAYQAN senior measurement contract", () => {
     expect(result.normalizedInputValues.wallHeight).toBeCloseTo(3);
     expect(result.resultUnit).toBe("m2");
     expect(result.resultValue).toBeCloseTo(16.5);
-    expect(result.confidence).toBe(92);
+    // TAYQAN-AUDIT-FIX-1: EXPLICIT_DIMENSION/SCHEDULE_VALUE's cap dropped from
+    // 98 to 90 (self-declared derivations, no code-enforced verification) —
+    // now the binding constraint on this subject, below the lowest input
+    // confidence (92).
+    expect(result.confidence).toBe(90);
   });
 
   it("refuses pixel/scaled geometry unless the cited page scale is verified", () => {
@@ -186,6 +191,13 @@ describe("TAYQAN senior measurement contract", () => {
   });
 
   it("caps confidence for verified-scale geometry instead of trusting model confidence blindly", () => {
+    // TAYQAN-AUDIT-FIX-1: methodConfidence raised to 100 (was 95) so the
+    // derivation cap under test is actually the binding constraint — at the
+    // old, buggy cap (88) it would have bound regardless, but now that
+    // VERIFIED_SCALE_GEOMETRY's cap is 98 (the highest tier, correctly
+    // reflecting real code-enforced scale verification), a methodConfidence
+    // of 95 would have silently become the binding minimum instead and this
+    // test would stop demonstrating what its name claims.
     const result = evaluateTayqanMeasurementSubject({
       existingEntityId: null,
       primaryPageId: PAGE_PLAN,
@@ -196,7 +208,7 @@ describe("TAYQAN senior measurement contract", () => {
       location: "Level 01",
       measurementMethod: "AREA",
       methodSelectionRationale: "Floor finish is a payable surface-area scope.",
-      methodConfidence: 95,
+      methodConfidence: 100,
       calculationType: QuantityCalculationType.FLOOR_AREA,
       inputs: [{
         key: "netFloorArea",
@@ -218,7 +230,7 @@ describe("TAYQAN senior measurement contract", () => {
       pagesById: new Map([[PAGE_PLAN, pageGuard({ scaleVerified: true })]]),
     });
 
-    expect(result.confidence).toBe(88);
+    expect(result.confidence).toBe(98);
   });
 
   it("refuses stored room geometry unless that room cites a verified scale calibration", () => {
@@ -345,7 +357,10 @@ describe("TAYQAN senior measurement contract", () => {
     });
     expect(result.resultValue).toBe(12);
     expect(result.resultUnit).toBe("nr");
-    expect(result.confidence).toBe(90);
+    // TAYQAN-AUDIT-FIX-1: DIRECT_COUNT's cap dropped from 90 to 88 (lowest of
+    // the self-declared tier — a visual count is the least verifiable of the
+    // three unverified derivations).
+    expect(result.confidence).toBe(88);
   });
 
   it("requires real multi-source evidence before calling a count reconciled", () => {
@@ -509,6 +524,27 @@ describe("TAYQAN senior measurement contract", () => {
     expect(footing.supportingChecks[0]?.application).toBe("REPETITION_MULTIPLIER");
     expect(footing.supportingChecks[0]?.measurementMethod).toBe("COUNT");
     expect(footing.supportingChecks[0]?.resultValue).toBe(12);
+  });
+
+  it("TAYQAN-AUDIT-FIX-1: a code-verified derivation's confidence cap is never lower than a self-declared derivation's cap", () => {
+    const codeVerified = ["VERIFIED_SCALE_GEOMETRY", "ROOM_GEOMETRY", "COUNT_RECONCILIATION"] as const;
+    const selfDeclared = ["EXPLICIT_DIMENSION", "SCHEDULE_VALUE", "DIRECT_COUNT"] as const;
+
+    const codeVerifiedCaps = codeVerified.map(derivationConfidenceCap);
+    const selfDeclaredCaps = selfDeclared.map(derivationConfidenceCap);
+
+    const minCodeVerified = Math.min(...codeVerifiedCaps);
+    const maxSelfDeclared = Math.max(...selfDeclaredCaps);
+    expect(minCodeVerified).toBeGreaterThanOrEqual(maxSelfDeclared);
+
+    // Direct, per-kind assertions too — not just the aggregate min/max
+    // comparison above, so a future edit that regresses just one pairing
+    // (e.g. only COUNT_RECONCILIATION vs. SCHEDULE_VALUE) still fails here.
+    for (const verified of codeVerified) {
+      for (const unverified of selfDeclared) {
+        expect(derivationConfidenceCap(verified)).toBeGreaterThanOrEqual(derivationConfidenceCap(unverified));
+      }
+    }
   });
 
 });

@@ -87,9 +87,23 @@ export async function manuallyAddExtractedEntity(actor: CurrentActor, input: Cre
   return toExtractedEntityDTO(row);
 }
 
-export async function listEntitiesForProject(actor: CurrentActor, projectId: string, filters?: { status?: string; entityType?: string }) {
+export async function listEntitiesForProject(
+  actor: CurrentActor,
+  projectId: string,
+  filters?: { status?: string; entityType?: string; ids?: string[] },
+) {
   const rows = await listExtractedEntities(actor.companyId, projectId, filters);
-  return rows.map(toExtractedEntityDTO);
+  // PR3: additive, optional narrowing for callers that only need to resolve
+  // a small, known set of entity ids (e.g. the TAYQAN work-order panel
+  // resolving measurementExceptions[].relatedEntityId) without paying to
+  // serialize every entity in the project — company scoping already
+  // happened above via listExtractedEntities, so this is a pure narrowing,
+  // never a way to reach another company's rows. Omitted entirely (default)
+  // leaves every existing caller's behavior byte-identical.
+  const scoped = filters?.ids && filters.ids.length > 0
+    ? rows.filter((row) => filters.ids!.includes(row.id))
+    : rows;
+  return scoped.map(toExtractedEntityDTO);
 }
 
 /** Human verification workflow (spec section 25): confirm/correct/reject, always preserving the original value and requiring a reason for corrections. Confirmed values are never overwritten by later reprocessing. */

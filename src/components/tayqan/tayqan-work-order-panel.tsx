@@ -17,6 +17,40 @@ export type TayqanMeasurementExceptionState = {
   resolution: { reason: string; actorUserId: string; actorName: string; resolvedAt: string } | null;
 };
 
+/** Subset of toExtractedEntityDTO's shape actually rendered here. */
+type ResolvedExceptionEntity = {
+  id: string;
+  label: string;
+  quantity: number | null;
+  unit: string | null;
+  extractionMethod: string;
+  sourceText: string | null;
+};
+
+/** The reasoner's own JSON schema caps a single exception at 16 pageIds; this is a defensive UI cap, not a real-world expectation (typical exceptions cite 1-3 pages). */
+const MAX_INLINE_PAGE_THUMBNAILS = 12;
+
+function DrawingPageThumbnail({ pageId }: { pageId: string }) {
+  const t = useTranslations();
+  const [failed, setFailed] = useState(false);
+  const src = `/api/drawing-pages/${encodeURIComponent(pageId)}/image`;
+
+  if (failed) {
+    return (
+      <div className="flex h-20 w-28 items-center justify-center rounded-lg border border-slate-800 text-center text-[10px] text-slate-500">
+        {t("tayqan.hire.workflow.exceptionNoPageImage")}
+      </div>
+    );
+  }
+
+  return (
+    <a href={src} target="_blank" rel="noreferrer" className="block h-20 w-28 overflow-hidden rounded-lg border border-slate-800 bg-black">
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src={src} alt={t("tayqan.hire.workflow.exceptionPageEvidence")} className="h-full w-full object-cover" onError={() => setFailed(true)} />
+    </a>
+  );
+}
+
 export type TayqanWorkOrderState = {
   id: string;
   status: "RUNNING" | "NEEDS_INPUT" | "READY_FOR_ACCEPTANCE" | "COMPLETED" | "FAILED" | "CANCELLED";
@@ -75,6 +109,8 @@ export function TayqanWorkOrderPanel({
   const [note, setNote] = useState("");
   const [resolutionReasons, setResolutionReasons] = useState<Record<string, string>>({});
   const [confirmingAccept, setConfirmingAccept] = useState(false);
+  const [resolvedEntities, setResolvedEntities] = useState<Record<string, ResolvedExceptionEntity>>({});
+  const resolvedEntityIdsFetched = useRef<string>("");
   const qaNotified = useRef<string | null>(null);
   // Senior QS can outlive the poll interval; never overlap expensive /advance calls.
   const advanceInFlight = useRef(false);
@@ -128,6 +164,39 @@ export function TayqanWorkOrderPanel({
     qaNotified.current = state.qaWorkerRunId;
     void onQaStarted();
   }, [state?.qaWorkerRunId, onQaStarted]);
+
+  // Resolves measurementExceptions[].relatedEntityId to real entity details
+  // (mission 2). Independent of the polling/advance flow above — a failure
+  // here silently leaves resolvedEntities as-is; the exception's own kind
+  // and message (already rendered regardless) are never blocked on this.
+  useEffect(() => {
+    const ids = [...new Set(
+      (state?.measurementExceptions.exceptions ?? [])
+        .map((exception) => exception.relatedEntityId)
+        .filter((id): id is string => Boolean(id))
+        .filter((id) => !resolvedEntities[id]),
+    )];
+    if (ids.length === 0) return;
+    const fetchKey = ids.slice().sort().join(",");
+    if (fetchKey === resolvedEntityIdsFetched.current) return;
+    resolvedEntityIdsFetched.current = fetchKey;
+
+    const controller = new AbortController();
+    apiClient
+      .get<ResolvedExceptionEntity[]>(
+        `/api/projects/${encodeURIComponent(projectId)}/extractions?ids=${encodeURIComponent(ids.join(","))}`,
+        controller.signal,
+      )
+      .then((entities) => {
+        setResolvedEntities((current) => {
+          const next = { ...current };
+          for (const entity of entities) next[entity.id] = entity;
+          return next;
+        });
+      })
+      .catch(() => { /* degrade gracefully — the exception text is already shown */ });
+    return () => controller.abort();
+  }, [state?.measurementExceptions.exceptions, projectId, resolvedEntities]);
 
   const answer = async (payload: Record<string, unknown>) => {
     if (!state) return;
@@ -244,6 +313,41 @@ export function TayqanWorkOrderPanel({
               <div key={exception.key} className="rounded-xl border border-slate-800 bg-slate-950 p-3">
                 <p className="text-xs font-semibold uppercase tracking-wide text-amber-200">{exception.kind}</p>
                 <p className="mt-1 text-sm text-slate-200">{exception.message}</p>
+
+                {exception.pageIds.length > 0 && (
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {exception.pageIds.slice(0, MAX_INLINE_PAGE_THUMBNAILS).map((pageId) => (
+                      <DrawingPageThumbnail key={pageId} pageId={pageId} />
+                    ))}
+                    {exception.pageIds.length > MAX_INLINE_PAGE_THUMBNAILS && (
+                      <span className="self-center text-[11px] text-slate-500">
+                        +{exception.pageIds.length - MAX_INLINE_PAGE_THUMBNAILS}
+                      </span>
+                    )}
+                  </div>
+                )}
+
+                {exception.relatedEntityId && (() => {
+                  const entity = resolvedEntities[exception.relatedEntityId];
+                  if (!entity) return null;
+                  const isTableSourced = entity.extractionMethod === "TABLE_PARSER";
+                  return (
+                    <div className="mt-2 rounded-lg border border-slate-800 bg-slate-900 p-2 text-xs text-slate-300">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="font-semibold text-white">{entity.label}</p>
+                        <span className={[
+                          "rounded-full px-2 py-0.5 text-[0.6rem] uppercase tracking-[0.15em]",
+                          isTableSourced ? "border border-blue-900/60 bg-blue-950/30 text-blue-200" : "border border-slate-700 bg-slate-800 text-slate-300",
+                        ].join(" ")}>
+                          {isTableSourced ? t("tayqan.hire.workflow.exceptionEntitySourceTable") : t("tayqan.hire.workflow.exceptionEntitySourcePage")}
+                        </span>
+                      </div>
+                      <p className="mt-1 text-slate-400">{entity.quantity ?? "—"} {entity.unit ?? ""}</p>
+                      {entity.sourceText && <p className="mt-1 whitespace-pre-line text-slate-500">{entity.sourceText}</p>}
+                    </div>
+                  );
+                })()}
+
                 {exception.resolution ? (
                   <p className="mt-2 text-xs text-emerald-300">
                     {t("tayqan.hire.workflow.measurementExceptionResolved", {

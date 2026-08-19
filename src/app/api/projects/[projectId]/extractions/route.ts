@@ -28,9 +28,11 @@ async function GETHandler(request: Request, context: RouteContext) {
     const { projectId } = projectIdParamsSchema.parse(params);
     const project = await getProjectRecord(actor.companyId, projectId);
     const url = new URL(request.url);
+    const idsParam = url.searchParams.get("ids");
     const data = await listEntitiesForProject(actor, project.id, {
       status: url.searchParams.get("status") ?? undefined,
       entityType: url.searchParams.get("entityType") ?? undefined,
+      ids: idsParam ? idsParam.split(",").map((id) => id.trim()).filter(Boolean) : undefined,
     });
     return apiSuccess(data);
   } catch (error) {

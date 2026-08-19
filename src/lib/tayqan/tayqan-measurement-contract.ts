@@ -47,8 +47,42 @@ export const tayqanMeasurementExceptionKindSchema = z.enum(
  * ungrounded quantity into a SCOPE_GAP exception instead of a fabricated BOQ
  * row, and if SCOPE_GAP were only informational, a work order could still
  * sail to acceptance with scope items that were never genuinely measured —
- * exactly the "completion safety" failure this PR exists to close. All other
- * kinds remain informational (visible, not blocking) by default.
+ * exactly the "completion safety" failure this PR exists to close.
+ *
+ * TAYQAN-AUDIT-FIX-1 adds three more, each backed by evidence gathered from
+ * openai-tayqan-measurement-reasoner.ts's actual prompt instructions before
+ * adding it, not by guessing:
+ * - SPEC_DRAWING_CONFLICT already had an explicit single-condition trigger
+ *   instruction ("If specification notes and drawing evidence materially
+ *   conflict, create SPEC_DRAWING_CONFLICT") — the exact same phrasing
+ *   pattern already used for PLAN_SCHEDULE_MISMATCH/REVISION_CONFLICT, both
+ *   already dangerous with no reported over-blocking. No prompt change was
+ *   needed for this one.
+ * - DOUBLE_COUNT_RISK and UNIT_OR_DIMENSION_ANOMALY had NO explicit trigger
+ *   instruction at all before this fix (confirmed by reading the full
+ *   reasoner prompt — only a general "don't double-count" instruction with
+ *   no exception-raising trigger, and no mention of unit/dimension anomalies
+ *   whatsoever), so there was no prompt-level mechanism that could have made
+ *   either fire frequently — no evidence of an over-blocking risk. Both name
+ *   a genuine, serious measurement-integrity concern (an inflated payable
+ *   quantity; an order-of-magnitude/unit error), so per the mission's
+ *   default-to-add guidance they're added here, and openai-tayqan-
+ *   measurement-reasoner.ts gained one trigger instruction each (mirroring
+ *   the existing PLAN_SCHEDULE_MISMATCH/SPEC_DRAWING_CONFLICT phrasing) so
+ *   the model reliably raises them now that they gate.
+ *
+ * CROSS_PAGE_CONFLICT is deliberately left informational: it is the
+ * broadest, most general-purpose "evidence disagrees" signal of the four
+ * candidates considered, has no explicit trigger instruction in the prompt
+ * either, and structurally overlaps every other, more specific conflict
+ * kind already listed (REVISION_CONFLICT, PLAN_SCHEDULE_MISMATCH,
+ * SPEC_DRAWING_CONFLICT, SUPPORTING_CHECK_MISMATCH). Its breadth makes it
+ * the one candidate most likely to become a catch-all a model reaches for on
+ * minor, non-blocking discrepancies if it were ever prompted to raise it —
+ * with no usage data available to confirm otherwise, this is a judgment
+ * call left for the product owner rather than a guess in either direction.
+ *
+ * All other kinds remain informational (visible, not blocking) by default.
  */
 export const TAYQAN_DANGEROUS_MEASUREMENT_EXCEPTION_KINDS = new Set<
   (typeof TAYQAN_MEASUREMENT_EXCEPTION_KINDS)[number]
@@ -59,6 +93,9 @@ export const TAYQAN_DANGEROUS_MEASUREMENT_EXCEPTION_KINDS = new Set<
   "SUPPORTING_CHECK_MISMATCH",
   "COMPOSITE_SCOPE_REQUIRES_SPLIT",
   "SCOPE_GAP",
+  "SPEC_DRAWING_CONFLICT",
+  "DOUBLE_COUNT_RISK",
+  "UNIT_OR_DIMENSION_ANOMALY",
 ]);
 
 export function tayqanMeasurementExceptionIsDangerous(kind: string): boolean {
@@ -430,18 +467,53 @@ function integerInputKey(key: string): boolean {
   return ["verifiedCount", "faces", "coats"].includes(key);
 }
 
-function derivationConfidenceCap(derivation: TayqanMeasurementDerivation): number {
+/**
+ * TAYQAN-AUDIT-FIX-1: the cap scales with how much of this derivation's
+ * claim is independently checked by code below (the input-validation loop
+ * in evaluateTayqanMeasurementSubject) versus taken purely on the model's
+ * word. This is a ceiling on `confidence` (see the `Math.min(...)` in
+ * evaluateTayqanMeasurementSubject) — a derivation the code cannot actually
+ * verify must never be capable of reaching a higher confidence than one it
+ * does. Three tiers, ordered by verification strength:
+ *
+ * 1. Scale-verified geometry — ROOM_GEOMETRY and VERIFIED_SCALE_GEOMETRY.
+ *    Both require the cited record (a stored DetectedRoom or the evidence
+ *    page itself) to carry `scaleVerified: true` — a real, independently
+ *    computed calibration fact, not something this derivation's input can
+ *    fake. Highest cap.
+ * 2. Structurally cross-referenced — COUNT_RECONCILIATION. Code requires at
+ *    least two independent evidence pages, a real (if weaker) check: it
+ *    confirms multiple sources were actually cited, but not that their
+ *    values agree or that either is scale-calibrated. Capped below tier 1,
+ *    above tier 3.
+ * 3. Self-declared — EXPLICIT_DIMENSION, SCHEDULE_VALUE, DIRECT_COUNT. Code
+ *    only confirms the cited page exists in the frozen source scope, never
+ *    that the claimed dimension/schedule value/count is actually present on
+ *    it — this is purely a label the model assigns itself. Lowest tier,
+ *    always below every code-verified derivation. DIRECT_COUNT sits at the
+ *    bottom of this tier: a visual count is inherently more error-prone
+ *    than a printed dimension or schedule value, if either is genuinely
+ *    present (which the code still cannot confirm).
+ *
+ * Not yet possible to strengthen tier 3 with a real content check (e.g.
+ * requiring EXPLICIT_DIMENSION to cite OCR'd page text containing a
+ * plausible dimension pattern): the OCR'd `technicalLines` signal exists
+ * upstream in tayqan-measurement-service.ts's page bundle but is not
+ * currently threaded into `TayqanMeasurementPageGuard`/`pagesById`, and that
+ * file is out of scope for this fix. Documented as future work rather than
+ * attempted here — see the audit-fix-1 PR description.
+ */
+export function derivationConfidenceCap(derivation: TayqanMeasurementDerivation): number {
   switch (derivation) {
-    case "EXPLICIT_DIMENSION":
-    case "SCHEDULE_VALUE":
+    case "ROOM_GEOMETRY":
+    case "VERIFIED_SCALE_GEOMETRY":
       return 98;
-    case "DIRECT_COUNT":
-      return 90;
     case "COUNT_RECONCILIATION":
       return 95;
-    case "ROOM_GEOMETRY":
-      return 92;
-    case "VERIFIED_SCALE_GEOMETRY":
+    case "EXPLICIT_DIMENSION":
+    case "SCHEDULE_VALUE":
+      return 90;
+    case "DIRECT_COUNT":
       return 88;
   }
 }

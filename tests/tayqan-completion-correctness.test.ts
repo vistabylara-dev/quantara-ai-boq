@@ -61,13 +61,22 @@ async function expectConflict(promise: Promise<unknown>, code: string) {
 
 describe("TAYQAN PR1 completion correctness — pure gating logic (no database)", () => {
   it("classifies exactly the mission-2 minimum plus SCOPE_GAP as dangerous", () => {
+    // TAYQAN-AUDIT-FIX-1 added SPEC_DRAWING_CONFLICT, DOUBLE_COUNT_RISK, and
+    // UNIT_OR_DIMENSION_ANOMALY to this set — see that fix's PR description
+    // for the evidence behind each addition. CROSS_PAGE_CONFLICT was
+    // deliberately left informational (see the doc comment on
+    // TAYQAN_DANGEROUS_MEASUREMENT_EXCEPTION_KINDS).
     expect([...TAYQAN_DANGEROUS_MEASUREMENT_EXCEPTION_KINDS].sort()).toEqual(
       [
-        "COMPOSITE_SCOPE_REQUIRES_SPLIT", "METHOD_SELECTION_UNCERTAIN", "PLAN_SCHEDULE_MISMATCH",
-        "REVISION_CONFLICT", "SCOPE_GAP", "SUPPORTING_CHECK_MISMATCH",
+        "COMPOSITE_SCOPE_REQUIRES_SPLIT", "DOUBLE_COUNT_RISK", "METHOD_SELECTION_UNCERTAIN", "PLAN_SCHEDULE_MISMATCH",
+        "REVISION_CONFLICT", "SCOPE_GAP", "SPEC_DRAWING_CONFLICT", "SUPPORTING_CHECK_MISMATCH", "UNIT_OR_DIMENSION_ANOMALY",
       ].sort(),
     );
     expect(tayqanMeasurementExceptionIsDangerous("SCOPE_GAP")).toBe(true);
+    expect(tayqanMeasurementExceptionIsDangerous("SPEC_DRAWING_CONFLICT")).toBe(true);
+    expect(tayqanMeasurementExceptionIsDangerous("DOUBLE_COUNT_RISK")).toBe(true);
+    expect(tayqanMeasurementExceptionIsDangerous("UNIT_OR_DIMENSION_ANOMALY")).toBe(true);
+    expect(tayqanMeasurementExceptionIsDangerous("CROSS_PAGE_CONFLICT")).toBe(false);
     expect(tayqanMeasurementExceptionIsDangerous("INSUFFICIENT_EVIDENCE")).toBe(false);
   });
 
@@ -404,6 +413,62 @@ describe("TAYQAN PR1 completion correctness — integration (real local Postgres
     expect(validationState.blocker?.kind).toBe("MEASUREMENT_EXCEPTIONS");
     // Never even reaches enqueueing a QA run while the dangerous exception is unresolved.
     expect(validationState.qaWorkerRunId).toBeNull();
+  });
+
+  it("TAYQAN-AUDIT-FIX-1: each newly-dangerous exception kind blocks BOQ_ASSEMBLY and VALIDATION unresolved, and unblocks once resolved", async () => {
+    const newlyDangerousKinds = ["SPEC_DRAWING_CONFLICT", "DOUBLE_COUNT_RISK", "UNIT_OR_DIMENSION_ANOMALY"] as const;
+
+    for (const kind of newlyDangerousKinds) {
+      const boq = await createEmptyBoq(`Audit fix 1 ${kind} BOQ`);
+      const exceptionKey = `audit-fix-1-${kind}`;
+      const exception = {
+        key: exceptionKey,
+        kind,
+        message: `Fixture ${kind} exception for audit-fix-1 gating coverage.`,
+        pageIds: [],
+        relatedEntityId: null,
+        createdAt: new Date().toISOString(),
+      };
+
+      const assemblyOrder = await createWorkOrder({
+        stage: TayqanWorkStage.BOQ_ASSEMBLY,
+        boqId: boq.id,
+        progress: { measurementExceptions: [exception] },
+      });
+      const assemblyState = await advanceTayqanWorkOrder(actor(), projectId, assemblyOrder.id);
+      expect(assemblyState.status).toBe("NEEDS_INPUT");
+      expect(assemblyState.blocker?.kind).toBe("MEASUREMENT_EXCEPTIONS");
+
+      const validationOrder = await createWorkOrder({
+        stage: TayqanWorkStage.VALIDATION,
+        boqId: boq.id,
+        progress: { measurementExceptions: [exception] },
+      });
+      const validationState = await advanceTayqanWorkOrder(actor(), projectId, validationOrder.id);
+      expect(validationState.status).toBe("NEEDS_INPUT");
+      expect(validationState.blocker?.kind).toBe("MEASUREMENT_EXCEPTIONS");
+      expect(validationState.qaWorkerRunId).toBeNull();
+
+      // Resolved (a governed resolution exists for this exact exception key)
+      // must unblock the identical stage that was blocking a moment ago.
+      const resolvedOrder = await createWorkOrder({
+        stage: TayqanWorkStage.BOQ_ASSEMBLY,
+        boqId: boq.id,
+        progress: {
+          measurementExceptions: [exception],
+          measurementExceptionResolutions: {
+            [exceptionKey]: {
+              reason: `Reviewed and confirmed safe for ${kind}.`,
+              actorUserId: userId,
+              actorName: "PR1 Completion Owner",
+              resolvedAt: new Date().toISOString(),
+            },
+          },
+        },
+      });
+      const resolvedState = await advanceTayqanWorkOrder(actor(), projectId, resolvedOrder.id);
+      expect(resolvedState.blocker?.kind).not.toBe("MEASUREMENT_EXCEPTIONS");
+    }
   });
 
   it("mission 4: editing the BOQ after QA completed forces a fresh QA run before acceptance is reachable again", async () => {

@@ -81,6 +81,7 @@ export async function generateDocx(input: GenerateDocxInput): Promise<Buffer> {
   const { data, style, content } = input;
   const rtl = style.direction === "rtl";
   const showInternal = data.boq.showInternalFields;
+  const quantitiesOnly = data.boq.pricingMode === "QUANTITIES_ONLY";
 
   const headerCells = [
     "#",
@@ -90,8 +91,7 @@ export async function generateDocx(input: GenerateDocxInput): Promise<Buffer> {
     "Unit",
     "Qty",
     ...(showInternal ? ["Landed Cost", "Margin %"] : []),
-    "Rate",
-    "Total",
+    ...(quantitiesOnly ? [] : ["Rate", "Total"]),
   ];
   if (rtl) headerCells.reverse();
 
@@ -135,8 +135,12 @@ export async function generateDocx(input: GenerateDocxInput): Promise<Buffer> {
               cell((item.marginPercentage ?? 0).toLocaleString("en-US", { maximumFractionDigits: 1 }), rtl, { align: AlignmentType.RIGHT }),
             ]
           : []),
-        cell(item.sellingRate.toLocaleString("en-US", { maximumFractionDigits: 2 }), rtl, { align: AlignmentType.RIGHT }),
-        cell(item.totalAmount.toLocaleString("en-US", { maximumFractionDigits: 2 }), rtl, { align: AlignmentType.RIGHT }),
+        ...(quantitiesOnly
+          ? []
+          : [
+              cell((item.sellingRate ?? 0).toLocaleString("en-US", { maximumFractionDigits: 2 }), rtl, { align: AlignmentType.RIGHT }),
+              cell((item.totalAmount ?? 0).toLocaleString("en-US", { maximumFractionDigits: 2 }), rtl, { align: AlignmentType.RIGHT }),
+            ]),
       ];
       if (rtl) rowCells.reverse();
       tableRows.push(new TableRow({ children: rowCells }));
@@ -176,6 +180,15 @@ export async function generateDocx(input: GenerateDocxInput): Promise<Buffer> {
       }),
     );
   }
+  if (quantitiesOnly) {
+    children.push(
+      new Paragraph({
+        alignment: AlignmentType.CENTER,
+        spacing: { after: 200 },
+        children: [new TextRun({ text: "Draft Quantities — For Scope Review Only (No Pricing)", bold: true, color: "B45309", size: 22 })],
+      }),
+    );
+  }
 
   children.push(paragraph(data.boq.title, rtl, { heading: HeadingLevel.TITLE, spacingAfter: 80 }));
   children.push(
@@ -207,25 +220,31 @@ export async function generateDocx(input: GenerateDocxInput): Promise<Buffer> {
   children.push(boqTable);
   children.push(new Paragraph({ spacing: { after: 200 }, children: [] }));
 
-  const totalsLines: Array<[string, string, boolean]> = [
-    ["Subtotal", formatCurrency(data.boq.totals.subtotal, data.project.currency), false],
-    ["Discount", formatCurrency(data.boq.totals.discountAmount, data.project.currency), false],
-    ["Taxable Amount", formatCurrency(data.boq.totals.taxableAmount, data.project.currency), false],
-    [`VAT (${data.project.taxRate}%)`, formatCurrency(data.boq.totals.taxAmount, data.project.currency), false],
-    ["Grand Total", formatCurrency(data.boq.totals.grandTotal, data.project.currency), true],
-  ];
-  for (const [label, value, bold] of totalsLines) {
-    children.push(
-      new Paragraph({
-        alignment: rtl ? AlignmentType.LEFT : AlignmentType.RIGHT,
-        bidirectional: rtl,
-        spacing: { after: 60 },
-        children: [textRun(`${label}: ${value}`, rtl, { bold, size: bold ? 22 : 18 })],
-      }),
-    );
+  if (!quantitiesOnly && data.boq.totals) {
+    const totals = data.boq.totals;
+    const totalsLines: Array<[string, string, boolean]> = [
+      ["Subtotal", formatCurrency(totals.subtotal, data.project.currency), false],
+      ["Discount", formatCurrency(totals.discountAmount, data.project.currency), false],
+      ["Taxable Amount", formatCurrency(totals.taxableAmount, data.project.currency), false],
+      [`VAT (${data.project.taxRate}%)`, formatCurrency(totals.taxAmount, data.project.currency), false],
+      ["Grand Total", formatCurrency(totals.grandTotal, data.project.currency), true],
+    ];
+    for (const [label, value, bold] of totalsLines) {
+      children.push(
+        new Paragraph({
+          alignment: rtl ? AlignmentType.LEFT : AlignmentType.RIGHT,
+          bidirectional: rtl,
+          spacing: { after: 60 },
+          children: [textRun(`${label}: ${value}`, rtl, { bold, size: bold ? 22 : 18 })],
+        }),
+      );
+    }
   }
 
-  if (content.showTermsSection) {
+  // No VAT/payment terms apply before a BOQ has been priced — the "for
+  // scope review" banner above already frames the document; Terms &
+  // Payment is priced-document content and stays out of this mode entirely.
+  if (content.showTermsSection && !quantitiesOnly) {
     children.push(paragraph("Terms & Payment", rtl, { bold: true, size: 20, spacingAfter: 60 }));
     children.push(paragraph(data.boq.termsText, rtl, { size: 18, spacingAfter: 160 }));
   }

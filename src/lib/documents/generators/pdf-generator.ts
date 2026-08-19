@@ -321,8 +321,8 @@ export async function generatePdf(input: GeneratePdfInput): Promise<Buffer> {
           quantity: item.quantity.toLocaleString("en-US", { maximumFractionDigits: 2 }),
           landedCost: (item.landedCost ?? 0).toLocaleString("en-US", { maximumFractionDigits: 2 }),
           marginPercentage: (item.marginPercentage ?? 0).toLocaleString("en-US", { maximumFractionDigits: 1 }),
-          sellingRate: item.sellingRate.toLocaleString("en-US", { maximumFractionDigits: 2 }),
-          totalAmount: item.totalAmount.toLocaleString("en-US", { maximumFractionDigits: 2 }),
+          sellingRate: (item.sellingRate ?? 0).toLocaleString("en-US", { maximumFractionDigits: 2 }),
+          totalAmount: (item.totalAmount ?? 0).toLocaleString("en-US", { maximumFractionDigits: 2 }),
           drawingReference: item.drawingReference,
         };
         const rowHeight = Math.max(
@@ -345,12 +345,16 @@ export async function generatePdf(input: GeneratePdfInput): Promise<Buffer> {
     // ---------- Totals ----------
     ensureSpace(110);
     y += 8;
+    // PDF generation is a FINAL_ONLY (locked-revision) type and only ever
+    // receives WITH_PRICES data — totals is always populated here; the
+    // fallback only satisfies the now-optional shared type, it changes nothing.
+    const pdfTotals = data.boq.totals ?? { subtotal: 0, discountAmount: 0, taxableAmount: 0, taxAmount: 0, grandTotal: 0 };
     const totalsRows: Array<[string, string]> = [
-      ["Subtotal", formatCurrency(data.boq.totals.subtotal, data.project.currency)],
-      ["Discount", formatCurrency(data.boq.totals.discountAmount, data.project.currency)],
-      ["Taxable Amount", formatCurrency(data.boq.totals.taxableAmount, data.project.currency)],
-      [`VAT (${data.project.taxRate}%)`, formatCurrency(data.boq.totals.taxAmount, data.project.currency)],
-      ["Grand Total", formatCurrency(data.boq.totals.grandTotal, data.project.currency)],
+      ["Subtotal", formatCurrency(pdfTotals.subtotal, data.project.currency)],
+      ["Discount", formatCurrency(pdfTotals.discountAmount, data.project.currency)],
+      ["Taxable Amount", formatCurrency(pdfTotals.taxableAmount, data.project.currency)],
+      [`VAT (${data.project.taxRate}%)`, formatCurrency(pdfTotals.taxAmount, data.project.currency)],
+      ["Grand Total", formatCurrency(pdfTotals.grandTotal, data.project.currency)],
     ];
     const totalsWidth = 220;
     const totalsX = rtl ? PAGE_MARGIN : PAGE_MARGIN + contentWidth - totalsWidth;

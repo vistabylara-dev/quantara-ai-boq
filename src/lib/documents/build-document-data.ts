@@ -33,6 +33,8 @@ export type DocumentProjectData = {
   language: string;
 };
 
+export type DocumentPricingMode = "WITH_PRICES" | "QUANTITIES_ONLY";
+
 export type DocumentBOQItemData = {
   itemNumber: number;
   itemCode: string;
@@ -40,8 +42,9 @@ export type DocumentBOQItemData = {
   specification: string;
   unit: string;
   quantity: number;
-  sellingRate: number;
-  totalAmount: number;
+  /** Absent entirely (not zeroed) in QUANTITIES_ONLY mode — see buildDocumentData. */
+  sellingRate?: number;
+  totalAmount?: number;
   roomOrZone: string;
   drawingReference: string;
   notes: string;
@@ -68,12 +71,14 @@ export type DocumentBOQData = {
   status: BOQ["status"];
   lockedAt: string | null;
   sections: DocumentBOQSectionData[];
-  totals: BOQ["totals"];
+  /** Absent entirely in QUANTITIES_ONLY mode — see buildDocumentData. */
+  totals?: BOQ["totals"];
   termsText: string;
   exclusionsText: string;
   validityDays: number;
   notes: string;
   showInternalFields: boolean;
+  pricingMode: DocumentPricingMode;
 };
 
 export type DocumentMeta = {
@@ -142,6 +147,8 @@ export type BuildDocumentDataInput = {
   generatedByName: string;
   isDraft: boolean;
   showInternalCostFieldsToClient?: boolean;
+  /** TAYQAN Draft BOQ Word export. Defaults to today's existing (priced) behavior. */
+  pricingMode?: DocumentPricingMode;
   termsText?: string;
   exclusionsText?: string;
   validityDays?: number;
@@ -150,7 +157,7 @@ export type BuildDocumentDataInput = {
   watermarkText?: string | null;
 };
 
-function toItemData(item: BOQItem, showInternalFields: boolean): DocumentBOQItemData {
+function toItemData(item: BOQItem, showInternalFields: boolean, pricingMode: DocumentPricingMode): DocumentBOQItemData {
   const base: DocumentBOQItemData = {
     itemNumber: item.itemNumber,
     itemCode: item.itemCode,
@@ -158,13 +165,12 @@ function toItemData(item: BOQItem, showInternalFields: boolean): DocumentBOQItem
     specification: item.specification,
     unit: item.unit,
     quantity: item.quantity,
-    sellingRate: item.sellingRate,
-    totalAmount: item.totalAmount,
     roomOrZone: item.roomOrZone,
     drawingReference: item.drawingReference,
     notes: item.notes,
+    ...(pricingMode === "WITH_PRICES" ? { sellingRate: item.sellingRate, totalAmount: item.totalAmount } : {}),
   };
-  if (!showInternalFields) return base;
+  if (!showInternalFields || pricingMode === "QUANTITIES_ONLY") return base;
   return {
     ...base,
     unitCost: item.unitCost,
@@ -187,6 +193,8 @@ function toItemData(item: BOQItem, showInternalFields: boolean): DocumentBOQItem
  */
 export function buildDocumentData(input: BuildDocumentDataInput): CanonicalDocumentData {
   const showInternalFields = input.audience === "INTERNAL" || Boolean(input.showInternalCostFieldsToClient);
+  const pricingMode: DocumentPricingMode = input.pricingMode ?? "WITH_PRICES";
+  const quantitiesOnly = pricingMode === "QUANTITIES_ONLY";
 
   return {
     company: {
@@ -230,14 +238,18 @@ export function buildDocumentData(input: BuildDocumentDataInput): CanonicalDocum
           code: section.code,
           title: section.title,
           description: section.description,
-          items: section.items.map((item) => toItemData(item, showInternalFields)),
+          items: section.items.map((item) => toItemData(item, showInternalFields, pricingMode)),
         })),
-      totals: input.boq.totals,
-      termsText: input.termsText ?? DEFAULT_TERMS_TEXT,
+      ...(quantitiesOnly ? {} : { totals: input.boq.totals }),
+      // No VAT/payment terms apply before a BOQ has been priced — the
+      // pricing disclaimer is never included in quantities-only mode, not
+      // even reworded. The generator shows its own "for scope review" note.
+      termsText: quantitiesOnly ? "" : (input.termsText ?? DEFAULT_TERMS_TEXT),
       exclusionsText: input.exclusionsText ?? DEFAULT_EXCLUSIONS_TEXT,
       validityDays: input.validityDays ?? DEFAULT_VALIDITY_DAYS,
       notes: input.notes ?? "",
-      showInternalFields,
+      showInternalFields: showInternalFields && !quantitiesOnly,
+      pricingMode,
     },
     meta: {
       generatedAt: (input.generatedAt ?? new Date()).toISOString(),

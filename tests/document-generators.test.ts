@@ -122,7 +122,7 @@ describe("buildDocumentData (canonical document data)", () => {
     expect(data.boq.revision).toBe("R01");
     expect(data.boq.revisionNumber).toBe(1);
     expect(data.boq.sections[0].items[0].itemCode).toBe("CON-001");
-    expect(data.boq.totals.grandTotal).toBe(10867.5);
+    expect(data.boq.totals?.grandTotal).toBe(10867.5);
   });
 
   it("shows internal commercial fields for INTERNAL audience", () => {

@@ -5,6 +5,7 @@ import {
   evaluateTayqanMeasurementSubject,
   normalizeTayqanMeasurementValue,
   tayqanMeasurementMethodForCalculationType,
+  TayqanRevisionConflictError,
 } from "../src/lib/tayqan/tayqan-measurement-contract";
 import {
   applyTayqanSeniorReview,
@@ -282,6 +283,33 @@ describe("TAYQAN senior measurement contract", () => {
     })).toThrow(/mixed revisions/i);
   });
 
+  it("PR2 gap 3: a genuine revision-mix condition throws TayqanRevisionConflictError, a structured, catchable exception producer — not a plain, unhandled Error", () => {
+    const mixedRevision = {
+      ...wallSubject(),
+      existingEntityId: null,
+      evidencePageIds: [PAGE_PLAN, PAGE_SECTION],
+      inputs: wallSubject().inputs.slice(0, 2),
+    };
+    let caught: unknown;
+    try {
+      evaluateTayqanMeasurementSubject(mixedRevision, {
+        allowedEntityIds: new Set(),
+        roomsById: new Map(),
+        pagesById: new Map([
+          [PAGE_PLAN, pageGuard({ drawingNumber: "A-101", revisionNumber: "P01" })],
+          [PAGE_SECTION, pageGuard({ projectFileId: "f2", drawingNumber: "A-101", revisionNumber: "P02", role: "SECTION" })],
+        ]),
+      });
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught).toBeInstanceOf(TayqanRevisionConflictError);
+    const exception = (caught as TayqanRevisionConflictError).exception;
+    expect(exception.kind).toBe("REVISION_CONFLICT");
+    expect(exception.pageIds.sort()).toEqual([PAGE_PLAN, PAGE_SECTION].sort());
+    expect(exception.relatedEntityId).toBeNull();
+    expect(exception.message).toMatch(/mixed revisions/i);
+  });
 
   it("accepts a bounded direct count without pretending it was cross-source reconciled", () => {
     const result = evaluateTayqanMeasurementSubject({
@@ -680,6 +708,7 @@ describe("TAYQAN senior OpenAI orchestration — mocked, zero network", () => {
         sourceFileIds: ["aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"],
         pages: [page({})],
         existingEntities: [],
+        existingBoqItems: [],
         rooms: [],
       },
       loadPageImageDataUrl: async () => "data:image/png;base64,AAAA",
@@ -760,6 +789,7 @@ describe("TAYQAN senior OpenAI orchestration — mocked, zero network", () => {
         sourceFileIds: ["aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"],
         pages: bundlePages(),
         existingEntities: [],
+        existingBoqItems: [],
         rooms: [],
       },
       loadPageImageDataUrl: async () => "data:image/png;base64,AAAA",
@@ -774,6 +804,78 @@ describe("TAYQAN senior OpenAI orchestration — mocked, zero network", () => {
     expect(result.seniorReview.globalReviewApplied).toBe(true);
     expect(result.seniorReview.acceptedSubjectCount).toBe(1);
     expect(result.responseIds).toHaveLength(3);
+  });
+
+  it("PR2 gap 1: a table/schedule entity (no drawingPageId, different projectFileId than any cluster page) reaches the cluster measurement prompt and the global reconciliation prompt — not just the bundle object", async () => {
+    const subject = wallSubject();
+    const proposalKey = tayqanMeasurementProposalKey(subject);
+    const requests: Record<string, unknown>[] = [];
+    const payloads = [
+      { subjects: [subject], exceptions: [] },
+      { decisions: [{ proposalKey, decision: "ACCEPT", exceptionKind: null, severity: "LOW", message: "ok", pageIds: [PAGE_PLAN, PAGE_SECTION, PAGE_SCHEDULE] }], findings: [] },
+      { decisions: [{ proposalKey, decision: "ACCEPT", exceptionKind: null, severity: "LOW", message: "ok", pageIds: [PAGE_PLAN, PAGE_SECTION, PAGE_SCHEDULE] }], findings: [] },
+    ];
+    let call = 0;
+    const fakeFetch = (async (_url: string | URL | Request, init?: RequestInit) => {
+      requests.push(JSON.parse(String(init?.body)) as Record<string, unknown>);
+      const payload = payloads[call];
+      call += 1;
+      return responseJson(`resp-${call}`, payload);
+    }) as typeof fetch;
+
+    const reasoner = createOpenAITayqanMeasurementReasoner({
+      apiKey: "test-key",
+      model: "gpt-5.6",
+      safetyIdentifier: "tayqan_test_company",
+      useSeniorProMode: true,
+    }, fakeFetch);
+
+    // TABLE_PARSER entity from a schedule/CSV/XLSX file: no drawingPageId,
+    // and its projectFileId ("table-file-id") belongs to no page in this
+    // bundle at all — under the pre-PR2 filter (page match OR cluster-file
+    // match) this would never reach any cluster's prompt.
+    const scheduleEntity = {
+      id: "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+      projectFileId: "table-file-id",
+      drawingPageId: null,
+      entityType: "REBAR_SCHEDULE" as const,
+      label: "Rebar bending schedule row B12",
+      quantity: 145.5,
+      unit: "kg",
+      confidence: 92,
+      status: "CONFIRMED",
+      sourceText: "B12 T16-200 145.5kg",
+      sourceReference: "rebar-schedule.xlsx",
+      technicalData: null,
+      extractionMethod: "TABLE_PARSER",
+    };
+
+    await reasoner({
+      bundle: {
+        project: { id: "project-1", slug: "project-1", name: "Test", reference: "Q-001" },
+        governingContext: null,
+        sourceFileIds: ["aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", "table-file-id"],
+        pages: bundlePages(),
+        existingEntities: [scheduleEntity],
+        existingBoqItems: [{ id: "boq-item-1", sectionCode: "FND", sectionTitle: "Foundations", itemCode: "F-01", description: "Existing footing concrete", quantity: 12, unit: "m3" }],
+        rooms: [],
+      },
+      loadPageImageDataUrl: async () => "data:image/png;base64,AAAA",
+    });
+
+    // Cluster measurement request (requests[0]): the schedule entity must be
+    // present, tagged so the model knows it's schedule data, not a page.
+    const clusterRequestText = JSON.stringify(requests[0]);
+    expect(clusterRequestText).toContain("Rebar bending schedule row B12");
+    expect(clusterRequestText).toContain("TABLE_SCHEDULE");
+    // The existing-BOQ reconciliation context reaches the same cluster prompt.
+    expect(clusterRequestText).toContain("Existing footing concrete");
+
+    // Global reconciliation request (requests[2]): scheduleEvidence and
+    // existingBoqItems both reach compactProjectContext too.
+    const globalRequestText = JSON.stringify(requests[2]);
+    expect(globalRequestText).toContain("Rebar bending schedule row B12");
+    expect(globalRequestText).toContain("Existing footing concrete");
   });
 });
 

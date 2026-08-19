@@ -16,12 +16,14 @@ import {
   evaluateTayqanMeasurementSubject,
   TAYQAN_MEASUREMENT_CALCULATED_BY_PREFIX,
   TAYQAN_MEASUREMENT_VERSION,
+  TayqanRevisionConflictError,
   type EvaluatedTayqanMeasurement,
   type TayqanMeasurementException,
 } from "@/lib/tayqan/tayqan-measurement-contract";
 import { createOpenAITayqanMeasurementReasoner } from "@/lib/tayqan/openai-tayqan-measurement-reasoner";
 import {
   classifyTayqanDrawingPageRole,
+  mergeTayqanMeasurementPlans,
   type TayqanMeasurementEvidenceBundle,
   type TayqanMeasurementGoverningContext,
   type TayqanMeasurementPageEvidence,
@@ -99,6 +101,15 @@ export type PrepareTayqanMeasurementsInput = {
   projectId: string;
   sourceFileIds: readonly string[];
   governingContext?: TayqanMeasurementGoverningContext | null;
+  /**
+   * PR2 gap 2: set only for an UPDATE_EXISTING_BOQ assignment (the caller in
+   * tayqan-work-order-service.ts decides this — this service stays
+   * deliverable-agnostic). When present, the target BOQ's current items are
+   * fed into the reasoner's evidence bundle before it proposes new
+   * measurements, in addition to (never instead of) the existing post-hoc
+   * dedup in ai-draft-boq-service.ts.
+   */
+  targetBoqId?: string | null;
 };
 
 export type PrepareTayqanMeasurementsResult = {
@@ -267,6 +278,18 @@ async function buildEvidenceBundle(
     orderBy: { createdAt: "asc" },
   });
 
+  // PR2 gap 2: read once, here, alongside the rest of this frozen-scope
+  // bundle — never re-queried mid-pass. Only ever populated for an
+  // UPDATE_EXISTING_BOQ assignment; every other assignment gets an empty
+  // array, identical to today's behavior.
+  const existingBoqItems = input.targetBoqId
+    ? await prisma.bOQItem.findMany({
+        where: { companyId: actor.companyId, section: { boqId: input.targetBoqId } },
+        include: { section: { select: { code: true, title: true } } },
+        orderBy: [{ section: { sortOrder: "asc" } }, { sortOrder: "asc" }],
+      })
+    : [];
+
   return {
     bundle: {
       project: {
@@ -291,6 +314,16 @@ async function buildEvidenceBundle(
         sourceText: entity.sourceText,
         sourceReference: entity.sourceReference,
         technicalData: entity.technicalDataJson,
+        extractionMethod: entity.extractionMethod,
+      })),
+      existingBoqItems: existingBoqItems.map((item) => ({
+        id: item.id,
+        sectionCode: item.section.code,
+        sectionTitle: item.section.title,
+        itemCode: item.itemCode,
+        description: item.description,
+        quantity: item.quantity.toNumber(),
+        unit: item.unit,
       })),
       rooms: rooms.map((room) => ({
         id: room.id,
@@ -471,9 +504,29 @@ export async function prepareTayqanMeasurementProposals(
     }] as const),
   );
 
-  const evaluated = result.plan.subjects.map((subject) =>
-    evaluateTayqanMeasurementSubject(subject, { allowedEntityIds, roomsById, pagesById }),
-  );
+  // PR2 gap 3: a genuine revision-mix condition (TayqanRevisionConflictError)
+  // is caught per-subject and recorded as a structured, gating
+  // REVISION_CONFLICT exception instead of aborting the whole pass — every
+  // other thrown error here still aborts everything, unchanged. See
+  // assertNoRevisionMix's doc comment for why only this one error type is
+  // singled out.
+  const evaluated: EvaluatedTayqanMeasurement[] = [];
+  const revisionConflictExceptions: TayqanMeasurementException[] = [];
+  for (const subject of result.plan.subjects) {
+    try {
+      evaluated.push(evaluateTayqanMeasurementSubject(subject, { allowedEntityIds, roomsById, pagesById }));
+    } catch (error) {
+      if (error instanceof TayqanRevisionConflictError) {
+        revisionConflictExceptions.push(error.exception);
+        continue;
+      }
+      throw error;
+    }
+  }
+  const exceptions = mergeTayqanMeasurementPlans([
+    { subjects: [], exceptions: result.plan.exceptions },
+    { subjects: [], exceptions: revisionConflictExceptions },
+  ]).exceptions;
 
   let createdEntityCount = 0;
   let reusedEntityCount = 0;
@@ -598,7 +651,7 @@ export async function prepareTayqanMeasurementProposals(
       reusedEntityCount,
       createdCalculationCount,
       reusedCalculationCount,
-      exceptionCount: result.plan.exceptions.length,
+      exceptionCount: exceptions.length,
       provider: result.provider,
       model: result.model,
       seniorReview: result.seniorReview,
@@ -613,8 +666,8 @@ export async function prepareTayqanMeasurementProposals(
     reusedEntityCount,
     createdCalculationCount,
     reusedCalculationCount,
-    exceptionCount: result.plan.exceptions.length,
-    exceptions: result.plan.exceptions,
+    exceptionCount: exceptions.length,
+    exceptions,
     provider: result.provider,
     model: result.model,
     seniorReview: result.seniorReview,

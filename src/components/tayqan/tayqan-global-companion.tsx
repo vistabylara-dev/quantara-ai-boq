@@ -37,16 +37,24 @@ function containsPoint(rect: DOMRect, x: number, y: number): boolean {
  *
  * Important interaction contract:
  *
- * - The ROBOT itself remains pointer-events-none and can never intercept
- *   BOQ controls, navigation, forms, Save, Lock, Generate, dialogs, etc.
+ * - The whole companion (robot + speech bubble) is ONE navigable link,
+ *   scoped exactly to the robot's own visual bounding box (the same box the
+ *   hover-detection math below already uses) — never a full-viewport
+ *   overlay, and it never intercepts BOQ controls, navigation, forms, Save,
+ *   Lock, Generate, dialogs, etc. outside that box, because the wrapping
+ *   container stays pointer-events-none and only this one link opts back in.
  *
- * - Hover detection is performed from window pointer coordinates against
- *   the robot's visual bounding box. Therefore we do not need to make the
- *   WebGL canvas clickable merely to detect hover.
+ * - A single click/tap/Enter/Space on that link navigates directly — this is
+ *   a real `<a href>` (via next/link), so it is natively focusable and
+ *   natively activates on Enter/Space; no bubble-reveal step is required
+ *   first, on any input method.
  *
- * - The speech bubble becomes interactive only while visible.
- *
- * - The visible bubble routes to the user project workspace.
+ * - Hover detection (mouse/trackpad only — touch intentionally passes
+ *   through, see the pointermove handler below) is still performed from
+ *   window pointer coordinates against the robot's visual bounding box, and
+ *   still only controls the speech bubble's VISUAL reveal — a
+ *   discoverability affordance for mouse users, not a gate on whether the
+ *   link can be activated.
  *
  * - TAYQAN-specific commercial checkout belongs inside the TAYQAN hire workflow.
  *
@@ -80,7 +88,7 @@ export function TayqanGlobalCompanion() {
       : "/projects?tayqan=assign";
 
   const robotRef = useRef<HTMLDivElement>(null);
-  const bubbleRef = useRef<HTMLAnchorElement>(null);
+  const bubbleRef = useRef<HTMLSpanElement>(null);
   const hideTimerRef = useRef<number | null>(null);
   const visibleRef = useRef(false);
 
@@ -202,9 +210,7 @@ export function TayqanGlobalCompanion() {
       }}
     >
       <Link
-        ref={bubbleRef}
         href={companionHref}
-        tabIndex={bubbleVisible ? 0 : -1}
         onFocus={() => setVisible(true)}
         onBlur={() => setVisible(false)}
         aria-label={t(
@@ -212,45 +218,51 @@ export function TayqanGlobalCompanion() {
             ? "tayqan.adminCompanionAriaLabel"
             : "tayqan.companionAriaLabel",
         )}
-        className={[
-          "absolute bottom-full start-0 mb-2 w-[220px]",
-          "rounded-2xl border border-cyan-700/60 bg-slate-950/95",
-          "px-3 py-2 text-start text-xs text-cyan-100",
-          "shadow-xl backdrop-blur transition-all duration-150",
-          bubbleVisible
-            ? "pointer-events-auto scale-100 opacity-100"
-            : "pointer-events-none scale-95 opacity-0",
-        ].join(" ")}
+        className="pointer-events-auto relative block h-full w-full rounded-2xl focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950"
       >
-        <span className="block font-medium">
-          {t(
-            internalAdminAccess
-              ? "tayqan.adminHoverMessage"
-              : "tayqan.hoverMessage",
-          )}
+        <span
+          ref={bubbleRef}
+          aria-hidden="true"
+          className={[
+            "pointer-events-none absolute bottom-full start-0 mb-2 w-[220px]",
+            "rounded-2xl border border-cyan-700/60 bg-slate-950/95",
+            "px-3 py-2 text-start text-xs text-cyan-100",
+            "shadow-xl backdrop-blur transition-all duration-150",
+            bubbleVisible
+              ? "scale-100 opacity-100"
+              : "scale-95 opacity-0",
+          ].join(" ")}
+        >
+          <span className="block font-medium">
+            {t(
+              internalAdminAccess
+                ? "tayqan.adminHoverMessage"
+                : "tayqan.hoverMessage",
+            )}
+          </span>
+
+          <span className="mt-1 inline-flex font-semibold text-cyan-300">
+            {t(
+              internalAdminAccess
+                ? "tayqan.adminAccessBadge"
+                : "tayqan.companionAriaLabel",
+            )} →
+          </span>
         </span>
 
-        <span className="mt-1 inline-flex font-semibold text-cyan-300">
-          {t(
-            internalAdminAccess
-              ? "tayqan.adminAccessBadge"
-              : "tayqan.companionAriaLabel",
-          )} →
-        </span>
+        <div
+          ref={robotRef}
+          aria-hidden="true"
+          className="h-full w-full"
+        >
+          <TayqanRobotCanvas
+            compact
+            cameraDistance={4.4}
+            fov={30}
+            scale={1.05}
+          />
+        </div>
       </Link>
-
-      <div
-        ref={robotRef}
-        aria-hidden="true"
-        className="h-full w-full"
-      >
-        <TayqanRobotCanvas
-          compact
-          cameraDistance={4.4}
-          fov={30}
-          scale={1.05}
-        />
-      </div>
     </div>
   );
 }

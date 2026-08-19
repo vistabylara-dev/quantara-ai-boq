@@ -317,6 +317,18 @@ export async function createCommerceCheckoutSession(
   const stripe = resolveCommercialStripeClient(overrideClient);
   const baseUrl = validateAppBaseUrl(liveMode);
 
+  /**
+   * MARKETPLACE-FIX-3 — checkoutMode defaults to "SUBSCRIPTION" in the
+   * request schema (commerce-schema.ts), never inferred from boqId's
+   * presence, so this checks the field explicitly. Dispatched before the
+   * SUBSCRIPTION-only eligibility checks below (loadEligibleCommercePrice/
+   * resolveProviderPriceMapping) — those must never run for a BOQ_UNLOCK
+   * request, which has no priceCode at all.
+   */
+  if (input.checkoutMode === "BOQ_UNLOCK") {
+    return handleBoqUnlockCheckoutSession(actor, input, stripe, environment, liveMode, baseUrl);
+  }
+
   // Global catalog validation — not company-specific, so it doesn't need the
   // per-company lock below. Never trusts client-supplied amount/currency/
   // providerPriceId; both are resolved purely from the trusted priceCode.
@@ -549,6 +561,22 @@ async function handleBoqUnlockCheckoutSession(
       }
     });
 
-    return { checkoutSessionId: session.id, checkoutUrl: session.url! };
-  });
+    // MARKETPLACE-FIX-3 — the sibling SUBSCRIPTION path explicitly checks
+    // this before using session.url; this path was force-asserting it with
+    // `!` instead, which would have silently returned checkoutUrl: undefined
+    // (cast as string) on the documented, real edge case where Stripe
+    // returns no URL.
+    if (!session.url) {
+      throw new AppError("STRIPE_CHECKOUT_SESSION_NO_URL", "Stripe did not return a checkout URL.", 502);
+    }
+
+    return { checkoutSessionId: session.id, checkoutUrl: session.url };
+  },
+  // MARKETPLACE-FIX-3 — this transaction holds the same per-company advisory
+  // lock and makes several real Stripe API calls (session list, an expire
+  // per stale session, then a create) while open, same as the SUBSCRIPTION
+  // path above — it was missing the same generous timeout override, and
+  // could plausibly exceed Prisma's 5s default with more than a couple of
+  // stale sessions to expire.
+  { maxWait: 10_000, timeout: 30_000 });
 }

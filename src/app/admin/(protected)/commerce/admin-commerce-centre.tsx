@@ -109,6 +109,15 @@ export default function AdminCommerceCentre() {
   const [actionMessage, setActionMessage] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  // STRIPE-COMMERCIAL — the /admin/(protected) layout already restricts this
+  // entire page to PLATFORM_OWNER server-side (requirePlatformActor redirects
+  // anyone else to /dashboard before this component ever mounts), same as
+  // every other route under /admin/(protected). This client-side check is
+  // defense-in-depth against the live-money panel below ever rendering for a
+  // non-owner if that layout policy changes — same actor-role source
+  // (/api/auth/session -> session.user.platformRole) admin-dashboard.tsx
+  // already uses for its own role-gated UI, not a new auth check.
+  const [viewerIsPlatformOwner, setViewerIsPlatformOwner] = useState(false);
 
   const loadList = useCallback(async (signal?: AbortSignal) => {
     setLoadError(null);
@@ -124,6 +133,10 @@ export default function AdminCommerceCentre() {
   useEffect(() => {
     const controller = new AbortController();
     void loadList(controller.signal);
+    apiClient
+      .get<{ authenticated: boolean; user: { platformRole: string | null } | null }>("/api/auth/session", controller.signal)
+      .then((session) => setViewerIsPlatformOwner(session.authenticated && session.user?.platformRole === "PLATFORM_OWNER"))
+      .catch(() => setViewerIsPlatformOwner(false));
     return () => controller.abort();
   }, [loadList]);
 
@@ -401,6 +414,10 @@ export default function AdminCommerceCentre() {
       </div>
 
       <StripeSyncPanel busy={busy} setBusy={setBusy} setActionMessage={setActionMessage} setActionError={setActionError} />
+
+      {viewerIsPlatformOwner && (
+        <LiveStripeSyncPanel busy={busy} setBusy={setBusy} setActionMessage={setActionMessage} setActionError={setActionError} />
+      )}
     </div>
   );
 }
@@ -644,6 +661,200 @@ function StripeSyncPanel({
               <tbody className="text-[#0B1630] dark:text-[#F7FAFC]">
                 {history.slice(0, 10).map((h) => (
                   <tr key={h.id} className="border-t border-[#D9E2EC] dark:border-[#1E2A42]">
+                    <td className="px-3 py-2">{h.operation}{h.dryRun ? " (dry run)" : ""}</td>
+                    <td className="px-3 py-2">{h.status}</td>
+                    <td className="px-3 py-2">{h.productsCreated + h.pricesCreated}</td>
+                    <td className="px-3 py-2">{h.productsArchived + h.pricesArchived}</td>
+                    <td className="px-3 py-2">{h.blockedCount}</td>
+                    <td className="px-3 py-2">{new Date(h.startedAt).toLocaleString()}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+    </section>
+  );
+}
+
+type LiveSyncPlan = {
+  catalogueFingerprint: string;
+  productsToCreate: number;
+  productsToUpdate: number;
+  productsUnchanged: number;
+  productsToArchive: number;
+  pricesToCreate: number;
+  pricesToReactivate: number;
+  pricesUnchanged: number;
+  pricesToArchive: number;
+  blockedCount: number;
+  prices: Array<{ priceId: string; code: string; productCode: string; action: string; blockedReason?: string }>;
+};
+
+/**
+ * STRIPE-COMMERCIAL-4 UI — the backend (runLiveDryRun/synchronizeLiveCommerceCatalogue,
+ * stripe-live-sync-service.ts) has existed since STRIPE-COMMERCIAL-4 with no
+ * caller anywhere in the admin UI. This is the first and only entry point
+ * into it. Deliberately not merged into StripeSyncPanel above — separate
+ * component, separate state, separate confirm copy — so a coding mistake in
+ * the TEST panel can never accidentally cross into live-money code, and vice
+ * versa. Rendered only when the parent has confirmed (via /api/auth/session)
+ * the viewer is PLATFORM_OWNER; the API routes enforce the same restriction
+ * independently (requireOwner inside the service functions) — this
+ * component never weakens or substitutes for that.
+ */
+function LiveStripeSyncPanel({
+  busy,
+  setBusy,
+  setActionMessage,
+  setActionError,
+}: {
+  busy: boolean;
+  setBusy: (v: boolean) => void;
+  setActionMessage: (v: string | null) => void;
+  setActionError: (v: string | null) => void;
+}) {
+  const [plan, setPlan] = useState<LiveSyncPlan | null>(null);
+  const [history, setHistory] = useState<SyncRun[] | null>(null);
+
+  const loadHistory = useCallback(async () => {
+    try {
+      setHistory(await apiClient.get<SyncRun[]>("/api/admin/commerce/stripe/live/history"));
+    } catch {
+      // History is supplementary — a failed load here doesn't block the rest of the panel.
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadHistory();
+  }, [loadHistory]);
+
+  const runLiveDryRun = useCallback(async () => {
+    setBusy(true);
+    setActionMessage(null);
+    setActionError(null);
+    try {
+      const result = await apiClient.post<{ plan: LiveSyncPlan; run: SyncRun }>("/api/admin/commerce/stripe/live/dry-run", {});
+      setPlan(result.plan);
+      setActionMessage("Live dry run complete — review the plan below before synchronizing to LIVE Stripe.");
+      await loadHistory();
+    } catch (error) {
+      setActionError(getApiErrorMessage(error));
+    } finally {
+      setBusy(false);
+    }
+  }, [setBusy, setActionMessage, setActionError, loadHistory]);
+
+  const runLiveSynchronize = useCallback(async () => {
+    if (!plan) return;
+    const productCount = plan.productsToCreate + plan.productsToUpdate;
+    if (
+      !window.confirm(
+        `Synchronize ${plan.pricesToCreate} price(s) and ${productCount} product(s) to LIVE Stripe? This creates real, chargeable Stripe objects that customers can immediately pay with. This cannot be undone — Stripe prices are immutable once created.`,
+      )
+    ) {
+      return;
+    }
+    setBusy(true);
+    setActionMessage(null);
+    setActionError(null);
+    try {
+      const result = await apiClient.post<{ run: SyncRun; pricesReactivated: number; errors: string[] }>("/api/admin/commerce/stripe/live/synchronize", {
+        catalogueFingerprint: plan.catalogueFingerprint,
+        confirm: true,
+      });
+      setActionMessage(result.errors.length > 0 ? `Live synchronization completed with ${result.errors.length} warning(s) — see history.` : "Live synchronization complete. These Stripe objects are now real and chargeable.");
+      // Never reuse a plan/fingerprint across calls — the next synchronize
+      // attempt must start from a fresh dry run, matching what the backend
+      // route already enforces server-side (a stale fingerprint is rejected).
+      setPlan(null);
+      await loadHistory();
+    } catch (error) {
+      setActionError(getApiErrorMessage(error));
+    } finally {
+      setBusy(false);
+    }
+  }, [plan, setBusy, setActionMessage, setActionError, loadHistory]);
+
+  return (
+    <section className="rounded-[28px] border-2 border-[#B91C1C] bg-[#FEF2F2] p-6 dark:border-[#F87171] dark:bg-[#3A1116] sm:p-8">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-sm font-semibold text-[#0B1630] dark:text-white">Live Stripe Synchronization</p>
+        <span className="rounded-full border border-[#B91C1C] bg-[#B91C1C] px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-white dark:border-[#F87171] dark:bg-[#F87171] dark:text-[#3A1116]">
+          Live Mode — Real Money
+        </span>
+      </div>
+      <p className="mt-2 text-xs font-medium text-[#B91C1C] dark:text-[#F87171]">
+        This panel creates real, live Stripe Products and Prices that customers can immediately pay with. Nothing here is a
+        drill — synchronizing is a chargeable, irreversible action (Stripe prices are immutable once created). Only run this
+        with intent.
+      </p>
+
+      <div className="mt-4 flex flex-wrap gap-2 border-t border-[#B91C1C]/30 pt-4 dark:border-[#F87171]/30">
+        <button
+          type="button"
+          disabled={busy}
+          onClick={() => void runLiveDryRun()}
+          className="rounded-lg border border-[#B91C1C] bg-white px-3 py-1.5 text-xs font-semibold text-[#B91C1C] hover:bg-[#FEF2F2] disabled:opacity-50 dark:border-[#F87171] dark:bg-[#0B1426] dark:text-[#F87171] dark:hover:bg-[#3A1116]"
+        >
+          Run live dry run
+        </button>
+        <button
+          type="button"
+          disabled={busy || !plan}
+          onClick={() => void runLiveSynchronize()}
+          className="rounded-lg border border-[#B91C1C] bg-[#B91C1C] px-3 py-1.5 text-xs font-semibold text-white hover:opacity-90 disabled:opacity-50 dark:border-[#F87171] dark:bg-[#F87171] dark:text-[#3A1116]"
+        >
+          Synchronize to LIVE Stripe
+        </button>
+      </div>
+
+      {plan && (
+        <div className="mt-4 rounded-2xl border border-[#B91C1C]/40 bg-white p-4 text-xs dark:border-[#F87171]/40 dark:bg-[#0B1426]">
+          <p className="font-semibold text-[#0B1630] dark:text-white">Live synchronization plan</p>
+          <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3">
+            <p>Products to create: <strong>{plan.productsToCreate}</strong></p>
+            <p>Products to update: <strong>{plan.productsToUpdate}</strong></p>
+            <p>Products unchanged: <strong>{plan.productsUnchanged}</strong></p>
+            <p>Products to archive: <strong>{plan.productsToArchive}</strong></p>
+            <p>Prices to create: <strong>{plan.pricesToCreate}</strong></p>
+            <p>Prices to reactivate: <strong>{plan.pricesToReactivate}</strong></p>
+            <p>Prices unchanged: <strong>{plan.pricesUnchanged}</strong></p>
+            <p>Prices to archive: <strong>{plan.pricesToArchive}</strong></p>
+            <p>Blocked: <strong>{plan.blockedCount}</strong></p>
+          </div>
+          {plan.prices.some((p) => p.action === "BLOCKED") && (
+            <div className="mt-3">
+              <p className="font-semibold text-[#B4841F] dark:text-[#E0B25C]">Blocked prices (never eligible for live checkout)</p>
+              <ul className="mt-1 space-y-0.5 text-[#536078] dark:text-[#B8C4D8]">
+                {plan.prices.filter((p) => p.action === "BLOCKED").map((p) => (
+                  <li key={p.priceId}>{p.productCode} / {p.code} — {p.blockedReason}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
+      )}
+
+      {history && history.length > 0 && (
+        <div className="mt-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-[#B91C1C] dark:text-[#F87171]">Live history</p>
+          <div className="mt-2 overflow-x-auto rounded-2xl border border-[#B91C1C]/40 dark:border-[#F87171]/40">
+            <table className="min-w-full text-left text-xs">
+              <thead className="bg-white text-[#536078] dark:bg-[#0B1426] dark:text-[#7F8DA6]">
+                <tr>
+                  <th className="px-3 py-2">Operation</th>
+                  <th className="px-3 py-2">Status</th>
+                  <th className="px-3 py-2">Created</th>
+                  <th className="px-3 py-2">Archived</th>
+                  <th className="px-3 py-2">Blocked</th>
+                  <th className="px-3 py-2">When</th>
+                </tr>
+              </thead>
+              <tbody className="text-[#0B1630] dark:text-[#F7FAFC]">
+                {history.slice(0, 10).map((h) => (
+                  <tr key={h.id} className="border-t border-[#B91C1C]/20 dark:border-[#F87171]/20">
                     <td className="px-3 py-2">{h.operation}{h.dryRun ? " (dry run)" : ""}</td>
                     <td className="px-3 py-2">{h.status}</td>
                     <td className="px-3 py-2">{h.productsCreated + h.pricesCreated}</td>

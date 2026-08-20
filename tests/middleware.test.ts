@@ -50,8 +50,9 @@ describe("edge middleware routing", () => {
 describe("edge middleware matcher (Next.js routing config — the middleware() function above is never invoked for an excluded path)", () => {
   const matcherPattern = new RegExp(middlewareConfig.matcher[0]);
 
-  it("excludes .glb static model assets, same class of exclusion as .png/.jpg", () => {
+  it("excludes public static media assets from authentication redirects", () => {
     expect(matcherPattern.test("/models/tayqan/tayqan-web.glb")).toBe(false);
+    expect(matcherPattern.test("/videos/quantara-third-pilot-promo.mp4")).toBe(false);
     expect(matcherPattern.test("/logo.png")).toBe(false);
     expect(matcherPattern.test("/logo.jpg")).toBe(false);
   });

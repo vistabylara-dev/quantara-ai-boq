@@ -1,4 +1,3 @@
-import Image from "next/image";
 import Link from "next/link";
 import {
   AlertTriangle,
@@ -197,15 +196,20 @@ export default async function HomePage() {
       <section className="border-y border-slate-800 bg-slate-900/50 px-4 py-12" aria-label={t("publicContent.home.workspaceAria")}>
         <div className="container mx-auto max-w-6xl">
           <div className="overflow-hidden rounded-2xl border border-slate-800 bg-slate-950 p-2 shadow-2xl sm:p-4">
-            <Image
-              src="/workspace-preview.png"
-              alt={t("publicContent.home.workspaceAlt")}
-              width={1024}
-              height={603}
-              priority
-              sizes="(max-width: 1200px) 100vw, 1152px"
-              className="h-auto w-full rounded-xl border border-slate-800"
-            />
+            <video
+              width={1920}
+              height={1080}
+              autoPlay
+              muted
+              playsInline
+              controls
+              preload="metadata"
+              aria-label={t("publicContent.home.workspaceAlt")}
+              className="aspect-video h-auto w-full rounded-xl border border-slate-800 bg-black object-contain"
+            >
+              <source src="/videos/quantara-third-pilot-promo.mp4" type="video/mp4" />
+              Your browser does not support HTML video.
+            </video>
           </div>
         </div>
       </section>

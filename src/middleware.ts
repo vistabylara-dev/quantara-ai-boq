@@ -73,5 +73,6 @@ export const config = {
   // signed-out visitor on a public marketing page — got redirected to
   // /login?next=%2Fmodels%2Ftayqan%2Ftayqan-web.glb instead of the model
   // bytes, so the robot fell back to its no-WebGL placeholder everywhere.
-  matcher: ["/((?!_next/static|_next/image|favicon.ico|robots.txt|sitemap.xml|llms.txt|opengraph-image|twitter-image|manifest.webmanifest|.*\\.png|.*\\.jpg|.*\\.glb).*)"],
+  // Public marketing video files need the same static-asset exemption.
+  matcher: ["/((?!_next/static|_next/image|favicon.ico|robots.txt|sitemap.xml|llms.txt|opengraph-image|twitter-image|manifest.webmanifest|.*\\.png|.*\\.jpg|.*\\.glb|.*\\.mp4).*)"],
 };

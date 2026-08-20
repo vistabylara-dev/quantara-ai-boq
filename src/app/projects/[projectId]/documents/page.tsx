@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState, use } from "react";
 import type { BOQ } from "@/types/boq";
 import type { Project } from "@/types/project";
-import { apiClient, getApiErrorMessage } from "@/lib/api/client";
+import { apiClient, getApiErrorMessage, ApiClientError } from "@/lib/api/client";
 import { formatDate } from "@/lib/formatting/dates";
 import { computeDocumentReadiness } from "@/lib/workflow/document-readiness-state";
 import { GuideTip } from "@/components/guidance/guide-tip";
@@ -215,7 +215,21 @@ export default function ProjectDocumentsPage(props: PageProps) {
       });
       await refreshHistory();
     } catch (error) {
-      setGenerateError(getApiErrorMessage(error));
+      // The pre-check above can pass and then this request can still 403
+      // with COMMERCIAL_UNLOCK_REQUIRED (e.g. a subscription lapsed, or the
+      // BOQ's premium items changed, between the check and this call). Show
+      // the real unlock panel in that case instead of leaving the user with
+      // a bare error string and no path to fix it.
+      if (boqId && error instanceof ApiClientError && error.code === "COMMERCIAL_UNLOCK_REQUIRED") {
+        try {
+          const decision = await apiClient.get<CommercialAccessDecision>(`/api/boqs/${encodeURIComponent(boqId)}/commercial-requirements`);
+          setCommercialDecision({ boqId, decision });
+        } catch {
+          setGenerateError(getApiErrorMessage(error));
+        }
+      } else {
+        setGenerateError(getApiErrorMessage(error));
+      }
     } finally {
       setIsGenerating(false);
     }

@@ -19,10 +19,37 @@ import {
 describe("commerce-plan-mapping", () => {
   it("never reuses a legacy SoftwarePlan key (pro/business) — every commerce tier gets its own namespaced key", () => {
     const keys = COMMERCE_LINKED_SOFTWARE_PLANS.map((spec) => spec.softwarePlanKey);
-    expect(keys).toEqual(["commerce_starter", "commerce_professional", "commerce_business"]);
+    expect(keys).toEqual([
+      "commerce_starter",
+      "commerce_professional",
+      "commerce_business",
+      "commerce_enterprise_core",
+      "commerce_enterprise_scale",
+      "commerce_enterprise_authority",
+    ]);
     for (const key of keys) {
       expect(key.startsWith("commerce_")).toBe(true);
     }
+  });
+
+  it("the three Enterprise tiers are annual-prepaid-only (monthlyPriceAed 0, not free) at their exact AED prices, use PlanType.ENTERPRISE, and are all unlimited-project", () => {
+    const core = findCommerceLinkedPlanSpec("enterprise_core")!;
+    const scale = findCommerceLinkedPlanSpec("enterprise_scale")!;
+    const authority = findCommerceLinkedPlanSpec("enterprise_authority")!;
+
+    for (const spec of [core, scale, authority]) {
+      expect(spec.planType).toBe("ENTERPRISE");
+      expect(spec.monthlyPriceAed).toBe(0);
+      expect(spec.maxProjects).toBeNull();
+    }
+
+    expect(core.annualPriceAed).toBe(15000);
+    expect(scale.annualPriceAed).toBe(25000);
+    expect(authority.annualPriceAed).toBe(35000);
+
+    expect(core.maxUsers).toBe(50);
+    expect(scale.maxUsers).toBe(100);
+    expect(authority.maxUsers).toBeNull(); // unlimited users, per the commercial spec
   });
 
   it("Starter's maxProjects (3) is strictly less than the legacy Pro plan's unlimited — mapping starter -> pro would over-grant", () => {

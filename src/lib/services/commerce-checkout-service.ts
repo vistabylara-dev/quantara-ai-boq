@@ -346,17 +346,42 @@ export async function createCommerceCheckoutSession(
    * transaction to fully commit, then re-reads Stripe/DB state that already
    * reflects the first's outcome.
    */
+  /**
+   * STRIPE-COMMERCIAL-6's "no two simultaneous subscriptions" rule was
+   * written with only core software tiers in mind (its own comment says
+   * "e.g. Starter + Professional") but the DB/Stripe checks below ran
+   * unconditionally for every SUBSCRIPTION-typed price — which also matches
+   * every Industry Library add-on (they're `type: "SUBSCRIPTION"` too, see
+   * the INDUSTRY_ACCESS_CANDIDATES loop in
+   * prisma/seed-data/commerce-products.ts). That incorrectly blocked a
+   * company with an active Starter/Professional/Business/Enterprise
+   * software subscription from ever buying a library. `industryPackageId`
+   * is the real, existing signal for "this is a library add-on, not a core
+   * software tier" — null for starter/professional/business/enterprise_*,
+   * set for every industry_* library product — so only a core-tier purchase
+   * is blocked by an existing non-final subscription; a library purchase is
+   * never blocked by this rule, regardless of what software tier the
+   * company already has.
+   */
+  const isCoreSoftwareSubscriptionPurchase = price.product.industryPackageId === null;
+
   return prisma.$transaction(
     async (tx) => {
       await acquireCompanyCheckoutLock(tx, actor.companyId);
 
-      await assertNoExistingNonFinalSubscription(actor.companyId, tx);
+      if (isCoreSoftwareSubscriptionPurchase) {
+        await assertNoExistingNonFinalSubscription(actor.companyId, tx);
+      }
       const stripeCustomerId = await getOrCreateStripeCustomerForCompany(stripe, actor, liveMode, tx);
 
       // Stripe-side checks close the window the DB-only check above cannot: the
       // gap between session creation and the (asynchronous) webhook that would
       // otherwise be the only thing recording a CompanySoftwareSubscription row.
-      await assertNoExistingStripeSubscription(stripe, stripeCustomerId);
+      // Scoped identically to the DB-only check above — never blocks a library
+      // purchase, only a second core software subscription.
+      if (isCoreSoftwareSubscriptionPurchase) {
+        await assertNoExistingStripeSubscription(stripe, stripeCustomerId);
+      }
 
       /**
        * STRIPE-COMMERCIAL-21 — invariant: after this function returns

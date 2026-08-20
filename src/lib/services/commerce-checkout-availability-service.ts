@@ -74,6 +74,12 @@ export async function getCheckoutAvailability(actor: CurrentActor): Promise<Chec
 
   for (const product of products) {
     const prices: CheckoutOptionPrice[] = [];
+    // See the matching comment in commerce-checkout-service.ts's
+    // createCommerceCheckoutSession: `industryPackageId` is the real signal
+    // for "this is an Industry Library add-on, not a core software tier" —
+    // an existing subscription must never mark a library price unavailable,
+    // only another core-tier price.
+    const isCoreSoftwareSubscriptionProduct = product.industryPackageId === null;
 
     for (const price of product.prices) {
       if (price.isFromPrice) continue;
@@ -98,7 +104,7 @@ export async function getCheckoutAvailability(actor: CurrentActor): Promise<Chec
         }
       }
 
-      if (available && hasExistingSubscription) {
+      if (available && hasExistingSubscription && isCoreSoftwareSubscriptionProduct) {
         available = false;
         unavailableReason = "EXISTING_SUBSCRIPTION";
       }

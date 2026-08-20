@@ -75,6 +75,47 @@ export const COMMERCE_LINKED_SOFTWARE_PLANS: readonly CommerceLinkedPlanSpec[] =
     maxUsers: 30,
     maxProjects: null,
   },
+  /**
+   * Enterprise Core/Scale/Authority are annual-prepaid-only (see
+   * prisma/seed-data/commerce-products.ts) — monthlyPriceAed is 0 for all
+   * three because no monthly price exists for them, not because they're
+   * free. `enterprise_installation` (the pre-existing one-time,
+   * CONTACT_SALES professional-services product) deliberately has no entry
+   * here and must never resolve via findCommerceLinkedPlanSpec.
+   */
+  {
+    softwarePlanKey: "commerce_enterprise_core",
+    commerceProductCode: "enterprise_core",
+    name: "Enterprise Core",
+    description: "Commerce-purchased Enterprise Core subscription (AED 15,000/yr). Synced from the enterprise_core CommerceProduct entitlement template.",
+    planType: PlanType.ENTERPRISE,
+    monthlyPriceAed: 0,
+    annualPriceAed: 15000,
+    maxUsers: 50,
+    maxProjects: null,
+  },
+  {
+    softwarePlanKey: "commerce_enterprise_scale",
+    commerceProductCode: "enterprise_scale",
+    name: "Enterprise Scale",
+    description: "Commerce-purchased Enterprise Scale subscription (AED 25,000/yr). Synced from the enterprise_scale CommerceProduct entitlement template.",
+    planType: PlanType.ENTERPRISE,
+    monthlyPriceAed: 0,
+    annualPriceAed: 25000,
+    maxUsers: 100,
+    maxProjects: null,
+  },
+  {
+    softwarePlanKey: "commerce_enterprise_authority",
+    commerceProductCode: "enterprise_authority",
+    name: "Enterprise Authority",
+    description: "Commerce-purchased Enterprise Authority subscription (AED 35,000/yr). Synced from the enterprise_authority CommerceProduct entitlement template.",
+    planType: PlanType.ENTERPRISE,
+    monthlyPriceAed: 0,
+    annualPriceAed: 35000,
+    maxUsers: null,
+    maxProjects: null,
+  },
 ] as const;
 
 const SPEC_BY_PRODUCT_CODE = new Map(

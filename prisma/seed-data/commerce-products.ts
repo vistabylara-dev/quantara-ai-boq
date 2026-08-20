@@ -148,6 +148,88 @@ const CATALOGUE_PRODUCTS: ProductSpec[] = [
       entitlementDurationDays: SUBSCRIPTION_TEMPLATE_DURATION_DAYS,
     },
   },
+  /**
+   * Enterprise Core/Scale/Authority — annual-prepaid-only SaaS subscriptions
+   * (a single YEAR price each, deliberately no MONTH price: unlike
+   * starter/professional/business, these are not offered on a monthly
+   * cadence). Distinct from the pre-existing `enterprise_installation`
+   * below, which is a one-time, CONTACT_SALES professional-services
+   * engagement with no SoftwarePlan mapping — these three are real
+   * `type: "SUBSCRIPTION"` / `purchaseMode: "DIRECT"` self-checkout
+   * products, mapped to commerce_enterprise_core/scale/authority in
+   * src/lib/entitlements/commerce-plan-mapping.ts. The 15 paid Industry
+   * Libraries are deliberately NOT included in any of these — that catalogue
+   * stays a separate purchase on every tier, same as starter/professional/
+   * business above.
+   */
+  {
+    code: "enterprise_core",
+    type: "SUBSCRIPTION",
+    name: "Enterprise Core",
+    shortDescription: "For established contractors and consultancies needing high-volume BOQ production.",
+    description: "Annual enterprise subscription: high-volume BOQ generation, API access, company branding and enterprise onboarding.",
+    sortOrder: 34,
+    prices: [{ code: "enterprise_core_annual_aed_15000", amountMinor: 1500000, billingInterval: "YEAR" }],
+    entitlement: {
+      maxUsers: 50,
+      maxWorkspaces: 20,
+      maxActiveProjects: null,
+      maxBoqGenerationsPerMonth: 500,
+      maxTechnicalReportsPerMonth: 250,
+      maxWatermarkFreeExportsPerMonth: 250,
+      permittedExportFormats: ["PDF", "DOCX", "XLSX", "CSV"],
+      removesWatermark: true,
+      allowsCompanyBranding: true,
+      allowsApiAccess: true,
+      entitlementDurationDays: SUBSCRIPTION_TEMPLATE_DURATION_DAYS,
+    },
+  },
+  {
+    code: "enterprise_scale",
+    type: "SUBSCRIPTION",
+    name: "Enterprise Scale",
+    shortDescription: "For multi-team and multi-department companies running BOQ production at scale.",
+    description: "Annual enterprise subscription: higher-volume BOQ generation, white-label output, API access and priority onboarding/support.",
+    sortOrder: 35,
+    prices: [{ code: "enterprise_scale_annual_aed_25000", amountMinor: 2500000, billingInterval: "YEAR" }],
+    entitlement: {
+      maxUsers: 100,
+      maxWorkspaces: 50,
+      maxActiveProjects: null,
+      maxBoqGenerationsPerMonth: 1500,
+      maxTechnicalReportsPerMonth: 750,
+      maxWatermarkFreeExportsPerMonth: 750,
+      permittedExportFormats: ["PDF", "DOCX", "XLSX", "CSV"],
+      removesWatermark: true,
+      allowsCompanyBranding: true,
+      allowsApiAccess: true,
+      allowsWhiteLabel: true,
+      entitlementDurationDays: SUBSCRIPTION_TEMPLATE_DURATION_DAYS,
+    },
+  },
+  {
+    code: "enterprise_authority",
+    type: "SUBSCRIPTION",
+    name: "Enterprise Authority",
+    shortDescription: "For large groups, consultancies and institutional customers needing dedicated onboarding.",
+    description: "Annual enterprise subscription: unlimited users/workspaces, full white-label output, private catalogue/data onboarding and executive-priority support.",
+    sortOrder: 36,
+    prices: [{ code: "enterprise_authority_annual_aed_35000", amountMinor: 3500000, billingInterval: "YEAR" }],
+    entitlement: {
+      maxUsers: null,
+      maxWorkspaces: null,
+      maxActiveProjects: null,
+      maxBoqGenerationsPerMonth: 5000,
+      maxTechnicalReportsPerMonth: 2500,
+      maxWatermarkFreeExportsPerMonth: 2500,
+      permittedExportFormats: ["PDF", "DOCX", "XLSX", "CSV"],
+      removesWatermark: true,
+      allowsCompanyBranding: true,
+      allowsApiAccess: true,
+      allowsWhiteLabel: true,
+      entitlementDurationDays: SUBSCRIPTION_TEMPLATE_DURATION_DAYS,
+    },
+  },
   {
     code: "tayqan_day",
     type: "ONE_TIME",

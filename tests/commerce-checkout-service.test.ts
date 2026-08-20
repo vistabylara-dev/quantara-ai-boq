@@ -124,6 +124,7 @@ describe("commerce-checkout-service (integration, real local Postgres, mocked St
   let raceCompanyId: string;
   let raceCompanyBId: string;
   let cleanupCompanyId: string;
+  let librarySubscriberCompanyId: string;
   let userId: string;
   const originalKey = process.env.STRIPE_SECRET_KEY;
   const originalMode = process.env.STRIPE_MODE;
@@ -144,6 +145,8 @@ describe("commerce-checkout-service (integration, real local Postgres, mocked St
     raceCompanyBId = raceCompanyB.id;
     const cleanupCompany = await prisma.company.create({ data: { legalName: `Cleanup Co ${RUN_ID}`, tradeName: "Cleanup Co", email: `checkout-cleanup-${RUN_ID}@example.com` } });
     cleanupCompanyId = cleanupCompany.id;
+    const librarySubscriberCompany = await prisma.company.create({ data: { legalName: `Library Subscriber Co ${RUN_ID}`, tradeName: "Library Subscriber Co", email: `checkout-library-subscriber-${RUN_ID}@example.com` } });
+    librarySubscriberCompanyId = librarySubscriberCompany.id;
     const user = await prisma.user.create({ data: { companyId, email: `checkout-owner-${RUN_ID}@example.com`, passwordHash: "hash", fullName: "Owner", role: "COMPANY_OWNER", isActive: true, emailVerifiedAt: new Date() } });
     userId = user.id;
   });
@@ -164,11 +167,13 @@ describe("commerce-checkout-service (integration, real local Postgres, mocked St
   });
 
   afterAll(async () => {
-    const allCompanyIds = [companyId, otherCompanyId, thirdCompanyId, fourthCompanyId, raceCompanyId, raceCompanyBId, cleanupCompanyId];
+    const allCompanyIds = [companyId, otherCompanyId, thirdCompanyId, fourthCompanyId, raceCompanyId, raceCompanyBId, cleanupCompanyId, librarySubscriberCompanyId];
     await prisma.commerceProduct.deleteMany({ where: { code: { contains: RUN_ID } } });
     await prisma.companySoftwareSubscription.deleteMany({ where: { companyId: { in: allCompanyIds } } });
     await prisma.softwarePlan.deleteMany({ where: { key: { contains: RUN_ID } } });
     await prisma.stripeBillingCustomer.deleteMany({ where: { companyId: { in: allCompanyIds } } });
+    await prisma.industryDataPackageItem.deleteMany({ where: { package: { key: { contains: RUN_ID } } } });
+    await prisma.industryDataPackage.deleteMany({ where: { key: { contains: RUN_ID } } });
     await prisma.user.deleteMany({ where: { id: userId } });
     await prisma.company.deleteMany({ where: { id: { in: allCompanyIds } } });
     await prisma.$disconnect();
@@ -183,6 +188,10 @@ describe("commerce-checkout-service (integration, real local Postgres, mocked St
     approved?: boolean;
     amountMinor?: number;
     billingInterval?: "ONE_TIME" | "MONTH" | "YEAR";
+    /** Set to simulate an Industry Library add-on product (as opposed to a
+     *  core software tier) — see the industryPackageId-scoped existing-
+     *  subscription tests below. */
+    industryPackageId?: string;
   } = {}) {
     const suffix = `${RUN_ID}_${Math.random().toString(36).slice(2)}`;
     const { product } = await upsertCommerceProduct({
@@ -192,6 +201,7 @@ describe("commerce-checkout-service (integration, real local Postgres, mocked St
       purchaseMode: overrides.purchaseMode ?? "DIRECT",
       isActive: overrides.isActive ?? true,
       isPublic: overrides.isPublic ?? true,
+      industryPackageId: overrides.industryPackageId ?? null,
     });
     const { price } = await upsertCommercePrice({
       productId: product.id,
@@ -332,6 +342,56 @@ describe("commerce-checkout-service (integration, real local Postgres, mocked St
     });
 
     const actor = actorFor(userId, otherCompanyId, `checkout-other-${RUN_ID}@example.com`);
+    await expect(createCommerceCheckoutSession(actor, { priceCode: price.code }, mockStripeClient())).rejects.toMatchObject({ code: "CHECKOUT_EXISTING_SUBSCRIPTION" });
+  });
+
+  it("does NOT block an Industry Library purchase for a company that already has an active core software subscription", async () => {
+    // Regression test for the "Business subscriber can't buy HVAC/Plumbing/
+    // etc." bug: assertNoExistingNonFinalSubscription/assertNoExistingStripeSubscription
+    // must be scoped to core software tiers (industryPackageId === null) only.
+    const discipline = await prisma.masterDiscipline.findFirstOrThrow();
+    const pkg = await prisma.industryDataPackage.create({
+      data: {
+        key: `test-library-${RUN_ID}`,
+        name: `Checkout Test Library ${RUN_ID}`,
+        disciplineId: discipline.id,
+        packageType: "SPECIALIST",
+        monthlyPrice: 0,
+      },
+    });
+    const { product, price } = await makeApprovedDirectPrice({ industryPackageId: pkg.id });
+    await createMapping({ provider: "STRIPE", environment: "TEST", commerceProductId: product.id, commercePriceId: price.id, providerProductId: `prod_test_library_${RUN_ID}`, providerPriceId: `price_test_library_${RUN_ID}`, providerObjectType: "PRICE" });
+
+    const plan = await prisma.softwarePlan.create({ data: { key: `test_checkout_library_subscriber_plan_${RUN_ID}`, name: "Library Subscriber Test Plan", planType: "PRO" } });
+    await prisma.companySoftwareSubscription.create({
+      data: { companyId: librarySubscriberCompanyId, softwarePlanId: plan.id, status: "ACTIVE", externalSubscriptionId: `sub_library_subscriber_${RUN_ID}`, source: "stripe" },
+    });
+
+    // Confirms this company genuinely has a blocking core subscription — the
+    // exact state that must NOT stop it from buying an unrelated library.
+    const hasCoreSubscription = await prisma.companySoftwareSubscription.count({
+      where: { companyId: librarySubscriberCompanyId, source: "stripe", status: "ACTIVE" },
+    });
+    expect(hasCoreSubscription).toBe(1);
+
+    const actor = actorFor(userId, librarySubscriberCompanyId, `checkout-library-subscriber-${RUN_ID}@example.com`);
+    const result = await createCommerceCheckoutSession(actor, { priceCode: price.code }, mockStripeClient());
+    expect(result.checkoutUrl).toMatch(/^https:\/\/checkout\.stripe\.com/);
+
+    // The pre-existing core subscription itself is untouched by the library purchase.
+    const stillActiveCoreSubscription = await prisma.companySoftwareSubscription.findFirst({
+      where: { companyId: librarySubscriberCompanyId, softwarePlanId: plan.id },
+    });
+    expect(stillActiveCoreSubscription?.status).toBe("ACTIVE");
+  });
+
+  it("still blocks a second core software subscription for a company with an existing one, even after the library-purchase fix", async () => {
+    // Same company/state as the library test above, but requesting a
+    // core-tier (industryPackageId: null) price this time — must still 409.
+    const { product, price } = await makeApprovedDirectPrice();
+    await createMapping({ provider: "STRIPE", environment: "TEST", commerceProductId: product.id, commercePriceId: price.id, providerProductId: `prod_test_library_core_${RUN_ID}`, providerPriceId: `price_test_library_core_${RUN_ID}`, providerObjectType: "PRICE" });
+
+    const actor = actorFor(userId, librarySubscriberCompanyId, `checkout-library-subscriber-${RUN_ID}@example.com`);
     await expect(createCommerceCheckoutSession(actor, { priceCode: price.code }, mockStripeClient())).rejects.toMatchObject({ code: "CHECKOUT_EXISTING_SUBSCRIPTION" });
   });
 

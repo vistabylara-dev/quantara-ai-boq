@@ -89,6 +89,81 @@ type SoftwareProductCode = "starter" | "professional" | "business";
 
 const SOFTWARE_PRODUCT_ORDER: SoftwareProductCode[] = ["starter", "professional", "business"];
 
+/**
+ * Enterprise tiers are annual-prepaid-only (no monthly price exists for
+ * them — see prisma/seed-data/commerce-products.ts), so they render in
+ * their own section below with their own YEAR-only price lookup, entirely
+ * independent of the Starter/Professional/Business MONTH/YEAR toggle
+ * above. Mixing them into that grid would show "Pricing unavailable" for
+ * these three every time a visitor has the Monthly toggle selected.
+ */
+type EnterpriseProductCode = "enterprise_core" | "enterprise_scale" | "enterprise_authority";
+const ENTERPRISE_PRODUCT_ORDER: EnterpriseProductCode[] = ["enterprise_core", "enterprise_scale", "enterprise_authority"];
+
+/**
+ * Only `maxProjects` (rendered here as "Unlimited active projects") has a
+ * real runtime enforcement gate (`canCreateProject`) — see
+ * src/lib/entitlements/commerce-plan-mapping.ts's docstring. Every other
+ * numeric figure below (BOQ generations, reports, clean exports, users) is
+ * a commercial allowance recorded on the product's EntitlementTemplate, not
+ * a technically enforced ceiling — worded as "(included allowance)" rather
+ * than a hard platform limit so this card never claims enforcement that
+ * doesn't exist yet.
+ */
+const ENTERPRISE_PLAN_UI: Record<EnterpriseProductCode, { badge: string; positioning: string; benefits: string[] }> = {
+  enterprise_core: {
+    badge: "ENTERPRISE",
+    positioning: "For established contracting, consultancy and quantity-surveying teams running high-volume BOQ production.",
+    benefits: [
+      "Up to 50 users",
+      "Unlimited active projects",
+      "500 BOQ generations/month (included allowance)",
+      "250 technical reports/month (included allowance)",
+      "250 clean exports/month (included allowance)",
+      "PDF, DOCX, XLSX and CSV exports",
+      "Company branding on exports",
+      "API access",
+      "Enterprise onboarding",
+      "Industry Data Packages available separately",
+    ],
+  },
+  enterprise_scale: {
+    badge: "MULTI-TEAM",
+    positioning: "For multi-team and multi-department companies running BOQ production at scale.",
+    benefits: [
+      "Up to 100 users",
+      "Unlimited active projects",
+      "1,500 BOQ generations/month (included allowance)",
+      "750 technical reports/month (included allowance)",
+      "750 clean exports/month (included allowance)",
+      "All export formats",
+      "API access",
+      "White-label output",
+      "Priority onboarding and support",
+      "Up to 3 custom BOQ/report templates (included implementation service)",
+      "Industry Data Packages available separately",
+    ],
+  },
+  enterprise_authority: {
+    badge: "INSTITUTIONAL",
+    positioning: "For large groups, consultancies and institutional customers with dedicated onboarding needs.",
+    benefits: [
+      "Unlimited users and workspaces",
+      "Unlimited active projects",
+      "5,000 BOQ generations/month (included allowance)",
+      "2,500 technical reports/month (included allowance)",
+      "2,500 clean exports/month (included allowance)",
+      "All export formats",
+      "API access",
+      "Full white-label output",
+      "Up to 5 custom BOQ/report templates (included implementation service)",
+      "Private company catalogue/data onboarding",
+      "Executive-priority support",
+      "Industry Data Packages available separately",
+    ],
+  },
+};
+
 const SOFTWARE_PLAN_UI: Record<
   SoftwareProductCode,
   { badge: string; positioning: string; benefits: string[]; recommended?: boolean }
@@ -345,6 +420,10 @@ function SubscriptionSettingsContent() {
   }
 
   const softwareProducts = SOFTWARE_PRODUCT_ORDER.map((productCode) =>
+    checkoutAvailability?.products.find((product) => product.productCode === productCode),
+  ).filter((product): product is CheckoutOptionProduct => Boolean(product));
+
+  const enterpriseProducts = ENTERPRISE_PRODUCT_ORDER.map((productCode) =>
     checkoutAvailability?.products.find((product) => product.productCode === productCode),
   ).filter((product): product is CheckoutOptionProduct => Boolean(product));
 
@@ -636,6 +715,117 @@ function SubscriptionSettingsContent() {
           </div>
         )}
       </section>
+
+      {enterpriseProducts.length > 0 && (
+        <section className="overflow-hidden rounded-[32px] border border-amber-400/20 bg-slate-950">
+          <div className="border-b border-amber-400/15 bg-gradient-to-br from-amber-400/10 via-slate-950 to-slate-950 p-6 sm:p-8">
+            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-amber-300">Enterprise</p>
+            <h2 className="mt-2 text-2xl font-semibold text-white sm:text-3xl">Enterprise annual plans</h2>
+            <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-400">
+              Prepaid annual subscriptions for teams that have outgrown Business. Billed once a year, not monthly. Industry Data Packages remain a separate purchase on every tier.
+            </p>
+          </div>
+
+          <div className="p-6 sm:p-8">
+            {hasExistingSubscription && (
+              <div className="mb-6 flex flex-col gap-3 rounded-2xl border border-blue-400/20 bg-blue-400/5 p-4 sm:flex-row sm:items-center sm:justify-between">
+                <p className="text-sm leading-6 text-slate-300">
+                  Your company already has a software subscription. Use Manage Billing for payment method, invoice or cancellation changes; a second software checkout stays disabled.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => void manageBilling()}
+                  disabled={busyKey === "manage-billing"}
+                  className="shrink-0 rounded-xl border border-slate-700 bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-cyan-400 disabled:opacity-50"
+                >
+                  {busyKey === "manage-billing" ? "Opening…" : "Manage Billing"}
+                </button>
+              </div>
+            )}
+
+            <div className="grid gap-5 lg:grid-cols-3">
+              {enterpriseProducts.map((product) => {
+                const code = product.productCode as EnterpriseProductCode;
+                const meta = ENTERPRISE_PLAN_UI[code];
+                const price = product.prices.find((candidate) => candidate.billingInterval === "YEAR");
+                const isSelectedPricingIntent = price?.priceCode === selectedPricingIntent;
+                const currentPlan = entitlements.planName.trim().toLowerCase() === product.name.trim().toLowerCase();
+                const busy = price !== undefined && busyKey === `checkout-${price.priceCode}`;
+                const disabled = !price || !price.available || hasExistingSubscription || currentPlan;
+
+                let ctaLabel = "Pay securely with Stripe";
+                if (currentPlan) ctaLabel = "Current plan";
+                else if (hasExistingSubscription) ctaLabel = "Manage existing plan";
+                else if (!price) ctaLabel = "Not available";
+                else if (!price.available) ctaLabel = unavailableLabel(price.unavailableReason);
+                else if (busy) ctaLabel = "Redirecting…";
+
+                return (
+                  <article
+                    key={product.productCode}
+                    className={`relative flex h-full flex-col rounded-[28px] border p-6 transition ${
+                      isSelectedPricingIntent ? "border-amber-400/60 ring-2 ring-amber-400/50" : "border-slate-800"
+                    } bg-slate-900/80`}
+                  >
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="rounded-full border border-amber-400/30 bg-amber-400/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-amber-200">
+                        {meta.badge}
+                      </span>
+                      {isSelectedPricingIntent && <span className="text-xs font-semibold text-amber-300">Selected</span>}
+                    </div>
+
+                    <h3 className="mt-5 text-2xl font-semibold text-white">{product.name}</h3>
+                    <p className="mt-2 min-h-12 text-sm leading-6 text-slate-400">{meta.positioning}</p>
+
+                    <div className="mt-6 border-y border-slate-800 py-5">
+                      {price ? (
+                        <>
+                          <div className="flex flex-wrap items-end gap-2">
+                            <span className="text-3xl font-semibold tracking-tight text-white">
+                              {formatMoney(price.amountMinor, price.currency)}
+                            </span>
+                            <span className="pb-1 text-sm text-slate-500">/year</span>
+                          </div>
+                          <p className="mt-2 text-xs font-semibold text-slate-500">Billed annually</p>
+                        </>
+                      ) : (
+                        <p className="text-lg font-semibold text-slate-500">Pricing unavailable</p>
+                      )}
+                    </div>
+
+                    <ul className="mt-6 flex-1 space-y-3">
+                      {meta.benefits.map((benefit) => (
+                        <li key={benefit} className="flex gap-3 text-sm leading-5 text-slate-300">
+                          <span className="mt-1 h-2 w-2 shrink-0 rounded-full bg-amber-400" aria-hidden="true" />
+                          <span>{benefit}</span>
+                        </li>
+                      ))}
+                    </ul>
+
+                    <button
+                      type="button"
+                      onClick={() =>
+                        price &&
+                        price.available &&
+                        !hasExistingSubscription &&
+                        !currentPlan &&
+                        void checkout(price.priceCode)
+                      }
+                      disabled={disabled || busy}
+                      title={price && !price.available ? unavailableLabel(price.unavailableReason) : undefined}
+                      aria-current={isSelectedPricingIntent ? "true" : undefined}
+                      data-selected-pricing-intent={isSelectedPricingIntent ? "true" : undefined}
+                      className="mt-7 w-full rounded-xl bg-amber-400 px-4 py-3 text-sm font-semibold text-slate-950 transition hover:bg-amber-300 focus:outline-none focus:ring-2 focus:ring-amber-400 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {ctaLabel}
+                    </button>
+                  </article>
+                );
+              })}
+            </div>
+          </div>
+        </section>
+      )}
 
       <section className="overflow-hidden rounded-[32px] border border-indigo-400/20 bg-slate-950">
         <div className="border-b border-indigo-400/15 bg-gradient-to-br from-indigo-500/10 via-slate-950 to-cyan-500/5 p-6 sm:p-8">

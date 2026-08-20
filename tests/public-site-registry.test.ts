@@ -66,7 +66,7 @@ describe("public search registry", () => {
   });
 
   it("keeps the four owner-confirmation-dependent legal documents out of the public search index", () => {
-    expect(indexableEntries).toHaveLength(60);
+    expect(indexableEntries).toHaveLength(61);
     expect(
       PUBLIC_SEARCH_PAGES
         .filter((entry) => entry.indexable === false)

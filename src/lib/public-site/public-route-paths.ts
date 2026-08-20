@@ -8,6 +8,7 @@ import { PUBLIC_INTEGRATION_PATHS } from "./public-integration-ids";
 export const PUBLIC_WEBSITE_PATHS = [
   "/",
   "/features",
+  "/products",
   "/about",
   "/security",
   "/terms",

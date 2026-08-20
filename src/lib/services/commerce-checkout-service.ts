@@ -10,12 +10,13 @@ import {
   StripeInvalidKeyError,
   StripeNotConfiguredError,
 } from "@/lib/payments/stripe-client";
-import { findPriceMapping } from "@/lib/repositories/commerce-provider-mapping-repository";
+import { findMappingByProviderPriceId, findPriceMapping } from "@/lib/repositories/commerce-provider-mapping-repository";
 import { generateBoqCommercialManifest } from "@/lib/services/commercial-entitlement-service";
 import {
   createStripeBillingCustomer,
   findStripeBillingCustomer,
 } from "@/lib/repositories/stripe-billing-repository";
+import { isTayqanProductCode } from "@/lib/tayqan/tayqan-commerce";
 
 /**
  * STRIPE-COMMERCIAL-2 — server-side checkout. The browser sends only a
@@ -71,6 +72,54 @@ export class ExistingSubscriptionError extends AppError {
     );
     this.name = "ExistingSubscriptionError";
   }
+}
+
+/**
+ * CORRECTION-1 — distinct from ExistingSubscriptionError: thrown only when
+ * the company already owns THIS EXACT Industry Library package. A different
+ * library, a core software subscription, or a TAYQAN hire never triggers
+ * this — see classifyCommerceProductFamily and its call sites below.
+ */
+export class DuplicatePackageSubscriptionError extends AppError {
+  constructor() {
+    super(
+      "CHECKOUT_ALREADY_OWNS_PACKAGE",
+      "This company already has an active or pending subscription to this library. Manage it from the billing portal instead of starting a new checkout.",
+      409,
+    );
+    this.name = "DuplicatePackageSubscriptionError";
+  }
+}
+
+/**
+ * CORRECTION-1 — the three mutually-exclusive commercial "families" a
+ * CommerceProduct belongs to, replacing the old binary
+ * "industryPackageId === null means core software" check. That binary check
+ * was correct for library-vs-core, but silently misclassified every TAYQAN
+ * product (tayqan_monthly is `type: "SUBSCRIPTION"`, `purchaseMode:
+ * "DIRECT"`, and — like every core software tier — has no industryPackageId)
+ * as CORE_SOFTWARE. TAYQAN is governed entirely by its own checkout/
+ * entitlement logic (tayqan-checkout-service.ts) and must never be treated
+ * as interchangeable with a core software subscription by this file's
+ * existing-subscription rules in either direction.
+ *
+ * Intended coexistence rules (see createCommerceCheckoutSession and
+ * getCheckoutAvailability, which both branch on this classification):
+ *  - CORE_SOFTWARE: at most ONE active/pending core software subscription
+ *    per company (Starter/Professional/Business/Enterprise Core/Scale/
+ *    Authority — never TAYQAN, never a library).
+ *  - INDUSTRY_LIBRARY: any number of DIFFERENT libraries may coexist with
+ *    each other, with a core software subscription, and with TAYQAN — but
+ *    the SAME library must never be purchased twice.
+ *  - TAYQAN: a separate product family entirely; never blocked by, and
+ *    never blocks, a core software or library purchase through this file.
+ */
+export type CommerceProductFamily = "CORE_SOFTWARE" | "INDUSTRY_LIBRARY" | "TAYQAN";
+
+export function classifyCommerceProductFamily(product: { code: string; industryPackageId: string | null }): CommerceProductFamily {
+  if (product.industryPackageId) return "INDUSTRY_LIBRARY";
+  if (isTayqanProductCode(product.code)) return "TAYQAN";
+  return "CORE_SOFTWARE";
 }
 
 export function resolveCheckoutEnvironment(): CommerceProviderEnvironment {
@@ -157,8 +206,9 @@ async function resolveProviderPriceMapping(environment: CommerceProviderEnvironm
 }
 
 type CompanySubscriptionClient = Pick<Prisma.TransactionClient, "companySoftwareSubscription">;
+type CompanyPackageSubscriptionClient = Pick<Prisma.TransactionClient, "companyPackageSubscription">;
 
-/** Exported so commerce-checkout-availability-service.ts can report the same "already subscribed" fact to the UI without duplicating this query. Accepts an optional transaction client so the per-company-lock recheck in createCommerceCheckoutSession reads through the SAME transaction, not a separate connection. */
+/** Exported so commerce-checkout-availability-service.ts can report the same "already subscribed" fact to the UI without duplicating this query. Accepts an optional transaction client so the per-company-lock recheck in createCommerceCheckoutSession reads through the SAME transaction, not a separate connection. Inherently CORE_SOFTWARE-only: the webhook (stripe-webhook-service.ts's applyCurrentSubscriptionState) only ever writes a CompanySoftwareSubscription row for a product with no industryPackageId AND a resolvable commerce-plan-mapping.ts entry — TAYQAN products have no such entry, so this never fires for TAYQAN either. */
 export async function hasNonFinalStripeSubscription(companyId: string, client: CompanySubscriptionClient = prisma): Promise<boolean> {
   const existing = await client.companySoftwareSubscription.findFirst({
     where: { companyId, source: "stripe", status: { in: [...NON_FINAL_SUBSCRIPTION_STATUSES] } },
@@ -167,30 +217,137 @@ export async function hasNonFinalStripeSubscription(companyId: string, client: C
   return existing !== null;
 }
 
-/** STRIPE-COMMERCIAL-6 — a company cannot start a second subscription checkout while a non-final Stripe subscription already exists (see NON_FINAL_SUBSCRIPTION_STATUSES). A CANCELLED/EXPIRED subscription never blocks a fresh checkout. */
+/** STRIPE-COMMERCIAL-6 — a company cannot start a second CORE_SOFTWARE subscription checkout while a non-final Stripe subscription already exists (see NON_FINAL_SUBSCRIPTION_STATUSES). A CANCELLED/EXPIRED subscription never blocks a fresh checkout. */
 async function assertNoExistingNonFinalSubscription(companyId: string, client: CompanySubscriptionClient = prisma): Promise<void> {
   if (await hasNonFinalStripeSubscription(companyId, client)) throw new ExistingSubscriptionError();
 }
 
 /**
+ * CORRECTION-1 — the INDUSTRY_LIBRARY equivalent of hasNonFinalStripeSubscription
+ * above, scoped to one exact package: a company may hold any number of
+ * DIFFERENT non-final CompanyPackageSubscription rows at once (different
+ * libraries coexist freely), so this only blocks a repurchase of the SAME
+ * industryPackageId, never a different one.
+ */
+async function hasNonFinalPackageSubscription(
+  companyId: string,
+  industryPackageId: string,
+  client: CompanyPackageSubscriptionClient = prisma,
+): Promise<boolean> {
+  const existing = await client.companyPackageSubscription.findFirst({
+    where: { companyId, packageId: industryPackageId, source: "stripe", status: { in: [...NON_FINAL_SUBSCRIPTION_STATUSES] } },
+    select: { id: true },
+  });
+  return existing !== null;
+}
+
+/** CORRECTION-1 — blocks only a repurchase of the SAME library a company already holds; a different library, a core software subscription, or TAYQAN never trips this. */
+async function assertNoExistingNonFinalPackageSubscription(
+  companyId: string,
+  industryPackageId: string,
+  client: CompanyPackageSubscriptionClient = prisma,
+): Promise<void> {
+  if (await hasNonFinalPackageSubscription(companyId, industryPackageId, client)) throw new DuplicatePackageSubscriptionError();
+}
+
+/**
  * STRIPE-COMMERCIAL-11 — the DB-only check above cannot protect the window
  * between a Checkout Session being created and the webhook that eventually
- * records a CompanySoftwareSubscription row for it (webhook delivery is
- * asynchronous and can lag by seconds to minutes). This asks Stripe itself,
- * which is authoritative immediately. `canceled` and `incomplete_expired`
- * are the only two genuinely terminal Stripe subscription statuses — every
- * other value (including any future status Stripe might add) is treated as
- * blocking, deliberately failing closed rather than open.
+ * records a CompanySoftwareSubscription/CompanyPackageSubscription row for
+ * it (webhook delivery is asynchronous and can lag by seconds to minutes).
+ * This asks Stripe itself, which is authoritative immediately. `canceled`
+ * and `incomplete_expired` are the only two genuinely terminal Stripe
+ * subscription statuses — every other value (including any future status
+ * Stripe might add) is treated as blocking, deliberately failing closed
+ * rather than open.
  *
  * STRIPE-COMMERCIAL-16 — walks every page of the customer's subscriptions
  * rather than inspecting only the first (a customer with a long history of
  * canceled subscriptions could otherwise push a genuinely blocking one past
  * page 1). A provider/network error mid-pagination fails closed — treated
  * as "cannot rule out an existing subscription", never as "none found".
+ *
+ * CORRECTION-1 — this used to treat ANY non-terminal Stripe subscription on
+ * the customer as blocking, regardless of what product it was for. That
+ * meant an existing Industry Library (or TAYQAN Monthly) Stripe subscription
+ * could block a company from ever completing a CORE_SOFTWARE checkout, and
+ * vice versa — the Stripe-side check was not family-aware even after the
+ * DB-side check (assertNoExistingNonFinalSubscription) was scoped correctly.
+ * classifySubscriptionForBlocking below resolves each subscription's
+ * item(s) back to their CommerceProduct via the same provider-mapping table
+ * the webhook uses, then hasBlockingStripeSubscription only counts a
+ * subscription as blocking when it matches the REQUESTED purchase's target
+ * family (and, for a library purchase, the exact industryPackageId).
+ * A subscription whose price cannot be resolved (no mapping, deleted
+ * product, etc.) is treated as CORE_SOFTWARE for blocking purposes — failing
+ * closed exactly as before this fix for a CORE_SOFTWARE request — but is
+ * NEVER treated as a match for a specific library, so an unclassifiable
+ * subscription can never incorrectly block a library purchase (the one
+ * failure mode that actually caused customer-facing bugs).
  */
 const NON_BLOCKING_STRIPE_SUBSCRIPTION_STATUSES = new Set<Stripe.Subscription.Status>(["canceled", "incomplete_expired"]);
 
-async function hasBlockingStripeSubscription(stripe: Stripe, stripeCustomerId: string): Promise<boolean> {
+export type CheckoutSubscriptionTarget =
+  | { family: "CORE_SOFTWARE" }
+  | { family: "INDUSTRY_LIBRARY"; industryPackageId: string };
+
+type SubscriptionBlockingClassification = {
+  /** True if any item on this subscription is CORE_SOFTWARE, or could not be classified at all (fail closed). */
+  matchesCoreSoftware: boolean;
+  /** industryPackageId(s) this subscription's items resolve to, if any. */
+  libraryPackageIds: Set<string>;
+};
+
+async function classifySubscriptionForBlocking(
+  environment: CommerceProviderEnvironment,
+  subscription: Pick<Stripe.Subscription, "items">,
+): Promise<SubscriptionBlockingClassification> {
+  const items = subscription.items?.data ?? [];
+  if (items.length === 0) {
+    // No item data to classify (e.g. a status-only subscription object) —
+    // fail closed for a CORE_SOFTWARE request, exactly as this function's
+    // predecessor did unconditionally; never treated as a library match.
+    return { matchesCoreSoftware: true, libraryPackageIds: new Set() };
+  }
+
+  let matchesCoreSoftware = false;
+  const libraryPackageIds = new Set<string>();
+
+  for (const item of items) {
+    const providerPriceId = item.price?.id;
+    if (!providerPriceId) {
+      matchesCoreSoftware = true;
+      continue;
+    }
+
+    const mapping = await findMappingByProviderPriceId("STRIPE", environment, providerPriceId);
+    const commercePrice = mapping?.commercePriceId
+      ? await prisma.commercePrice.findUnique({ where: { id: mapping.commercePriceId }, include: { product: true } })
+      : null;
+
+    if (!commercePrice) {
+      matchesCoreSoftware = true; // unmapped/unresolvable — fail closed as core-blocking, never as a library match.
+      continue;
+    }
+
+    const family = classifyCommerceProductFamily(commercePrice.product);
+    if (family === "CORE_SOFTWARE") {
+      matchesCoreSoftware = true;
+    } else if (family === "INDUSTRY_LIBRARY" && commercePrice.product.industryPackageId) {
+      libraryPackageIds.add(commercePrice.product.industryPackageId);
+    }
+    // TAYQAN family items are neither core-blocking nor library-blocking — deliberately ignored.
+  }
+
+  return { matchesCoreSoftware, libraryPackageIds };
+}
+
+async function hasBlockingStripeSubscription(
+  stripe: Stripe,
+  stripeCustomerId: string,
+  environment: CommerceProviderEnvironment,
+  target: CheckoutSubscriptionTarget,
+): Promise<boolean> {
   let startingAfter: string | undefined;
   for (;;) {
     let page: Stripe.ApiList<Stripe.Subscription>;
@@ -199,16 +356,29 @@ async function hasBlockingStripeSubscription(stripe: Stripe, stripeCustomerId: s
     } catch (error) {
       throw new AppError("STRIPE_SUBSCRIPTION_LOOKUP_FAILED", "Could not verify existing subscriptions with Stripe. Please try again.", 502);
     }
-    if (page.data.some((subscription) => !NON_BLOCKING_STRIPE_SUBSCRIPTION_STATUSES.has(subscription.status))) {
-      return true;
+    for (const subscription of page.data) {
+      if (NON_BLOCKING_STRIPE_SUBSCRIPTION_STATUSES.has(subscription.status)) continue;
+      const classification = await classifySubscriptionForBlocking(environment, subscription);
+      if (target.family === "CORE_SOFTWARE") {
+        if (classification.matchesCoreSoftware) return true;
+      } else if (classification.libraryPackageIds.has(target.industryPackageId)) {
+        return true;
+      }
     }
     if (!page.has_more || page.data.length === 0) return false;
     startingAfter = page.data[page.data.length - 1].id;
   }
 }
 
-async function assertNoExistingStripeSubscription(stripe: Stripe, stripeCustomerId: string): Promise<void> {
-  if (await hasBlockingStripeSubscription(stripe, stripeCustomerId)) throw new ExistingSubscriptionError();
+async function assertNoExistingStripeSubscription(
+  stripe: Stripe,
+  stripeCustomerId: string,
+  environment: CommerceProviderEnvironment,
+  target: CheckoutSubscriptionTarget,
+): Promise<void> {
+  if (await hasBlockingStripeSubscription(stripe, stripeCustomerId, environment, target)) {
+    throw target.family === "CORE_SOFTWARE" ? new ExistingSubscriptionError() : new DuplicatePackageSubscriptionError();
+  }
 }
 
 /**
@@ -347,40 +517,52 @@ export async function createCommerceCheckoutSession(
    * reflects the first's outcome.
    */
   /**
-   * STRIPE-COMMERCIAL-6's "no two simultaneous subscriptions" rule was
-   * written with only core software tiers in mind (its own comment says
-   * "e.g. Starter + Professional") but the DB/Stripe checks below ran
-   * unconditionally for every SUBSCRIPTION-typed price — which also matches
-   * every Industry Library add-on (they're `type: "SUBSCRIPTION"` too, see
-   * the INDUSTRY_ACCESS_CANDIDATES loop in
-   * prisma/seed-data/commerce-products.ts). That incorrectly blocked a
-   * company with an active Starter/Professional/Business/Enterprise
-   * software subscription from ever buying a library. `industryPackageId`
-   * is the real, existing signal for "this is a library add-on, not a core
-   * software tier" — null for starter/professional/business/enterprise_*,
-   * set for every industry_* library product — so only a core-tier purchase
-   * is blocked by an existing non-final subscription; a library purchase is
-   * never blocked by this rule, regardless of what software tier the
-   * company already has.
+   * CORRECTION-1 — STRIPE-COMMERCIAL-6's "no two simultaneous subscriptions"
+   * rule was written with only core software tiers in mind (its own comment
+   * says "e.g. Starter + Professional") but the DB/Stripe checks below
+   * originally ran unconditionally for every SUBSCRIPTION-typed price —
+   * which also matches every Industry Library add-on and TAYQAN Monthly
+   * (all `type: "SUBSCRIPTION"`). classifyCommerceProductFamily resolves
+   * the REQUESTED purchase's family once here, and every check below is
+   * scoped to that family:
+   *  - CORE_SOFTWARE: blocked by an existing non-final core subscription
+   *    (DB row or Stripe-side, family-aware) — unchanged rule, now correctly
+   *    excludes TAYQAN and library subscriptions from ever triggering it.
+   *  - INDUSTRY_LIBRARY: never blocked by a core subscription or a
+   *    DIFFERENT library; blocked only by an existing non-final subscription
+   *    for the SAME industryPackageId (DB row, or a Stripe-side subscription
+   *    for that same package still awaiting its webhook).
+   *  - TAYQAN never reaches this function (createTayqanCheckoutSession is
+   *    an entirely separate code path) — no case is needed, but the target
+   *    resolution below leaves it uncheck-ed rather than silently matching
+   *    CORE_SOFTWARE, in case that ever changes.
    */
-  const isCoreSoftwareSubscriptionPurchase = price.product.industryPackageId === null;
+  const purchaseFamily = classifyCommerceProductFamily(price.product);
+  const checkoutTarget: CheckoutSubscriptionTarget | null =
+    purchaseFamily === "CORE_SOFTWARE"
+      ? { family: "CORE_SOFTWARE" }
+      : purchaseFamily === "INDUSTRY_LIBRARY" && price.product.industryPackageId
+        ? { family: "INDUSTRY_LIBRARY", industryPackageId: price.product.industryPackageId }
+        : null;
 
   return prisma.$transaction(
     async (tx) => {
       await acquireCompanyCheckoutLock(tx, actor.companyId);
 
-      if (isCoreSoftwareSubscriptionPurchase) {
+      if (checkoutTarget?.family === "CORE_SOFTWARE") {
         await assertNoExistingNonFinalSubscription(actor.companyId, tx);
+      } else if (checkoutTarget?.family === "INDUSTRY_LIBRARY") {
+        await assertNoExistingNonFinalPackageSubscription(actor.companyId, checkoutTarget.industryPackageId, tx);
       }
       const stripeCustomerId = await getOrCreateStripeCustomerForCompany(stripe, actor, liveMode, tx);
 
       // Stripe-side checks close the window the DB-only check above cannot: the
       // gap between session creation and the (asynchronous) webhook that would
-      // otherwise be the only thing recording a CompanySoftwareSubscription row.
-      // Scoped identically to the DB-only check above — never blocks a library
-      // purchase, only a second core software subscription.
-      if (isCoreSoftwareSubscriptionPurchase) {
-        await assertNoExistingStripeSubscription(stripe, stripeCustomerId);
+      // otherwise be the only thing recording a CompanySoftwareSubscription/
+      // CompanyPackageSubscription row. Family-aware and scoped identically to
+      // the DB-only check above.
+      if (checkoutTarget) {
+        await assertNoExistingStripeSubscription(stripe, stripeCustomerId, environment, checkoutTarget);
       }
 
       /**

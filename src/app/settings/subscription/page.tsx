@@ -115,14 +115,14 @@ const ENTERPRISE_PLAN_UI: Record<EnterpriseProductCode, { badge: string; positio
     badge: "ENTERPRISE",
     positioning: "For established contracting, consultancy and quantity-surveying teams running high-volume BOQ production.",
     benefits: [
-      "Up to 50 users",
+      "50-user included commercial allowance",
       "Unlimited active projects",
       "500 BOQ generations/month (included allowance)",
       "250 technical reports/month (included allowance)",
       "250 clean exports/month (included allowance)",
-      "PDF, DOCX, XLSX and CSV exports",
-      "Company branding on exports",
-      "API access",
+      "PDF, DOCX, XLSX and CSV export formats (included allowance)",
+      "Company branding setup included",
+      "API enablement included, subject to configured API availability",
       "Enterprise onboarding",
       "Industry Data Packages available separately",
     ],
@@ -131,14 +131,14 @@ const ENTERPRISE_PLAN_UI: Record<EnterpriseProductCode, { badge: string; positio
     badge: "MULTI-TEAM",
     positioning: "For multi-team and multi-department companies running BOQ production at scale.",
     benefits: [
-      "Up to 100 users",
+      "100-user included commercial allowance",
       "Unlimited active projects",
       "1,500 BOQ generations/month (included allowance)",
       "750 technical reports/month (included allowance)",
       "750 clean exports/month (included allowance)",
-      "All export formats",
-      "API access",
-      "White-label output",
+      "All export formats (included allowance)",
+      "API enablement included, subject to configured API availability",
+      "White-label setup included as implementation service",
       "Priority onboarding and support",
       "Up to 3 custom BOQ/report templates (included implementation service)",
       "Industry Data Packages available separately",
@@ -148,14 +148,14 @@ const ENTERPRISE_PLAN_UI: Record<EnterpriseProductCode, { badge: string; positio
     badge: "INSTITUTIONAL",
     positioning: "For large groups, consultancies and institutional customers with dedicated onboarding needs.",
     benefits: [
-      "Unlimited users and workspaces",
+      "Unlimited-user and workspace commercial allowance",
       "Unlimited active projects",
       "5,000 BOQ generations/month (included allowance)",
       "2,500 technical reports/month (included allowance)",
       "2,500 clean exports/month (included allowance)",
-      "All export formats",
-      "API access",
-      "Full white-label output",
+      "All export formats (included allowance)",
+      "API enablement included, subject to configured API availability",
+      "Full white-label setup included as implementation service",
       "Up to 5 custom BOQ/report templates (included implementation service)",
       "Private company catalogue/data onboarding",
       "Executive-priority support",
@@ -750,15 +750,22 @@ function SubscriptionSettingsContent() {
                 const price = product.prices.find((candidate) => candidate.billingInterval === "YEAR");
                 const isSelectedPricingIntent = price?.priceCode === selectedPricingIntent;
                 const currentPlan = entitlements.planName.trim().toLowerCase() === product.name.trim().toLowerCase();
-                const busy = price !== undefined && busyKey === `checkout-${price.priceCode}`;
-                const disabled = !price || !price.available || hasExistingSubscription || currentPlan;
 
-                let ctaLabel = "Pay securely with Stripe";
-                if (currentPlan) ctaLabel = "Current plan";
-                else if (hasExistingSubscription) ctaLabel = "Manage existing plan";
-                else if (!price) ctaLabel = "Not available";
-                else if (!price.available) ctaLabel = unavailableLabel(price.unavailableReason);
-                else if (busy) ctaLabel = "Redirecting…";
+                /**
+                 * CORRECTION-1 — Enterprise is deliberately NOT a direct
+                 * Stripe-checkout CTA here, even though `price` (a real,
+                 * priced, YEAR-only CommercePrice) exists. The public Terms
+                 * (legal.terms.checkoutBody in the i18n dictionaries) state
+                 * that "Enterprise scope... require[s] a separate written
+                 * quotation or agreement and must not be inferred from
+                 * public catalogue defaults" — offering one-click Stripe
+                 * checkout here would silently contradict that. Enterprise
+                 * stays sales-led (routes to /contact-sales) until the Terms
+                 * are intentionally updated to permit self-service Enterprise
+                 * purchase with a valid terms-acceptance mechanism, which is
+                 * out of scope for this change.
+                 */
+                const ctaLabel = currentPlan ? "Current plan" : "Contact Sales";
 
                 return (
                   <article
@@ -802,23 +809,26 @@ function SubscriptionSettingsContent() {
                       ))}
                     </ul>
 
-                    <button
-                      type="button"
-                      onClick={() =>
-                        price &&
-                        price.available &&
-                        !hasExistingSubscription &&
-                        !currentPlan &&
-                        void checkout(price.priceCode)
-                      }
-                      disabled={disabled || busy}
-                      title={price && !price.available ? unavailableLabel(price.unavailableReason) : undefined}
-                      aria-current={isSelectedPricingIntent ? "true" : undefined}
-                      data-selected-pricing-intent={isSelectedPricingIntent ? "true" : undefined}
-                      className="mt-7 w-full rounded-xl bg-amber-400 px-4 py-3 text-sm font-semibold text-slate-950 transition hover:bg-amber-300 focus:outline-none focus:ring-2 focus:ring-amber-400 disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                      {ctaLabel}
-                    </button>
+                    {currentPlan ? (
+                      <button
+                        type="button"
+                        disabled
+                        aria-current={isSelectedPricingIntent ? "true" : undefined}
+                        data-selected-pricing-intent={isSelectedPricingIntent ? "true" : undefined}
+                        className="mt-7 w-full rounded-xl bg-amber-400 px-4 py-3 text-sm font-semibold text-slate-950 transition disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        {ctaLabel}
+                      </button>
+                    ) : (
+                      <Link
+                        href="/contact-sales"
+                        aria-current={isSelectedPricingIntent ? "true" : undefined}
+                        data-selected-pricing-intent={isSelectedPricingIntent ? "true" : undefined}
+                        className="mt-7 flex w-full items-center justify-center rounded-xl bg-amber-400 px-4 py-3 text-sm font-semibold text-slate-950 transition hover:bg-amber-300 focus:outline-none focus:ring-2 focus:ring-amber-400"
+                      >
+                        {ctaLabel}
+                      </Link>
+                    )}
                   </article>
                 );
               })}

@@ -3,7 +3,9 @@ import type { CurrentActor } from "@/lib/auth/current-actor";
 import { findPriceMapping } from "@/lib/repositories/commerce-provider-mapping-repository";
 import {
   CHECKOUT_ELIGIBLE_INTERVALS,
+  classifyCommerceProductFamily,
   hasNonFinalStripeSubscription,
+  NON_FINAL_SUBSCRIPTION_STATUSES,
   resolveCheckoutEnvironment,
   SUPPORTED_CHECKOUT_CURRENCIES,
 } from "./commerce-checkout-service";
@@ -60,9 +62,24 @@ export type CheckoutAvailability = {
  * existing-subscription facts that only this authenticated endpoint can
  * safely report.
  */
+/**
+ * CORRECTION-1 — every industryPackageId this company already holds a
+ * non-final ("stripe"-sourced) CompanyPackageSubscription for. Different
+ * libraries coexist freely; only a repurchase of one of THESE exact
+ * packageIds is reported unavailable below.
+ */
+async function getOwnedIndustryPackageIds(companyId: string): Promise<Set<string>> {
+  const rows = await prisma.companyPackageSubscription.findMany({
+    where: { companyId, source: "stripe", status: { in: [...NON_FINAL_SUBSCRIPTION_STATUSES] } },
+    select: { packageId: true },
+  });
+  return new Set(rows.map((row) => row.packageId));
+}
+
 export async function getCheckoutAvailability(actor: CurrentActor): Promise<CheckoutAvailability> {
   const environment = resolveCheckoutEnvironment();
   const hasExistingSubscription = await hasNonFinalStripeSubscription(actor.companyId);
+  const ownedIndustryPackageIds = await getOwnedIndustryPackageIds(actor.companyId);
 
   const products = await prisma.commerceProduct.findMany({
     where: { isActive: true, isPublic: true, purchaseMode: "DIRECT", type: "SUBSCRIPTION" },
@@ -74,12 +91,17 @@ export async function getCheckoutAvailability(actor: CurrentActor): Promise<Chec
 
   for (const product of products) {
     const prices: CheckoutOptionPrice[] = [];
-    // See the matching comment in commerce-checkout-service.ts's
-    // createCommerceCheckoutSession: `industryPackageId` is the real signal
-    // for "this is an Industry Library add-on, not a core software tier" —
-    // an existing subscription must never mark a library price unavailable,
-    // only another core-tier price.
-    const isCoreSoftwareSubscriptionProduct = product.industryPackageId === null;
+    // CORRECTION-1 — see classifyCommerceProductFamily in
+    // commerce-checkout-service.ts. Three mutually exclusive families:
+    //  - CORE_SOFTWARE: unavailable while hasExistingSubscription is true
+    //    (at most one core software subscription per company).
+    //  - INDUSTRY_LIBRARY: unavailable only if this EXACT package is already
+    //    owned — an existing core subscription or a DIFFERENT library never
+    //    marks it unavailable.
+    //  - TAYQAN: never marked unavailable via EXISTING_SUBSCRIPTION here —
+    //    it is governed entirely by its own checkout/entitlement logic and
+    //    is unaffected by a company's core software or library state.
+    const family = classifyCommerceProductFamily(product);
 
     for (const price of product.prices) {
       if (price.isFromPrice) continue;
@@ -104,9 +126,14 @@ export async function getCheckoutAvailability(actor: CurrentActor): Promise<Chec
         }
       }
 
-      if (available && hasExistingSubscription && isCoreSoftwareSubscriptionProduct) {
-        available = false;
-        unavailableReason = "EXISTING_SUBSCRIPTION";
+      if (available) {
+        if (family === "CORE_SOFTWARE" && hasExistingSubscription) {
+          available = false;
+          unavailableReason = "EXISTING_SUBSCRIPTION";
+        } else if (family === "INDUSTRY_LIBRARY" && product.industryPackageId && ownedIndustryPackageIds.has(product.industryPackageId)) {
+          available = false;
+          unavailableReason = "EXISTING_SUBSCRIPTION";
+        }
       }
 
       prices.push({

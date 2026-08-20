@@ -18,7 +18,7 @@ import {
   COMMERCE_ENTITLEMENTS_ARE_LIVE,
   describeEntitlementTemplate,
 } from "../src/lib/services/entitlement-template-service";
-import { seedCommerceProducts } from "../prisma/seed-data/commerce-products";
+import { seedCommerceProducts, seedEnterpriseCommerceProducts } from "../prisma/seed-data/commerce-products";
 
 const RUN_ID = `${Date.now()}-${process.pid}`;
 
@@ -139,6 +139,79 @@ describe("commerce product catalogue (integration, real local Postgres)", () => 
 
       const phantomProduct = await prisma.commerceProduct.findUnique({ where: { code: "industry_electrical_professional" } });
       expect(phantomProduct).toBeNull();
+    });
+  });
+
+  /**
+   * CORRECTION-1 mission 5 — seedEnterpriseCommerceProducts must be a
+   * genuinely target-only production activation path: it may create/update
+   * ONLY enterprise_core/enterprise_scale/enterprise_authority and their
+   * prices/entitlement templates, never touching Starter, Professional,
+   * Business, TAYQAN, or any Industry Library — unlike seedCommerceProducts
+   * (exercised above), which intentionally iterates the whole catalogue.
+   */
+  describe("seedEnterpriseCommerceProducts (target-only production activation)", () => {
+    it("touches only the three Enterprise products — every other product's row count and content is byte-for-byte unchanged", async () => {
+      const totalProductsBefore = await prisma.commerceProduct.count();
+      const totalPricesBefore = await prisma.commercePrice.count();
+      const starterBefore = await prisma.commerceProduct.findUniqueOrThrow({ where: { code: "starter" } });
+      const tayqanBefore = await prisma.commerceProduct.findUniqueOrThrow({ where: { code: "tayqan_monthly" } });
+      const libraryProductCountBefore = await prisma.commerceProduct.count({ where: { industryPackageId: { not: null } } });
+
+      const report = await seedEnterpriseCommerceProducts(prisma);
+      expect(report.productsInserted + report.productsUpdated + report.productsUnchanged).toBe(3);
+
+      const totalProductsAfter = await prisma.commerceProduct.count();
+      const totalPricesAfter = await prisma.commercePrice.count();
+      const starterAfter = await prisma.commerceProduct.findUniqueOrThrow({ where: { code: "starter" } });
+      const tayqanAfter = await prisma.commerceProduct.findUniqueOrThrow({ where: { code: "tayqan_monthly" } });
+      const libraryProductCountAfter = await prisma.commerceProduct.count({ where: { industryPackageId: { not: null } } });
+
+      // If the three Enterprise products/prices already existed from an
+      // earlier seedCommerceProducts run in this same test database (they
+      // do, from the "idempotent catalogue seed" describe block above),
+      // this run is a genuine no-op — proves target-only scoping AND
+      // idempotency at once.
+      expect(totalProductsAfter).toBe(totalProductsBefore);
+      expect(totalPricesAfter).toBe(totalPricesBefore);
+      expect(starterAfter.updatedAt.getTime()).toBe(starterBefore.updatedAt.getTime());
+      expect(tayqanAfter.updatedAt.getTime()).toBe(tayqanBefore.updatedAt.getTime());
+      expect(libraryProductCountAfter).toBe(libraryProductCountBefore);
+
+      for (const code of ["enterprise_core", "enterprise_scale", "enterprise_authority"]) {
+        const product = await prisma.commerceProduct.findUnique({ where: { code }, include: { prices: true, entitlementTemplate: true } });
+        expect(product).not.toBeNull();
+        expect(product!.prices.length).toBeGreaterThan(0);
+        expect(product!.entitlementTemplate).not.toBeNull();
+      }
+
+      // Governance boundary this function must never cross — seeding never
+      // sets reviewStatus, so a never-yet-approved price stays exactly where
+      // the schema default put it. See
+      // src/lib/services/commerce-price-approval-service.ts's docstring for
+      // the only path that may move it to APPROVED.
+      for (const priceCode of ["enterprise_core_annual_aed_15000", "enterprise_scale_annual_aed_25000", "enterprise_authority_annual_aed_35000"]) {
+        const price = await prisma.commercePrice.findUnique({ where: { code: priceCode } });
+        expect(price).not.toBeNull();
+        if (price!.reviewedByUserId === null) {
+          expect(price!.reviewStatus).toBe("REQUIRES_REVIEW");
+        } else {
+          // Another test/earlier run in this shared database already routed
+          // it through the governed approval path — this function must not
+          // have reverted that.
+          expect(price!.reviewStatus).toBe("APPROVED");
+        }
+      }
+    });
+
+    it("running it twice is a genuine no-op the second time", async () => {
+      const first = await seedEnterpriseCommerceProducts(prisma);
+      const second = await seedEnterpriseCommerceProducts(prisma);
+      expect(second.productsInserted).toBe(0);
+      expect(second.pricesInserted).toBe(0);
+      expect(second.templatesInserted).toBe(0);
+      expect(second.productsInserted + second.productsUpdated + second.productsUnchanged).toBe(3);
+      expect(first.productsInserted + first.productsUpdated + first.productsUnchanged).toBe(3);
     });
   });
 

@@ -659,3 +659,51 @@ export async function seedCommerceProducts(prisma: PrismaClient): Promise<Commer
 
   return report;
 }
+
+const ENTERPRISE_PRODUCT_CODES = ["enterprise_core", "enterprise_scale", "enterprise_authority"] as const;
+
+/**
+ * CORRECTION-1 mission 5 — target-only production activation for the three
+ * Enterprise tiers. Unlike seedCommerceProducts above (which iterates the
+ * ENTIRE CATALOGUE_PRODUCTS array plus every INDUSTRY_ACCESS_CANDIDATES
+ * library), this touches ONLY the CommerceProduct/CommercePrice/
+ * EntitlementTemplate rows for enterprise_core/enterprise_scale/
+ * enterprise_authority — reusing the exact same seedCatalogueProduct upsert
+ * logic (so behavior is byte-identical to what seedCommerceProducts would do
+ * for these three products), with a hard, structural guarantee that
+ * Starter, Professional, Business, TAYQAN, every Industry Library, and any
+ * future catalogue product are never read or written by this function.
+ * Idempotent — safe to run more than once against production.
+ *
+ * New/changed prices still default to reviewStatus: REQUIRES_REVIEW; owner/
+ * admin approval via PATCH /api/admin/commerce/prices/[priceId]/approval
+ * (see src/lib/services/commerce-price-approval-service.ts) remains the
+ * required next step before these three prices can be synced to LIVE Stripe.
+ */
+export async function seedEnterpriseCommerceProducts(prisma: PrismaClient): Promise<CommerceSeedReport> {
+  const report: CommerceSeedReport = {
+    productsInserted: 0,
+    productsUpdated: 0,
+    productsUnchanged: 0,
+    pricesInserted: 0,
+    pricesUnchanged: 0,
+    pricesArchived: 0,
+    templatesInserted: 0,
+    templatesUpdated: 0,
+    industryProductsCreated: [],
+    industryProductsSkipped: [],
+  };
+
+  const specs = CATALOGUE_PRODUCTS.filter((spec) => (ENTERPRISE_PRODUCT_CODES as readonly string[]).includes(spec.code));
+  if (specs.length !== ENTERPRISE_PRODUCT_CODES.length) {
+    throw new Error(
+      `seedEnterpriseCommerceProducts: expected exactly ${ENTERPRISE_PRODUCT_CODES.length} Enterprise product specs (${ENTERPRISE_PRODUCT_CODES.join(", ")}) in CATALOGUE_PRODUCTS but found ${specs.length} — refusing to run partially.`,
+    );
+  }
+
+  for (const spec of specs) {
+    await seedCatalogueProduct(prisma, spec, report);
+  }
+
+  return report;
+}

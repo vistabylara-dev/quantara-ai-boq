@@ -836,4 +836,194 @@ describe("commerce-checkout-service (integration, real local Postgres, mocked St
       expect(stripe.checkout.sessions.create).not.toHaveBeenCalled();
     });
   });
+
+  /**
+   * CORRECTION-1 — regression coverage for the subscription-family
+   * coexistence rule external audit flagged as broken: the original library
+   * fix (industryPackageId-scoped) only worked in one direction (core no
+   * longer blocked buying a library) but the Stripe-side existing-
+   * subscription check still treated ANY non-terminal Stripe subscription as
+   * blocking regardless of product, so an existing library (or TAYQAN
+   * Monthly) Stripe subscription could still block a core purchase, and nothing
+   * stopped the SAME library from being bought twice. classifyCommerceProductFamily
+   * + the family-aware DB/Stripe checks in createCommerceCheckoutSession fix
+   * both directions; these tests exercise each side (letters match the
+   * external audit's scenario list A-G; G is covered in
+   * commerce-checkout-availability-service.test.ts since TAYQAN's own
+   * checkout never calls this function at all).
+   */
+  describe("CORRECTION-1: subscription-family coexistence (core / library / TAYQAN)", () => {
+    const coexistCompanyIds: string[] = [];
+
+    async function makeCoexistCompany(label: string): Promise<string> {
+      const company = await prisma.company.create({
+        data: { legalName: `Coexist ${label} ${RUN_ID}`, tradeName: label, email: `coexist-${label.toLowerCase()}-${RUN_ID}@example.com` },
+      });
+      coexistCompanyIds.push(company.id);
+      return company.id;
+    }
+
+    async function makeCoreSubscription(forCompanyId: string, label: string): Promise<void> {
+      const plan = await prisma.softwarePlan.create({ data: { key: `coexist_plan_${label}_${RUN_ID}`, name: `Coexist Plan ${label}`, planType: "PRO" } });
+      await prisma.companySoftwareSubscription.create({
+        data: { companyId: forCompanyId, softwarePlanId: plan.id, status: "ACTIVE", externalSubscriptionId: `sub_coexist_${label}_${RUN_ID}`, source: "stripe" },
+      });
+    }
+
+    async function makeLibraryPackage(label: string) {
+      const discipline = await prisma.masterDiscipline.findFirstOrThrow();
+      const pkg = await prisma.industryDataPackage.create({
+        data: { key: `coexist-pkg-${label}-${RUN_ID}`, name: `Coexist Library ${label} ${RUN_ID}`, disciplineId: discipline.id, packageType: "SPECIALIST", monthlyPrice: 0 },
+      });
+      return pkg;
+    }
+
+    async function makeMappedPrice(label: string, overrides: { industryPackageId?: string } = {}) {
+      const { product, price } = await makeApprovedDirectPrice({ industryPackageId: overrides.industryPackageId });
+      const providerPriceId = `price_coexist_${label}_${RUN_ID}`;
+      await createMapping({
+        provider: "STRIPE",
+        environment: "TEST",
+        commerceProductId: product.id,
+        commercePriceId: price.id,
+        providerProductId: `prod_coexist_${label}_${RUN_ID}`,
+        providerPriceId,
+        providerObjectType: "PRICE",
+      });
+      return { product, price, providerPriceId };
+    }
+
+    function stripeWithActiveSubscription(providerPriceId: string) {
+      const stripe = mockStripeClient();
+      stripe.subscriptions.list.mockResolvedValueOnce({
+        data: [{ id: `sub_coexist_active_${RUN_ID}_${Math.random().toString(36).slice(2)}`, status: "active", items: { data: [{ price: { id: providerPriceId } }] } }],
+        has_more: false,
+      });
+      return stripe;
+    }
+
+    afterAll(async () => {
+      // Cascades to each company's CompanySoftwareSubscription, CompanyPackageSubscription,
+      // and StripeBillingCustomer rows (all onDelete: Cascade on Company) — the outer
+      // afterAll's RUN_ID-scoped deletes cover the CommerceProduct/Price/Mapping and
+      // IndustryDataPackage rows this block creates (all named with RUN_ID).
+      await prisma.company.deleteMany({ where: { id: { in: coexistCompanyIds } } });
+    });
+
+    it("(A) an active core software subscription does not block buying an Industry Library — DB row AND a still-visible Stripe subscription for the core plan", async () => {
+      const companyId = await makeCoexistCompany("A");
+      await makeCoreSubscription(companyId, "A");
+      const core = await makeMappedPrice("a-core");
+      const pkg = await makeLibraryPackage("A");
+      const library = await makeMappedPrice("a-lib", { industryPackageId: pkg.id });
+
+      const actor = actorFor(userId, companyId, `coexist-a-${RUN_ID}@example.com`);
+      const stripe = stripeWithActiveSubscription(core.providerPriceId);
+
+      const result = await createCommerceCheckoutSession(actor, { priceCode: library.price.code }, stripe);
+      expect(result.checkoutUrl).toMatch(/^https:\/\/checkout\.stripe\.com/);
+    });
+
+    it("(B) an active Industry Library subscription does not block buying core software — DB row AND a still-visible Stripe subscription for the library", async () => {
+      const companyId = await makeCoexistCompany("B");
+      const pkg = await makeLibraryPackage("B");
+      const library = await makeMappedPrice("b-lib", { industryPackageId: pkg.id });
+      await prisma.companyPackageSubscription.create({
+        data: { companyId, packageId: pkg.id, status: "ACTIVE", externalSubscriptionId: `sub_coexist_b_lib_${RUN_ID}`, source: "stripe" },
+      });
+      const core = await makeMappedPrice("b-core");
+
+      const actor = actorFor(userId, companyId, `coexist-b-${RUN_ID}@example.com`);
+      const stripe = stripeWithActiveSubscription(library.providerPriceId);
+
+      const result = await createCommerceCheckoutSession(actor, { priceCode: core.price.code }, stripe);
+      expect(result.checkoutUrl).toMatch(/^https:\/\/checkout\.stripe\.com/);
+    });
+
+    it("(C) buying the SAME Industry Library twice is blocked — DB row alone is enough, before any Stripe check runs", async () => {
+      const companyId = await makeCoexistCompany("C1");
+      const pkg = await makeLibraryPackage("C1");
+      const library = await makeMappedPrice("c1-lib", { industryPackageId: pkg.id });
+      await prisma.companyPackageSubscription.create({
+        data: { companyId, packageId: pkg.id, status: "ACTIVE", externalSubscriptionId: `sub_coexist_c1_lib_${RUN_ID}`, source: "stripe" },
+      });
+
+      const actor = actorFor(userId, companyId, `coexist-c1-${RUN_ID}@example.com`);
+      await expect(createCommerceCheckoutSession(actor, { priceCode: library.price.code }, mockStripeClient())).rejects.toMatchObject({
+        code: "CHECKOUT_ALREADY_OWNS_PACKAGE",
+      });
+    });
+
+    it("(C, webhook-lag variant) the SAME Industry Library is still blocked via the Stripe-side check even with no DB row yet", async () => {
+      const companyId = await makeCoexistCompany("C2");
+      const pkg = await makeLibraryPackage("C2");
+      const library = await makeMappedPrice("c2-lib", { industryPackageId: pkg.id });
+      // No CompanyPackageSubscription row at all — simulates the webhook not
+      // having processed the first purchase yet; only Stripe knows about it.
+
+      const actor = actorFor(userId, companyId, `coexist-c2-${RUN_ID}@example.com`);
+      const stripe = stripeWithActiveSubscription(library.providerPriceId);
+      await expect(createCommerceCheckoutSession(actor, { priceCode: library.price.code }, stripe)).rejects.toMatchObject({
+        code: "CHECKOUT_ALREADY_OWNS_PACKAGE",
+      });
+    });
+
+    it("(D) an active Industry Library subscription does not block buying a DIFFERENT Industry Library", async () => {
+      const companyId = await makeCoexistCompany("D");
+      const pkgOwned = await makeLibraryPackage("D-owned");
+      const owned = await makeMappedPrice("d-owned", { industryPackageId: pkgOwned.id });
+      await prisma.companyPackageSubscription.create({
+        data: { companyId, packageId: pkgOwned.id, status: "ACTIVE", externalSubscriptionId: `sub_coexist_d_owned_${RUN_ID}`, source: "stripe" },
+      });
+      const pkgOther = await makeLibraryPackage("D-other");
+      const other = await makeMappedPrice("d-other", { industryPackageId: pkgOther.id });
+
+      const actor = actorFor(userId, companyId, `coexist-d-${RUN_ID}@example.com`);
+      const stripe = stripeWithActiveSubscription(owned.providerPriceId);
+
+      const result = await createCommerceCheckoutSession(actor, { priceCode: other.price.code }, stripe);
+      expect(result.checkoutUrl).toMatch(/^https:\/\/checkout\.stripe\.com/);
+    });
+
+    it("(E) a second core software subscription is still blocked for a company with an active one — the family-aware rewrite preserves this", async () => {
+      const companyId = await makeCoexistCompany("E");
+      await makeCoreSubscription(companyId, "E");
+      const secondCore = await makeMappedPrice("e-core2");
+
+      const actor = actorFor(userId, companyId, `coexist-e-${RUN_ID}@example.com`);
+      await expect(createCommerceCheckoutSession(actor, { priceCode: secondCore.price.code }, mockStripeClient())).rejects.toMatchObject({
+        code: "CHECKOUT_EXISTING_SUBSCRIPTION",
+      });
+    });
+
+    it("(F) an active TAYQAN Monthly Stripe subscription does not block buying core software", async () => {
+      const companyId = await makeCoexistCompany("F");
+      const tayqanProduct = await prisma.commerceProduct.findUniqueOrThrow({ where: { code: "tayqan_monthly" }, include: { prices: true } });
+      const tayqanPrice = tayqanProduct.prices.find((p) => p.code === "tayqan_monthly_2499");
+      if (!tayqanPrice) throw new Error("Fixture assumption broken: tayqan_monthly_2499 not seeded in this database.");
+      const tayqanProviderPriceId = `price_coexist_f_tayqan_${RUN_ID}`;
+      await createMapping({
+        provider: "STRIPE",
+        environment: "TEST",
+        commerceProductId: tayqanProduct.id,
+        commercePriceId: tayqanPrice.id,
+        providerProductId: `prod_coexist_f_tayqan_${RUN_ID}`,
+        providerPriceId: tayqanProviderPriceId,
+        providerObjectType: "PRICE",
+      });
+      const core = await makeMappedPrice("f-core");
+
+      const actor = actorFor(userId, companyId, `coexist-f-${RUN_ID}@example.com`);
+      const stripe = stripeWithActiveSubscription(tayqanProviderPriceId);
+
+      const result = await createCommerceCheckoutSession(actor, { priceCode: core.price.code }, stripe);
+      expect(result.checkoutUrl).toMatch(/^https:\/\/checkout\.stripe\.com/);
+
+      // Cleanup this test's mapping on the SHARED seeded tayqan_monthly price explicitly —
+      // it is not RUN_ID-suffixed in its code, so it falls outside the outer afterAll's
+      // `commerceProduct.deleteMany({ code: { contains: RUN_ID } } })` sweep (and must
+      // never be deleted — it's the real seeded product, not test fixture data).
+      await prisma.commerceProviderMapping.deleteMany({ where: { providerPriceId: tayqanProviderPriceId } });
+    });
+  });
 });

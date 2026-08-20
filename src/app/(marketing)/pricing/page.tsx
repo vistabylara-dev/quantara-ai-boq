@@ -107,6 +107,60 @@ export default async function PricingPage() {
     recommended: t("publicContent.pricing.saasRecommended"),
   };
 
+  /**
+   * CORRECTION-1 mission 4 — Enterprise added to the public pricing journey
+   * (previously only Starter/Professional/Business were visible here, so a
+   * visitor arriving from an ad had no way to even discover Enterprise
+   * exists), but deliberately WITHOUT the specific per-tier annual AED
+   * amounts (the ones approved for Phase A / shown on the authenticated
+   * settings page): tests/public-product-truth.test.ts's "does not publish
+   * unverified self-serve prices" assertions encode this repo's existing
+   * product-truth policy that the
+   * `enterprise-feature-bundle` capability — status NOT_AVAILABLE in
+   * src/lib/public-site/product-truth.ts — must never show a specific price
+   * on the public site. That policy predates this change and is a real,
+   * intentional guardrail, not an oversight; showing exact figures here
+   * would silently violate it. Every card routes to /contact-sales rather
+   * than any self-service checkout intent, matching the public Terms
+   * (legal.terms.checkoutBody: Enterprise scope requires a separate written
+   * quotation) and the same sales-led CTA used on the authenticated
+   * /settings/subscription Enterprise section — the AUTHENTICATED settings
+   * page is still the right place to show the approved AED amounts to a
+   * signed-in company evaluating an upgrade.
+   */
+  const enterprisePlans = [
+    {
+      key: "enterprise_core",
+      name: t("publicContent.pricing.saasEnterpriseCoreName"),
+      features: [
+        t("publicContent.pricing.saasEnterpriseCoreFeature1"),
+        t("publicContent.pricing.saasEnterpriseCoreFeature2"),
+        t("publicContent.pricing.saasEnterpriseCoreFeature3"),
+        t("publicContent.pricing.saasEnterpriseCoreFeature4"),
+      ],
+    },
+    {
+      key: "enterprise_scale",
+      name: t("publicContent.pricing.saasEnterpriseScaleName"),
+      features: [
+        t("publicContent.pricing.saasEnterpriseScaleFeature1"),
+        t("publicContent.pricing.saasEnterpriseScaleFeature2"),
+        t("publicContent.pricing.saasEnterpriseScaleFeature3"),
+        t("publicContent.pricing.saasEnterpriseScaleFeature4"),
+      ],
+    },
+    {
+      key: "enterprise_authority",
+      name: t("publicContent.pricing.saasEnterpriseAuthorityName"),
+      features: [
+        t("publicContent.pricing.saasEnterpriseAuthorityFeature1"),
+        t("publicContent.pricing.saasEnterpriseAuthorityFeature2"),
+        t("publicContent.pricing.saasEnterpriseAuthorityFeature3"),
+        t("publicContent.pricing.saasEnterpriseAuthorityFeature4"),
+      ],
+    },
+  ];
+
   return (
     <>
       <PublicJsonLd data={pageSchema} />
@@ -132,6 +186,47 @@ export default async function PricingPage() {
             </p>
           </div>
           <PricingPlans plans={plans} labels={billingLabels} />
+
+          <section className="mx-auto mt-24 max-w-6xl border-t border-slate-800 pt-16" aria-labelledby="enterprise-pricing-heading">
+            <div className="mx-auto mb-10 max-w-3xl text-center">
+              <p className="mb-3 text-sm font-bold uppercase tracking-[0.2em] text-amber-300">
+                {t("publicContent.pricing.saasEnterpriseEyebrow")}
+              </p>
+              <h2 id="enterprise-pricing-heading" className="text-3xl font-bold tracking-tight text-white sm:text-4xl">
+                {t("publicContent.pricing.saasEnterpriseTitle")}
+              </h2>
+              <p className="mx-auto mt-5 max-w-2xl leading-relaxed text-slate-300">
+                {t("publicContent.pricing.saasEnterpriseBody")}
+              </p>
+            </div>
+
+            <div className="grid gap-6 lg:grid-cols-3">
+              {enterprisePlans.map((plan) => (
+                <article key={plan.key} className="rounded-3xl border border-amber-400/20 bg-slate-950 p-7">
+                  <div className="mb-5">
+                    <h3 className="text-2xl font-bold text-white">{plan.name}</h3>
+                  </div>
+                  <div className="mt-2">
+                    <span className="text-lg font-semibold text-amber-200">{t("publicContent.pricing.saasEnterprisePricingNote")}</span>
+                  </div>
+                  <ul className="mt-6 space-y-3 text-sm leading-6 text-slate-300">
+                    {plan.features.map((feature) => (
+                      <li key={feature} className="flex gap-x-3">
+                        <span className="mt-1 h-2 w-2 shrink-0 rounded-full bg-amber-400" aria-hidden="true" />
+                        <span dir="auto">{feature}</span>
+                      </li>
+                    ))}
+                  </ul>
+                  <Link
+                    href="/contact-sales"
+                    className="mt-7 flex h-11 items-center justify-center rounded-lg bg-amber-400 px-6 text-sm font-semibold text-slate-950 hover:bg-amber-300"
+                  >
+                    {t("publicContent.pricing.saasEnterpriseCta")}
+                  </Link>
+                </article>
+              ))}
+            </div>
+          </section>
 
           <section className="mx-auto mt-24 max-w-6xl border-t border-slate-800 pt-16" aria-labelledby="tayqan-pricing-heading">
             <div className="mx-auto mb-10 max-w-3xl text-center">

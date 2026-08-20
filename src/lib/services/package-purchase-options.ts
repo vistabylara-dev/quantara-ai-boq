@@ -16,13 +16,13 @@ import { getCheckoutAvailability, type CheckoutUnavailableReason } from "@/lib/s
  * so a package price must be reported unavailable in that case too, or the
  * UI would offer a "Buy" button that always 409s.
  *
- * getCheckoutAvailability's existing-subscription check is scoped to core
- * software tiers only (a company already on Starter/Professional/Business/
- * Enterprise can still buy a library — see the industryPackageId-based scoping
- * in commerce-checkout-availability-service.ts and the matching scoping in
- * commerce-checkout-service.ts's createCommerceCheckoutSession), so an
- * existing software subscription no longer marks a library price
- * unavailable here either.
+ * getCheckoutAvailability's existing-subscription check is family-aware (see
+ * classifyCommerceProductFamily in commerce-checkout-service.ts and the
+ * matching scoping in createCommerceCheckoutSession): a company already on
+ * Starter/Professional/Business/Enterprise, or already holding a DIFFERENT
+ * library, can still buy this one — an existing core software subscription
+ * or another library never marks a library price unavailable here. Only
+ * already owning this EXACT industryPackageId does.
  *
  * A package with no backing CommerceProduct returns no entry in the map at
  * all — callers must treat a missing entry as "not yet available for

@@ -26,6 +26,7 @@
     "db:reset": "prisma migrate reset",
     "admin:bootstrap-owner": "tsx scripts/bootstrap-platform-owner.ts",
     "admin:provision-owner": "tsx scripts/provision-platform-owner.ts",
+    "commerce:sync-library-pricing": "tsx scripts/sync-library-package-pricing.ts",
     "storage:verify-blob": "tsx scripts/verify-vercel-blob-storage.ts",
     "preview": "npm run build:cloudflare && opennextjs-cloudflare preview",
     "deploy": "npm run db:migrate:deploy && npm run build:cloudflare && opennextjs-cloudflare deploy",

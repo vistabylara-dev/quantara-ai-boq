@@ -30,6 +30,17 @@ export default async function PricingPage() {
   const locale = await getServerLocale();
   const t = createTranslator(getDictionary(locale));
   const sales = getPublicSalesTruth(locale);
+  const comparisonCopy = locale === "ar"
+    ? {
+        title: "قارن ملاءمة سير العمل قبل الشراء",
+        body: "استخدم دليل المشتري القائم على الأدلة في الإمارات لمقارنة المدخلات المطلوبة والقياس وضوابط المراجعة والمخرجات وأسئلة المشتريات الإقليمية قبل اختيار المنصة.",
+        cta: "افتح مقارنة برامج جداول الكميات",
+      }
+    : {
+        title: "Compare Workflow Fit Before Purchase",
+        body: "Use the evidence-led UAE buyer guide to compare required inputs, takeoff, review controls, outputs and regional procurement questions before selecting a platform.",
+        cta: "Open the BOQ software comparison",
+      };
 
   const plans: PricingPlan[] = [
     {
@@ -152,13 +163,13 @@ export default async function PricingPage() {
                       <span className="rounded-full bg-cyan-950 px-3 py-1 text-xs font-bold uppercase tracking-[0.16em] text-cyan-200">
                         {copy.badge}
                       </span>
-                      <span className="text-sm text-slate-500">{copy.duration}</span>
+                      <span className="text-sm text-slate-400">{copy.duration}</span>
                     </div>
                     <h3 className="text-2xl font-bold text-white">{copy.title}</h3>
                     <p className="mt-2 min-h-12 text-sm leading-relaxed text-slate-400">{copy.bestFor}</p>
                     <div className="mt-6">
                       <span className="text-4xl font-extrabold text-white">{amount}</span>
-                      <span className="ms-2 text-sm text-slate-500">{cadence}</span>
+                      <span className="ms-2 text-sm text-slate-400">{cadence}</span>
                     </div>
                     {plan.maxDistinctProjects ? (
                       <p className="mt-4 rounded-xl border border-slate-800 bg-slate-900/70 px-4 py-3 text-sm text-slate-300">
@@ -176,7 +187,7 @@ export default async function PricingPage() {
             <div className="mt-10 flex flex-col items-center justify-center gap-3 sm:flex-row">
               <Link
                 href="/register"
-                className="inline-flex h-12 items-center justify-center rounded-lg bg-cyan-600 px-6 font-semibold text-white hover:bg-cyan-500"
+                className="inline-flex h-12 items-center justify-center rounded-lg bg-cyan-700 px-6 font-semibold text-white hover:bg-cyan-800"
               >
                 {sales.tayqanAccountCta}
               </Link>
@@ -188,6 +199,16 @@ export default async function PricingPage() {
               </Link>
             </div>
           </section>
+
+          <aside className="mx-auto mt-12 max-w-4xl rounded-2xl border border-slate-800 bg-slate-950 p-6 text-center">
+            <h2 className="text-xl font-bold text-white">{comparisonCopy.title}</h2>
+            <p className="mx-auto mt-3 max-w-2xl text-sm leading-relaxed text-slate-400">
+              {comparisonCopy.body}
+            </p>
+            <Link href="/boq-software-comparison-uae" className="mt-5 inline-flex font-semibold text-blue-300 hover:text-blue-200">
+              {comparisonCopy.cta} <span aria-hidden="true" className="ms-2 inline-block rtl:rotate-180">&rarr;</span>
+            </Link>
+          </aside>
         </div>
       </div>
     </>

@@ -37,6 +37,10 @@ describe("public sales truth part 1", () => {
     expect(pricing).toContain('annual: { amount: "AED 8,990", priceCode: "business_annual_aed_8990" }');
     expect(homepage).not.toContain('t("publicContent.home.commercialFaq")');
     expect(salesTruth).toContain("Quantara publishes Starter, Professional and Business subscriptions");
+    expect(salesTruth).toContain("eligible authenticated checkout");
+    expect(salesTruth).toContain("selected approved and active price");
+    expect(salesTruth).toContain("active synchronized provider mapping");
+    expect(salesTruth).toContain("Anonymous or unauthenticated checkout is not offered");
   });
 
   it("renders TAYQAN prices from the existing commerce truth without new public checkout code", () => {

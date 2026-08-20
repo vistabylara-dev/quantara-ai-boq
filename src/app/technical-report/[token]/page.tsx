@@ -1,12 +1,13 @@
-import type { Metadata } from "next";
 import type { ReactNode } from "react";
+import { createPrivateUtilityMetadata } from "@/lib/public-site/search-registry";
 import { getPublicTechnicalReportView } from "@/lib/services/public-technical-report-service";
 
 export const dynamic = "force-dynamic";
 
-export const metadata: Metadata = {
-  title: "Technical Report | Quantara BOQ",
-};
+export const metadata = createPrivateUtilityMetadata(
+  "Shared Quantara Technical Report",
+  "Private token-based technical-report review utility.",
+);
 
 const MESSAGES: Record<string, string> = {
   NOT_FOUND: "This link is not valid. Please check the link and try again.",

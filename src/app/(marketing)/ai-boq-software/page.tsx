@@ -26,13 +26,13 @@ const content: SeoLandingPageContent = {
     paragraphs: [
       <>
         Construction teams often move information between drawings, schedules, PDFs and spreadsheets before they can prepare a BOQ. Quantara combines review-led extraction, guided measurement and controlled BOQ structuring so the professional can review each result before it is used. Teams can compare{" "}
-        <Link href="/ai-boq-vs-manual-boq-preparation" className="text-blue-600 hover:underline font-medium">
+        <Link href="/ai-boq-vs-manual-boq-preparation" className="font-medium text-blue-600 hover:underline dark:text-blue-400">
           AI-assisted and manual BOQ preparation
         </Link>{" "}
         before choosing a workflow.
       </>,
       <>
-        <Link href="/ocr-vs-structured-boq-extraction" className="text-blue-600 hover:underline font-medium">
+        <Link href="/ocr-vs-structured-boq-extraction" className="font-medium text-blue-600 hover:underline dark:text-blue-400">
           Basic OCR tools
         </Link>{" "}
         recognize image text but do not by themselves establish a BOQ hierarchy or verify measurement inputs. Captured content, dimensions and quantities still require professional review.

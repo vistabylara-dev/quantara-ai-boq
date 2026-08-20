@@ -90,4 +90,39 @@ describe("i18n dictionary parity: English (canonical) vs Arabic", () => {
     walk(en, ar, "", offenders);
     expect(offenders).toEqual([]);
   });
+
+  it("keeps Arabic comparison links aligned with their English route order", () => {
+    const comparisons = JSON.parse(ar.publicRoutes.comparisonsHub) as {
+      categories: Array<{ links: Array<{ label: string }> }>;
+    };
+    expect(comparisons.categories[0]?.links.map((link) => link.label)).toEqual([
+      "مقارنة برامج جداول الكميات في الإمارات",
+      "Quantara مقابل Excel لجداول الكميات",
+      "برمجيات جداول الكميات مقابل جداول البيانات",
+      "برمجيات تقدير الإنشاءات مقابل Excel",
+    ]);
+
+    const estimating = JSON.parse(ar.publicRoutes.constructionEstimatingSoftware) as {
+      relatedPages: Array<{ label: string }>;
+    };
+    expect(estimating.relatedPages.map((page) => page.label)).toEqual([
+      "مقارنة برامج جداول الكميات في الإمارات",
+      "برنامج BOQ",
+      "إدارة BOQ",
+      "حصر الكميات",
+      "إنشاء المستندات",
+      "ميزات المنتج",
+    ]);
+
+    const navigation = JSON.parse(ar.publicRoutes.publicNavigation) as {
+      labels: Record<string, string>;
+      descriptions: Record<string, string>;
+    };
+    expect(navigation.labels["/boq-software-comparison-uae"]).toBe(
+      "مقارنة برامج جداول الكميات في الإمارات",
+    );
+    expect(navigation.descriptions["/boq-software-comparison-uae"]).toContain(
+      "المصادر الرسمية",
+    );
+  });
 });

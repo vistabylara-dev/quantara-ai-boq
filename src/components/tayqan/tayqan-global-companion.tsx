@@ -202,7 +202,12 @@ export function TayqanGlobalCompanion() {
   }
 
   return (
-    <div
+    <aside
+      aria-label={t(
+        internalAdminAccess
+          ? "tayqan.adminCompanionAriaLabel"
+          : "tayqan.companionAriaLabel",
+      )}
       className="pointer-events-none fixed z-20 h-[130px] w-[90px] drop-shadow-[0_6px_16px_rgba(0,0,0,0.45)] sm:h-[210px] sm:w-[150px]"
       style={{
         insetInlineStart: "max(0.75rem, env(safe-area-inset-left))",
@@ -263,6 +268,6 @@ export function TayqanGlobalCompanion() {
           />
         </div>
       </Link>
-    </div>
+    </aside>
   );
 }

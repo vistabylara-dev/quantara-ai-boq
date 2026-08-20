@@ -150,7 +150,7 @@ export default async function BoqIntegrationsPage() {
                     href={`/boq-integrations/${provider.id}`}
                     className="group rounded-2xl border border-slate-800 bg-slate-950 p-6 hover:border-cyan-900 hover:bg-cyan-950/10"
                   >
-                    <div className="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">
+                    <div className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">
                       {provider.familyDisplayName}
                     </div>
                     <h3 className="mt-3 text-xl font-bold text-white">
@@ -178,7 +178,7 @@ export default async function BoqIntegrationsPage() {
           <div className="mt-8 flex flex-col justify-center gap-3 sm:flex-row">
             <Link
               href="/register"
-              className="inline-flex h-12 items-center justify-center rounded-lg bg-cyan-600 px-6 font-semibold text-white hover:bg-cyan-500"
+              className="inline-flex h-12 items-center justify-center rounded-lg bg-cyan-700 px-6 font-semibold text-white hover:bg-cyan-800"
             >
               {pageCopy.createAccount}
             </Link>

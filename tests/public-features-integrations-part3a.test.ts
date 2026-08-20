@@ -67,7 +67,7 @@ describe("Part 3A Features and integration discovery", () => {
     }
   });
 
-  it("removes availability/status badges from the Features sales page", () => {
+  it("publishes capability truth separately from integration discovery", () => {
     expect(featuresSource).toContain("getPublicFeatureSales(locale)");
     expect(featuresSource).toContain("featureSales.groups");
     expect(featuresSource).toContain("PROVIDER_REGISTRY.length");
@@ -79,9 +79,12 @@ describe("Part 3A Features and integration discovery", () => {
       "capabilityStatus",
       "NOT_AVAILABLE",
       "CONTROLLED_ACCESS",
+      "PUBLIC_CAPABILITY_REVIEW_DATE",
     ]) {
-      expect(featuresSource).not.toContain(marker);
+      expect(featuresSource).toContain(marker);
     }
+
+    expect(featuresSource).not.toContain("provider.status");
   });
 
   it("keeps public integration presentation free of availability badges", () => {

@@ -8,6 +8,10 @@ Quantara helps construction professionals move from supported project evidence t
 
 AI Draft BOQ can assemble usable extracted evidence into an editable draft before every extraction issue has been individually resolved. Supported source and quantity provenance is preserved where available. Missing quantity or unit information remains visible for professional completion instead of being invented, and commercial rates are not silently fabricated. AI Draft BOQ is a draft workflow and is not automatic professional approval.
 
+Public content and capability statements were reviewed on 20 August 2026. Runtime availability and provider-dependent features must still be confirmed for the applicable account, configuration and entitlement.
+
+Current supported source workflows store extractable text from text-based PDFs, create review candidates only from supported detected table rows, and import structured XLSX or CSV files. Plain PDF paragraph text is not converted into BOQ candidates. Image-only pages can be detected but require manual transcription. Google Drive import requires an authorized controlled-access connection. BOQ documents can use supported PDF, XLSX, CSV, DOCX and HTML flows; technical-report generation is limited to DOCX in supported configured environments, and durable production storage must be confirmed for the active deployment.
+
 ## TAYQAN - AI Quantity Surveyor / Digital QS
 
 TAYQAN is Quantara's governed AI Quantity Surveyor workflow. It can carry work through source discovery, source processing, evidence review, quantity preparation, governed rate preparation when requested, BOQ assembly, validation / final QA, and a Ready for Acceptance state.
@@ -52,6 +56,7 @@ Project information, extracted data, measurements, calculations, rates and outpu
 - [BOQ calculation formulas](https://quantara.vistabylara.com/boq-calculation-formulas)
 - [BOQ resources](https://quantara.vistabylara.com/resources)
 - [Workflow comparisons](https://quantara.vistabylara.com/comparisons)
+- [UAE BOQ software comparison and eligibility guide](https://quantara.vistabylara.com/boq-software-comparison-uae)
 - [UAE and GCC project context](https://quantara.vistabylara.com/gcc-boq-software)
 - [Public HTML sitemap](https://quantara.vistabylara.com/site-map)
 

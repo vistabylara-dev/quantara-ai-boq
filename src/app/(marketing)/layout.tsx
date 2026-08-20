@@ -14,7 +14,7 @@ export default function MarketingLayout({
     <div data-theme="dark" className="min-h-screen bg-[#030508] text-white">
       <PublicJsonLd id="quantara-public-entities" data={publicEntityGraph} />
       <PublicHeader />
-      <main className="flex-1 bg-[#030508]">{children}</main>
+      <main id="main-content" className="flex-1 bg-[#030508]">{children}</main>
       <PublicFooter />
     </div>
   );

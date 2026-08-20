@@ -10,6 +10,7 @@ export default function Page() {
     breadcrumbLabel: "How to Review an AI-Extracted BOQ Before Professional Use",
     title: "How to Review an AI-Extracted BOQ Before Professional Use",
     summary: "AI-assisted extraction can help turn supported source content into structured digital BOQ candidates. It is an assistive workflow, not a replacement for a quantity surveyor or estimator, and every result requires structured human review before pricing or contractual use.",
+    isHowTo: true,
     reviewedDate: PUBLIC_CONTENT_REVIEW_DATE,
     sections: [
   {

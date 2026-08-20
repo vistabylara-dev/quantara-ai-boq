@@ -27,6 +27,11 @@ export type PublicPageSchemaInput = {
   description: string;
   breadcrumbs: readonly PublicBreadcrumbSchemaInput[];
   faqs?: readonly PublicFaqSchemaInput[];
+  howTo?: {
+    name: string;
+    description?: string;
+    steps: readonly string[];
+  };
   kind?: "webpage" | "tech-article";
   dateModified?: string;
 };
@@ -91,6 +96,13 @@ export function buildPublicEntityGraph(): Record<string, unknown> {
         logo: `${PUBLIC_SITE_ORIGIN}/logo.png`,
         email: siteConfig.contact.email,
         telephone: siteConfig.contact.telephone.replace(/[^+\d]/g, ""),
+        contactPoint: {
+          "@type": "ContactPoint",
+          contactType: "sales and product requirements",
+          email: siteConfig.contact.email,
+          telephone: siteConfig.contact.telephone.replace(/[^+\d]/g, ""),
+          availableLanguage: ["English"],
+        },
       },
       {
         "@type": "WebSite",
@@ -109,6 +121,10 @@ export function buildPublicEntityGraph(): Record<string, unknown> {
         applicationCategory: "BusinessApplication",
         operatingSystem: "Web",
         description: QUANTARA_ENTITY_DEFINITION,
+        audience: {
+          "@type": "BusinessAudience",
+          audienceType: "Construction professionals reviewing BOQ workflows",
+        },
         publisher: { "@id": PUBLIC_ENTITY_IDS.organization },
         provider: { "@id": PUBLIC_ENTITY_IDS.organization },
       },
@@ -122,6 +138,7 @@ export function buildPublicPageGraph({
   description,
   breadcrumbs,
   faqs = [],
+  howTo,
   kind = "webpage",
   dateModified = PUBLIC_CONTENT_REVIEW_DATE,
 }: PublicPageSchemaInput): Record<string, unknown> {
@@ -130,6 +147,7 @@ export function buildPublicPageGraph({
   const breadcrumbId = `${canonicalUrl}#breadcrumb`;
   const faqId = `${canonicalUrl}#faq`;
   const articleId = `${canonicalUrl}#article`;
+  const howToId = `${canonicalUrl}#how-to`;
 
   const pageNode: JsonLdNode = {
     "@type": "WebPage",
@@ -144,6 +162,7 @@ export function buildPublicPageGraph({
   };
 
   const graph: JsonLdNode[] = [pageNode];
+  const pageParts: JsonLdNode[] = [];
 
   if (kind === "tech-article") {
     pageNode.mainEntity = { "@id": articleId };
@@ -176,11 +195,29 @@ export function buildPublicPageGraph({
     })),
   });
 
+  if (howTo && howTo.steps.length > 0) {
+    pageParts.push({ "@id": howToId });
+    graph.push({
+      "@type": "HowTo",
+      "@id": howToId,
+      name: howTo.name,
+      description: howTo.description ?? description,
+      url: canonicalUrl,
+      inLanguage: "en-AE",
+      isPartOf: { "@id": pageId },
+      step: howTo.steps.map((step, index) => ({
+        "@type": "HowToStep",
+        position: index + 1,
+        text: step,
+      })),
+    });
+  }
+
   const visibleFaqs = faqs.filter(
     (faq) => faq.question.trim().length > 0 && faq.answer.trim().length > 0,
   );
   if (visibleFaqs.length > 0) {
-    pageNode.hasPart = { "@id": faqId };
+    pageParts.push({ "@id": faqId });
     graph.push({
       "@type": "FAQPage",
       "@id": faqId,
@@ -195,6 +232,10 @@ export function buildPublicPageGraph({
         },
       })),
     });
+  }
+
+  if (pageParts.length > 0) {
+    pageNode.hasPart = pageParts.length === 1 ? pageParts[0] : pageParts;
   }
 
   return {

@@ -42,11 +42,11 @@ const SALES_TRUTH = {
       "Ready for Acceptance — never automatic professional approval",
     ],
     commercialSummary:
-      "Published Starter, Professional and Business subscriptions are available through the public pricing journey, with authenticated checkout when the selected approved price is active and synchronized.",
+      "Published Starter, Professional and Business subscriptions are available through the public pricing journey, with eligible authenticated checkout when the selected price is approved and active and its provider mapping is active and synchronized.",
     commercialLimitation:
-      "Checkout eligibility depends on the authenticated account, selected approved price and synchronized provider mapping. TAYQAN hire is commercially separate from the core SaaS subscription.",
+      "Checkout requires an authenticated eligible account, a selected approved and active price, and an active synchronized provider mapping. Anonymous or unauthenticated checkout is not offered. TAYQAN hire is commercially separate from the core SaaS subscription.",
     pricingFaqAnswer:
-      "Quantara publishes Starter, Professional and Business subscriptions at AED 149, AED 399 and AED 899 per month, with annual options at AED 1,490, AED 3,990 and AED 8,990. Choose a plan, create your account and continue to eligible authenticated checkout when the selected approved price is active. TAYQAN is commercially separate and can be hired for AED 299 per day, AED 999 per week or AED 2,499 per month as a Digital Quantity Surveyor.",
+      "Quantara publishes Starter, Professional and Business subscriptions at AED 149, AED 399 and AED 899 per month, with annual options at AED 1,490, AED 3,990 and AED 8,990. Choose a plan, create or sign in to your account and continue to eligible authenticated checkout when the selected price is approved and active and its provider mapping is active and synchronized; anonymous or unauthenticated checkout is not offered. TAYQAN is commercially separate and can be hired for AED 299 per day, AED 999 per week or AED 2,499 per month as a Digital Quantity Surveyor.",
     tayqanPricingEyebrow: "Hire Digital QS capacity",
     tayqanPricingTitle: "Hire TAYQAN separately from your Quantara subscription",
     tayqanPricingBody:
@@ -120,11 +120,11 @@ const SALES_TRUTH = {
       "جاهز للقبول — وليس اعتماداً مهنياً تلقائياً",
     ],
     commercialSummary:
-      "خطط Starter وProfessional وBusiness منشورة ضمن رحلة الأسعار العامة، مع انتقال إلى الدفع الموثق عندما يكون السعر المعتمد المختار فعالاً ومتزامناً.",
+      "خطط Starter وProfessional وBusiness منشورة ضمن رحلة الأسعار العامة، مع دفع موثق للحساب المؤهل عندما يكون السعر المختار معتمداً وفعالاً ويكون ربط مزود الدفع فعالاً ومتزامناً.",
     commercialLimitation:
-      "تعتمد أهلية الدفع على الحساب الموثق والسعر المعتمد المختار وتزامن ربط مزود الدفع. توظيف TAYQAN منفصل تجارياً عن اشتراك Quantara الأساسي.",
+      "يتطلب الدفع حساباً موثقاً ومؤهلاً وسعراً مختاراً معتمداً وفعالاً وربطاً فعالاً ومتزامناً مع مزود الدفع. لا يتوفر الدفع المجهول أو دون تسجيل الدخول. توظيف TAYQAN منفصل تجارياً عن اشتراك Quantara الأساسي.",
     pricingFaqAnswer:
-      "ينشر Quantara خطط Starter وProfessional وBusiness بسعر 149 و399 و899 درهماً شهرياً، مع خيارات سنوية بقيمة 1,490 و3,990 و8,990 درهماً. اختر الخطة وأنشئ حسابك ثم انتقل إلى الدفع الموثق عندما يكون السعر المعتمد فعالاً. TAYQAN منفصل تجارياً ويمكن توظيفه مقابل 299 درهماً لليوم أو 999 درهماً للأسبوع أو 2,499 درهماً شهرياً كمسّاح كميات رقمي.",
+      "ينشر Quantara خطط Starter وProfessional وBusiness بسعر 149 و399 و899 درهماً شهرياً، مع خيارات سنوية بقيمة 1,490 و3,990 و8,990 درهماً. اختر الخطة وأنشئ حسابك أو سجل الدخول ثم انتقل إلى الدفع الموثق المؤهل عندما يكون السعر المختار معتمداً وفعالاً ويكون ربط مزود الدفع فعالاً ومتزامناً؛ ولا يتوفر الدفع المجهول أو دون تسجيل الدخول. TAYQAN منفصل تجارياً ويمكن توظيفه مقابل 299 درهماً لليوم أو 999 درهماً للأسبوع أو 2,499 درهماً شهرياً كمسّاح كميات رقمي.",
     tayqanPricingEyebrow: "وظّف قدرة مسّاح كميات رقمي",
     tayqanPricingTitle: "وظّف TAYQAN بشكل منفصل عن اشتراك Quantara",
     tayqanPricingBody:

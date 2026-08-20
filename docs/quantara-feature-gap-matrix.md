@@ -1,5 +1,7 @@
 # Quantara Feature Gap Matrix
 
+> Historical snapshot. Capability conclusions in this file were not revalidated after later SaaS changes and are superseded for public marketing claims by `src/lib/public-site/product-truth.ts` and the 20 August 2026 website/SaaS audit. Do not give this file to an external reviewer as current product truth without that qualification.
+
 Audit-only. Every feature from `docs/quantara-full-feature-audit.md`,
 condensed into one table. `✓`=present/passing, `✗`=absent/failing,
 `~`=partial, `?`=unverified this turn.

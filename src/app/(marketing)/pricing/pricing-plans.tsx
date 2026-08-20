@@ -84,13 +84,13 @@ export default function PricingPlans({ plans, labels }: PricingPlansProps) {
               }`}
             >
               <div className="flex items-center justify-between gap-2">
-                <h3
+                <h2
                   className={`text-lg font-semibold leading-8 ${
                     plan.recommended ? "text-blue-600 dark:text-blue-400" : "text-slate-900 dark:text-white"
                   }`}
                 >
                   {plan.name}
-                </h3>
+                </h2>
                 {plan.recommended && (
                   <span className="rounded-full bg-blue-600/10 px-3 py-1 text-xs font-semibold text-blue-600 dark:bg-blue-400/10 dark:text-blue-300">
                     {labels.recommended}

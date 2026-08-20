@@ -1,5 +1,7 @@
 # Quantara Full SaaS Feature Audit
 
+> Historical snapshot. Capability conclusions in this file were not revalidated after later SaaS changes and are superseded for public marketing claims by `src/lib/public-site/product-truth.ts` and the 20 August 2026 website/SaaS audit. Do not give this file to an external reviewer as current product truth without that qualification.
+
 Audit-only. No application code, migration, seed, push, or deploy resulted
 from this document. Findings combine fresh inspection this turn with
 direct, hands-on knowledge from earlier phases of this same session

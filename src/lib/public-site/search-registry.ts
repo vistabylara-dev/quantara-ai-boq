@@ -2,7 +2,7 @@ import type { Metadata, MetadataRoute } from "next";
 import { getDictionary } from "@/lib/i18n/dictionaries";
 
 export const PUBLIC_SITE_ORIGIN = "https://quantara.vistabylara.com";
-export const PUBLIC_CONTENT_REVIEW_DATE = "2026-08-16";
+export const PUBLIC_CONTENT_REVIEW_DATE = "2026-08-20";
 
 export type PublicTopicCluster =
   | "core"
@@ -86,6 +86,7 @@ export const PUBLIC_SEARCH_PAGES = [
   page({ path: "/boq-software-qatar", title: "BOQ Software for Qatar Project Workflows | Quantara", description: "Organize supported Qatar BOQ records and revisions without claims of local authority approval, pricing data or automated takeoff.", cluster: "regional", intent: "commercial" }),
   page({ path: "/boq-software-oman", title: "BOQ Software for Oman Project Workflows | Quantara", description: "Support structured BOQ exchange and review for Oman projects without claims of local approval, market rates or automatic measurement.", cluster: "regional", intent: "commercial" }),
   page({ path: "/comparisons", title: "BOQ Software and Workflow Comparisons", description: "Compare BOQ software with spreadsheets, manual preparation, OCR, quantity takeoff and document management using clear capability boundaries.", cluster: "comparison", intent: "informational" }),
+  page({ path: "/boq-software-comparison-uae", title: "BOQ Software Comparison UAE | Quantara", description: "Compare Quantara, CostX, Candy, Procore, Autodesk Forma Takeoff, STACK and PlanSwift by BOQ workflow, takeoff, controls, outputs and UAE fit.", cluster: "comparison", intent: "commercial" }),
   page({ path: "/quantara-vs-excel-for-boq", title: "Quantara vs Excel for BOQ Workflows", description: "Compare Quantara and Excel across project sources, BOQ structure, visible calculations, revisions, validation and professional control.", cluster: "comparison", intent: "commercial" }),
   page({ path: "/boq-software-vs-spreadsheets", title: "BOQ Software vs Spreadsheets: Workflow Comparison", description: "Compare structured BOQ software and spreadsheets across records, formulas, revisions, collaboration, review and output control.", cluster: "comparison", intent: "informational" }),
   page({ path: "/ai-boq-vs-manual-boq-preparation", title: "AI-Assisted vs Manual BOQ Preparation", description: "Compare AI-assisted and manual BOQ preparation across source handling, review, correction and professional responsibility without invented savings.", cluster: "comparison", intent: "informational" }),
@@ -116,7 +117,7 @@ export function createPublicPageMetadata(path: PublicSearchPath): Metadata {
     description: entry.description,
     alternates: {
       canonical: canonicalUrl,
-      languages: { "en-AE": canonicalUrl },
+      languages: { "en-AE": canonicalUrl, "x-default": canonicalUrl },
     },
     robots: {
       index: entry.indexable !== false,

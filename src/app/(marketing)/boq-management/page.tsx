@@ -19,7 +19,7 @@ const content: SeoLandingPageContent = {
   workflowProblem: {
     heading: "The Chaos of Unmanaged Data",
     paragraphs: [
-      <>When BOQs are managed as loose files on local hard drives or shared folders, governance breaks down. Different estimators use different formatting, revisions overwrite original files, and tracking the history of a specific item&apos;s quantity becomes impossible. This is particularly challenging when compared to <Link href="/boq-software-vs-document-management" className="text-blue-600 hover:underline font-medium">generic document management</Link>.</>,
+      <>When BOQs are managed as loose files on local hard drives or shared folders, governance breaks down. Different estimators use different formatting, revisions overwrite original files, and tracking the history of a specific item&apos;s quantity becomes impossible. This is particularly challenging when compared to <Link href="/boq-software-vs-document-management" className="text-blue-600 hover:underline font-medium dark:text-blue-400">generic document management</Link>.</>,
       "This lack of centralization leads to inconsistent client proposals, lost data during staff turnover, and significant difficulty in auditing project history during commercial disputes."
     ]
   },

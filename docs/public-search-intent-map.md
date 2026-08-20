@@ -1,7 +1,7 @@
 # Quantara public search intent map
 
-Reviewed: 2026-08-16
-Scope: 60 indexable registry routes plus 43 public provider integration detail URLs, for 103 sitemap URLs. Auth, account recovery, thin legal placeholders, token-sharing pages and authenticated SaaS routes are intentionally excluded.
+Reviewed: 2026-08-20
+Scope: 65 registered public content routes, of which 61 are indexable, plus 43 public provider integration detail URLs, for 104 sitemap URLs. Auth, account recovery, noindex legal support pages, token-sharing pages and authenticated SaaS routes are intentionally excluded.
 
 ## Cannibalization rules
 
@@ -10,6 +10,7 @@ Scope: 60 indexable registry routes plus 43 public provider integration detail U
 - `/pdf-boq-extraction` owns supported text-PDF product intent. `/scanned-pdf-boq` owns current scan/OCR status. `/ocr-for-boq-documents` owns educational OCR intent. `/how-to-convert-pdf-boq-to-excel` owns the conversion task.
 - `/quantity-takeoff-vs-boq-management` explains the process distinction; `/quantity-takeoff-vs-boq-software` owns software-category comparison. Neither redefines Quantara as takeoff software.
 - `/quantara-vs-excel-for-boq` is the branded comparison. `/boq-software-vs-spreadsheets` is category-level. `/construction-estimating-software-vs-excel` is estimating-specific.
+- `/boq-software-comparison-uae` owns same-category software eligibility intent and must remain evidence-led; it does not declare a universal winner.
 - `/gcc-boq-software` is the regional hub. Country/city pages require genuinely different workflow context and explicit local-rates/compliance/approval limitations.
 - Audience pages answer role-specific workflow questions and should link back to `/industries`, not compete with the broad `/boq-software` page.
 - `/tayqan-ai-quantity-surveyor` owns AI Quantity Surveyor / Digital QS hire intent. `/quantity-surveying-software` and `/boq-software-for-quantity-surveyors` remain software-category and role-workflow pages rather than TAYQAN hire pages.
@@ -20,10 +21,10 @@ Scope: 60 indexable registry routes plus 43 public provider integration detail U
 | `/` | Find an AI-assisted BOQ platform for UAE work | AI-assisted BOQ workflow software UAE | What is Quantara? What does it support? What still needs professional review? | UAE construction professionals | Commercial discovery | High: distinguish from `/ai-boq-software` and `/boq-software-uae` with brand/entity overview |
 | `/features` | Evaluate the full Quantara capability set | Quantara BOQ features | How does Quantara handle project sources, AI Draft BOQ, measurement, calculations, TAYQAN, integrations and outputs? | Construction software buyers, QS, estimators and contractors | Evaluation | Medium: capability-sales page; avoid duplicating individual integration and TAYQAN intent |
 | `/about` | Verify company and software identity | About Quantara | Who operates Quantara? Who is it for? What is its scope? | Buyers, partners, answer engines | Trust | Low |
-| `/security` | Assess published security boundaries | Quantara security and Early Access | What access controls are described? Is UAE hosting, SSO or certification claimed? | Security reviewers and buyers | Risk review | Low: keep separate from privacy/legal content |
-| `/terms` | Read access terms | Quantara Controlled Early Access terms | What use is permitted? What professional duties remain? | Users and legal reviewers | Decision/support | Low |
+| `/security` | Assess published security boundaries | Quantara security and account access | What access controls are evidenced? Which hosting, provider-region, SSO and certification claims remain unverified? | Security reviewers and buyers | Risk review | Low: keep separate from privacy/legal content |
+| `/terms` | Read service terms | Quantara Terms of Service | What use is permitted? How do accounts, subscriptions and professional duties work? | Users and legal reviewers | Decision/support | Low |
 | `/privacy` | Read privacy practices | Quantara privacy policy | Who operates the service? What personal data contexts are covered? | Visitors and users | Trust/support | Low |
-| `/contact-sales` | Start a requirements conversation | Contact Quantara Early Access | How do I discuss workflow fit? Is there self-serve checkout? | Qualified prospects | Conversion | Low |
+| `/contact-sales` | Start a requirements conversation | Contact Quantara sales UAE | How do I discuss enterprise workflow fit, deployment and non-direct commercial terms? | Qualified prospects | Conversion | Low |
 | `/ai-boq-software` | Evaluate AI-assisted BOQ workflow | AI BOQ software | What does AI assist with? Is review required? Does it replace judgement? | Contractors, estimators, QS teams | Evaluation | High: owns AI workflow, not broad BOQ category |
 | `/boq-software` | Understand/buy BOQ software | BOQ software | What records are managed? How are revisions and outputs handled? | Construction commercial teams | Evaluation | High: broad category owner; avoid duplicating AI/estimating pages |
 | `/construction-estimating-software` | Compare estimating workflow software | construction estimating and BOQ software | Does it set rates? Does it calculate final prices? How does BOQ fit? | Estimators and commercial managers | Evaluation | High: distinguish from BOQ management and takeoff |
@@ -66,6 +67,7 @@ Scope: 60 indexable registry routes plus 43 public provider integration detail U
 | `/boq-software-qatar` | Evaluate Qatar project workflow | BOQ software Qatar | How are MEP/tender revisions handled? Are local rates/approval included? | Qatar contractors and consultants | Evaluation | High: unique country context required |
 | `/boq-software-oman` | Evaluate Oman project workflow | BOQ software Oman | How is contractor/consultant exchange handled? Are local rates/approval included? | Oman project teams | Evaluation | High: unique country context required |
 | `/comparisons` | Browse decision comparisons | BOQ software comparisons | Which comparison matches Excel, OCR, takeoff or document management? | Software evaluators | Awareness/evaluation | Low: hub only |
+| `/boq-software-comparison-uae` | Compare BOQ and estimating platforms for a UAE requirement | BOQ software comparison UAE | Which products support takeoff, reviewed BOQs, controls and outputs? Which UAE requirements need contractual verification? | UAE estimators, QS teams, contractors and procurement reviewers | Decision | High: same-category comparison owner; every vendor claim requires a current official source |
 | `/quantara-vs-excel-for-boq` | Compare the brand with Excel | Quantara vs Excel for BOQ | Which tool handles structure, formulas, revisions and validation? Can both be used? | Quantara evaluators | Decision | High: branded comparison owner |
 | `/boq-software-vs-spreadsheets` | Compare category with spreadsheets | BOQ software vs spreadsheets | What control/flexibility trade-offs exist? | Construction software buyers | Evaluation | High: non-branded category comparison |
 | `/ai-boq-vs-manual-boq-preparation` | Compare assisted and manual workflow | AI-assisted vs manual BOQ preparation | Where can assistance help? Which review/judgement remains manual? | Estimators and QS teams | Evaluation | Medium |
@@ -76,12 +78,12 @@ Scope: 60 indexable registry routes plus 43 public provider integration detail U
 | `/when-to-use-boq-software` | Decide whether workflow software is warranted | when to use BOQ software | Which volume, complexity and revision signals matter? | Small and growing construction teams | Evaluation | Medium |
 | `/site-map` | Navigate the public website | Quantara public sitemap | Where is each product, audience, regional, comparison or legal page? | Visitors and crawlers | Navigation | Low |
 | `/boq-calculation-formulas` | Find common BOQ formulas | BOQ calculation formulas | Which length/area/volume/weight/cost formulas apply? What inputs need review? | Estimators, QS and learners | Education/use | Medium: educational formulas, not automatic calculation promise |
-| `/pricing` | Understand commercial availability | Quantara Early Access pricing and availability | Is self-serve checkout live? Are prices published? How is scope confirmed? | Qualified buyers | Conversion | Medium: must not compete using invented plan/price data |
+| `/pricing` | Compare published plans and commercial availability | Quantara subscription pricing and TAYQAN hire | Which AED plans are published? Where does eligible checkout occur? Which terms require sales confirmation? | Qualified buyers | Conversion | Medium: owns published SaaS pricing; TAYQAN detail intent remains on its dedicated page |
 
 ## Excluded-intent notes
 
 - `/register` is a conversion utility, not an informational “free trial” or pricing page.
 - `/login` and recovery pages serve existing-account tasks and remain noindex.
-- The four incomplete legal placeholders remain linked for users but are noindex until substantive verified policies exist.
+- The four legal support routes remain noindex until owner and legal review confirms the contracting entity, provider regions, retention, transfer, cancellation and related contractual facts.
 - Dynamic industry-engine pages are authenticated product views. The public industry SEO cluster is the eight explicit audience landing pages.
 - Connected integrations are described only at a truthful availability level. Public navigation points to the relevant controlled-access feature section; the auth-only integrations screen is not a public search landing page.

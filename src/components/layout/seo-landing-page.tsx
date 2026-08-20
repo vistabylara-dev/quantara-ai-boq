@@ -18,8 +18,10 @@ import {
   type PublicSearchPath,
 } from "@/lib/public-site/search-registry";
 import { getDictionary } from "@/lib/i18n/dictionaries";
+import { DEFAULT_LOCALE } from "@/lib/i18n/config";
 import { getServerLocale } from "@/lib/i18n/server-locale";
 import { createTranslator, translateStructuredContent, type TranslationKey } from "@/lib/i18n/translate";
+import { isEnglishOnlyPublicWebsitePath } from "@/lib/public-site/public-route-paths";
 import { buildPublicPageGraph } from "@/lib/public-site/schema";
 
 type SeoCapabilityItem = {
@@ -121,7 +123,10 @@ const SEO_ROUTE_KEYS: Record<string, TranslationKey> = {
 };
 
 export default async function SeoLandingPage({ content: sourceContent, currentPath }: { content: SeoLandingPageContent; currentPath: string }) {
-  const locale = await getServerLocale();
+  const persistedLocale = await getServerLocale();
+  const locale = isEnglishOnlyPublicWebsitePath(currentPath)
+    ? DEFAULT_LOCALE
+    : persistedLocale;
   const t = createTranslator(getDictionary(locale));
   const routeKey = SEO_ROUTE_KEYS[currentPath];
   const content = routeKey

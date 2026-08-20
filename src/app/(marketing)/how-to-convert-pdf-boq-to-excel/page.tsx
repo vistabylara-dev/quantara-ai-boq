@@ -10,6 +10,7 @@ export default function Page() {
     breadcrumbLabel: "How to Convert a PDF BOQ to Excel with Structured Review",
     title: "How to Convert a PDF BOQ to Excel with Structured Review",
     summary: "Contractors frequently receive Bills of Quantities in PDF format, which can be inconvenient to edit or price in spreadsheet workflows. Conversion requires careful attention to table structure, text recognition, values and human verification.",
+    isHowTo: true,
     reviewedDate: PUBLIC_CONTENT_REVIEW_DATE,
     sections: [
   {

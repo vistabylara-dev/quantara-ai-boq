@@ -2,13 +2,18 @@ import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { extname, join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
+  getPublicCapabilityRegisterEntry,
   PROFESSIONAL_REVIEW_NOTICE,
   PUBLIC_CAPABILITIES,
   PUBLIC_PRODUCT_TRUTH_MATRIX,
+  PUBLIC_CAPABILITY_REVIEW_DATE,
   QUANTARA_ENTITY_DEFINITION,
   QUANTARA_WORKFLOW_TRUTH,
 } from "@/lib/public-site/product-truth";
 import { OCR_IMPLEMENTATION_STATUS } from "@/lib/files/pdf-text-extraction";
+import ar from "@/lib/i18n/dictionaries/ar";
+import en from "@/lib/i18n/dictionaries/en";
+import { createTranslator } from "@/lib/i18n/translate";
 
 const repoRoot = process.cwd();
 
@@ -83,10 +88,11 @@ describe("public product truth", () => {
     expect(byId.get("autodesk-dwg-analysis")?.status).toBe("CONTROLLED_ACCESS");
     expect(byId.get("autodesk-dwg-analysis")?.name).toBe("Autodesk / AutoCAD DWG analysis");
     expect(byId.get("autodesk-dwg-analysis")?.summary).toContain("traceable Quantara review candidates");
-    expect(byId.get("commercial-access")?.summary).toContain("Authenticated recurring subscription checkout");
-    expect(byId.get("commercial-access")?.limitation).toContain("public website does not offer checkout");
-    expect(byId.get("commercial-access")?.limitation).toContain("One-time checkout");
-    expect(byId.get("commercial-access")?.limitation).toContain("direct enterprise checkout");
+    expect(byId.get("commercial-access")?.summary).toContain("Published Starter, Professional and Business subscriptions");
+    expect(byId.get("commercial-access")?.summary).toContain("eligible authenticated checkout");
+    expect(byId.get("commercial-access")?.limitation).toContain("selected approved and active price");
+    expect(byId.get("commercial-access")?.limitation).toContain("active synchronized provider mapping");
+    expect(byId.get("commercial-access")?.limitation).toContain("Anonymous or unauthenticated checkout is not offered");
     expect(byId.get("technical-report-generation")?.status).toBe("LIMITED");
     expect(byId.get("technical-report-generation")?.limitation).toContain("limited to DOCX");
     expect(byId.get("model-file-import")?.status).toBe("NOT_AVAILABLE");
@@ -162,6 +168,88 @@ describe("public product truth", () => {
     );
     expect(targetSources).toContain("This limitation does not apply to Quantara's available guided BOQ measurement");
     expect(targetSources).toContain("professional confirmation");
+  });
+
+  it("publishes evidence-backed SaaS capabilities with explicit operating boundaries", () => {
+    const byId = new Map(PUBLIC_CAPABILITIES.map((capability) => [capability.id, capability]));
+    const reviewedCapabilityIds = [
+      "client-records",
+      "spreadsheet-import",
+      "internal-supplier-rate-catalogue",
+      "company-library",
+      "voice-proposals",
+      "client-proposals",
+      "bilingual-rtl-interface",
+    ];
+
+    for (const id of reviewedCapabilityIds) {
+      expect(byId.get(id)?.evidenceLevel, id).toBe("SOURCE_AND_TESTS_REVIEWED");
+      expect(byId.get(id)?.reviewedAt, id).toBe(PUBLIC_CAPABILITY_REVIEW_DATE);
+    }
+
+    expect(byId.get("client-proposals")?.summary).toContain("token-gated proposal link");
+    expect(byId.get("client-proposals")?.summary).toContain("completed technical report");
+    expect(byId.get("client-proposals")?.limitation).toContain("not electronic signatures");
+    expect(byId.get("internal-supplier-rate-catalogue")?.limitation).toContain("does not provide automated supplier feeds or live market pricing");
+    expect(byId.get("company-library")?.limitation).toContain("depends on published data");
+    expect(byId.get("spreadsheet-import")?.summary).toContain("approve selected records");
+    expect(byId.get("bilingual-rtl-interface")?.limitation).toContain("does not perform Arabic OCR, translate content or parse Arabic project sources");
+    expect(byId.get("voice-proposals")?.summary).toContain("change, addition or deletion");
+    expect(byId.get("voice-proposals")?.limitation).toContain("signed confirmation");
+
+  });
+
+  it("keeps enriched capability-register copy and dependencies aligned in English and Arabic", () => {
+    const english = createTranslator(en);
+    const arabic = createTranslator(ar);
+    const localizedCapabilityIds = [
+      "client-records",
+      "spreadsheet-import",
+      "internal-supplier-rate-catalogue",
+      "voice-proposals",
+      "client-proposals",
+      "company-library",
+      "bilingual-rtl-interface",
+    ] as const;
+
+    for (const id of localizedCapabilityIds) {
+      const canonical = PUBLIC_CAPABILITIES.find((capability) => capability.id === id);
+      expect(canonical, id).toBeDefined();
+
+      const englishEntry = getPublicCapabilityRegisterEntry(id, english);
+      expect(englishEntry.name, `${id}: English name`).toBe(canonical?.name);
+      expect(englishEntry.summary, `${id}: English summary`).toBe(canonical?.summary);
+      expect(englishEntry.limitation, `${id}: English limitation`).toBe(canonical?.limitation);
+      expect(englishEntry.dependencies, `${id}: English dependencies`).toEqual(canonical?.dependencies);
+
+      const arabicEntry = getPublicCapabilityRegisterEntry(id, arabic);
+      expect(arabicEntry.name, `${id}: Arabic name`).not.toBe(canonical?.name);
+      expect(arabicEntry.summary, `${id}: Arabic summary`).not.toBe(canonical?.summary);
+      if (canonical?.limitation) {
+        expect(arabicEntry.limitation, `${id}: Arabic limitation`).not.toBe(canonical.limitation);
+      }
+      if (canonical?.dependencies?.length) {
+        expect(arabicEntry.dependencies, `${id}: Arabic dependency count`).toHaveLength(
+          canonical.dependencies.length,
+        );
+        for (const [index, dependency] of canonical.dependencies.entries()) {
+          expect(
+            arabicEntry.dependencies?.[index],
+            `${id}: Arabic dependency ${index + 1}`,
+          ).not.toBe(dependency);
+        }
+      }
+    }
+  });
+
+  it("marks the tokenized technical-report page as a private noindex utility", () => {
+    const source = readFileSync(
+      join(repoRoot, "src", "app", "technical-report", "[token]", "page.tsx"),
+      "utf8",
+    );
+
+    expect(source).toContain("createPrivateUtilityMetadata");
+    expect(source).toContain("Private token-based technical-report review utility.");
   });
 
   it("derives public availability badges from Product Truth instead of page-local status strings", () => {

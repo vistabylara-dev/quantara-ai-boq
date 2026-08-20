@@ -1,10 +1,16 @@
 import type { Metadata } from "next";
+import { headers } from "next/headers";
 import type { ReactNode } from "react";
 import ConditionalAppShell from "@/components/layout/conditional-app-shell";
 import { THEME_MODE_KEY } from "@/lib/theme";
-import { directionForLocale } from "@/lib/i18n/config";
+import { DEFAULT_LOCALE, directionForLocale } from "@/lib/i18n/config";
 import { getServerLocale } from "@/lib/i18n/server-locale";
 import { LocaleProvider } from "@/lib/i18n/locale-provider";
+import {
+  PUBLIC_PATHNAME_HEADER,
+  isEnglishOnlyPublicWebsitePath,
+  isPublicWebsitePath,
+} from "@/lib/public-site/public-route-paths";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -23,14 +29,13 @@ export const metadata: Metadata = {
     description: "Create structured BOQs, organize project items, manage templates and pricing data, and generate professional construction documents with Quantara.",
     url: "https://quantara.vistabylara.com",
     siteName: "Quantara",
-    locale: "en_US",
+    locale: "en_AE",
     type: "website",
   },
   twitter: {
     card: "summary_large_image",
     title: "Quantara: AI BOQ and Construction Estimating Platform",
     description: "Create structured BOQs, organize project items, manage templates and pricing data, and generate professional construction documents with Quantara.",
-    creator: "@quantara",
   },
   alternates: {
     canonical: "/",
@@ -69,17 +74,25 @@ const THEME_INIT_SCRIPT = `
 `;
 
 export default async function RootLayout({ children }: { children: ReactNode }) {
-  const locale = await getServerLocale();
+  const requestHeaders = await headers();
+  const requestPathname = requestHeaders.get(PUBLIC_PATHNAME_HEADER);
+  const isPublicWebsite = isPublicWebsitePath(requestPathname);
+  const isEnglishOnlyPublicWebsite = isEnglishOnlyPublicWebsitePath(
+    requestPathname,
+  );
+  const persistedLocale = await getServerLocale();
+  const locale = isEnglishOnlyPublicWebsite ? DEFAULT_LOCALE : persistedLocale;
   const direction = directionForLocale(locale);
+  const documentLanguage = isPublicWebsite && locale === DEFAULT_LOCALE
+    ? "en-AE"
+    : locale;
 
   return (
-    // lang/dir are read from the persisted cookie server-side (see
-    // get-server-locale.ts) — correct on the FIRST response, never a
-    // post-hydration flip. THEME_INIT_SCRIPT separately sets data-theme on
-    // this element before React hydrates (see its own comment above) — the
-    // server can never render that attribute since it depends on the
-    // client's localStorage, so that one mismatch is expected/intentional.
-    <html lang={locale} dir={direction} suppressHydrationWarning>
+    // Bespoke public pages without an approved Arabic translation stay
+    // en-AE/ltr on the first response. Localized public and authenticated
+    // routes use the persisted locale. THEME_INIT_SCRIPT separately sets
+    // data-theme before hydration because it depends on localStorage.
+    <html lang={documentLanguage} dir={direction} suppressHydrationWarning>
       <body>
         <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
         <LocaleProvider initialLocale={locale}>

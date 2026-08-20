@@ -249,7 +249,7 @@ export default async function TayqanAiQuantitySurveyorPage() {
             <div className="mt-9 flex flex-col justify-center gap-3 sm:flex-row">
               <Link
                 href="/register"
-                className="inline-flex h-12 items-center justify-center rounded-lg bg-cyan-600 px-7 font-semibold text-white hover:bg-cyan-500"
+                className="inline-flex h-12 items-center justify-center rounded-lg bg-cyan-700 px-7 font-semibold text-white hover:bg-cyan-800"
               >
                 {copy.primaryCta}
                 <ArrowRight className="ms-2 h-4 w-4" aria-hidden="true" />
@@ -404,7 +404,7 @@ export default async function TayqanAiQuantitySurveyorPage() {
                   <p className="mt-2 text-sm leading-relaxed text-slate-400">{planCopy.bestFor}</p>
                   <div className="mt-6">
                     <span className="text-4xl font-extrabold">{amount}</span>
-                    <span className="ms-2 text-sm text-slate-500">{cadence}</span>
+                    <span className="ms-2 text-sm text-slate-400">{cadence}</span>
                   </div>
                   <p className="mt-3 text-sm text-slate-400">{planCopy.duration}</p>
                   {plan.maxDistinctProjects ? (
@@ -441,7 +441,7 @@ export default async function TayqanAiQuantitySurveyorPage() {
           <div className="mt-8 flex flex-col justify-center gap-3 sm:flex-row">
             <Link
               href="/register"
-              className="inline-flex h-12 items-center justify-center rounded-lg bg-cyan-600 px-7 font-semibold text-white hover:bg-cyan-500"
+              className="inline-flex h-12 items-center justify-center rounded-lg bg-cyan-700 px-7 font-semibold text-white hover:bg-cyan-800"
             >
               {copy.primaryCta}
             </Link>

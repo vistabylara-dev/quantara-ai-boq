@@ -27,6 +27,7 @@ const CATEGORIES = [
   {
     title: "Software and Spreadsheet Comparisons",
     links: [
+      { url: "/boq-software-comparison-uae", label: "BOQ Software Comparison UAE", desc: "Compare Quantara, CostX, Candy, Procore, Autodesk Forma Takeoff, STACK and PlanSwift using official sources and explicit eligibility boundaries." },
       { url: "/quantara-vs-excel-for-boq", label: "Quantara vs Excel for BOQ", desc: "Compare structured BOQ software with spreadsheets across project records, revisions, templates and outputs." },
       { url: "/boq-software-vs-spreadsheets", label: "BOQ Software vs Spreadsheets", desc: "When are spreadsheets sufficient, and when does structured software add value for project control?" },
       { url: "/construction-estimating-software-vs-excel", label: "Construction Estimating Software vs Excel", desc: "Compare construction estimating tools with manual Excel rate analysis and pricing formulas." }
@@ -66,7 +67,7 @@ export default async function ComparisonsHubPage() {
   const t = createTranslator(getDictionary(locale));
   const content = translateStructuredContent(t, "publicRoutes.comparisonsHub", PAGE_CONTENT);
   return (
-    <div className="min-h-screen bg-[#030508] text-slate-100">
+    <div className="min-h-screen bg-[#030508] text-slate-300">
       <div className="container mx-auto px-4 py-16 md:py-24 max-w-7xl">
       <PublicJsonLd data={pageSchema} />
       <PublicBreadcrumb items={[{ name: content.home, item: "/" }, { name: content.breadcrumb }]} tone="dark" />
@@ -75,7 +76,7 @@ export default async function ComparisonsHubPage() {
           <h1 className="text-4xl md:text-5xl font-extrabold text-white tracking-tight mb-6">
             {content.title}
           </h1>
-          <p className="text-xl text-slate-400 max-w-3xl mx-auto">
+          <p className="text-xl text-slate-300 max-w-3xl mx-auto">
             {content.intro}
           </p>
         </header>
@@ -86,8 +87,8 @@ export default async function ComparisonsHubPage() {
               <h2 className="text-2xl font-bold text-white mb-6 border-b border-slate-800 pb-2">{cat.title}</h2>
               <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {cat.links.map((link, lidx) => (
-                  <Link key={lidx} href={link.url} className="group block p-6 border border-slate-800 rounded-xl hover:border-blue-500 hover:shadow-md transition-all bg-slate-900/50">
-                    <h3 className="text-lg font-semibold text-white mb-3 group-hover:text-blue-400 transition-colors">{link.label}</h3>
+                  <Link key={lidx} href={link.url} className="group block p-6 border border-slate-800 rounded-xl hover:border-blue-500 hover:bg-slate-900 transition-all bg-slate-900/50">
+                    <h3 className="text-lg font-semibold text-white mb-3 group-hover:text-blue-300 transition-colors">{link.label}</h3>
                     <p className="text-sm text-slate-400 leading-relaxed">{link.desc}</p>
                   </Link>
                 ))}
@@ -99,9 +100,9 @@ export default async function ComparisonsHubPage() {
         <section className="mt-20 border-t border-slate-800 pt-10">
           <h2 className="text-2xl font-bold text-white mb-6">{content.additionalResources}</h2>
           <div className="flex flex-wrap gap-4">
-            <Link href="/resources" className="px-5 py-2 bg-slate-900 hover:bg-slate-800 rounded-lg text-sm font-medium transition-colors">{content.allResources}</Link>
-            <Link href="/features" className="px-5 py-2 bg-slate-900 hover:bg-slate-800 rounded-lg text-sm font-medium transition-colors">{content.exploreFeatures}</Link>
-            <Link href="/about" className="px-5 py-2 bg-slate-900 hover:bg-slate-800 rounded-lg text-sm font-medium transition-colors">{content.aboutQuantara}</Link>
+            <Link href="/resources" className="px-5 py-2 bg-slate-900/50 hover:bg-slate-900 border border-slate-800 rounded-lg text-sm font-medium text-slate-300 transition-colors">{content.allResources}</Link>
+            <Link href="/features" className="px-5 py-2 bg-slate-900/50 hover:bg-slate-900 border border-slate-800 rounded-lg text-sm font-medium text-slate-300 transition-colors">{content.exploreFeatures}</Link>
+            <Link href="/about" className="px-5 py-2 bg-slate-900/50 hover:bg-slate-900 border border-slate-800 rounded-lg text-sm font-medium text-slate-300 transition-colors">{content.aboutQuantara}</Link>
           </div>
         </section>
       

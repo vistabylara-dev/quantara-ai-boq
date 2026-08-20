@@ -111,7 +111,7 @@ export default function PublicBuyerJourney({
           <div className="mt-7 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
             <Link
               href="/tayqan-ai-quantity-surveyor"
-              className="inline-flex min-h-11 items-center justify-center rounded-lg bg-cyan-600 px-5 py-3 text-sm font-semibold text-white hover:bg-cyan-500"
+              className="inline-flex min-h-11 items-center justify-center rounded-lg bg-cyan-700 px-5 py-3 text-sm font-semibold text-white hover:bg-cyan-800"
             >
               {sales.tayqanCta}
               <ArrowRight className="ms-2 h-4 w-4" aria-hidden="true" />

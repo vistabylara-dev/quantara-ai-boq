@@ -86,6 +86,31 @@ describe("public structured-data guardrails", () => {
     });
   });
 
+  it("builds HowTo markup from the same visible instructional steps", () => {
+    const steps = ["Confirm the source revision.", "Review every captured row."];
+    const nodes = graphNodes(buildPublicPageGraph({
+      path: "/how-to-review-ai-extracted-boq",
+      title: "How to Review an AI-Extracted BOQ",
+      description: "A review workflow.",
+      breadcrumbs: [{ name: "Home", path: "/" }, { name: "Review" }],
+      howTo: {
+        name: "AI-extracted BOQ review workflow",
+        steps,
+      },
+      kind: "tech-article",
+    }));
+
+    const howTo = nodes.find((node) => node["@type"] === "HowTo");
+    expect(howTo).toMatchObject({
+      name: "AI-extracted BOQ review workflow",
+      step: steps.map((text, index) => ({
+        "@type": "HowToStep",
+        position: index + 1,
+        text,
+      })),
+    });
+  });
+
   it("does not add fabricated commercial or social-proof properties", () => {
     const schemas = JSON.stringify([
       buildPublicEntityGraph(),

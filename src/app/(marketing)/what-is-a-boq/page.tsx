@@ -23,9 +23,9 @@ export default function Page() {
     "id": "understanding-boqs",
     "heading": "Why the BOQ Matters in Construction",
     "paragraphs": [
-      <>For contractors, <Link href="/boq-software-for-quantity-surveyors" className="text-blue-600 hover:underline font-medium">quantity surveyors</Link>, and estimators, the Bill of Quantities is the foundation of competitive tendering. It translates complex architectural and engineering drawings into a readable, line-by-line list of tasks.</>,
+      <>For contractors, <Link href="/boq-software-for-quantity-surveyors" className="text-blue-600 hover:underline font-medium dark:text-blue-400">quantity surveyors</Link>, and estimators, the Bill of Quantities is the foundation of competitive tendering. It translates complex architectural and engineering drawings into a readable, line-by-line list of tasks.</>,
       "A BOQ can give tenderers a common list of descriptions, units and stated quantities. Clients must still reconcile qualifications, exclusions, rates and any contractor measurement responsibility when comparing bids.",
-      <>For procurement professionals, understanding how this differs from a <Link href="/boq-vs-bill-of-materials" className="text-blue-600 hover:underline font-medium">Bill of Materials</Link> is essential for proper supply chain planning.</>
+      <>For procurement professionals, understanding how this differs from a <Link href="/boq-vs-bill-of-materials" className="text-blue-600 hover:underline font-medium dark:text-blue-400">Bill of Materials</Link> is essential for proper supply chain planning.</>
     ]
   },
   {

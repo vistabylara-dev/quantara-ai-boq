@@ -6,7 +6,11 @@ import robots from "@/app/robots";
 import sitemap from "@/app/sitemap";
 import { middleware } from "@/middleware";
 import { PUBLIC_INTEGRATION_PATHS } from "@/lib/public-site/public-integration-ids";
-import { PUBLIC_WEBSITE_PATHS } from "@/lib/public-site/public-route-paths";
+import {
+  PUBLIC_PATHNAME_HEADER,
+  PUBLIC_WEBSITE_PATHS,
+  isPublicWebsitePath,
+} from "@/lib/public-site/public-route-paths";
 import {
   PUBLIC_SEARCH_PAGES,
   PUBLIC_SITE_ORIGIN,
@@ -66,7 +70,7 @@ describe("public search registry", () => {
   });
 
   it("keeps the four owner-confirmation-dependent legal documents out of the public search index", () => {
-    expect(indexableEntries).toHaveLength(60);
+    expect(indexableEntries).toHaveLength(61);
     expect(
       PUBLIC_SEARCH_PAGES
         .filter((entry) => entry.indexable === false)
@@ -89,7 +93,7 @@ describe("public search registry", () => {
       expect(metadata.description).toBe(entry.description);
       expect(metadata.alternates).toEqual({
         canonical: canonicalUrl,
-        languages: { "en-AE": canonicalUrl },
+        languages: { "en-AE": canonicalUrl, "x-default": canonicalUrl },
       });
       expect(metadata.robots).toMatchObject({
         index: entry.indexable !== false,
@@ -172,6 +176,13 @@ describe("public search registry", () => {
     }
   });
 
+  it("identifies only registered marketing paths as public website paths", () => {
+    expect(isPublicWebsitePath("/")).toBe(true);
+    expect(isPublicWebsitePath("/boq-software-comparison-uae")).toBe(true);
+    expect(isPublicWebsitePath("/dashboard")).toBe(false);
+    expect(isPublicWebsitePath(null)).toBe(false);
+  });
+
   it("serves representative signed-out marketing routes and protects application routes", () => {
     for (const path of [
       "/",
@@ -192,6 +203,7 @@ describe("public search registry", () => {
       const response = middleware(new NextRequest(`${PUBLIC_SITE_ORIGIN}${path}`));
       expect(response.headers.get("location"), `${path} redirected`).toBeNull();
       expect(response.headers.get("x-middleware-next"), `${path} did not continue`).toBe("1");
+      expect(response.headers.get(`x-middleware-request-${PUBLIC_PATHNAME_HEADER}`)).toBe(path);
     }
 
     const protectedResponse = middleware(new NextRequest(`${PUBLIC_SITE_ORIGIN}/dashboard`));
@@ -302,6 +314,7 @@ describe("public search registry", () => {
     expect(marketingLayout).not.toContain("AppShell");
     expect(existsSync(join(marketingRoot, "industries", "[industryId]", "page.tsx"))).toBe(false);
     expect(existsSync(join(repoRoot, "src", "app", "industry-engines", "[industryId]", "page.tsx"))).toBe(true);
+    expect(existsSync(join(repoRoot, "src", "app", "industry-engines", "page.tsx"))).toBe(true);
   });
 
   it("documents every indexable route in both required website reports", () => {

@@ -3,6 +3,10 @@
  * contain exactly these keys (see tests/i18n-dictionary-parity.test.ts).
  * Keys are semantic (namespace.subject.field), never raw English sentences.
  */
+import { getPublicSalesTruth } from "@/lib/public-site/sales-truth";
+
+const publicSalesTruth = getPublicSalesTruth("en");
+
 const en = {
   common: {
     appName: "Quantara",
@@ -1110,6 +1114,11 @@ const en = {
           name: "Project source workspaces",
           summary: "Keep supported project files and BOQ records within a project workspace.",
         },
+        clientRecords: {
+          name: "Client records",
+          summary: "Maintain searchable, company-scoped client records and associate supported project workspaces with a client.",
+          limitation: "Quantara does not present the client directory as a full customer relationship management system.",
+        },
         textPdfExtraction: {
           name: "Text-based PDF extraction",
           summary: "Store extractable text from text-based PDF files and create review candidates only from supported detected table rows.",
@@ -1117,8 +1126,10 @@ const en = {
         },
         spreadsheetImport: {
           name: "XLSX and CSV import",
-          summary: "Bring supported structured spreadsheet data into a reviewable project workflow.",
-          limitation: "Column mapping and imported values still require review.",
+          summary: "Map supported CSV or XLSX columns, validate rows and approve selected records before importing them to a supported destination.",
+          limitation: "Only supported structures and destinations are included; column mapping and imported values still require review.",
+          supportedStructureDependency: "A supported CSV or XLSX structure",
+          approvalDependency: "User mapping, validation and approval",
         },
         scannedPdfDetection: {
           name: "Scanned PDF detection",
@@ -1138,6 +1149,12 @@ const en = {
           name: "Structured BOQ management",
           summary: "Organize BOQ sections, items, quantities, units and revisions within a project.",
         },
+        internalSupplierRateCatalogue: {
+          name: "Internal supplier and rate catalogue",
+          summary: "Maintain internal supplier contacts and user-managed rates with base and landed costs, margin, effective dates and price history.",
+          limitation: "Quantara does not provide automated supplier feeds or live market pricing.",
+          companyDataDependency: "Company-maintained supplier and rate data",
+        },
         visibleCalculations: {
           name: "Guided BOQ measurement and quantity calculations",
           summary: "For supported calculation types, Quantara uses reviewed source-linked or professionally entered dimensions to calculate BOQ quantities with deterministic engineering formulas, displaying the equation and proposed result for professional confirmation before governed BOQ use.",
@@ -1145,8 +1162,9 @@ const en = {
         },
         voiceProposals: {
           name: "Voice-assisted measurement and BOQ editing",
-          summary: "Use voice in supported BOQ contexts to enter or correct measurements and propose supported item changes for professional review and confirmation.",
-          limitation: "Voice changes remain review and confirmation controlled; no voice change is applied to governed BOQ data without the user's confirmation.",
+          summary: "Use voice in supported BOQ contexts to enter or correct measurements and propose one supported item-field change, addition or deletion at a time for professional review and confirmation.",
+          limitation: "A transcript is interpreted as a proposal; no voice change is applied to governed BOQ data without the user's valid signed confirmation.",
+          contextDependency: "A supported voice context and valid signed confirmation",
         },
         autodeskDwgAnalysis: {
           name: "Autodesk / AutoCAD DWG analysis",
@@ -1165,7 +1183,9 @@ const en = {
         clientProposals: {
           name: "Client proposal links",
           summary: "Generate a secure, token-gated proposal link from a reviewed BOQ revision or a completed technical report, with optional passcode protection, an expiry date and revoke, reopen or regenerate controls, for external client review.",
-          limitation: "Creating a proposal is subject to the account's plan entitlement, and each proposal is tied to the specific BOQ revision or completed technical report it was created from, not the live editable BOQ.",
+          limitation: "Creating a proposal is subject to the account's plan entitlement, and each proposal is tied to the specific locked, checked BOQ revision or completed technical report it was created from, not the live editable BOQ. Review responses are workflow records, not electronic signatures or contractual approval. Email delivery depends on a configured provider.",
+          sourceDependency: "A locked, checked BOQ revision or completed technical report",
+          emailDependency: "A configured provider when email delivery is used",
         },
         documentTemplates: {
           name: "Document templates",
@@ -1190,16 +1210,19 @@ const en = {
         companyLibrary: {
           name: "Company library of reusable BOQ items",
           summary: "Save reviewed BOQ items into a company-wide library with versions and variants, track item usage across projects, and mark favorites for faster reuse in future BOQs.",
-          limitation: "Premium library items still depend on the company's catalogue or industry-package entitlement, and every reused item remains subject to professional review in its new BOQ context.",
+          limitation: "Governed, premium and industry-package content depends on published data and the company's applicable entitlement, and every reused item remains subject to professional review in its new BOQ context.",
+          governedDataDependency: "Published governed data and an applicable entitlement for controlled content",
         },
         bilingualRtlInterface: {
           name: "English and Arabic interface with RTL",
           summary: "Use Quantara in English or Arabic, with a right-to-left interface in Arabic.",
+          limitation: "Quantara does not perform Arabic OCR, translate content or parse Arabic project sources; supported generated-output formats remain workflow-dependent.",
+          routeDependency: "A supported route and generated-output format",
         },
         commercialAccess: {
           name: "Commercial plans and billing",
-          summary: "Authenticated recurring subscription checkout may be available when the account is eligible and the selected direct-purchase price is active, approved and synchronized with the payment provider.",
-          limitation: "The public website does not offer checkout. One-time checkout and direct enterprise checkout are not currently available; enterprise and other non-direct commercial terms require contact with sales.",
+          summary: publicSalesTruth.commercialSummary,
+          limitation: publicSalesTruth.commercialLimitation,
         },
         automaticDrawingTakeoff: {
           name: "Unattended arbitrary drawing-geometry takeoff",
@@ -1233,15 +1256,15 @@ const en = {
     },
     productTruth: {
       technicalReportLimitation: "Technical report generation is limited to DOCX; other report formats are not currently supported. Voice-assisted measurement and supported BOQ change proposals are available separately in supported BOQ contexts.",
-      commercialSummary: "Authenticated recurring subscription checkout may be available when the account is eligible and the selected direct-purchase price is active, approved and synchronized with the payment provider.",
-      commercialLimitation: "The public website does not offer checkout. One-time checkout and direct enterprise checkout are not currently available; enterprise and other non-direct commercial terms require contact with sales.",
+      commercialSummary: publicSalesTruth.commercialSummary,
+      commercialLimitation: publicSalesTruth.commercialLimitation,
       nonGoogleIntegrationsName: "Other non-Google external integrations",
       nonGoogleIntegrationsSummary: "Other non-Google integrations beyond the supported Autodesk DWG workflow are represented as planned provider options, not verified current production capabilities.",
       enterpriseBundleName: "Enterprise feature bundle",
       enterpriseBundleSummary: "An enterprise feature bundle is planned, but its roles, approval chains, regional hosting and related capabilities are not verified as currently available.",
     },
     home: {
-      commercialFaq: "The public website does not offer checkout or publish static prices. Eligible authenticated accounts may receive recurring subscription checkout when a direct-purchase price is active, approved and synchronized; enterprise, one-time and other non-direct terms require contact with sales.",
+      commercialFaq: publicSalesTruth.pricingFaqAnswer,
       directAnswers: "Direct answers about current capability, limitations, account access and commercial availability.",
       eyebrow: "Dubai · UAE · GCC construction workflows",
       pageTitle: "AI-Assisted BOQ Measurement & Quantity Calculation Software for UAE Construction Teams",
@@ -1904,14 +1927,14 @@ const en = {
     header: {
       quantaraHome: "Quantara Home",
       signIn: "Sign In",
-      requestEarlyAccess: "Request Early Access",
+      requestEarlyAccess: publicSalesTruth.viewPricing,
       openMenu: "Open menu",
       closeMenu: "Close menu",
       mobileNavigation: "Mobile Navigation",
     },
     footer: {
       description1: "Quantara is developed and operated by Vista By Lara, a technology business focused on AI-assisted tools for construction, project, design and business workflows.",
-      description2Suffix: "It is offered through Controlled Early Access.",
+      description2Suffix: publicSalesTruth.commercialSummary,
       emailLabel: "Email:",
       telephoneLabel: "Telephone:",
       whatsappLabel: "WhatsApp:",
@@ -1924,7 +1947,7 @@ const en = {
       legal: "Legal",
       workflowReviewTitle: "Workflow Requirements Review",
       workflowReviewBody: "Organizations with workflow, source, output or rollout requirements can request a review before access or paid work is proposed.",
-      workflowReviewNote: "Availability, implementation scope and commercial terms are confirmed separately in writing. No public self-service checkout is currently offered.",
+      workflowReviewNote: publicSalesTruth.commercialLimitation,
       htmlSitemap: "HTML Sitemap",
       copyright: "© {year} Quantara. Operated by Vista By Lara. All rights reserved.",
     },

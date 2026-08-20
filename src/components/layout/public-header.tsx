@@ -119,11 +119,18 @@ export default function PublicHeader() {
   };
 
   return (
-    <header
-      ref={headerRef}
-      role="banner"
-      className="sticky top-0 z-50 w-full border-b border-slate-800 bg-slate-950/80 backdrop-blur"
-    >
+    <>
+      <a
+        href="#main-content"
+        className="fixed start-4 top-3 z-[60] -translate-y-20 rounded-md bg-white px-4 py-2 text-sm font-semibold text-slate-950 shadow-lg transition-transform focus:translate-y-0 focus:outline-none focus:ring-2 focus:ring-blue-400"
+      >
+        {t("a11y.skipToContent")}
+      </a>
+      <header
+        ref={headerRef}
+        role="banner"
+        className="sticky top-0 z-50 w-full border-b border-slate-800 bg-slate-950/80 backdrop-blur"
+      >
       <div className="container mx-auto px-4 h-16 flex items-center justify-between">
         {/* Logo */}
         <Link href="/" className="font-bold text-xl tracking-tight text-white flex items-center gap-2" aria-label={t("publicSite.header.quantaraHome")}>
@@ -306,6 +313,7 @@ export default function PublicHeader() {
           </div>
         </div>
       )}
-    </header>
+      </header>
+    </>
   );
 }

@@ -13,6 +13,10 @@ export type PublicCapabilityLifecycle =
   | "PLANNED"
   | "NOT_AVAILABLE";
 
+export type PublicCapabilityEvidenceLevel =
+  | "SOURCE_REVIEWED"
+  | "SOURCE_AND_TESTS_REVIEWED";
+
 export type PublicCapability = {
   id: string;
   name: string;
@@ -21,7 +25,20 @@ export type PublicCapability = {
   summary: string;
   limitation?: string;
   evidencePaths: readonly string[];
+  evidenceLevel?: PublicCapabilityEvidenceLevel;
+  dependencies?: readonly string[];
+  reviewedAt?: string;
 };
+
+export const PUBLIC_CAPABILITY_EVIDENCE_LABELS: Record<
+  PublicCapabilityEvidenceLevel,
+  string
+> = {
+  SOURCE_REVIEWED: "Source reviewed",
+  SOURCE_AND_TESTS_REVIEWED: "Source and tests reviewed",
+};
+
+export const PUBLIC_CAPABILITY_REVIEW_DATE = "2026-08-20";
 
 export const PUBLIC_CAPABILITY_STATUS_LABELS: Record<PublicCapabilityStatus, string> = {
   AVAILABLE: "Available",
@@ -54,6 +71,15 @@ const PUBLIC_CAPABILITY_DEFINITIONS = [
     summary: "Keep supported project files and BOQ records within a project workspace.",
   },
   {
+    id: "client-records",
+    name: "Client records",
+    status: "AVAILABLE",
+    summary: "Maintain searchable, company-scoped client records and associate supported project workspaces with a client.",
+    limitation: "Quantara does not present the client directory as a full customer relationship management system.",
+    evidenceLevel: "SOURCE_AND_TESTS_REVIEWED",
+    reviewedAt: PUBLIC_CAPABILITY_REVIEW_DATE,
+  },
+  {
     id: "text-pdf-extraction",
     name: "Text-based PDF extraction",
     status: "AVAILABLE",
@@ -64,8 +90,11 @@ const PUBLIC_CAPABILITY_DEFINITIONS = [
     id: "spreadsheet-import",
     name: "XLSX and CSV import",
     status: "AVAILABLE",
-    summary: "Bring supported structured spreadsheet data into a reviewable project workflow.",
-    limitation: "Column mapping and imported values still require review.",
+    summary: "Map supported CSV or XLSX columns, validate rows and approve selected records before importing them to a supported destination.",
+    limitation: "Only supported structures and destinations are included; column mapping and imported values still require review.",
+    evidenceLevel: "SOURCE_AND_TESTS_REVIEWED",
+    dependencies: ["A supported CSV or XLSX structure", "User mapping, validation and approval"],
+    reviewedAt: PUBLIC_CAPABILITY_REVIEW_DATE,
   },
   {
     id: "scanned-pdf-detection",
@@ -94,6 +123,16 @@ const PUBLIC_CAPABILITY_DEFINITIONS = [
     summary: "Organize BOQ sections, items, quantities, units and revisions within a project.",
   },
   {
+    id: "internal-supplier-rate-catalogue",
+    name: "Internal supplier and rate catalogue",
+    status: "LIMITED",
+    summary: "Maintain internal supplier contacts and user-managed rates with base and landed costs, margin, effective dates and price history.",
+    limitation: "Quantara does not provide automated supplier feeds or live market pricing.",
+    evidenceLevel: "SOURCE_AND_TESTS_REVIEWED",
+    dependencies: ["Company-maintained supplier and rate data"],
+    reviewedAt: PUBLIC_CAPABILITY_REVIEW_DATE,
+  },
+  {
     id: "visible-calculations",
     name: "Guided BOQ measurement and quantity calculations",
     status: "AVAILABLE",
@@ -104,8 +143,11 @@ const PUBLIC_CAPABILITY_DEFINITIONS = [
     id: "voice-proposals",
     name: "Voice-assisted measurement and BOQ editing",
     status: "AVAILABLE",
-    summary: "Use voice in supported BOQ contexts to enter or correct measurements and propose supported item changes for professional review and confirmation.",
-    limitation: "Voice changes remain review and confirmation controlled; no voice change is applied to governed BOQ data without the user's confirmation.",
+    summary: "Use voice in supported BOQ contexts to enter or correct measurements and propose one supported item-field change, addition or deletion at a time for professional review and confirmation.",
+    limitation: "A transcript is interpreted as a proposal; no voice change is applied to governed BOQ data without the user's valid signed confirmation.",
+    evidenceLevel: "SOURCE_AND_TESTS_REVIEWED",
+    dependencies: ["A supported voice context and valid signed confirmation"],
+    reviewedAt: PUBLIC_CAPABILITY_REVIEW_DATE,
   },
   {
     id: "autodesk-dwg-analysis",
@@ -132,7 +174,13 @@ const PUBLIC_CAPABILITY_DEFINITIONS = [
     name: "Client proposal links",
     status: "AVAILABLE",
     summary: "Generate a secure, token-gated proposal link from a reviewed BOQ revision or a completed technical report, with optional passcode protection, an expiry date and revoke, reopen or regenerate controls, for external client review.",
-    limitation: "Creating a proposal is subject to the account's plan entitlement, and each proposal is tied to the specific BOQ revision or completed technical report it was created from, not the live editable BOQ.",
+    limitation: "Creating a proposal is subject to the account's plan entitlement, and each proposal is tied to the specific locked, checked BOQ revision or completed technical report it was created from, not the live editable BOQ. Review responses are workflow records, not electronic signatures or contractual approval. Email delivery depends on a configured provider.",
+    evidenceLevel: "SOURCE_AND_TESTS_REVIEWED",
+    dependencies: [
+      "A locked, checked BOQ revision or completed technical report",
+      "A configured provider when email delivery is used",
+    ],
+    reviewedAt: PUBLIC_CAPABILITY_REVIEW_DATE,
   },
   {
     id: "document-templates",
@@ -167,13 +215,20 @@ const PUBLIC_CAPABILITY_DEFINITIONS = [
     name: "Company library of reusable BOQ items",
     status: "AVAILABLE",
     summary: "Save reviewed BOQ items into a company-wide library with versions and variants, track item usage across projects, and mark favorites for faster reuse in future BOQs.",
-    limitation: "Premium library items still depend on the company's catalogue or industry-package entitlement, and every reused item remains subject to professional review in its new BOQ context.",
+    limitation: "Governed, premium and industry-package content depends on published data and the company's applicable entitlement, and every reused item remains subject to professional review in its new BOQ context.",
+    evidenceLevel: "SOURCE_AND_TESTS_REVIEWED",
+    dependencies: ["Published governed data and an applicable entitlement for controlled content"],
+    reviewedAt: PUBLIC_CAPABILITY_REVIEW_DATE,
   },
   {
     id: "bilingual-rtl-interface",
     name: "English and Arabic interface with RTL",
     status: "AVAILABLE",
     summary: "Use Quantara in English or Arabic, with a right-to-left interface in Arabic.",
+    limitation: "Quantara does not perform Arabic OCR, translate content or parse Arabic project sources; supported generated-output formats remain workflow-dependent.",
+    evidenceLevel: "SOURCE_AND_TESTS_REVIEWED",
+    dependencies: ["A supported route and generated-output format"],
+    reviewedAt: PUBLIC_CAPABILITY_REVIEW_DATE,
   },
   {
     id: "commercial-access",
@@ -232,12 +287,18 @@ type CapabilityTranslationKeys = {
   name: TranslationKey;
   summary: TranslationKey;
   limitation?: TranslationKey;
+  dependencyKeys?: readonly TranslationKey[];
 };
 
 const PUBLIC_CAPABILITY_REGISTER_KEYS = {
   "project-workspaces": {
     name: "publicContent.capabilityRegister.capabilities.projectWorkspaces.name",
     summary: "publicContent.capabilityRegister.capabilities.projectWorkspaces.summary",
+  },
+  "client-records": {
+    name: "publicContent.capabilityRegister.capabilities.clientRecords.name",
+    summary: "publicContent.capabilityRegister.capabilities.clientRecords.summary",
+    limitation: "publicContent.capabilityRegister.capabilities.clientRecords.limitation",
   },
   "text-pdf-extraction": {
     name: "publicContent.capabilityRegister.capabilities.textPdfExtraction.name",
@@ -248,6 +309,10 @@ const PUBLIC_CAPABILITY_REGISTER_KEYS = {
     name: "publicContent.capabilityRegister.capabilities.spreadsheetImport.name",
     summary: "publicContent.capabilityRegister.capabilities.spreadsheetImport.summary",
     limitation: "publicContent.capabilityRegister.capabilities.spreadsheetImport.limitation",
+    dependencyKeys: [
+      "publicContent.capabilityRegister.capabilities.spreadsheetImport.supportedStructureDependency",
+      "publicContent.capabilityRegister.capabilities.spreadsheetImport.approvalDependency",
+    ],
   },
   "scanned-pdf-detection": {
     name: "publicContent.capabilityRegister.capabilities.scannedPdfDetection.name",
@@ -267,6 +332,14 @@ const PUBLIC_CAPABILITY_REGISTER_KEYS = {
     name: "publicContent.capabilityRegister.capabilities.boqManagement.name",
     summary: "publicContent.capabilityRegister.capabilities.boqManagement.summary",
   },
+  "internal-supplier-rate-catalogue": {
+    name: "publicContent.capabilityRegister.capabilities.internalSupplierRateCatalogue.name",
+    summary: "publicContent.capabilityRegister.capabilities.internalSupplierRateCatalogue.summary",
+    limitation: "publicContent.capabilityRegister.capabilities.internalSupplierRateCatalogue.limitation",
+    dependencyKeys: [
+      "publicContent.capabilityRegister.capabilities.internalSupplierRateCatalogue.companyDataDependency",
+    ],
+  },
   "visible-calculations": {
     name: "publicContent.capabilityRegister.capabilities.visibleCalculations.name",
     summary: "publicContent.capabilityRegister.capabilities.visibleCalculations.summary",
@@ -276,6 +349,9 @@ const PUBLIC_CAPABILITY_REGISTER_KEYS = {
     name: "publicContent.capabilityRegister.capabilities.voiceProposals.name",
     summary: "publicContent.capabilityRegister.capabilities.voiceProposals.summary",
     limitation: "publicContent.capabilityRegister.capabilities.voiceProposals.limitation",
+    dependencyKeys: [
+      "publicContent.capabilityRegister.capabilities.voiceProposals.contextDependency",
+    ],
   },
   "autodesk-dwg-analysis": {
     name: "publicContent.capabilityRegister.capabilities.autodeskDwgAnalysis.name",
@@ -295,6 +371,10 @@ const PUBLIC_CAPABILITY_REGISTER_KEYS = {
     name: "publicContent.capabilityRegister.capabilities.clientProposals.name",
     summary: "publicContent.capabilityRegister.capabilities.clientProposals.summary",
     limitation: "publicContent.capabilityRegister.capabilities.clientProposals.limitation",
+    dependencyKeys: [
+      "publicContent.capabilityRegister.capabilities.clientProposals.sourceDependency",
+      "publicContent.capabilityRegister.capabilities.clientProposals.emailDependency",
+    ],
   },
   "document-templates": {
     name: "publicContent.capabilityRegister.capabilities.documentTemplates.name",
@@ -320,10 +400,17 @@ const PUBLIC_CAPABILITY_REGISTER_KEYS = {
     name: "publicContent.capabilityRegister.capabilities.companyLibrary.name",
     summary: "publicContent.capabilityRegister.capabilities.companyLibrary.summary",
     limitation: "publicContent.capabilityRegister.capabilities.companyLibrary.limitation",
+    dependencyKeys: [
+      "publicContent.capabilityRegister.capabilities.companyLibrary.governedDataDependency",
+    ],
   },
   "bilingual-rtl-interface": {
     name: "publicContent.capabilityRegister.capabilities.bilingualRtlInterface.name",
     summary: "publicContent.capabilityRegister.capabilities.bilingualRtlInterface.summary",
+    limitation: "publicContent.capabilityRegister.capabilities.bilingualRtlInterface.limitation",
+    dependencyKeys: [
+      "publicContent.capabilityRegister.capabilities.bilingualRtlInterface.routeDependency",
+    ],
   },
   "commercial-access": {
     name: "publicContent.capabilityRegister.capabilities.commercialAccess.name",
@@ -358,7 +445,7 @@ const PUBLIC_CAPABILITY_REGISTER_KEYS = {
     name: "publicContent.capabilityRegister.capabilities.enterpriseFeatureBundle.name",
     summary: "publicContent.capabilityRegister.capabilities.enterpriseFeatureBundle.summary",
   },
-} as const satisfies Record<PublicCapabilityId, CapabilityTranslationKeys>;
+} as const satisfies Partial<Record<PublicCapabilityId, CapabilityTranslationKeys>>;
 
 const PUBLIC_CAPABILITY_STATUS_KEYS = {
   AVAILABLE: {
@@ -384,12 +471,14 @@ const PUBLIC_CAPABILITY_STATUS_KEYS = {
 
 export const PUBLIC_PRODUCT_LIFECYCLE_BY_ID = {
   "project-workspaces": "LIVE",
+  "client-records": "LIVE",
   "text-pdf-extraction": "LIVE",
   "spreadsheet-import": "LIVE",
   "scanned-pdf-detection": "LIVE",
   "google-drive-import": "BETA_LIMITED",
   "reviewed-extraction": "LIVE",
   "boq-management": "LIVE",
+  "internal-supplier-rate-catalogue": "LIVE",
   "visible-calculations": "LIVE",
   "voice-proposals": "LIVE",
   "autodesk-dwg-analysis": "BETA_LIMITED",
@@ -417,6 +506,10 @@ export const PUBLIC_PRODUCT_EVIDENCE_BY_ID = {
     "src/lib/services/project-service.ts",
     "tests/client-project-service.test.ts",
   ],
+  "client-records": [
+    "src/lib/services/client-service.ts",
+    "tests/client-project-service.test.ts",
+  ],
   "text-pdf-extraction": [
     "src/lib/files/pdf-text-extraction.ts",
     "tests/pdf-content-extraction.test.ts",
@@ -441,6 +534,10 @@ export const PUBLIC_PRODUCT_EVIDENCE_BY_ID = {
     "src/lib/services/boq-validation-service.ts",
     "tests/boq-core-workflow.test.ts",
   ],
+  "internal-supplier-rate-catalogue": [
+    "src/lib/services/supplier-service.ts",
+    "tests/catalogue-supplier-service.test.ts",
+  ],
   "visible-calculations": [
     "src/lib/services/quantity-calculation-service.ts",
     "tests/guided-boq-measurement-workflow.test.ts",
@@ -464,6 +561,8 @@ export const PUBLIC_PRODUCT_EVIDENCE_BY_ID = {
   "client-proposals": [
     "src/lib/services/client-proposal-service.ts",
     "tests/client-proposal-service.test.ts",
+    "src/lib/documents/technical-report-share.ts",
+    "tests/technical-report-service.test.ts",
   ],
   "document-templates": [
     "src/lib/services/document-template-service.ts",
@@ -592,13 +691,21 @@ function localizePublicCapabilityRegisterEntry(
   capability: PublicCapability,
   translate: TranslateFn,
 ): PublicCapability {
-  const keys: CapabilityTranslationKeys =
-    PUBLIC_CAPABILITY_REGISTER_KEYS[capability.id as PublicCapabilityId];
+  const keys: CapabilityTranslationKeys | undefined =
+    PUBLIC_CAPABILITY_REGISTER_KEYS[
+      capability.id as keyof typeof PUBLIC_CAPABILITY_REGISTER_KEYS
+    ];
+  if (!keys) {
+    return localizePublicCapability(capability, translate);
+  }
   return {
     ...capability,
     name: translate(keys.name),
     summary: translate(keys.summary),
     ...(keys.limitation ? { limitation: translate(keys.limitation) } : {}),
+    ...(keys.dependencyKeys
+      ? { dependencies: keys.dependencyKeys.map((key) => translate(key)) }
+      : {}),
   };
 }
 

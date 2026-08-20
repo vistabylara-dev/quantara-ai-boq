@@ -344,26 +344,38 @@ const CATALOGUE_PRODUCTS: ProductSpec[] = [
 
 /** Candidate industry-access SKUs. Only keys with a real, existing
  *  IndustryDataPackage row get a CommerceProduct — everything else is
- *  skipped and counted so the report is honest about what isn't real yet. */
+ *  skipped and counted so the report is honest about what isn't real yet.
+ *
+ *  MARKETPLACE-FULL-STRIPE-LINK — the previous 18-entry list used a stale
+ *  `-professional` naming scheme that matched ZERO real IndustryDataPackage
+ *  rows except `mechanical-hvac-professional` (a separate pilot package
+ *  seeded by ./commercial.ts's seedMechanicalPackage, kept below — do not
+ *  confuse it with the 15 real library packages, and do not remove it:
+ *  tests/commerce-product-service.test.ts and several others genuinely
+ *  depend on seedCommerceProducts creating/updating its CommerceProduct via
+ *  this exact loop). The other 17 stale `-professional` entries were
+ *  confirmed dead (grepped the whole repo — no other reference anywhere)
+ *  and are replaced here with the 15 real `-library` keys from
+ *  src/config/libraries.ts's CATALOGUE_LIBRARIES, the live config the
+ *  marketplace UI actually uses. sortOrder 220+ is a fresh range, distinct
+ *  from both CATALOGUE_PRODUCTS' (10-160) and the pilot entry's (200). */
 const INDUSTRY_ACCESS_CANDIDATES: { key: string; name: string; sortOrder: number }[] = [
   { key: "mechanical-hvac-professional", name: "Mechanical & HVAC Professional Library", sortOrder: 200 },
-  { key: "electrical-professional", name: "Electrical Professional Library", sortOrder: 201 },
-  { key: "plumbing-professional", name: "Plumbing Professional Library", sortOrder: 202 },
-  { key: "civil-professional", name: "Civil Professional Library", sortOrder: 203 },
-  { key: "fire-protection-professional", name: "Fire Protection Professional Library", sortOrder: 204 },
-  { key: "low-voltage-professional", name: "Low Voltage / ELV Professional Library", sortOrder: 205 },
-  { key: "landscaping-professional", name: "Landscaping Professional Library", sortOrder: 206 },
-  { key: "interior-fitout-professional", name: "Interior Fit-Out Professional Library", sortOrder: 207 },
-  { key: "facade-professional", name: "Facade Professional Library", sortOrder: 208 },
-  { key: "infrastructure-professional", name: "Infrastructure Professional Library", sortOrder: 209 },
-  { key: "marine-professional", name: "Marine Works Professional Library", sortOrder: 210 },
-  { key: "industrial-professional", name: "Industrial Professional Library", sortOrder: 211 },
-  { key: "renewable-energy-professional", name: "Renewable Energy Professional Library", sortOrder: 212 },
-  { key: "water-treatment-professional", name: "Water Treatment Professional Library", sortOrder: 213 },
-  { key: "telecom-professional", name: "Telecom Professional Library", sortOrder: 214 },
-  { key: "security-systems-professional", name: "Security Systems Professional Library", sortOrder: 215 },
-  { key: "elevators-escalators-professional", name: "Elevators & Escalators Professional Library", sortOrder: 216 },
-  { key: "painting-finishes-professional", name: "Painting & Finishes Professional Library", sortOrder: 217 },
+  { key: "architectural-finishes-library", name: "Architectural Finishes Library", sortOrder: 220 },
+  { key: "bim-digital-deliverables-library", name: "BIM & Digital Deliverables Library", sortOrder: 221 },
+  { key: "civil-works-library", name: "Civil Works Library", sortOrder: 222 },
+  { key: "closeout-library", name: "Closeout Library", sortOrder: 223 },
+  { key: "doors-and-windows-library", name: "Doors and Windows Library", sortOrder: 224 },
+  { key: "facade-library", name: "Facade Library", sortOrder: 225 },
+  { key: "general-requirements-library", name: "General Requirements Library", sortOrder: 226 },
+  { key: "hvac-library", name: "HVAC Library", sortOrder: 227 },
+  { key: "landscaping-library", name: "Landscaping Library", sortOrder: 228 },
+  { key: "plumbing-library", name: "Plumbing Library", sortOrder: 229 },
+  { key: "roofing-library", name: "Roofing Library", sortOrder: 230 },
+  { key: "site-infrastructure-library", name: "Site Infrastructure Library", sortOrder: 231 },
+  { key: "structural-library", name: "Structural Library", sortOrder: 232 },
+  { key: "temporary-works-library", name: "Temporary Works Library", sortOrder: 233 },
+  { key: "uae-authority-regulatory-library", name: "UAE Authority & Regulatory Library", sortOrder: 234 },
 ];
 
 async function seedCatalogueProduct(prisma: PrismaClient, spec: ProductSpec, report: CommerceSeedReport): Promise<void> {

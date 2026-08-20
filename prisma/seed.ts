@@ -4,6 +4,7 @@ import { demoIndustries } from "../src/config/industries/index";
 import { seedMechanicalDiscipline, seedTaxonomyFoundations } from "./seed-data/master-data";
 import { seedMechanicalPackage, seedSoftwarePlans } from "./seed-data/commercial";
 import { seedCommerceProducts } from "./seed-data/commerce-products";
+import { approveLibraryPackagePrices, backfillLibraryPackagePricing } from "./seed-data/library-package-pricing";
 import { seedCommerceLinkedSoftwarePlans } from "../src/lib/entitlements/commerce-plan-mapping";
 import { getDevelopmentCompanyId } from "../src/lib/tenancy/development-company";
 import { hashPassword } from "../src/lib/auth/password";
@@ -1240,9 +1241,25 @@ async function main(): Promise<void> {
   await seedSoftwarePlans(prisma);
   await seedMechanicalPackage(prisma, mechanical.disciplineId, mechanical.itemIds);
 
+  // MARKETPLACE-FULL-STRIPE-LINK — must run BEFORE seedCommerceProducts:
+  // it sets the real monthlyPrice/annualPrice on the 15 library packages
+  // that seedCommerceProducts reads to derive each CommercePrice.amountMinor.
+  const libraryPricingReport = await backfillLibraryPackagePricing(prisma);
+  console.log(
+    `Library package pricing backfill: updated [${libraryPricingReport.updated.join(", ") || "none"}], unchanged [${libraryPricingReport.unchanged.join(", ") || "none"}], missing [${libraryPricingReport.missing.join(", ") || "none"}].`,
+  );
+
   const commerceReport = await seedCommerceProducts(prisma);
   console.log(
     `Seeded commerce catalogue: products +${commerceReport.productsInserted}/~${commerceReport.productsUpdated}/=${commerceReport.productsUnchanged}, prices +${commerceReport.pricesInserted}/archived ${commerceReport.pricesArchived}/=${commerceReport.pricesUnchanged}, templates +${commerceReport.templatesInserted}/~${commerceReport.templatesUpdated}, industry products created [${commerceReport.industryProductsCreated.join(", ") || "none"}], industry products skipped: ${commerceReport.industryProductsSkipped.length}.`,
+  );
+
+  // MARKETPLACE-FULL-STRIPE-LINK — must run AFTER seedCommerceProducts: it
+  // looks up the 30 CommercePrice rows that function just created/upserted
+  // by their exact code and approves only those, never a broad update.
+  const libraryApprovalReport = await approveLibraryPackagePrices(prisma);
+  console.log(
+    `Library package price approval: approved [${libraryApprovalReport.approved.join(", ") || "none"}], already approved [${libraryApprovalReport.alreadyApproved.join(", ") || "none"}], missing [${libraryApprovalReport.missing.join(", ") || "none"}].`,
   );
 
   await seedCommerceLinkedSoftwarePlans(prisma);

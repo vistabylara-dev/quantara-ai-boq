@@ -300,71 +300,69 @@ export default function MarketplacePage() {
 
               <p className="text-sm text-slate-400 mb-4 flex-grow">{lib.description}</p>
               
-              {isActive ? (
-                <>
-                  <div className="mb-4 flex items-center gap-2 rounded-xl bg-blue-950/20 border border-blue-900/30 p-2.5 text-xs text-blue-300">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 text-blue-400"><path d="m9 11 3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
-                    <span className="font-medium">Provides BOQ autocomplete benefits</span>
-                  </div>
-      
-                  <div className="flex items-center justify-between border-t border-slate-800 pt-4 mb-5">
-                    <div className="flex items-center gap-1.5 text-xs font-medium text-slate-300">
-                      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-slate-500"><rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/><path d="M8 14h.01"/><path d="M12 14h.01"/><path d="M16 14h.01"/><path d="M8 18h.01"/><path d="M12 18h.01"/><path d="M16 18h.01"/></svg>
-                      {pkg.itemCount.toLocaleString()} items
+              {isActive ? (() => {
+                // MARKETPLACE-FULL-STRIPE-LINK — pkg.monthlyPrice/annualPrice are the
+                // legacy fields (always 0 for every real library package); the price
+                // shown and the buy button are driven entirely by the real,
+                // Stripe-backed pkg.purchase data, matching the package detail page's
+                // already-correct pattern. monthlyPrice/annualPrice are left on the
+                // type/API response for anything else that still reads them.
+                const monthPrice = pkg.purchase?.prices.find((candidate) => candidate.billingInterval === "MONTH");
+                return (
+                  <>
+                    <div className="mb-4 flex items-center gap-2 rounded-xl bg-blue-950/20 border border-blue-900/30 p-2.5 text-xs text-blue-300">
+                      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 text-blue-400"><path d="m9 11 3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+                      <span className="font-medium">Provides BOQ autocomplete benefits</span>
                     </div>
-                    <div className="text-right">
-                      <p className="text-sm font-bold text-white">{pkg.monthlyPrice === 0 ? "Contact sales" : `${pkg.currency} ${pkg.monthlyPrice}/mo`}</p>
+
+                    <div className="flex items-center justify-between border-t border-slate-800 pt-4 mb-5">
+                      <div className="flex items-center gap-1.5 text-xs font-medium text-slate-300">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-slate-500"><rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/><path d="M8 14h.01"/><path d="M12 14h.01"/><path d="M16 14h.01"/><path d="M8 18h.01"/><path d="M12 18h.01"/><path d="M16 18h.01"/></svg>
+                        {pkg.itemCount.toLocaleString()} items
+                      </div>
+                      <div className="text-right">
+                        <p className="text-sm font-bold text-white">
+                          {monthPrice ? `${monthPrice.currency} ${(monthPrice.amountMinor / 100).toLocaleString("en-AE")}/mo` : "Contact sales"}
+                        </p>
+                      </div>
                     </div>
-                  </div>
-      
-                  <div className="flex flex-wrap items-center gap-2 mt-auto">
-                    <Link href={`/marketplace/${pkg.key}`} className="flex-1 text-center rounded-xl border border-slate-700 bg-slate-800 hover:bg-slate-700 transition-colors px-3 py-2.5 text-xs font-bold text-white">
-                      View items
-                    </Link>
-                    {pkg.hasAccess ? (
-                      <span className="flex-1 text-center rounded-xl border border-emerald-900 bg-emerald-950/40 px-3 py-2.5 text-xs font-bold text-emerald-400">
-                        Access Granted
-                      </span>
-                    ) : pkg.monthlyPrice === 0 ? (
-                      <span className="flex-1 text-center rounded-xl border border-slate-700 bg-slate-900 px-3 py-2.5 text-xs font-bold text-slate-400">
-                        Contact sales
-                      </span>
-                    ) : (() => {
-                      const price = pkg.purchase?.prices.find((candidate) => candidate.billingInterval === "MONTH");
-                      if (!price) {
-                        return (
-                          <span
-                            className="flex-1 text-center rounded-xl border border-slate-700 bg-slate-900 px-3 py-2.5 text-xs font-bold text-slate-400"
-                            title="This package has no purchase configured yet."
-                          >
-                            Not yet available for purchase
-                          </span>
-                        );
-                      }
-                      if (!price.available) {
-                        return (
-                          <span
-                            className="flex-1 text-center rounded-xl border border-slate-700 bg-slate-900 px-3 py-2.5 text-xs font-bold text-slate-400"
-                            title={purchaseUnavailableLabel(price.unavailableReason)}
-                          >
-                            {purchaseUnavailableLabel(price.unavailableReason)}
-                          </span>
-                        );
-                      }
-                      return (
+
+                    <div className="flex flex-wrap items-center gap-2 mt-auto">
+                      <Link href={`/marketplace/${pkg.key}`} className="flex-1 text-center rounded-xl border border-slate-700 bg-slate-800 hover:bg-slate-700 transition-colors px-3 py-2.5 text-xs font-bold text-white">
+                        View items
+                      </Link>
+                      {pkg.hasAccess ? (
+                        <span className="flex-1 text-center rounded-xl border border-emerald-900 bg-emerald-950/40 px-3 py-2.5 text-xs font-bold text-emerald-400">
+                          Access Granted
+                        </span>
+                      ) : !monthPrice ? (
+                        <span
+                          className="flex-1 text-center rounded-xl border border-slate-700 bg-slate-900 px-3 py-2.5 text-xs font-bold text-slate-400"
+                          title="This package has no purchase configured yet."
+                        >
+                          Contact sales
+                        </span>
+                      ) : !monthPrice.available ? (
+                        <span
+                          className="flex-1 text-center rounded-xl border border-slate-700 bg-slate-900 px-3 py-2.5 text-xs font-bold text-slate-400"
+                          title={purchaseUnavailableLabel(monthPrice.unavailableReason)}
+                        >
+                          {purchaseUnavailableLabel(monthPrice.unavailableReason)}
+                        </span>
+                      ) : (
                         <button
                           type="button"
-                          onClick={() => void checkout(price.priceCode)}
-                          disabled={busyKey === price.priceCode}
+                          onClick={() => void checkout(monthPrice.priceCode)}
+                          disabled={busyKey === monthPrice.priceCode}
                           className="flex-1 rounded-xl border border-blue-600 bg-blue-600 hover:bg-blue-500 transition-colors px-3 py-2.5 text-xs font-bold text-white disabled:opacity-50"
                         >
-                          {busyKey === price.priceCode ? "Redirecting…" : "Buy access"}
+                          {busyKey === monthPrice.priceCode ? "Redirecting…" : "Buy access"}
                         </button>
-                      );
-                    })()}
-                  </div>
-                </>
-              ) : (
+                      )}
+                    </div>
+                  </>
+                );
+              })() : (
                 <div className="flex flex-col mt-auto border-t border-slate-800 pt-4">
                   <div className="flex items-center gap-2 rounded-xl bg-slate-800/50 border border-slate-800 p-2.5 text-xs text-slate-400 justify-center">
                     <span className="font-medium">{pkg ? "Data Activation Pending" : "Coming Soon"}</span>

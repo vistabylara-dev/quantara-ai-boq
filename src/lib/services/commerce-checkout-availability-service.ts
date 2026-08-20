@@ -49,10 +49,60 @@ export type CheckoutOptionProduct = {
   prices: CheckoutOptionPrice[];
 };
 
+/**
+ * item-A (Round 3 correction) — the settings/subscription/page.tsx Enterprise
+ * cards' non-checkout data source. Deliberately NOT a
+ * CheckoutOptionProduct/CheckoutOptionPrice — it carries no `available`/
+ * `unavailableReason` fields, because "available for self-checkout" is not a
+ * concept that applies to a sales-led product. `price` is null only if the
+ * product has no APPROVED annual price yet (still pending owner/admin
+ * approval) — the UI already renders "Pricing unavailable" for that case.
+ */
+export type EnterpriseAnnualPlan = {
+  productCode: string;
+  name: string;
+  shortDescription: string;
+  price: { priceCode: string; amountMinor: number; currency: string } | null;
+};
+
 export type CheckoutAvailability = {
   hasExistingSubscription: boolean;
   products: CheckoutOptionProduct[];
+  enterpriseProducts: EnterpriseAnnualPlan[];
 };
+
+const ENTERPRISE_ANNUAL_PRODUCT_CODES = ["enterprise_core", "enterprise_scale", "enterprise_authority"] as const;
+
+/**
+ * item-A (Round 3 correction) — Enterprise Core/Scale/Authority are
+ * `purchaseMode: "CONTACT_SALES"` (see prisma/seed-data/commerce-products.ts),
+ * so they are deliberately absent from getCheckoutAvailability's DIRECT-only
+ * query below — self-checkout availability must never represent a sales-led
+ * product as purchasable. This is a SEPARATE, non-checkout catalogue read:
+ * it exposes only the owner-approved annual amount for the settings page's
+ * "Contact Sales" cards, never a Stripe price ID, and performs no
+ * provider-mapping lookup at all — a LIVE mapping created for a manually
+ * issued Stripe Payment Link is a fact about sales fulfillment, not about
+ * self-checkout eligibility, and must never gate whether this reads.
+ */
+async function getEnterpriseAnnualPlans(): Promise<EnterpriseAnnualPlan[]> {
+  const products = await prisma.commerceProduct.findMany({
+    where: { code: { in: [...ENTERPRISE_ANNUAL_PRODUCT_CODES] }, isActive: true },
+    include: { prices: { where: { isActive: true, reviewStatus: "APPROVED", billingInterval: "YEAR" } } },
+  });
+  const byCode = new Map(products.map((product) => [product.code, product]));
+
+  return ENTERPRISE_ANNUAL_PRODUCT_CODES.filter((code) => byCode.has(code)).map((code) => {
+    const product = byCode.get(code)!;
+    const price = product.prices[0];
+    return {
+      productCode: product.code,
+      name: product.name,
+      shortDescription: product.shortDescription,
+      price: price ? { priceCode: price.code, amountMinor: price.amountMinor, currency: price.currency } : null,
+    };
+  });
+}
 
 /**
  * Applies the exact same eligibility criteria as
@@ -64,13 +114,21 @@ export type CheckoutAvailability = {
  */
 /**
  * CORRECTION-1 — every industryPackageId this company already holds a
- * non-final ("stripe"-sourced) CompanyPackageSubscription for. Different
- * libraries coexist freely; only a repurchase of one of THESE exact
- * packageIds is reported unavailable below.
+ * non-final CompanyPackageSubscription for. Different libraries coexist
+ * freely; only a repurchase of one of THESE exact packageIds is reported
+ * unavailable below.
+ *
+ * item-C (Round 3 correction) — deliberately NOT filtered by
+ * `source: "stripe"`, mirroring the same fix in
+ * hasNonFinalPackageSubscription (commerce-checkout-service.ts): an
+ * owner/admin-granted `platform_owner_activation` row means the company
+ * already owns this library exactly as much as a Stripe-purchased one, and
+ * the Buy button must reflect that — never offer to re-charge a library the
+ * company already has via any source.
  */
 async function getOwnedIndustryPackageIds(companyId: string): Promise<Set<string>> {
   const rows = await prisma.companyPackageSubscription.findMany({
-    where: { companyId, source: "stripe", status: { in: [...NON_FINAL_SUBSCRIPTION_STATUSES] } },
+    where: { companyId, status: { in: [...NON_FINAL_SUBSCRIPTION_STATUSES] } },
     select: { packageId: true },
   });
   return new Set(rows.map((row) => row.packageId));
@@ -80,6 +138,7 @@ export async function getCheckoutAvailability(actor: CurrentActor): Promise<Chec
   const environment = resolveCheckoutEnvironment();
   const hasExistingSubscription = await hasNonFinalStripeSubscription(actor.companyId);
   const ownedIndustryPackageIds = await getOwnedIndustryPackageIds(actor.companyId);
+  const enterpriseProducts = await getEnterpriseAnnualPlans();
 
   const products = await prisma.commerceProduct.findMany({
     where: { isActive: true, isPublic: true, purchaseMode: "DIRECT", type: "SUBSCRIPTION" },
@@ -156,5 +215,5 @@ export async function getCheckoutAvailability(actor: CurrentActor): Promise<Chec
     }
   }
 
-  return { hasExistingSubscription, products: result };
+  return { hasExistingSubscription, products: result, enterpriseProducts };
 }

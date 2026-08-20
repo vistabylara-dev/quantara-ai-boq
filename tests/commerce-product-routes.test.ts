@@ -41,6 +41,18 @@ describe("commerce product API routes (integration, real local Postgres)", () =>
   beforeAll(async () => {
     await seedCommerceProducts(prisma);
 
+    // item-D (Round 3 correction) — the public catalogue route now excludes
+    // any price still REQUIRES_REVIEW (see toPublicCommerceProductDTO). This
+    // anchor SKU's price is otherwise never routed through the governed
+    // approval flow in this suite, so approve it directly here (a
+    // test-database-only fixture write, not a production approval) so the
+    // "public route returns real active+public AED products" assertion
+    // below continues to reflect a real, approved catalogue entry.
+    await prisma.commercePrice.updateMany({
+      where: { code: "starter_monthly_aed_149" },
+      data: { reviewStatus: "APPROVED" },
+    });
+
     const company = await prisma.company.create({
       data: { legalName: `Commerce Routes Co ${RUN_ID}`, tradeName: "Commerce Routes", email: `commerce-routes-${RUN_ID}@example.com` },
     });
@@ -64,6 +76,8 @@ describe("commerce product API routes (integration, real local Postgres)", () =>
     await prisma.platformAuditLog.deleteMany({ where: { actorUserId: ownerUserId } });
     await prisma.commercePrice.deleteMany({ where: { productId: privateProductId } });
     await prisma.commerceProduct.delete({ where: { id: privateProductId } }).catch(() => undefined);
+    await prisma.commercePrice.deleteMany({ where: { code: { contains: RUN_ID } } });
+    await prisma.commerceProduct.deleteMany({ where: { code: { contains: RUN_ID } } });
     await prisma.user.delete({ where: { id: ownerUserId } }).catch(() => undefined);
     await prisma.company.delete({ where: { id: ownerCompanyId } }).catch(() => undefined);
     await prisma.$disconnect();
@@ -104,6 +118,30 @@ describe("commerce product API routes (integration, real local Postgres)", () =>
     it("rejects an unrecognized query parameter", async () => {
       const res = await publicProductsGET(new Request("http://localhost/api/commerce/products?bogus=1"));
       expect(res.status).toBe(400);
+    });
+
+    it("item-D: a REQUIRES_REVIEW price is absent from the public projection, and appears once APPROVED", async () => {
+      const productCode = `test_route_review_gate_${RUN_ID}`;
+      const priceCode = `test_route_review_gate_price_${RUN_ID}`;
+      const { product } = await upsertCommerceProduct({ code: productCode, type: "SUBSCRIPTION", name: "Review Gate Product", purchaseMode: "DIRECT", isActive: true, isPublic: true });
+      const { price } = await upsertCommercePrice({ productId: product.id, code: priceCode, amountMinor: 5000, billingInterval: "MONTH" });
+
+      // Freshly created — never approved. reviewStatus defaults to
+      // REQUIRES_REVIEW (see prisma/schema.prisma), so the price must not be
+      // published yet, even though the product itself is active+public.
+      const beforeApproval = await publicProductsGET(new Request("http://localhost/api/commerce/products"));
+      const beforeBody = await json(beforeApproval);
+      const beforeProduct = beforeBody.data.find((p: { code: string }) => p.code === productCode);
+      expect(beforeProduct).toBeDefined();
+      expect(beforeProduct.prices.some((pr: { code: string }) => pr.code === priceCode)).toBe(false);
+
+      await prisma.commercePrice.update({ where: { id: price.id }, data: { reviewStatus: "APPROVED" } });
+
+      const afterApproval = await publicProductsGET(new Request("http://localhost/api/commerce/products"));
+      const afterBody = await json(afterApproval);
+      const afterProduct = afterBody.data.find((p: { code: string }) => p.code === productCode);
+      expect(afterProduct).toBeDefined();
+      expect(afterProduct.prices.some((pr: { code: string }) => pr.code === priceCode)).toBe(true);
     });
   });
 

@@ -86,8 +86,19 @@ export function toCommerceProductDTO(row: CommerceProductRecord) {
 
 export type CommerceProductDTO = ReturnType<typeof toCommerceProductDTO>;
 
-/** Public projection — never database IDs beyond the product's own, never metadataJson,
- *  never inactive/private products, never unpublished prices. */
+/**
+ * Public projection — never database IDs beyond the product's own, never
+ * metadataJson, never inactive/private products, never unpublished prices.
+ *
+ * item-D (Round 3 correction) — "never unpublished prices" was previously
+ * NOT enforced here: only `isActive` was checked, so a price still awaiting
+ * governed owner/admin approval (`reviewStatus: "REQUIRES_REVIEW"`, or even
+ * "DRAFT"/"RETIRED") was exposed by the public, unauthenticated
+ * /api/commerce/products endpoint the moment its product/price rows were
+ * active — before any approval. Only `reviewStatus === "APPROVED"` is a
+ * published price; every other status is filtered out here exactly as the
+ * governed approval flow (commerce-price-approval-service.ts) intends.
+ */
 export function toPublicCommerceProductDTO(row: CommerceProductRecord) {
   return {
     code: row.code,
@@ -97,7 +108,7 @@ export function toPublicCommerceProductDTO(row: CommerceProductRecord) {
     description: row.description,
     purchaseMode: row.purchaseMode,
     prices: row.prices
-      .filter((p) => p.isActive)
+      .filter((p) => p.isActive && p.reviewStatus === "APPROVED")
       .map((p) => ({
         code: p.code,
         amountMinor: p.amountMinor,

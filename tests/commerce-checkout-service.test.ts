@@ -7,6 +7,7 @@ import {
 } from "../src/lib/services/commerce-checkout-service";
 import { upsertCommerceProduct, upsertCommercePrice } from "../src/lib/repositories/commerce-product-repository";
 import { createMapping } from "../src/lib/repositories/commerce-provider-mapping-repository";
+import { TAYQAN_PRODUCT_FAMILY } from "../src/lib/tayqan/tayqan-commerce";
 
 const RUN_ID = `${Date.now()}-${process.pid}-checkout`;
 
@@ -229,6 +230,30 @@ describe("commerce-checkout-service (integration, real local Postgres, mocked St
 
   it("rejects a non-DIRECT (quotation-required) product", async () => {
     const { price } = await makeApprovedDirectPrice({ purchaseMode: "QUOTATION_REQUIRED" });
+    const actor = actorFor(userId, companyId, `checkout-owner-${RUN_ID}@example.com`);
+    await expect(createCommerceCheckoutSession(actor, { priceCode: price.code }, mockStripeClient())).rejects.toMatchObject({ reason: "PRODUCT_NOT_DIRECT_PURCHASE" });
+  });
+
+  it("item-A: rejects a CONTACT_SALES annual price — the same purchaseMode enterprise_core/scale/authority now use — even when APPROVED and LIVE-mapped", async () => {
+    // Uses a test-local CONTACT_SALES fixture rather than mutating the real
+    // seeded enterprise_core/scale/authority rows (shared, non-transactional
+    // test database — see prisma/seed-data/commerce-products.ts for the
+    // real Enterprise specs). The rejection this proves is driven entirely
+    // by purchaseMode !== "DIRECT" in loadEligibleCommercePrice, which is
+    // identical for this fixture and the real Enterprise products.
+    const { product, price } = await makeApprovedDirectPrice({ purchaseMode: "CONTACT_SALES", billingInterval: "YEAR", amountMinor: 1500000 });
+    // Approved AND mapped in LIVE — proves this is a genuine
+    // "purchaseMode blocks checkout regardless of approval/sync state"
+    // rejection, not an incidental PROVIDER_MAPPING_MISSING/PRICE_NOT_APPROVED.
+    await createMapping({
+      provider: "STRIPE",
+      environment: "LIVE",
+      commerceProductId: product.id,
+      commercePriceId: price.id,
+      providerProductId: `prod_live_sales_led_${RUN_ID}`,
+      providerPriceId: `price_live_sales_led_${RUN_ID}`,
+      providerObjectType: "PRICE",
+    });
     const actor = actorFor(userId, companyId, `checkout-owner-${RUN_ID}@example.com`);
     await expect(createCommerceCheckoutSession(actor, { priceCode: price.code }, mockStripeClient())).rejects.toMatchObject({ reason: "PRODUCT_NOT_DIRECT_PURCHASE" });
   });
@@ -524,6 +549,51 @@ describe("commerce-checkout-service (integration, real local Postgres, mocked St
     expect(stripe.checkout.sessions.expire).toHaveBeenCalledWith(staleMonthlySessionId);
     const callArgs = stripe.checkout.sessions.create.mock.calls[0][0];
     expect(callArgs.line_items).toEqual([{ price: `price_test_annual_${RUN_ID}`, quantity: 1 }]);
+  });
+
+  it("item-B: an open TAYQAN Checkout Session is never expired or reused by a general commerce (core software / Industry Library) checkout", async () => {
+    // Regression test — findAppOwnedOpenCheckoutSessions previously matched
+    // ANY session carrying this company's quantara_company_id, including a
+    // TAYQAN-owned session (tayqan-checkout-service.ts sets
+    // quantara_company_id AND quantara_product_family: TAYQAN_PRODUCT_FAMILY
+    // on its own sessions). A core/library checkout would then treat the
+    // open TAYQAN session as "stale" and expire it via
+    // stripe.checkout.sessions.expire — TAYQAN checkout sessions must only
+    // ever be expired/reused by tayqan-checkout-service.ts's own
+    // expireOtherTayqanSessions.
+    const { product, price } = await makeApprovedDirectPrice();
+    await createMapping({
+      provider: "STRIPE",
+      environment: "TEST",
+      commerceProductId: product.id,
+      commercePriceId: price.id,
+      providerProductId: `prod_test_tayqan_coexist_${RUN_ID}`,
+      providerPriceId: `price_test_tayqan_coexist_${RUN_ID}`,
+      providerObjectType: "PRICE",
+    });
+    const actor = actorFor(userId, fourthCompanyId, `checkout-fourth-${RUN_ID}@example.com`);
+    const stripe = mockStripeClient();
+    const openTayqanSessionId = `cs_open_tayqan_${RUN_ID}`;
+    stripe.checkout.sessions.list.mockResolvedValueOnce({
+      data: [
+        {
+          id: openTayqanSessionId,
+          url: `https://checkout.stripe.com/test/tayqan_open_${RUN_ID}`,
+          metadata: { quantara_company_id: fourthCompanyId, quantara_product_family: TAYQAN_PRODUCT_FAMILY, quantara_tayqan_price_code: "tayqan_monthly_2499" },
+        },
+      ],
+      has_more: false,
+    });
+
+    const result = await createCommerceCheckoutSession(actor, { priceCode: price.code }, stripe);
+
+    // A new, independent commerce Checkout Session was created — the TAYQAN
+    // session was never treated as reusable (different product entirely)
+    // nor as a stale duplicate to expire.
+    expect(result.checkoutUrl).toMatch(/^https:\/\/checkout\.stripe\.com/);
+    expect(result.checkoutSessionId).not.toBe(openTayqanSessionId);
+    expect(stripe.checkout.sessions.expire).not.toHaveBeenCalled();
+    expect(stripe.checkout.sessions.create).toHaveBeenCalledTimes(1);
   });
 
   it("FIX 3: a blocking subscription that only appears on a later page still blocks checkout", async () => {
@@ -982,6 +1052,40 @@ describe("commerce-checkout-service (integration, real local Postgres, mocked St
       const stripe = stripeWithActiveSubscription(owned.providerPriceId);
 
       const result = await createCommerceCheckoutSession(actor, { priceCode: other.price.code }, stripe);
+      expect(result.checkoutUrl).toMatch(/^https:\/\/checkout\.stripe\.com/);
+    });
+
+    it("item-C (G) an owner-granted (platform_owner_activation) library entitlement blocks a duplicate Stripe checkout for the SAME library", async () => {
+      // hasNonFinalPackageSubscription previously only checked
+      // source: "stripe" — an owner/admin-activated library (e.g. via
+      // master-catalogue-activation-service.ts, source: "platform_owner_activation")
+      // did not count as "already owns this package," so a company could be
+      // charged again on Stripe for a library the platform owner already
+      // granted them for free.
+      const companyId = await makeCoexistCompany("G");
+      const pkg = await makeLibraryPackage("G-hvac");
+      const library = await makeMappedPrice("g-hvac", { industryPackageId: pkg.id });
+      await prisma.companyPackageSubscription.create({
+        data: { companyId, packageId: pkg.id, status: "ACTIVE", startsAt: new Date(), source: "platform_owner_activation" },
+      });
+
+      const actor = actorFor(userId, companyId, `coexist-g-${RUN_ID}@example.com`);
+      await expect(createCommerceCheckoutSession(actor, { priceCode: library.price.code }, mockStripeClient())).rejects.toMatchObject({
+        code: "CHECKOUT_ALREADY_OWNS_PACKAGE",
+      });
+    });
+
+    it("item-C (H) an owner-granted (platform_owner_activation) library entitlement does not block buying a DIFFERENT library", async () => {
+      const companyId = await makeCoexistCompany("H");
+      const pkgOwned = await makeLibraryPackage("H-hvac");
+      await prisma.companyPackageSubscription.create({
+        data: { companyId, packageId: pkgOwned.id, status: "ACTIVE", startsAt: new Date(), source: "platform_owner_activation" },
+      });
+      const pkgOther = await makeLibraryPackage("H-plumbing");
+      const other = await makeMappedPrice("h-plumbing", { industryPackageId: pkgOther.id });
+
+      const actor = actorFor(userId, companyId, `coexist-h-${RUN_ID}@example.com`);
+      const result = await createCommerceCheckoutSession(actor, { priceCode: other.price.code }, mockStripeClient());
       expect(result.checkoutUrl).toMatch(/^https:\/\/checkout\.stripe\.com/);
     });
 

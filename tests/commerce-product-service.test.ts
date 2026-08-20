@@ -245,15 +245,34 @@ describe("commerce product catalogue (integration, real local Postgres)", () => 
     it("public projection never includes an inactive price even for an otherwise public product", async () => {
       const productCode = `test_mixed_prices_${RUN_ID}`;
       const { product } = await upsertCommerceProduct({ code: productCode, type: "ONE_TIME", name: "Mixed Prices Product", isActive: true, isPublic: true });
-      await upsertCommercePrice({ productId: product.id, code: `test_mixed_active_${RUN_ID}`, amountMinor: 1000, billingInterval: "ONE_TIME" });
+      const { price: activePrice } = await upsertCommercePrice({ productId: product.id, code: `test_mixed_active_${RUN_ID}`, amountMinor: 1000, billingInterval: "ONE_TIME" });
+      await prisma.commercePrice.update({ where: { id: activePrice.id }, data: { reviewStatus: "APPROVED" } });
       await prisma.commercePrice.create({
-        data: { productId: product.id, code: `test_mixed_inactive_${RUN_ID}`, amountMinor: 9999, billingInterval: "ONE_TIME", isActive: false },
+        data: { productId: product.id, code: `test_mixed_inactive_${RUN_ID}`, amountMinor: 9999, billingInterval: "ONE_TIME", isActive: false, reviewStatus: "APPROVED" },
       });
 
       const publicList = await listPublicCommerceProducts();
       const found = publicList.find((p) => p.code === productCode);
       expect(found?.prices).toHaveLength(1);
       expect(found?.prices[0].amountMinor).toBe(1000);
+    });
+
+    it("item-D: public projection never includes a REQUIRES_REVIEW price, and includes it once APPROVED", async () => {
+      const productCode = `test_review_gate_${RUN_ID}`;
+      const { product } = await upsertCommerceProduct({ code: productCode, type: "ONE_TIME", name: "Review Gate Product", isActive: true, isPublic: true });
+      const { price } = await upsertCommercePrice({ productId: product.id, code: `test_review_gate_price_${RUN_ID}`, amountMinor: 2500, billingInterval: "ONE_TIME" });
+
+      const beforeApproval = await listPublicCommerceProducts();
+      const beforeFound = beforeApproval.find((p) => p.code === productCode);
+      expect(beforeFound).toBeDefined();
+      expect(beforeFound?.prices).toHaveLength(0);
+
+      await prisma.commercePrice.update({ where: { id: price.id }, data: { reviewStatus: "APPROVED" } });
+
+      const afterApproval = await listPublicCommerceProducts();
+      const afterFound = afterApproval.find((p) => p.code === productCode);
+      expect(afterFound?.prices).toHaveLength(1);
+      expect(afterFound?.prices[0].amountMinor).toBe(2500);
     });
   });
 

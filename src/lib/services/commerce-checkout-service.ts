@@ -16,7 +16,7 @@ import {
   createStripeBillingCustomer,
   findStripeBillingCustomer,
 } from "@/lib/repositories/stripe-billing-repository";
-import { isTayqanProductCode } from "@/lib/tayqan/tayqan-commerce";
+import { isTayqanProductCode, TAYQAN_PRODUCT_FAMILY } from "@/lib/tayqan/tayqan-commerce";
 
 /**
  * STRIPE-COMMERCIAL-2 — server-side checkout. The browser sends only a
@@ -228,6 +228,15 @@ async function assertNoExistingNonFinalSubscription(companyId: string, client: C
  * DIFFERENT non-final CompanyPackageSubscription rows at once (different
  * libraries coexist freely), so this only blocks a repurchase of the SAME
  * industryPackageId, never a different one.
+ *
+ * item-C (Round 3 correction) — deliberately NOT filtered by
+ * `source: "stripe"`. "Already owns this package" must be true regardless
+ * of HOW the entitlement was granted — an owner/admin-granted
+ * `platform_owner_activation` row (see master-catalogue-activation-service.ts)
+ * means the company owns this library exactly as much as a Stripe-purchased
+ * one does, and must block a duplicate Stripe charge for the same
+ * industryPackageId. Any non-final status for this exact packageId, from any
+ * source, is blocking.
  */
 async function hasNonFinalPackageSubscription(
   companyId: string,
@@ -235,7 +244,7 @@ async function hasNonFinalPackageSubscription(
   client: CompanyPackageSubscriptionClient = prisma,
 ): Promise<boolean> {
   const existing = await client.companyPackageSubscription.findFirst({
-    where: { companyId, packageId: industryPackageId, source: "stripe", status: { in: [...NON_FINAL_SUBSCRIPTION_STATUSES] } },
+    where: { companyId, packageId: industryPackageId, status: { in: [...NON_FINAL_SUBSCRIPTION_STATUSES] } },
     select: { id: true },
   });
   return existing !== null;
@@ -387,6 +396,16 @@ async function assertNoExistingStripeSubscription(
  * arbitrary open session that merely happens to share the same Stripe
  * customer. Paginated for the same reason as hasBlockingStripeSubscription
  * above; fails closed on a provider error.
+ *
+ * item-B (Round 3 correction) — explicitly EXCLUDES TAYQAN-owned sessions
+ * (quantara_product_family === TAYQAN_PRODUCT_FAMILY, set by
+ * tayqan-checkout-service.ts's createTayqanCheckoutSession alongside its own
+ * quantara_company_id). TAYQAN checkout sessions are only ever created,
+ * reused, and expired by tayqan-checkout-service.ts's own
+ * expireOtherTayqanSessions — a general commerce (core software / Industry
+ * Library) checkout for the same company must never expire or reuse one.
+ * Before this fix, a core/library checkout would see a TAYQAN session as
+ * just another app-owned open session and expire it as "stale."
  */
 async function findAppOwnedOpenCheckoutSessions(
   stripe: Stripe,
@@ -403,6 +422,7 @@ async function findAppOwnedOpenCheckoutSessions(
       throw new AppError("STRIPE_CHECKOUT_SESSION_LOOKUP_FAILED", "Could not verify existing checkout sessions with Stripe. Please try again.", 502);
     }
     for (const session of page.data) {
+      if (session.metadata?.quantara_product_family === TAYQAN_PRODUCT_FAMILY) continue;
       if (session.metadata?.quantara_company_id === companyId) matches.push(session);
     }
     if (!page.has_more || page.data.length === 0) return matches;

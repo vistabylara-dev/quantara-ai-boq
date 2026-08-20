@@ -154,20 +154,32 @@ const CATALOGUE_PRODUCTS: ProductSpec[] = [
    * starter/professional/business, these are not offered on a monthly
    * cadence). Distinct from the pre-existing `enterprise_installation`
    * below, which is a one-time, CONTACT_SALES professional-services
-   * engagement with no SoftwarePlan mapping — these three are real
-   * `type: "SUBSCRIPTION"` / `purchaseMode: "DIRECT"` self-checkout
-   * products, mapped to commerce_enterprise_core/scale/authority in
-   * src/lib/entitlements/commerce-plan-mapping.ts. The 15 paid Industry
-   * Libraries are deliberately NOT included in any of these — that catalogue
-   * stays a separate purchase on every tier, same as starter/professional/
-   * business above.
+   * engagement with no SoftwarePlan mapping — these three ARE real
+   * `type: "SUBSCRIPTION"` products with real annual CommercePrice rows,
+   * mapped to commerce_enterprise_core/scale/authority in
+   * src/lib/entitlements/commerce-plan-mapping.ts, but are deliberately
+   * `purchaseMode: "CONTACT_SALES"`, NOT "DIRECT" — Enterprise is sales-led
+   * (see legal.terms.checkoutBody: Enterprise scope requires a separate
+   * written quotation/agreement). This keeps them rejected by
+   * loadEligibleCommercePrice/PRODUCT_NOT_DIRECT_PURCHASE in
+   * commerce-checkout-service.ts and absent from getCheckoutAvailability's
+   * DIRECT-only query in commerce-checkout-availability-service.ts, while
+   * still allowing a narrow, exact-code LIVE-only sync exception
+   * (SALES_LED_LIVE_SYNC_PRODUCT_CODES in stripe-live-sync-service.ts) so an
+   * approved price can be created/mapped in live Stripe for a manually
+   * issued Stripe Payment Link. The 15 paid Industry Libraries are
+   * deliberately NOT included in any of these — that catalogue stays a
+   * separate purchase on every tier, same as starter/professional/business
+   * above.
    */
   {
     code: "enterprise_core",
     type: "SUBSCRIPTION",
     name: "Enterprise Core",
     shortDescription: "For established contractors and consultancies needing high-volume BOQ production.",
-    description: "Annual enterprise subscription: high-volume BOQ generation, API access, company branding and enterprise onboarding.",
+    description:
+      "Annual enterprise subscription: high-volume BOQ generation, API enablement subject to configured availability, company branding included as a setup service, and enterprise onboarding.",
+    purchaseMode: "CONTACT_SALES",
     sortOrder: 34,
     prices: [{ code: "enterprise_core_annual_aed_15000", amountMinor: 1500000, billingInterval: "YEAR" }],
     entitlement: {
@@ -189,7 +201,9 @@ const CATALOGUE_PRODUCTS: ProductSpec[] = [
     type: "SUBSCRIPTION",
     name: "Enterprise Scale",
     shortDescription: "For multi-team and multi-department companies running BOQ production at scale.",
-    description: "Annual enterprise subscription: higher-volume BOQ generation, white-label output, API access and priority onboarding/support.",
+    description:
+      "Annual enterprise subscription: higher-volume BOQ generation, white-label setup included as an implementation service, API enablement subject to configured availability, and priority onboarding/support.",
+    purchaseMode: "CONTACT_SALES",
     sortOrder: 35,
     prices: [{ code: "enterprise_scale_annual_aed_25000", amountMinor: 2500000, billingInterval: "YEAR" }],
     entitlement: {
@@ -212,7 +226,9 @@ const CATALOGUE_PRODUCTS: ProductSpec[] = [
     type: "SUBSCRIPTION",
     name: "Enterprise Authority",
     shortDescription: "For large groups, consultancies and institutional customers needing dedicated onboarding.",
-    description: "Annual enterprise subscription: unlimited users/workspaces, full white-label output, private catalogue/data onboarding and executive-priority support.",
+    description:
+      "Annual enterprise subscription: unlimited user and workspace commercial allowance, full white-label setup included as an implementation service, private catalogue/data onboarding and executive-priority support.",
+    purchaseMode: "CONTACT_SALES",
     sortOrder: 36,
     prices: [{ code: "enterprise_authority_annual_aed_35000", amountMinor: 3500000, billingInterval: "YEAR" }],
     entitlement: {

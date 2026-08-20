@@ -83,7 +83,23 @@ type CheckoutOptionProduct = {
   prices: CheckoutOptionPrice[];
 };
 
-type CheckoutAvailability = { hasExistingSubscription: boolean; products: CheckoutOptionProduct[] };
+/**
+ * item-A (Round 3 correction) — Enterprise Core/Scale/Authority are
+ * purchaseMode: "CONTACT_SALES", so they never appear in
+ * CheckoutAvailability.products (that list is DIRECT-only self-checkout
+ * eligibility). This is the separate, non-checkout shape
+ * getEnterpriseAnnualPlans (commerce-checkout-availability-service.ts)
+ * returns instead — no `available`/`unavailableReason`, since self-checkout
+ * availability is not a concept that applies to a sales-led product.
+ */
+type EnterpriseAnnualPlan = {
+  productCode: string;
+  name: string;
+  shortDescription: string;
+  price: { priceCode: string; amountMinor: number; currency: string } | null;
+};
+
+type CheckoutAvailability = { hasExistingSubscription: boolean; products: CheckoutOptionProduct[]; enterpriseProducts: EnterpriseAnnualPlan[] };
 type BillingInterval = "MONTH" | "YEAR";
 type SoftwareProductCode = "starter" | "professional" | "business";
 
@@ -423,9 +439,14 @@ function SubscriptionSettingsContent() {
     checkoutAvailability?.products.find((product) => product.productCode === productCode),
   ).filter((product): product is CheckoutOptionProduct => Boolean(product));
 
+  // item-A (Round 3 correction) — Enterprise cards no longer source from
+  // checkoutAvailability.products (DIRECT-only self-checkout availability;
+  // Enterprise is purchaseMode: "CONTACT_SALES" and is deliberately absent
+  // from it). enterpriseProducts now comes from the separate, non-checkout
+  // checkoutAvailability.enterpriseProducts catalogue read.
   const enterpriseProducts = ENTERPRISE_PRODUCT_ORDER.map((productCode) =>
-    checkoutAvailability?.products.find((product) => product.productCode === productCode),
-  ).filter((product): product is CheckoutOptionProduct => Boolean(product));
+    checkoutAvailability?.enterpriseProducts.find((product) => product.productCode === productCode),
+  ).filter((product): product is EnterpriseAnnualPlan => Boolean(product));
 
   const hasExistingSubscription = checkoutAvailability?.hasExistingSubscription ?? false;
   const projectAllowance =
@@ -747,7 +768,7 @@ function SubscriptionSettingsContent() {
               {enterpriseProducts.map((product) => {
                 const code = product.productCode as EnterpriseProductCode;
                 const meta = ENTERPRISE_PLAN_UI[code];
-                const price = product.prices.find((candidate) => candidate.billingInterval === "YEAR");
+                const price = product.price;
                 const isSelectedPricingIntent = price?.priceCode === selectedPricingIntent;
                 const currentPlan = entitlements.planName.trim().toLowerCase() === product.name.trim().toLowerCase();
 

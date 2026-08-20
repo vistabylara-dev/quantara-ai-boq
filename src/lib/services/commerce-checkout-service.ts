@@ -126,7 +126,8 @@ export function resolveCheckoutEnvironment(): CommerceProviderEnvironment {
   return getConfiguredStripeMode() === "live" ? "LIVE" : "TEST";
 }
 
-function resolveCommercialStripeClient(overrideClient?: Stripe): Stripe {
+/** v5 — exported (behavior unchanged) so the sales-led Enterprise checkout path resolves the commercial Stripe client through the identical mode/key-validated entry point, including the same safe 503 on a misconfigured key. */
+export function resolveCommercialStripeClient(overrideClient?: Stripe): Stripe {
   try {
     return getStripeCommercialClient(overrideClient);
   } catch (error) {
@@ -351,7 +352,15 @@ async function classifySubscriptionForBlocking(
   return { matchesCoreSoftware, libraryPackageIds };
 }
 
-async function hasBlockingStripeSubscription(
+/**
+ * v5 — exported (behavior unchanged) so the sales-led Enterprise checkout
+ * path (enterprise-sales-checkout-service.ts) reuses this exact, already-
+ * hardened, family-aware, fail-closed Stripe-side check instead of
+ * reimplementing it. Enterprise is CORE_SOFTWARE (no industryPackageId, not
+ * a TAYQAN code — see classifyCommerceProductFamily), so it passes
+ * `{ family: "CORE_SOFTWARE" }` exactly as self-serve core checkout does.
+ */
+export async function hasBlockingStripeSubscription(
   stripe: Stripe,
   stripeCustomerId: string,
   environment: CommerceProviderEnvironment,
@@ -407,7 +416,24 @@ async function assertNoExistingStripeSubscription(
  * Before this fix, a core/library checkout would see a TAYQAN session as
  * just another app-owned open session and expire it as "stale."
  */
-async function findAppOwnedOpenCheckoutSessions(
+/**
+ * v5 — exported (behavior unchanged) so the sales-led Enterprise checkout
+ * path participates in the SAME STRIPE-COMMERCIAL-21 "at most one
+ * Quantara-owned open Checkout Session per company" invariant rather than
+ * running a parallel, unsynchronized session lifecycle beside it.
+ *
+ * Deliberately NOT given an Enterprise carve-out mirroring the TAYQAN one
+ * above. A TAYQAN hire and a core software subscription are independent
+ * purchases that may legitimately be in flight at once; a sales-led
+ * Enterprise annual subscription and a self-serve Starter/Professional/
+ * Business subscription are the SAME family (CORE_SOFTWARE) and must never
+ * both be open and payable for one company — that is precisely the
+ * double-charge this invariant exists to prevent. The accepted cost is that
+ * a customer starting a self-serve checkout expires a pending sales-issued
+ * Enterprise session (and vice versa): recoverable by re-issuing the link,
+ * unlike a duplicate charge.
+ */
+export async function findAppOwnedOpenCheckoutSessions(
   stripe: Stripe,
   stripeCustomerId: string,
   companyId: string,
@@ -450,7 +476,16 @@ async function findAppOwnedOpenCheckoutSessions(
  */
 const CHECKOUT_LOCK_NAMESPACE = 419_628_331;
 
-async function acquireCompanyCheckoutLock(tx: Prisma.TransactionClient, companyId: string): Promise<void> {
+/**
+ * v5 — exported (behavior unchanged) so the sales-led Enterprise checkout
+ * path takes the SAME per-company lock, on the SAME namespace, as self-serve
+ * checkout. Using a distinct namespace (as TAYQAN deliberately does) would
+ * defeat the purpose here: an operator-issued Enterprise session and a
+ * customer-issued core software session for one company MUST contend, so
+ * neither can pass its existing-subscription/open-session checks while the
+ * other is mid-flight.
+ */
+export async function acquireCompanyCheckoutLock(tx: Prisma.TransactionClient, companyId: string): Promise<void> {
   await tx.$executeRaw`SELECT pg_advisory_xact_lock(${CHECKOUT_LOCK_NAMESPACE}, hashtext(${companyId}))`;
 }
 
@@ -465,27 +500,59 @@ async function acquireCompanyCheckoutLock(tx: Prisma.TransactionClient, companyI
  * constraint (via createStripeBillingCustomer's catch-and-refetch) then
  * guarantees only one StripeBillingCustomer row survives regardless.
  */
+/**
+ * v5 — the company-scoped form of the customer resolution below, extracted
+ * verbatim (no logic change) and exported so the sales-led Enterprise
+ * checkout path resolves/creates the SAME single Quantara-owned
+ * StripeBillingCustomer row this app has always used, rather than
+ * reimplementing customer creation a third time.
+ *
+ * This is the ONLY reason a manually issued Enterprise checkout can be
+ * fulfilled automatically: stripe-webhook-service.ts's
+ * applyCurrentSubscriptionState resolves tenant identity exclusively by
+ * looking the subscription's Stripe customer ID up in StripeBillingCustomer.
+ * A Stripe-Dashboard-created Payment Link that mints its own new Customer
+ * has no such row, so its payment can never be attributed to a company — the
+ * exact "customer paid, entitlement never granted" gap this path closes.
+ *
+ * `fallbackEmail` is the acting user's email for self-serve checkout (where a
+ * real human is present) and null for the operator-issued Enterprise path,
+ * where attaching the platform operator's own address to the CUSTOMER'S
+ * Stripe customer record would be wrong. Email is only ever a display field
+ * on the Stripe customer here — it is never used to match, resolve, or
+ * authorize a tenant anywhere in this codebase.
+ */
+export async function getOrCreateStripeCustomerForCompanyId(
+  stripe: Stripe,
+  companyId: string,
+  fallbackEmail: string | null,
+  livemode: boolean,
+  tx: Prisma.TransactionClient,
+): Promise<string> {
+  const existing = await findStripeBillingCustomer(companyId, livemode, tx);
+  if (existing) return existing.stripeCustomerId;
+
+  const company = await tx.company.findUniqueOrThrow({ where: { id: companyId } });
+  const stripeCustomer = await stripe.customers.create(
+    {
+      name: company.legalName,
+      email: company.email || fallbackEmail || undefined,
+      metadata: { quantara_company_id: companyId },
+    },
+    { idempotencyKey: `quantara:${livemode ? "live" : "test"}:customer:${companyId}` },
+  );
+
+  const created = await createStripeBillingCustomer(companyId, stripeCustomer.id, livemode, tx);
+  return created.stripeCustomerId;
+}
+
 async function getOrCreateStripeCustomerForCompany(
   stripe: Stripe,
   actor: CurrentActor,
   livemode: boolean,
   tx: Prisma.TransactionClient,
 ): Promise<string> {
-  const existing = await findStripeBillingCustomer(actor.companyId, livemode, tx);
-  if (existing) return existing.stripeCustomerId;
-
-  const company = await tx.company.findUniqueOrThrow({ where: { id: actor.companyId } });
-  const stripeCustomer = await stripe.customers.create(
-    {
-      name: company.legalName,
-      email: company.email || actor.email,
-      metadata: { quantara_company_id: actor.companyId },
-    },
-    { idempotencyKey: `quantara:${livemode ? "live" : "test"}:customer:${actor.companyId}` },
-  );
-
-  const created = await createStripeBillingCustomer(actor.companyId, stripeCustomer.id, livemode, tx);
-  return created.stripeCustomerId;
+  return getOrCreateStripeCustomerForCompanyId(stripe, actor.companyId, actor.email, livemode, tx);
 }
 
 export type CreateCheckoutSessionInput = {

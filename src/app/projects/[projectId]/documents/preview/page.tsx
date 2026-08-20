@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState, use } from "react";
 import type { BOQ } from "@/types/boq";
 import type { Project } from "@/types/project";
-import { apiClient, getApiErrorMessage } from "@/lib/api/client";
+import { apiClient, getApiErrorMessage, ApiClientError } from "@/lib/api/client";
 import { CommercialUnlockPanel } from "@/components/commercial/commercial-unlock-panel";
 import type { CommercialAccessDecision } from "@/lib/commercial/commercial-types";
 import { GuideTip } from "@/components/guidance/guide-tip";
@@ -104,7 +104,20 @@ export default function DocumentPreviewPage(props: PageProps) {
       });
       setGeneratedOk(true);
     } catch (error) {
-      setDownloadError(getApiErrorMessage(error));
+      // Same race as the generate() flow on the documents list page: the
+      // pre-check can pass and this request can still 403 with
+      // COMMERCIAL_UNLOCK_REQUIRED if the manifest changed in between. Show
+      // the real unlock panel rather than a bare error string.
+      if (boqId && error instanceof ApiClientError && error.code === "COMMERCIAL_UNLOCK_REQUIRED") {
+        try {
+          const decision = await apiClient.get<CommercialAccessDecision>(`/api/boqs/${encodeURIComponent(boqId)}/commercial-requirements`);
+          setCommercialDecision({ boqId, decision });
+        } catch {
+          setDownloadError(getApiErrorMessage(error));
+        }
+      } else {
+        setDownloadError(getApiErrorMessage(error));
+      }
     } finally {
       setIsCheckingUnlock(false);
     }

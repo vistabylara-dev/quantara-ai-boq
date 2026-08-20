@@ -1,6 +1,9 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { SESSION_COOKIE_NAME } from "@/lib/auth/session-cookie-name";
-import { PUBLIC_WEBSITE_PATHS } from "@/lib/public-site/public-route-paths";
+import {
+  PUBLIC_PATHNAME_HEADER,
+  PUBLIC_WEBSITE_PATHS,
+} from "@/lib/public-site/public-route-paths";
 
 const ADMIN_LOGIN_PAGE = "/admin/login";
 
@@ -54,7 +57,14 @@ export function middleware(request: NextRequest) {
     return NextResponse.redirect(loginUrl);
   }
 
-  return NextResponse.next();
+  const requestHeaders = new Headers(request.headers);
+  requestHeaders.set(PUBLIC_PATHNAME_HEADER, pathname);
+
+  return NextResponse.next({
+    request: {
+      headers: requestHeaders,
+    },
+  });
 }
 
 export const config = {

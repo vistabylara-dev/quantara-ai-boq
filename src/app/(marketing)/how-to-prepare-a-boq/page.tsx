@@ -17,6 +17,7 @@ export default function Page() {
       "Use a logical hierarchy such as Substructure, Superstructure, and MEP.",
       "Accurate quantities and clear item descriptions can reduce ambiguity and dispute risk; contractual responsibility still varies."
     ],
+    isHowTo: true,
     reviewedDate: PUBLIC_CONTENT_REVIEW_DATE,
     sections: [
   {
@@ -24,7 +25,7 @@ export default function Page() {
     "heading": "Why a Structured Workflow Matters",
     "paragraphs": [
       "For quantity surveyors, consultants and estimating teams, a missed scope item can affect pricing, tender qualifications and later commercial responsibility.",
-      <>A standardized preparation process can reduce omissions and ambiguity, but it does not remove the need for professional measurement and review. This also applies when moving from <Link href="/ai-boq-vs-manual-boq-preparation" className="text-blue-600 hover:underline font-medium">manual preparation to software-assisted work</Link>.</>
+      <>A standardized preparation process can reduce omissions and ambiguity, but it does not remove the need for professional measurement and review. This also applies when moving from <Link href="/ai-boq-vs-manual-boq-preparation" className="text-blue-600 hover:underline font-medium dark:text-blue-400">manual preparation to software-assisted work</Link>.</>
     ]
   },
   {

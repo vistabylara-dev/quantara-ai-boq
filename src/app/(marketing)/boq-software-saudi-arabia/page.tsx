@@ -3,66 +3,104 @@ import SeoLandingPage, { SeoLandingPageContent } from "@/components/layout/seo-l
 
 export const metadata = createPublicPageMetadata("/boq-software-saudi-arabia");
 
-
-
 export default function Page() {
   const content: SeoLandingPageContent = {
     breadcrumbLabel: "BOQ Software",
     h1: "BOQ Software for Saudi Arabia Project Records",
-    directDefinition: "Saudi Arabia project teams may manage large, multidisciplinary BOQ packages across contractor and consultant workflows. Quantara organizes supported sources and distinct BOQ revisions for professional review.",
+    directDefinition: "Saudi project teams can manage government tender notices, multidisciplinary price schedules, addenda and code-review evidence through different systems and owners. Quantara structures supported BOQ records for human review; Etimad submission, Saudi Building Code assessment and contractual approval remain separate.",
     audience: {
-      heading: "Designed for Professional Estimators",
-      content: "Quantara supports professionals who require structured data management for complex projects. All extracted quantities and generated proposals must be reviewed by a qualified human professional.",
-      items: ["Contractors managing complex tenders", "Consultants structuring master templates", "MEP and fit-out specialists"]
+      heading: "For Saudi Tender and Multidisciplinary BOQ Teams",
+      content: "This workflow is intended for professionals coordinating large or multi-package BOQs while keeping procurement-platform activity, technical-code review and commercial authorization with the responsible Saudi project stakeholders.",
+      items: [
+        "Suppliers preparing government tender price schedules alongside Etimad activity",
+        "Main contractors coordinating civil, architectural and MEP packages",
+        "Consultants issuing discipline-specific BOQ clarifications and addenda",
+        "Commercial reviewers separating code evidence, pricing assumptions and bid records"
+      ]
     },
     workflowProblem: {
-      heading: "Multidisciplinary Document Packages",
-      paragraphs: ["Complex Saudi Arabia projects can involve multidisciplinary BOQ packages with many sections and items. Separate PDF and spreadsheet revisions can make issue status and assumptions harder to reconcile.","A structured project record can support coordination, but contractors and consultants still need to compare versions and confirm the applicable scope."]
+      heading: "Keep Procurement, Code Review and Pricing Evidence Distinct",
+      paragraphs: [
+        <>
+          Saudi government tender opportunities can be reviewed through the official{" "}
+          <a href="https://portal.etimad.sa/en-us/home/getmostusedservicessection" target="_blank" rel="noreferrer" className="font-medium text-blue-600 underline dark:text-blue-400">
+            Etimad services
+          </a>
+          , while the official{" "}
+          <a href="https://sbc.gov.sa/En/BC/Pages/BuildingCode/BC.aspx?year=2024" target="_blank" rel="noreferrer" className="font-medium text-blue-600 underline dark:text-blue-400">
+            Saudi Building Code catalogue
+          </a>
+          {" "}publishes separate technical-code resources. Neither record is interchangeable with the reviewed commercial BOQ.
+        </>,
+        "On a multidisciplinary tender, a single addendum may affect selected packages without replacing every earlier source. Teams need a defensible issue register and professional review rather than an assumed automatic merge."
+      ]
     },
     quantaraSupport: {
-      heading: "Revision-Heavy Project Control",
-      paragraphs: ["Quantara provides authorized project workspaces for supported multidisciplinary sources and BOQ records.","Text-based PDF and spreadsheet information can be captured for review, and every output still requires professional checking before use."]
+      heading: "Structured Package Review Without Compliance Automation",
+      paragraphs: [
+        "Quantara can retain available source references, organize BOQ sections and revisions, and surface supported validation findings before a professional output is used.",
+        "The responsible Saudi bid team must still read the tender instructions, apply the correct code and contractual requirements, confirm taxes or local-content obligations, and submit through the authorized channel. Quantara does not connect to Etimad or certify Saudi Building Code compliance."
+      ]
     },
     relevantFeatures: [
-      { name: "Hierarchical Structuring", capabilityId: "boq-management", description: "Organize reviewed items by trade or section." },
-      { name: "BOQ Revision Records", capabilityId: "boq-management", description: "Keep distinct revision states for professional review." },
-      { name: "Format Extraction", capabilityId: "text-pdf-extraction", description: "Store extractable PDF text and create review candidates from supported detected table rows." }
+      { name: "Tender Source Attribution", capabilityId: "source-attribution", description: "Keep available source identity and evidence references with supported package records." },
+      { name: "Multidisciplinary BOQ Hierarchy", capabilityId: "boq-management", description: "Organize reviewed civil, architectural and MEP sections without claiming automatic coordination." },
+      { name: "Pre-Issue Validation Review", capabilityId: "validation", description: "Review supported findings before relying on the BOQ output; this is not regulatory or contractual validation." }
     ],
     workflowExample: {
-      heading: "Hypothetical Workflow Example",
-      introduction: "How a team might manage a major revision during the tender phase:",
+      heading: "Example: Saudi Government Tender Package",
+      introduction: "A contractor obtains a tender package externally, with separate civil and MEP price schedules followed by an addendum:",
       steps: [
-        { title: "Baseline Upload", description: "The original tender package is uploaded to an authorized project workspace." },
-        { title: "Variation Arrival", description: "A revised specification is received via PDF." },
-        { title: "Data Structuring", description: "Supported items are captured for review before they enter the BOQ record." },
-        { title: "Professional Review", description: "The estimator applies commercial judgment to the varied quantities." }
+        { title: "Record the External Tender Basis", description: "Create the authorized project workspace and identify the notice, package and issue supplied through the official procurement process." },
+        { title: "Map Package Schedules", description: "Import supported spreadsheet columns, validate each destination and preserve the intended section hierarchy." },
+        { title: "Review the Addendum", description: "Retain the new source separately and have discipline leads identify every affected item, assumption and exclusion." },
+        { title: "Validate Before External Submission", description: "Review supported findings and generate a checked output, then complete Etimad, code, guarantee and approval requirements outside Quantara." }
       ]
     },
     supportedInputs: [
-      { name: "XLSX / CSV", capabilityId: "spreadsheet-import", description: "Spreadsheet imports." },
-      { name: "Text-based PDF", capabilityId: "text-pdf-extraction", description: "Supported extraction from text-based PDFs." },
-      { name: "CAD / BIM", capabilityId: "model-file-import", description: "Model integration is not currently available." }
+      { name: "Multi-Sheet XLSX or CSV Schedule", capabilityId: "spreadsheet-import", description: "Map supported columns and approve validated records into the intended package or BOQ destination." },
+      { name: "Selectable-Text Tender BOQ", capabilityId: "text-pdf-extraction", description: "Capture candidates only from supported detected table rows and verify them against the source." },
+      { name: "Scanned or Image-Only Tender Page", capabilityId: "scanned-pdf-detection", description: "Detect that text extraction is unavailable so the page can be reviewed manually." }
     ],
     supportedOutputs: [
-      { name: "Structured XLSX", capabilityId: "professional-outputs", description: "Export reviewed BOQ data for further professional use." },
-      { name: "PDF Outputs", capabilityId: "professional-outputs", description: "Generate reviewable documents from stored data and available templates." }
+      { name: "Package-Structured BOQ", capabilityId: "boq-management", description: "Keep reviewed discipline sections, items and revisions in the project record." },
+      { name: "Reviewed XLSX or PDF Output", capabilityId: "professional-outputs", description: "Generate a supported professional output from reviewed data for authorized downstream use." },
+      { name: "Configured Document Template", capabilityId: "document-templates", description: "Apply a supported template while retaining project-specific checking and approval outside the software." }
     ],
     limitations: [
-      "Quantara does not provide automated visual measurement or drawing takeoff.",
-      "The software does not certify costs, calculate taxes, or claim regional regulatory compliance.",
-      "All outputs require independent professional validation."
+      "Quantara does not integrate with Etimad, register suppliers, browse opportunities, submit bids or manage government guarantees.",
+      "The software does not interpret or certify the Saudi Building Code, municipal requirements, tender conditions or contractual entitlement.",
+      "Arabic and RTL presentation is limited to supported authenticated workflows; Quantara does not provide automatic translation, Arabic source parsing or Arabic OCR.",
+      "Quantara does not supply Saudi market rates or calculate taxes, local-content scores, deductions or bank guarantees.",
+      "Automatic drawing takeoff and CAD/BIM/IFC import are unavailable, and every quantity and output requires independent professional validation."
     ],
     faqs: [
-      { question: "Does Quantara calculate local taxes?", answer: "No, Quantara does not calculate taxes, statutory deductions, or provide local regulatory compliance checks." },
-      { question: "Is this software approved by local authorities?", answer: "Quantara does not claim official government or authority approval. It is a commercial administrative tool." },
-      { question: "Does it include a local rate database?", answer: "No, Quantara does not include a verified local rate database. Estimators must supply their own professionally reviewed pricing." },
-      { question: "Can it replace professional judgment?", answer: "No. Quantara assists with supported capture and structured records, but a qualified professional must verify all commercial data." },
-      { question: "Can it process scanned tender PDFs?", answer: "Quantara detects scanned or image-only PDF pages, but OCR text extraction is not currently available. Their content requires manual transcription and review." }
+      {
+        question: "Does Quantara submit Saudi government tenders through Etimad?",
+        answer: <>
+          No. Tender discovery and submission remain in the official{" "}
+          <a href="https://portal.etimad.sa/en-us/home/getmostusedservicessection" target="_blank" rel="noreferrer" className="font-medium text-blue-600 underline dark:text-blue-400">Etimad process</a>
+          . Quantara can organize supported BOQ records but has no verified Etimad integration.
+        </>,
+        schemaAnswer: "No. Quantara has no verified Etimad integration and does not discover or submit Saudi government tenders. It can organize supported BOQ records for professional review."
+      },
+      {
+        question: "Does Quantara check the Saudi Building Code?",
+        answer: <>
+          No. The responsible design and construction professionals must use the applicable official{" "}
+          <a href="https://sbc.gov.sa/En/BC/Pages/BuildingCode/BC.aspx?year=2024" target="_blank" rel="noreferrer" className="font-medium text-blue-600 underline dark:text-blue-400">Saudi Building Code resources</a>
+          . Quantara does not interpret, test or certify code compliance.
+        </>,
+        schemaAnswer: "No. Quantara does not interpret, test or certify Saudi Building Code compliance. The responsible professionals must identify and apply the applicable official requirements."
+      },
+      { question: "Can Quantara merge every discipline addendum automatically?", answer: "No. Quantara can keep supported sources and distinct BOQ revisions, but discipline leads must identify the affected scope and approve every change." },
+      { question: "Can Quantara process Arabic tender documents automatically?", answer: "No. Supported authenticated workflows include limited Arabic and RTL presentation, but Quantara does not provide automatic translation, Arabic source parsing or OCR for scanned Arabic pages." },
+      { question: "Does Quantara calculate Saudi taxes, local content or tender guarantees?", answer: "No. Quantara does not calculate taxes, local-content scores, statutory deductions or bank guarantees. The authorized commercial team must follow the current tender and regulatory requirements." }
     ],
     relatedPages: [
-      { href: "/boq-software", label: "BOQ Software", description: "Learn about structured BOQ management." },
-      { href: "/boq-management", label: "BOQ Management", description: "Controlling project records and templates." },
-      { href: "/ai-boq-software", label: "AI BOQ Software", description: "AI-assisted document extraction workflows." }
+      { href: "/gcc-boq-software", label: "GCC BOQ Software", description: "Review the shared GCC workflow boundaries without claims of local approval or rates." },
+      { href: "/construction-estimating-software", label: "Construction Estimating Software", description: "Understand how Quantara organizes reviewed estimating inputs without making commercial decisions." },
+      { href: "/boq-review-checklist", label: "BOQ Review Checklist", description: "Check scope, quantities, rates, assumptions, exclusions and revision status before issue." }
     ]
   };
 

@@ -151,6 +151,7 @@ export const publicNavigation: NavigationSection[] = [
         label: "Comparisons",
         items: [
           { label: "Comparison Hub", href: "/comparisons" },
+          { label: "BOQ Software Comparison UAE", href: "/boq-software-comparison-uae", description: "Compare seven BOQ and estimating platforms using official sources, explicit limitations and UAE procurement checks." },
           { label: "Quantara vs Excel for BOQ", href: "/quantara-vs-excel-for-boq" },
           { label: "BOQ Software vs Spreadsheets", href: "/boq-software-vs-spreadsheets" },
           { label: "AI BOQ vs Manual BOQ Preparation", href: "/ai-boq-vs-manual-boq-preparation" },

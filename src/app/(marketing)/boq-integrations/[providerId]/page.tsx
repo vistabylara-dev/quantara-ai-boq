@@ -34,6 +34,7 @@ type PageProps = {
 const copy = {
   en: {
     integrations: "Integrations",
+    title: "{name} Integration with Quantara",
     eyebrow: "Quantara construction-software integration",
     introPrefix: "Connect",
     introSuffix:
@@ -68,6 +69,7 @@ const copy = {
   },
   ar: {
     integrations: "التكاملات",
+    title: "تكامل {name} مع Quantara",
     eyebrow: "تكامل Quantara مع برامج البناء",
     introPrefix: "اربط معلومات مشروع",
     introSuffix:
@@ -235,7 +237,7 @@ export default async function IntegrationDetailPage({ params }: PageProps) {
     },
   ];
 
-  const title = `${provider.displayName} Integration with Quantara`;
+  const title = replaceName(pageCopy.title, provider.displayName);
   const description =
     `${provider.displayName} integration for project-source, BOQ, measurement, review and Digital QS workflows.`;
 
@@ -389,7 +391,7 @@ export default async function IntegrationDetailPage({ params }: PageProps) {
           <div className="mt-8 flex flex-col justify-center gap-3 sm:flex-row">
             <Link
               href="/register"
-              className="inline-flex h-12 items-center justify-center rounded-lg bg-cyan-600 px-6 font-semibold text-white hover:bg-cyan-500"
+              className="inline-flex h-12 items-center justify-center rounded-lg bg-cyan-700 px-6 font-semibold text-white hover:bg-cyan-800"
             >
               {pageCopy.createAccount}
             </Link>

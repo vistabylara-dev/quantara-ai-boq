@@ -14,6 +14,7 @@ export default function robots(): MetadataRoute.Robots {
         "/dashboard",
         "/data-library",
         "/imports",
+        "/industry-engines",
         "/integrations",
         "/marketplace",
         "/projects",

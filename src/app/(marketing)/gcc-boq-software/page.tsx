@@ -45,12 +45,12 @@ export default async function GCCIndexPage() {
         path="/gcc-boq-software"
         breadcrumbs={[{ name: "Home", path: "/" }, { name: "GCC BOQ Software", path: "/gcc-boq-software" }]}
       />
-      <div className="min-h-screen bg-[#030508] text-slate-100">
+      <div className="min-h-screen bg-[#030508] text-slate-300">
       <div className="container mx-auto px-4 py-16 md:py-24 max-w-7xl">
         <PublicBreadcrumb items={[{ name: content.home, item: "/" }, { name: content.breadcrumb }]} tone="dark" />
 
         <header className="mb-16 text-center max-w-4xl mx-auto">
-          <div className="inline-flex items-center gap-2 px-3 py-1 bg-blue-900/30 text-blue-300 rounded-full text-xs font-semibold mb-6 uppercase tracking-wider">
+          <div className="inline-flex items-center gap-2 px-3 py-1 bg-slate-900/50 border border-slate-800 text-blue-300 rounded-full text-xs font-semibold mb-6 uppercase tracking-wider">
             <Globe className="w-4 h-4" /> {content.eyebrow}
           </div>
           <h1 className="text-4xl md:text-5xl font-bold text-white tracking-tight mb-8 leading-tight">
@@ -68,9 +68,9 @@ export default async function GCCIndexPage() {
 
         <div className="grid md:grid-cols-2 gap-6 mb-16">
           {content.links.map((link, idx) => (
-            <Link key={idx} href={link.href} className="group flex flex-col justify-between p-8 bg-slate-900/50 border border-slate-800 rounded-2xl hover:border-blue-500 hover:bg-blue-900/20 transition-all shadow-sm hover:shadow-md">
+            <Link key={idx} href={link.href} className="group flex flex-col justify-between p-8 bg-slate-900/50 border border-slate-800 rounded-2xl hover:border-blue-500 hover:bg-slate-900 transition-all shadow-sm">
               <div>
-                <h2 className="text-2xl font-bold text-white group-hover:text-blue-400 mb-3 flex items-center justify-between">
+                <h2 className="text-2xl font-bold text-white group-hover:text-blue-300 mb-3 flex items-center justify-between">
                   {link.name}
                   <ArrowRight className="w-5 h-5 opacity-0 group-hover:opacity-100 transform -translate-x-4 group-hover:translate-x-0 transition-all rtl:rotate-180" />
                 </h2>
@@ -80,7 +80,7 @@ export default async function GCCIndexPage() {
           ))}
         </div>
 
-        <section className="bg-slate-900/50 border border-slate-800 p-8 rounded-2xl text-center shadow-sm">
+        <section className="bg-slate-950 border border-slate-800 p-8 rounded-2xl text-center shadow-sm">
           <h2 className="text-2xl font-bold text-white mb-6">{content.learnMore}</h2>
           <div className="flex flex-wrap justify-center gap-4">
             <Link href="/about" className="px-6 py-3 bg-slate-900 hover:bg-slate-800 border border-slate-800 rounded-lg text-sm font-medium text-slate-300 transition-colors">{content.about}</Link>

@@ -124,6 +124,9 @@ export default async function HomePage() {
   const productTruth = getQuantaraProductTruthForDisplay(t);
   const workflowStages = buildWorkflowStages(t, sales.aiDraftStageTitle, sales.aiDraftStageBody);
   const faqs = buildFaqs(t, sales.pricingFaqAnswer);
+  const comparisonLinkLabel = locale === "ar"
+    ? "مقارنة برامج جداول الكميات في الإمارات"
+    : "Compare UAE BOQ software";
   const trustSignals = [
     t("publicContent.home.trustSupportedSources"),
     t("publicContent.home.trustVisibleCalculations"),
@@ -290,9 +293,14 @@ export default async function HomePage() {
                 {t("publicContent.home.capabilityIntro")}
               </p>
             </div>
-            <Link href="/features" className="inline-flex shrink-0 items-center font-semibold text-blue-300 hover:text-blue-200">
-              {t("publicContent.home.capabilityLink")} <ArrowRight className="ms-2 h-4 w-4" aria-hidden="true" />
-            </Link>
+            <div className="flex shrink-0 flex-col items-start gap-3 text-sm">
+              <Link href="/features" className="inline-flex shrink-0 items-center font-semibold text-blue-300 hover:text-blue-200">
+                {t("publicContent.home.capabilityLink")} <ArrowRight className="ms-2 h-4 w-4" aria-hidden="true" />
+              </Link>
+              <Link href="/boq-software-comparison-uae" className="inline-flex shrink-0 items-center font-semibold text-blue-300 hover:text-blue-200">
+                {comparisonLinkLabel} <ArrowRight className="ms-2 h-4 w-4" aria-hidden="true" />
+              </Link>
+            </div>
           </div>
           <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
             {featuredCapabilities.map((capability) => (

@@ -85,9 +85,9 @@ export default function ContactSalesPage() {
             <div className="bg-blue-900/20 p-6 rounded-2xl border border-blue-800/50 mb-8">
               <h3 className="font-bold text-slate-900 dark:text-white mb-4">{t("publicContent.contactSales.teamTitle")}</h3>
               <ul className="space-y-3 text-slate-700 dark:text-slate-300">
-                <li className="flex gap-2"><strong>{t("publicContent.contactSales.email")}</strong> <a dir="ltr" href={`mailto:${siteConfig.contact.email}`} className="text-blue-600 hover:underline">{siteConfig.contact.email}</a></li>
-                <li className="flex gap-2"><strong>{t("publicContent.contactSales.telephone")}</strong> <a dir="ltr" href={`tel:${siteConfig.contact.telephone.replace(/\s+/g, '')}`} className="text-blue-600 hover:underline">{siteConfig.contact.telephone}</a></li>
-                <li className="flex gap-2"><strong>{t("publicContent.contactSales.whatsapp")}</strong> <a dir="ltr" href={siteConfig.contact.whatsappLink} className="text-blue-600 hover:underline">{siteConfig.contact.whatsapp}</a></li>
+                <li className="flex gap-2"><strong>{t("publicContent.contactSales.email")}</strong> <a dir="ltr" href={`mailto:${siteConfig.contact.email}`} className="text-blue-600 hover:underline dark:text-blue-400">{siteConfig.contact.email}</a></li>
+                <li className="flex gap-2"><strong>{t("publicContent.contactSales.telephone")}</strong> <a dir="ltr" href={`tel:${siteConfig.contact.telephone.replace(/\s+/g, '')}`} className="text-blue-600 hover:underline dark:text-blue-400">{siteConfig.contact.telephone}</a></li>
+                <li className="flex gap-2"><strong>{t("publicContent.contactSales.whatsapp")}</strong> <a dir="ltr" href={siteConfig.contact.whatsappLink} className="text-blue-600 hover:underline dark:text-blue-400">{siteConfig.contact.whatsapp}</a></li>
               </ul>
               <p className="mt-4 text-sm text-slate-600 dark:text-slate-400">
                 {t("publicContent.contactSales.timing")}
@@ -203,7 +203,7 @@ export default function ContactSalesPage() {
                   onChange={(e) => setFormData({...formData, consent: e.target.checked})}
                   className="mt-1 h-4 w-4 rounded border-slate-800 bg-slate-900 text-blue-600 focus:ring-blue-500/20 focus:ring-offset-slate-950" 
                 />
-                <label htmlFor="consent" className="text-xs text-slate-500">
+                <label htmlFor="consent" className="text-xs text-slate-400">
                   {t("publicContent.contactSales.consent")}
                 </label>
               </div>
@@ -220,7 +220,7 @@ export default function ContactSalesPage() {
               
               <div className="pt-4 border-t border-slate-800 mt-6">
                 <p className="text-xs text-slate-500 dark:text-slate-400 text-center leading-relaxed">
-                  {t("publicContent.contactSales.privacyNotice")} <Link href="/privacy" className="text-blue-600 hover:underline">{t("publicContent.contactSales.privacyLink")}</Link>.
+                  {t("publicContent.contactSales.privacyNotice")} <Link href="/privacy" className="text-blue-600 hover:underline dark:text-blue-400">{t("publicContent.contactSales.privacyLink")}</Link>.
                 </p>
               </div>
             </form>

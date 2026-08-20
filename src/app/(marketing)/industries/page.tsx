@@ -80,26 +80,26 @@ export default async function IndustriesIndexPage() {
         path="/industries"
         breadcrumbs={[{ name: "Home", path: "/" }, { name: "Industries", path: "/industries" }]}
       />
-      <div className="min-h-screen bg-[#030508] text-slate-100">
+      <div className="min-h-screen bg-[#030508] text-slate-300">
       <div className="container mx-auto px-4 py-16 md:py-24 max-w-7xl">
         <PublicBreadcrumb items={[{ name: content.home, item: "/" }, { name: content.breadcrumb }]} tone="dark" />
 
         <header className="mb-16 text-center max-w-3xl mx-auto">
           <h1 className="text-4xl md:text-5xl font-bold text-white tracking-tight mb-6">{content.title}</h1>
-          <p className="text-lg text-slate-400 leading-relaxed">
+          <p className="text-lg text-slate-300 leading-relaxed">
             {content.intro}
           </p>
         </header>
 
         <div className="grid md:grid-cols-2 gap-6">
           {content.links.map((link, idx) => (
-            <Link key={idx} href={link.href} className="group flex flex-col justify-between p-8 bg-slate-900/50 border border-slate-800 rounded-2xl hover:border-blue-500 hover:bg-blue-900/20 transition-all">
+            <Link key={idx} href={link.href} className="group flex flex-col justify-between p-8 bg-slate-900/50 border border-slate-800 rounded-2xl hover:border-blue-500 hover:bg-slate-900 transition-all">
               <div>
-                <h2 className="text-2xl font-bold text-white group-hover:text-blue-400 mb-3 flex items-center justify-between">
+                <h2 className="text-2xl font-bold text-white group-hover:text-blue-300 mb-3 flex items-center justify-between">
                   {link.name}
                   <ArrowRight className="w-5 h-5 opacity-0 group-hover:opacity-100 transform -translate-x-4 group-hover:translate-x-0 transition-all rtl:rotate-180" />
                 </h2>
-                <p className="text-slate-400 mb-6">{link.desc}</p>
+                <p className="text-slate-300 mb-6">{link.desc}</p>
               </div>
               <div className="pt-4 border-t border-slate-800">
                 <p className="text-xs font-medium text-slate-400 uppercase tracking-wider">{link.status}</p>

@@ -60,6 +60,7 @@ export const PUBLIC_WEBSITE_PATHS = [
   "/boq-software-qatar",
   "/boq-software-oman",
   "/comparisons",
+  "/boq-software-comparison-uae",
   "/quantara-vs-excel-for-boq",
   "/boq-software-vs-spreadsheets",
   "/ai-boq-vs-manual-boq-preparation",
@@ -74,3 +75,25 @@ export const PUBLIC_WEBSITE_PATHS = [
 ] as const;
 
 export type PublicWebsitePath = (typeof PUBLIC_WEBSITE_PATHS)[number];
+
+export const PUBLIC_ENGLISH_ONLY_PATHS = [
+  "/boq-software-comparison-uae",
+  "/boq-software-dubai",
+  "/boq-software-abu-dhabi",
+  "/boq-software-saudi-arabia",
+  "/boq-software-qatar",
+  "/boq-software-oman",
+] as const satisfies readonly PublicWebsitePath[];
+
+export const PUBLIC_PATHNAME_HEADER = "x-quantara-request-pathname";
+
+const PUBLIC_WEBSITE_PATH_SET = new Set<string>(PUBLIC_WEBSITE_PATHS);
+const PUBLIC_ENGLISH_ONLY_PATH_SET = new Set<string>(PUBLIC_ENGLISH_ONLY_PATHS);
+
+export function isPublicWebsitePath(pathname: string | null | undefined): pathname is PublicWebsitePath {
+  return typeof pathname === "string" && PUBLIC_WEBSITE_PATH_SET.has(pathname);
+}
+
+export function isEnglishOnlyPublicWebsitePath(pathname: string | null | undefined): boolean {
+  return typeof pathname === "string" && PUBLIC_ENGLISH_ONLY_PATH_SET.has(pathname);
+}

@@ -175,7 +175,7 @@ function RegisterForm() {
       <div className="grid lg:grid-cols-2 gap-12 items-start">
         {/* Form Section */}
         <div className="rounded-[32px] border border-slate-800 bg-slate-950 p-8 lg:sticky lg:top-24 shadow-2xl">
-          <p className="text-sm uppercase tracking-[0.28em] text-slate-500">Quantara</p>
+          <p className="text-sm uppercase tracking-[0.28em] text-slate-400">Quantara</p>
           <h1 className="mt-2 text-2xl font-semibold text-white">{t("publicContent.accountSetup.title")}</h1>
           <p className="mt-2 text-sm text-slate-400">
             {t("publicContent.accountSetup.intro")}
@@ -278,7 +278,7 @@ function RegisterForm() {
                 onChange={(event) => setPassword(event.target.value)}
                 className="mt-1 w-full rounded-2xl border border-slate-800 bg-slate-900 px-4 py-3 text-sm text-white outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
               />
-              <p className="mt-1 text-xs text-slate-500">{t("publicContent.accountSetup.passwordHelp")}</p>
+              <p className="mt-1 text-xs text-slate-400">{t("publicContent.accountSetup.passwordHelp")}</p>
             </div>
 
             <div className="flex items-start gap-3 mt-4">

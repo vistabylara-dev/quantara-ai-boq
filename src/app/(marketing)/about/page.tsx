@@ -47,12 +47,12 @@ export default async function AboutPage() {
       <PublicJsonLd data={pageSchema} />
       <div className="max-w-3xl mx-auto py-24 px-4 flex-1">
         <nav className="mb-8 text-sm" aria-label="Breadcrumb">
-          <ol className="flex items-center gap-2 text-slate-500">
+          <ol className="flex items-center gap-2 text-slate-500 dark:text-slate-400">
             <li>
-              <Link href="/" className="hover:text-slate-900 transition-colors">{content.home}</Link>
+              <Link href="/" className="transition-colors hover:text-slate-900 dark:hover:text-white">{content.home}</Link>
             </li>
             <li aria-hidden="true">/</li>
-            <li className="text-slate-900 font-medium" aria-current="page">{content.breadcrumb}</li>
+            <li className="font-medium text-slate-900 dark:text-white" aria-current="page">{content.breadcrumb}</li>
           </ol>
         </nav>
         
@@ -82,9 +82,9 @@ export default async function AboutPage() {
             <h2 className="text-2xl font-bold text-slate-900 dark:text-white mb-4">{content.contactTitle}</h2>
             <div className="bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6 rounded-xl">
               <ul className="space-y-2 text-slate-700 dark:text-slate-300">
-                <li><strong>{content.email}</strong> <a dir="ltr" href={`mailto:${siteConfig.contact.email}`} className="text-blue-600 hover:underline">{siteConfig.contact.email}</a></li>
-                <li><strong>{content.telephone}</strong> <a dir="ltr" href={`tel:${siteConfig.contact.telephone.replace(/\s+/g, '')}`} className="text-blue-600 hover:underline">{siteConfig.contact.telephone}</a></li>
-                <li><strong>{content.whatsapp}</strong> <a dir="ltr" href={siteConfig.contact.whatsappLink} className="text-blue-600 hover:underline">{siteConfig.contact.whatsapp}</a></li>
+                <li><strong>{content.email}</strong> <a dir="ltr" href={`mailto:${siteConfig.contact.email}`} className="text-blue-600 hover:underline dark:text-blue-400">{siteConfig.contact.email}</a></li>
+                <li><strong>{content.telephone}</strong> <a dir="ltr" href={`tel:${siteConfig.contact.telephone.replace(/\s+/g, '')}`} className="text-blue-600 hover:underline dark:text-blue-400">{siteConfig.contact.telephone}</a></li>
+                <li><strong>{content.whatsapp}</strong> <a dir="ltr" href={siteConfig.contact.whatsappLink} className="text-blue-600 hover:underline dark:text-blue-400">{siteConfig.contact.whatsapp}</a></li>
               </ul>
             </div>
           </section>

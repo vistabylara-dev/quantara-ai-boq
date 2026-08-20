@@ -317,7 +317,7 @@ export default async function BOQCalculationFormulasPage() {
                   </div>
                   <div className="grid sm:grid-cols-2 gap-6">
                     <div>
-                      <h4 className="font-semibold text-sm uppercase tracking-wider text-slate-500 mb-2 mt-0">Variables</h4>
+                      <h4 className="font-semibold text-sm uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-2 mt-0">Variables</h4>
                       <ul className="text-sm space-y-1 m-0 p-0 list-none">
                         <li><strong>V</strong> = volume in m³</li>
                         <li><strong>L</strong> = length in m</li>
@@ -326,7 +326,7 @@ export default async function BOQCalculationFormulasPage() {
                       </ul>
                     </div>
                     <div>
-                      <h4 className="font-semibold text-sm uppercase tracking-wider text-slate-500 mb-2 mt-0">Example</h4>
+                      <h4 className="font-semibold text-sm uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-2 mt-0">Example</h4>
                       <ul className="text-sm space-y-1 m-0 p-0 list-none font-mono">
                         <li>L = 20 m</li>
                         <li>W = 1.2 m</li>
@@ -350,7 +350,7 @@ export default async function BOQCalculationFormulasPage() {
                   </div>
                   <div className="grid sm:grid-cols-2 gap-6">
                     <div className="sm:col-start-2">
-                      <h4 className="font-semibold text-sm uppercase tracking-wider text-slate-500 mb-2 mt-0">Example Slab</h4>
+                      <h4 className="font-semibold text-sm uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-2 mt-0">Example Slab</h4>
                       <ul className="text-sm space-y-1 m-0 p-0 list-none font-mono">
                         <li>L = 12 m</li>
                         <li>W = 10 m</li>
@@ -508,7 +508,7 @@ export default async function BOQCalculationFormulasPage() {
                       </ul>
                     </div>
                     <div>
-                      <h4 className="font-semibold text-sm uppercase tracking-wider text-slate-500 mb-2 mt-0">Example</h4>
+                      <h4 className="font-semibold text-sm uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-2 mt-0">Example</h4>
                       <ul className="text-sm space-y-1 m-0 p-0 list-none font-mono">
                         <li>Diameter = 16 mm</li>
                         <li>Total length = 20 m</li>

@@ -2,11 +2,19 @@ import { expect, test, type BrowserContext, type Page } from "@playwright/test";
 
 import ar from "../../src/lib/i18n/dictionaries/ar";
 import en from "../../src/lib/i18n/dictionaries/en";
-import { PUBLIC_WEBSITE_PATHS } from "../../src/lib/public-site/public-route-paths";
+import { getPublicFeatureSales } from "../../src/lib/public-site/feature-sales";
+import {
+  PUBLIC_ENGLISH_ONLY_PATHS,
+  PUBLIC_WEBSITE_PATHS,
+} from "../../src/lib/public-site/public-route-paths";
+import { getPublicSalesTruth } from "../../src/lib/public-site/sales-truth";
 
 const COMPLETED_CORRECTIVE_PATHS = new Set(["/", "/features", "/contact-sales"]);
+const ENGLISH_ONLY_PUBLIC_PATHS = new Set<string>(PUBLIC_ENGLISH_ONLY_PATHS);
 const PUBLIC_ARABIC_PATHS = [...PUBLIC_WEBSITE_PATHS, "/register"].filter(
-  (path) => !COMPLETED_CORRECTIVE_PATHS.has(path),
+  (path) =>
+    !COMPLETED_CORRECTIVE_PATHS.has(path) &&
+    !ENGLISH_ONLY_PUBLIC_PATHS.has(path),
 );
 
 function leafPaths(value: unknown, prefix = ""): string[] {
@@ -47,7 +55,7 @@ test.describe("approved Arabic public-page correction", () => {
     await page.goto("/");
     await expectArabicRtlPage(page);
     await expect(page.getByRole("heading", { level: 1 })).toHaveText(
-      ar.publicContent.home.pageTitle,
+      getPublicSalesTruth("ar").heroTitle,
     );
     await expect(page.getByRole("heading", { name: ar.publicContent.home.workflowTitle })).toBeVisible();
     await expect(page.getByText(ar.publicContent.capabilityRegister.capabilities.textPdfExtraction.name)).toBeVisible();
@@ -60,7 +68,7 @@ test.describe("approved Arabic public-page correction", () => {
     await page.goto("/features");
     await expectArabicRtlPage(page);
     await expect(page.getByRole("heading", { level: 1 })).toHaveText(
-      ar.publicContent.features.pageTitle,
+      getPublicFeatureSales("ar").title,
     );
     await expect(page.getByRole("heading", { name: ar.publicContent.features.registerTitle })).toBeVisible();
     await expect(page.getByText(ar.publicContent.capabilityRegister.status.unavailableLabel).first()).toBeVisible();
@@ -114,12 +122,22 @@ test.describe("approved Arabic public-page correction", () => {
     }
   });
 
+  test("untranslated public rewrites stay English and LTR", async ({ page }) => {
+    for (const path of PUBLIC_ENGLISH_ONLY_PATHS) {
+      await page.goto(path);
+      await expect(page.locator("html"), `${path}: language`).toHaveAttribute("lang", "en-AE");
+      await expect(page.locator("html"), `${path}: direction`).toHaveAttribute("dir", "ltr");
+      const heading = page.locator("h1").first();
+      await expect(heading, `${path}: H1`).toBeVisible();
+      expect(await heading.innerText(), `${path}: English H1`).not.toMatch(/[\u0600-\u06ff]/);
+    }
+  });
+
   test("the complete public route inventory renders Arabic content in RTL", async ({ page }) => {
-    // Crawls ~60 distinct routes in one dev-mode session; observed to run
-    // right up against the prior 600s budget (and occasionally trip the
-    // dev server's own memory-threshold auto-restart mid-crawl on a
-    // resource-constrained machine) — 900s gives a first-compile-heavy run
-    // room to finish rather than timing out at the boundary.
+    // The complete inventory crawl can be first-compile-heavy in local
+    // development and slower CI environments. A 900s budget lets the same
+    // assertions finish without turning infrastructure latency into a false
+    // localization failure.
     test.setTimeout(900_000);
     for (const path of PUBLIC_ARABIC_PATHS) {
       const response = await page.goto(path, { waitUntil: "domcontentloaded" });

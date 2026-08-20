@@ -3,66 +3,100 @@ import SeoLandingPage, { SeoLandingPageContent } from "@/components/layout/seo-l
 
 export const metadata = createPublicPageMetadata("/boq-software-abu-dhabi");
 
-
-
 export default function Page() {
   const content: SeoLandingPageContent = {
     breadcrumbLabel: "BOQ Software",
     h1: "BOQ Software for Abu Dhabi Consultants and Contractors",
-    directDefinition: "Abu Dhabi infrastructure and facilities workflows can involve long-lived BOQ records shared between consultants and contractors. Quantara organizes supported sources and distinct BOQ revisions for professional review.",
+    directDefinition: "Abu Dhabi procurement teams may need to coordinate supplier-registration records, consultant-issued BOQs, clarification responses and long-lived project revisions. Quantara organizes supported commercial records for review, but it does not qualify suppliers, submit government bids or approve contractual scope.",
     audience: {
-      heading: "Designed for Professional Estimators",
-      content: "Quantara supports professionals who require structured data management for complex projects. All extracted quantities and generated proposals must be reviewed by a qualified human professional.",
-      items: ["Contractors managing complex tenders", "Consultants structuring master templates", "MEP and fit-out specialists"]
+      heading: "For Abu Dhabi Procurement and Project-Control Teams",
+      content: "This page addresses teams that need a traceable BOQ review process alongside, but separate from, government procurement, consultant approval and facilities handover procedures.",
+      items: [
+        "Registered suppliers preparing responses for participating government entities",
+        "Consultants issuing coordinated BOQ and clarification packages",
+        "Infrastructure contractors managing discipline and package revisions",
+        "Facilities teams reviewing refurbishment BOQs without replacing an asset-management system"
+      ]
     },
     workflowProblem: {
-      heading: "Contractor and Consultant Document Coordination",
-      paragraphs: ["Engineering consultants and facilities-management teams in Abu Dhabi must maintain precise, long-term project records. Uncontrolled revisions in scattered files make it difficult to audit changes and coordinate updates between stakeholders.","Without a centralized system, maintaining an accurate baseline of the BOQ becomes administratively overwhelming."]
+      heading: "Supplier Qualification and BOQ Review Are Different Records",
+      paragraphs: [
+        <>
+          The official{" "}
+          <a href="https://www.adgpg.gov.ae/" target="_blank" rel="noreferrer" className="font-medium text-blue-600 underline dark:text-blue-400">
+            Abu Dhabi Government Procurement Gate
+          </a>
+          {" "}manages the supplier journey for participating government entities. Its published guidance explains that supplier registration and qualification do not themselves guarantee tender shortlisting.
+        </>,
+        "A project team must therefore keep supplier eligibility, tender instructions, clarification responses, consultant BOQ issues and priced revisions distinguishable. A structured BOQ record can support review, but it cannot determine whether a bidder is eligible or a submission is compliant."
+      ]
     },
     quantaraSupport: {
-      heading: "Controlled Revisions and Project Records",
-      paragraphs: ["Quantara retains BOQ revisions as distinct project records. Contractors and consultants must compare those records and document the commercial changes through their own review process.","Structured sections and item fields help organize the underlying data, while professional review remains required before any tender, contractual or construction use."]
+      heading: "Traceable Project Records Outside the Procurement Gate",
+      paragraphs: [
+        "Quantara can associate supported project workspaces with client records, retain available source references and organize confirmed BOQ revisions by section and item.",
+        "Procurement officers, consultants and contractors must still complete registration, evaluate tender instructions, answer clarifications and approve commercial changes through their authorized processes. Quantara does not integrate with the Procurement Gate or convert a review record into government, consultant or contractual approval."
+      ]
     },
     relevantFeatures: [
-      { name: "Hierarchical Structuring", capabilityId: "boq-management", description: "Organize reviewed items by trade or section." },
-      { name: "BOQ Revision Records", capabilityId: "boq-management", description: "Keep distinct revision states for professional review." },
-      { name: "Format Extraction", capabilityId: "text-pdf-extraction", description: "Store extractable PDF text and create review candidates from supported detected table rows." }
+      { name: "Client-Linked Project Workspaces", capabilityId: "client-records", description: "Associate supported project workspaces with searchable company-scoped client records without presenting Quantara as a CRM." },
+      { name: "Available Source References", capabilityId: "source-attribution", description: "Keep source identity and available evidence references with supported records for professional checking." },
+      { name: "Discipline and Package Revisions", capabilityId: "boq-management", description: "Organize sections, items and distinct revisions while the project team resolves the governing scope." }
     ],
     workflowExample: {
-      heading: "Hypothetical Workflow Example",
-      introduction: "How a team might manage a major revision during the tender phase:",
+      heading: "Example: Consultant Clarification and Revised BOQ",
+      introduction: "An infrastructure bidder receives a consultant BOQ followed by a clarification response that changes selected package information:",
       steps: [
-        { title: "Baseline Upload", description: "The original tender package is uploaded to an authorized project workspace." },
-        { title: "Variation Arrival", description: "A revised specification is received via PDF." },
-        { title: "Data Structuring", description: "Supported items are captured for review before they enter the BOQ record." },
-        { title: "Professional Review", description: "The estimator applies commercial judgment to the varied quantities." }
+        { title: "Register the Tender Basis", description: "Keep the supported procurement notice, consultant issue and internal review files in the authorized project workspace." },
+        { title: "Map the Consultant Schedule", description: "Import supported spreadsheet columns, validate the records and approve only the intended BOQ destination." },
+        { title: "Record the Clarification Issue", description: "Retain the later source as a separate record and have the responsible professional identify each commercial effect." },
+        { title: "Issue a Checked Package", description: "Generate a supported output from the reviewed revision, then complete bid submission and consultant approval outside Quantara." }
       ]
     },
     supportedInputs: [
-      { name: "XLSX / CSV", capabilityId: "spreadsheet-import", description: "Spreadsheet imports." },
-      { name: "Text-based PDF", capabilityId: "text-pdf-extraction", description: "Supported extraction from text-based PDFs." },
-      { name: "CAD / BIM", capabilityId: "model-file-import", description: "Model integration is not currently available." }
+      { name: "Consultant-Issued XLSX or CSV", capabilityId: "spreadsheet-import", description: "Map supported package and item fields with validation before import approval." },
+      { name: "Text-Based Scope or Clarification PDF", capabilityId: "text-pdf-extraction", description: "Create candidates only from supported detected table rows and compare them with the original document." },
+      { name: "Authorized Google Drive File", capabilityId: "google-drive-import", description: "Import a selected supported file only where a controlled-access workspace connection is authorized." }
     ],
     supportedOutputs: [
-      { name: "Structured XLSX", capabilityId: "professional-outputs", description: "Export reviewed BOQ data for further professional use." },
-      { name: "PDF Outputs", capabilityId: "professional-outputs", description: "Generate reviewable documents from stored data and available templates." }
+      { name: "Package-Level BOQ Revision", capabilityId: "boq-management", description: "Keep the reviewed package issue distinct from earlier tender and clarification records." },
+      { name: "Professional BOQ Output", capabilityId: "professional-outputs", description: "Generate a supported project output from reviewed data for further checking and authorized use." },
+      { name: "Private Client Review Record", capabilityId: "client-proposals", description: "Where enabled, record comments or a review response; this is not an electronic signature or contractual approval." }
     ],
     limitations: [
-      "Quantara does not provide automated visual measurement or drawing takeoff.",
-      "The software does not certify costs, calculate taxes, or claim regional regulatory compliance.",
-      "All outputs require independent professional validation."
+      "Quantara does not register or qualify suppliers, monitor opportunities or submit responses through the Abu Dhabi Government Procurement Gate.",
+      "Supplier registration, shortlisting, tender compliance and award decisions remain with the applicable official and project processes.",
+      "Quantara is not a facilities-management, asset-register, digital-twin or consultant-approval platform.",
+      "The software does not validate Abu Dhabi authority requirements, specifications, designs or contractual entitlement.",
+      "Automatic drawing takeoff and OCR extraction are not available; local rates, taxes and every output require independent professional review."
     ],
     faqs: [
-      { question: "Does Quantara calculate local taxes?", answer: "No, Quantara does not calculate taxes, statutory deductions, or provide local regulatory compliance checks." },
-      { question: "Is this software approved by local authorities?", answer: "Quantara does not claim official government or authority approval. It is a commercial administrative tool." },
-      { question: "Does it include a local rate database?", answer: "No, Quantara does not include a verified local rate database. Estimators must supply their own professionally reviewed pricing." },
-      { question: "Can it replace professional judgment?", answer: "No. Quantara assists with supported capture and structured records, but a qualified professional must verify all commercial data." },
-      { question: "Can it process scanned tender PDFs?", answer: "Quantara detects scanned or image-only PDF pages, but OCR text extraction is not currently available. Their content requires manual transcription and review." }
+      {
+        question: "Does Quantara connect to the Abu Dhabi Government Procurement Gate?",
+        answer: <>
+          No. Supplier registration, opportunities and tender activity remain on the official{" "}
+          <a href="https://www.adgpg.gov.ae/" target="_blank" rel="noreferrer" className="font-medium text-blue-600 underline dark:text-blue-400">Abu Dhabi Government Procurement Gate</a>
+          . Quantara has no verified integration with that portal.
+        </>,
+        schemaAnswer: "No. Quantara has no verified integration with the Abu Dhabi Government Procurement Gate. Supplier registration, opportunities and tender activity remain on the official portal."
+      },
+      {
+        question: "Does supplier registration mean a Quantara BOQ is eligible for an Abu Dhabi government tender?",
+        answer: <>
+          No. The official{" "}
+          <a href="https://adgpg.gov.ae/en/Trading-With-Government/Becoming-a-Registered-Supplier" target="_blank" rel="noreferrer" className="font-medium text-blue-600 underline dark:text-blue-400">supplier-registration guidance</a>
+          {" "}states that qualification during registration is not tender shortlisting and does not guarantee business. Quantara cannot determine eligibility or compliance.
+        </>,
+        schemaAnswer: "No. Quantara cannot determine supplier eligibility, tender shortlisting or compliance. The applicable government entity and official procurement process control those decisions."
+      },
+      { question: "Can Quantara preserve consultant clarifications and revised BOQs?", answer: "It can retain supported sources and distinct BOQ revisions, but the responsible consultant and commercial team must interpret each clarification and approve any resulting change." },
+      { question: "Can Quantara act as an Abu Dhabi facilities asset register?", answer: "No. Quantara can organize supported maintenance or refurbishment BOQs, but it is not represented as a CMMS, digital twin or full asset-management platform." },
+      { question: "Does Quantara approve local specifications, rates or authority requirements?", answer: "No. Quantara does not provide authority approval, a verified local rate database or regulatory validation. Qualified professionals must check all project-specific requirements and values." }
     ],
     relatedPages: [
-      { href: "/boq-software", label: "BOQ Software", description: "Learn about structured BOQ management." },
-      { href: "/boq-management", label: "BOQ Management", description: "Controlling project records and templates." },
-      { href: "/ai-boq-software", label: "AI BOQ Software", description: "AI-assisted document extraction workflows." }
+      { href: "/boq-software-uae", label: "BOQ Software UAE", description: "Review supported UAE BOQ workflows and their professional boundaries." },
+      { href: "/boq-software-for-facilities-management", label: "Facilities Management BOQs", description: "See where Quantara can support refurbishment records without acting as a CMMS." },
+      { href: "/boq-software-for-engineering-consultants", label: "BOQ Software for Consultants", description: "Explore consultant schedules, revisions and independent professional review." }
     ]
   };
 

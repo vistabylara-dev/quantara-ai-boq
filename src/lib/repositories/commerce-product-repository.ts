@@ -87,6 +87,24 @@ export function toCommerceProductDTO(row: CommerceProductRecord) {
 export type CommerceProductDTO = ReturnType<typeof toCommerceProductDTO>;
 
 /**
+ * v4 gate 1 — the exact, narrow allowlist of sales-led product codes whose
+ * CommercePrice rows must never appear in the public DTO, even once
+ * APPROVED. Enterprise is CONTACT_SALES precisely because the annual amount
+ * is a private commercial term communicated by sales, not a self-serve
+ * price — approving the price (to allow the authenticated settings page and
+ * LIVE Payment Link sync to read it) must not turn the unauthenticated,
+ * public /api/commerce/products endpoint into an undocumented public
+ * Enterprise price feed. Deliberately an EXACT code allowlist, not a
+ * `purchaseMode !== "DIRECT"` rule — no evidence elsewhere in this
+ * repository suggests every CONTACT_SALES/QUOTATION_REQUIRED product's
+ * prices are meant to be hidden (e.g. `enterprise_installation`, a one-time
+ * CONTACT_SALES professional-services product, has never been price-hidden
+ * and is out of scope for this fix). Widening this must be a deliberate,
+ * separately-reviewed decision, not a side effect of this allowlist.
+ */
+const PUBLIC_PRICE_REDACTED_PRODUCT_CODES = new Set(["enterprise_core", "enterprise_scale", "enterprise_authority"]);
+
+/**
  * Public projection — never database IDs beyond the product's own, never
  * metadataJson, never inactive/private products, never unpublished prices.
  *
@@ -98,6 +116,16 @@ export type CommerceProductDTO = ReturnType<typeof toCommerceProductDTO>;
  * active — before any approval. Only `reviewStatus === "APPROVED"` is a
  * published price; every other status is filtered out here exactly as the
  * governed approval flow (commerce-price-approval-service.ts) intends.
+ *
+ * v4 gate 1 — on top of that, PUBLIC_PRICE_REDACTED_PRODUCT_CODES always
+ * yields an empty `prices` array for exactly those three product codes,
+ * regardless of reviewStatus. Product metadata (name/description/
+ * purchaseMode/entitlementSummary) stays public — only the exact
+ * CommercePrice code and amountMinor are withheld. The authenticated
+ * getEnterpriseAnnualPlans() (commerce-checkout-availability-service.ts)
+ * and LIVE Stripe sync (stripe-live-sync-service.ts) both read
+ * CommercePrice directly via Prisma/getCommerceProduct, never through this
+ * public DTO, so neither is affected by this redaction.
  */
 export function toPublicCommerceProductDTO(row: CommerceProductRecord) {
   return {
@@ -107,15 +135,17 @@ export function toPublicCommerceProductDTO(row: CommerceProductRecord) {
     shortDescription: row.shortDescription,
     description: row.description,
     purchaseMode: row.purchaseMode,
-    prices: row.prices
-      .filter((p) => p.isActive && p.reviewStatus === "APPROVED")
-      .map((p) => ({
-        code: p.code,
-        amountMinor: p.amountMinor,
-        currency: p.currency,
-        billingInterval: p.billingInterval,
-        isFromPrice: p.isFromPrice,
-      })),
+    prices: PUBLIC_PRICE_REDACTED_PRODUCT_CODES.has(row.code)
+      ? []
+      : row.prices
+          .filter((p) => p.isActive && p.reviewStatus === "APPROVED")
+          .map((p) => ({
+            code: p.code,
+            amountMinor: p.amountMinor,
+            currency: p.currency,
+            billingInterval: p.billingInterval,
+            isFromPrice: p.isFromPrice,
+          })),
     entitlementSummary: row.entitlementTemplate
       ? {
           maxUsers: row.entitlementTemplate.maxUsers,

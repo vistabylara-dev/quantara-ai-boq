@@ -19,6 +19,8 @@ import {
   describeEntitlementTemplate,
 } from "../src/lib/services/entitlement-template-service";
 import { seedCommerceProducts, seedEnterpriseCommerceProducts } from "../prisma/seed-data/commerce-products";
+import { getCheckoutAvailability } from "../src/lib/services/commerce-checkout-availability-service";
+import type { CurrentActor } from "../src/lib/auth/current-actor";
 
 const RUN_ID = `${Date.now()}-${process.pid}`;
 
@@ -51,6 +53,17 @@ describe("commerce product catalogue (integration, real local Postgres)", () => 
   });
 
   afterAll(async () => {
+    // v4 gate 1 — the tests above approve the REAL, shared, never-deleted
+    // enterprise_core/scale/authority and starter anchor prices with
+    // reviewedByUserId: ownerUserId. Reset BEFORE deleting ownerUserId below
+    // — reviewedByUserId's FK is onDelete: SetNull, so deleting the user
+    // first would silently leave these rows APPROVED with a null reviewer,
+    // corrupting the governance invariant this same file's byte-for-byte
+    // guard test checks on the three Enterprise anchor rows.
+    await prisma.commercePrice.updateMany({
+      where: { code: { in: ["enterprise_core_annual_aed_15000", "enterprise_scale_annual_aed_25000", "enterprise_authority_annual_aed_35000"] } },
+      data: { reviewStatus: "REQUIRES_REVIEW", reviewedByUserId: null, reviewedAt: null },
+    });
     await prisma.platformAuditLog.deleteMany({ where: { actorUserId: ownerUserId } });
     await prisma.user.delete({ where: { id: ownerUserId } }).catch(() => undefined);
     await prisma.company.delete({ where: { id: ownerCompanyId } }).catch(() => undefined);
@@ -273,6 +286,84 @@ describe("commerce product catalogue (integration, real local Postgres)", () => 
       const afterFound = afterApproval.find((p) => p.code === productCode);
       expect(afterFound?.prices).toHaveLength(1);
       expect(afterFound?.prices[0].amountMinor).toBe(2500);
+    });
+
+    describe("v4 gate 1: Enterprise sales-led prices are never publicly exposed, even once APPROVED", () => {
+      it("(1) an APPROVED enterprise_core annual price does not expose amountMinor or its price code via the public DTO/API, (2) the product still appears publicly without it, and (4) an unapproved sibling price stays absent for the ordinary REQUIRES_REVIEW reason too", async () => {
+        await seedCommerceProducts(prisma);
+        const stub = await prisma.commerceProduct.findUniqueOrThrow({ where: { code: "enterprise_core" }, include: { prices: true } });
+        expect(stub.purchaseMode).toBe("CONTACT_SALES");
+        const annualPrice = stub.prices.find((p) => p.billingInterval === "YEAR" && p.isActive);
+        expect(annualPrice).toBeDefined();
+
+        // Governed approval (reviewedByUserId set, mirroring commerce-product-service.test.ts's
+        // own byte-for-byte guard invariant on this exact anchor row) — proves the redaction
+        // below is NOT merely an artifact of the price still being REQUIRES_REVIEW.
+        await prisma.commercePrice.update({ where: { id: annualPrice!.id }, data: { reviewStatus: "APPROVED", reviewedByUserId: ownerUserId } });
+
+        const publicList = await listPublicCommerceProducts();
+        const publicEnterpriseCore = publicList.find((p) => p.code === "enterprise_core");
+
+        // (2) product metadata remains public.
+        expect(publicEnterpriseCore).toBeDefined();
+        expect(publicEnterpriseCore?.name).toBeTruthy();
+        expect(publicEnterpriseCore?.purchaseMode).toBe("CONTACT_SALES");
+
+        // (1) the exact CommercePrice code/amountMinor is withheld even though APPROVED.
+        expect(publicEnterpriseCore?.prices).toHaveLength(0);
+        expect(JSON.stringify(publicEnterpriseCore)).not.toContain(annualPrice!.code);
+        expect(JSON.stringify(publicEnterpriseCore)).not.toContain(String(annualPrice!.amountMinor));
+
+        // Same via the direct DTO function (not just the aggregate list), and via the real
+        // unauthenticated route in tests/commerce-product-routes.test.ts's own gate-1 test.
+        const fullRecord = await prisma.commerceProduct.findUniqueOrThrow({
+          where: { code: "enterprise_core" },
+          include: { prices: true, entitlementTemplate: true, industryPackage: true },
+        });
+        const dto = toPublicCommerceProductDTO(fullRecord);
+        expect(dto.prices).toHaveLength(0);
+      });
+
+      it("(3) an approved Starter price still appears publicly with its real amount — the redaction is scoped to exactly the three Enterprise codes", async () => {
+        await seedCommerceProducts(prisma);
+        await prisma.commercePrice.updateMany({
+          where: { code: "starter_monthly_aed_149" },
+          data: { reviewStatus: "APPROVED", reviewedByUserId: ownerUserId },
+        });
+
+        const publicList = await listPublicCommerceProducts();
+        const starter = publicList.find((p) => p.code === "starter");
+        expect(starter).toBeDefined();
+        const monthly = starter?.prices.find((p) => p.code === "starter_monthly_aed_149");
+        expect(monthly).toBeDefined();
+        expect(monthly?.amountMinor).toBe(14900);
+      });
+
+      it("(5) getEnterpriseAnnualPlans (via getCheckoutAvailability) still returns the real approved Enterprise annual price for the authenticated settings experience, unaffected by the public redaction", async () => {
+        await seedCommerceProducts(prisma);
+        for (const code of ["enterprise_core", "enterprise_scale", "enterprise_authority"]) {
+          const stub = await prisma.commerceProduct.findUniqueOrThrow({ where: { code }, include: { prices: true } });
+          const annualPrice = stub.prices.find((p) => p.billingInterval === "YEAR" && p.isActive);
+          await prisma.commercePrice.update({ where: { id: annualPrice!.id }, data: { reviewStatus: "APPROVED", reviewedByUserId: ownerUserId } });
+        }
+
+        const actor: CurrentActor = { userId: ownerUserId, companyId: ownerCompanyId, role: "COMPANY_OWNER", fullName: "Commerce Test Owner", email: `commerce-owner-${RUN_ID}@example.com` };
+        const availability = await getCheckoutAvailability(actor);
+
+        for (const code of ["enterprise_core", "enterprise_scale", "enterprise_authority"]) {
+          const plan = availability.enterpriseProducts.find((p) => p.productCode === code);
+          expect(plan).toBeDefined();
+          expect(plan!.price).not.toBeNull();
+          expect(plan!.price!.amountMinor).toBeGreaterThan(0);
+        }
+
+        // The same three codes are simultaneously redacted from the public projection.
+        const publicList = await listPublicCommerceProducts();
+        for (const code of ["enterprise_core", "enterprise_scale", "enterprise_authority"]) {
+          const publicEntry = publicList.find((p) => p.code === code);
+          expect(publicEntry?.prices).toHaveLength(0);
+        }
+      });
     });
   });
 

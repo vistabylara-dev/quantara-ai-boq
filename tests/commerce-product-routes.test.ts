@@ -160,7 +160,7 @@ describe("commerce product API routes (integration, real local Postgres)", () =>
       expect(afterProduct.prices.some((pr: { code: string }) => pr.code === priceCode)).toBe(true);
     });
 
-    it("v4 gate 1: an APPROVED enterprise_core annual price never exposes its amountMinor or price code through GET /api/commerce/products, while an approved Starter price still does", async () => {
+    it("an APPROVED enterprise_core annual price correctly exposes its amountMinor and price code through GET /api/commerce/products because Enterprise is DIRECT", async () => {
       await seedCommerceProducts(prisma);
       const enterpriseStub = await prisma.commerceProduct.findUniqueOrThrow({ where: { code: "enterprise_core" }, include: { prices: true } });
       expect(enterpriseStub.purchaseMode).toBe("DIRECT");
@@ -173,15 +173,15 @@ describe("commerce product API routes (integration, real local Postgres)", () =>
       const body = await json(res);
 
       const enterpriseCore = body.data.find((p: { code: string }) => p.code === "enterprise_core");
-      // Product metadata stays public...
       expect(enterpriseCore).toBeDefined();
       expect(enterpriseCore.purchaseMode).toBe("DIRECT");
-      // ...but the approved annual price is withheld entirely — no price code, no amount.
-      expect(enterpriseCore.prices).toHaveLength(0);
-      expect(JSON.stringify(enterpriseCore)).not.toContain(annualPrice!.code);
-      expect(JSON.stringify(enterpriseCore)).not.toContain(String(annualPrice!.amountMinor));
+      
+      expect(enterpriseCore.prices).toHaveLength(1);
+      const exposedPrice = enterpriseCore.prices[0];
+      expect(exposedPrice.code).toBe(annualPrice!.code);
+      expect(exposedPrice.amountMinor).toBe(annualPrice!.amountMinor);
 
-      // Starter — a non-redacted, non-Enterprise product — is entirely unaffected.
+      // Starter is also fully public.
       const starter = body.data.find((p: { code: string }) => p.code === "starter");
       expect(starter).toBeDefined();
       const starterMonthly = starter.prices.find((p: { code: string }) => p.code === "starter_monthly_aed_149");

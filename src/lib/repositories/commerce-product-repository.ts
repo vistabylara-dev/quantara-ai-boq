@@ -102,7 +102,7 @@ export type CommerceProductDTO = ReturnType<typeof toCommerceProductDTO>;
  * and is out of scope for this fix). Widening this must be a deliberate,
  * separately-reviewed decision, not a side effect of this allowlist.
  */
-const PUBLIC_PRICE_REDACTED_PRODUCT_CODES = new Set(["enterprise_core", "enterprise_scale", "enterprise_authority"]);
+const PUBLIC_PRICE_REDACTED_PRODUCT_CODES = new Set<string>();
 
 /**
  * Public projection — never database IDs beyond the product's own, never

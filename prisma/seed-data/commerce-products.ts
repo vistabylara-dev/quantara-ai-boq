@@ -179,7 +179,7 @@ const CATALOGUE_PRODUCTS: ProductSpec[] = [
     shortDescription: "For established contractors and consultancies needing high-volume BOQ production.",
     description:
       "Annual enterprise subscription: high-volume BOQ generation, API enablement subject to configured availability, company branding included as a setup service, and enterprise onboarding.",
-    purchaseMode: "CONTACT_SALES",
+    purchaseMode: "DIRECT",
     sortOrder: 34,
     prices: [{ code: "enterprise_core_annual_aed_15000", amountMinor: 1500000, billingInterval: "YEAR" }],
     entitlement: {
@@ -203,7 +203,7 @@ const CATALOGUE_PRODUCTS: ProductSpec[] = [
     shortDescription: "For multi-team and multi-department companies running BOQ production at scale.",
     description:
       "Annual enterprise subscription: higher-volume BOQ generation, white-label setup included as an implementation service, API enablement subject to configured availability, and priority onboarding/support.",
-    purchaseMode: "CONTACT_SALES",
+    purchaseMode: "DIRECT",
     sortOrder: 35,
     prices: [{ code: "enterprise_scale_annual_aed_25000", amountMinor: 2500000, billingInterval: "YEAR" }],
     entitlement: {
@@ -228,7 +228,7 @@ const CATALOGUE_PRODUCTS: ProductSpec[] = [
     shortDescription: "For large groups, consultancies and institutional customers needing dedicated onboarding.",
     description:
       "Annual enterprise subscription: unlimited user and workspace commercial allowance, full white-label setup included as an implementation service, private catalogue/data onboarding and executive-priority support.",
-    purchaseMode: "CONTACT_SALES",
+    purchaseMode: "DIRECT",
     sortOrder: 36,
     prices: [{ code: "enterprise_authority_annual_aed_35000", amountMinor: 3500000, billingInterval: "YEAR" }],
     entitlement: {

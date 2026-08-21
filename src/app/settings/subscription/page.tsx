@@ -92,14 +92,9 @@ type CheckoutOptionProduct = {
  * returns instead — no `available`/`unavailableReason`, since self-checkout
  * availability is not a concept that applies to a sales-led product.
  */
-type EnterpriseAnnualPlan = {
-  productCode: string;
-  name: string;
-  shortDescription: string;
-  price: { priceCode: string; amountMinor: number; currency: string } | null;
-};
 
-type CheckoutAvailability = { hasExistingSubscription: boolean; products: CheckoutOptionProduct[]; enterpriseProducts?: EnterpriseAnnualPlan[] };
+
+type CheckoutAvailability = { hasExistingSubscription: boolean; products: CheckoutOptionProduct[];  };
 type BillingInterval = "MONTH" | "YEAR";
 type SoftwareProductCode = "starter" | "professional" | "business";
 
@@ -445,8 +440,8 @@ function SubscriptionSettingsContent() {
   // from it). enterpriseProducts now comes from the separate, non-checkout
   // checkoutAvailability.enterpriseProducts catalogue read.
   const enterpriseProducts = ENTERPRISE_PRODUCT_ORDER.map((productCode) =>
-    checkoutAvailability?.enterpriseProducts?.find((product) => product.productCode === productCode),
-  ).filter((product): product is EnterpriseAnnualPlan => Boolean(product));
+    checkoutAvailability?.products.find((product) => product.productCode === productCode),
+  ).filter((product): product is CheckoutOptionProduct => Boolean(product));
 
   const hasExistingSubscription = checkoutAvailability?.hasExistingSubscription ?? false;
   const projectAllowance =
@@ -682,7 +677,7 @@ function SubscriptionSettingsContent() {
                           )}
                         </>
                       ) : (
-                        <p className="text-lg font-semibold text-slate-500">Pricing unavailable</p>
+                        <p className="text-lg font-semibold text-slate-500">Setup pending</p>
                       )}
                     </div>
 
@@ -768,7 +763,7 @@ function SubscriptionSettingsContent() {
               {enterpriseProducts.map((product) => {
                 const code = product.productCode as EnterpriseProductCode;
                 const meta = ENTERPRISE_PLAN_UI[code];
-                const price = product.price;
+                const price = product.prices.find((p) => p.billingInterval === "YEAR");
                 const isSelectedPricingIntent = price?.priceCode === selectedPricingIntent;
                 const currentPlan = entitlements.planName.trim().toLowerCase() === product.name.trim().toLowerCase();
 
@@ -831,25 +826,33 @@ function SubscriptionSettingsContent() {
                     </ul>
 
                     {currentPlan ? (
-                      <button
-                        type="button"
-                        disabled
-                        aria-current={isSelectedPricingIntent ? "true" : undefined}
-                        data-selected-pricing-intent={isSelectedPricingIntent ? "true" : undefined}
-                        className="mt-7 w-full rounded-xl bg-amber-400 px-4 py-3 text-sm font-semibold text-slate-950 transition disabled:cursor-not-allowed disabled:opacity-50"
-                      >
-                        {ctaLabel}
-                      </button>
-                    ) : (
-                      <Link
-                        href="/contact-sales"
-                        aria-current={isSelectedPricingIntent ? "true" : undefined}
-                        data-selected-pricing-intent={isSelectedPricingIntent ? "true" : undefined}
-                        className="mt-7 flex w-full items-center justify-center rounded-xl bg-amber-400 px-4 py-3 text-sm font-semibold text-slate-950 transition hover:bg-amber-300 focus:outline-none focus:ring-2 focus:ring-amber-400"
-                      >
-                        {ctaLabel}
-                      </Link>
-                    )}
+                        <button
+                          type="button"
+                          disabled
+                          aria-current={isSelectedPricingIntent ? "true" : undefined}
+                          data-selected-pricing-intent={isSelectedPricingIntent ? "true" : undefined}
+                          className="mt-7 w-full rounded-xl bg-amber-400 px-4 py-3 text-sm font-semibold text-slate-950 transition disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          {ctaLabel}
+                        </button>
+                      ) : price && price.available ? (
+                        <button
+                          type="button"
+                          onClick={() => void checkout(price.priceCode)}
+                          disabled={!!busyKey}
+                          className="mt-7 w-full rounded-xl bg-amber-400 px-4 py-3 text-sm font-semibold text-slate-950 transition hover:bg-amber-300 disabled:opacity-50"
+                        >
+                          {busyKey === price.priceCode ? "Processing..." : "Subscribe"}
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          disabled
+                          className="mt-7 w-full rounded-xl bg-amber-900/40 px-4 py-3 text-sm font-semibold text-amber-500 cursor-not-allowed"
+                        >
+                          {unavailableLabel(price?.unavailableReason ?? "PRICE_NOT_APPROVED")}
+                        </button>
+                      )}
                   </article>
                 );
               })}

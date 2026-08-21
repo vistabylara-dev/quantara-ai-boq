@@ -68,7 +68,7 @@ export type EnterpriseAnnualPlan = {
 export type CheckoutAvailability = {
   hasExistingSubscription: boolean;
   products: CheckoutOptionProduct[];
-  enterpriseProducts: EnterpriseAnnualPlan[];
+  
 };
 
 const ENTERPRISE_ANNUAL_PRODUCT_CODES = ["enterprise_core", "enterprise_scale", "enterprise_authority"] as const;
@@ -220,5 +220,5 @@ export async function getCheckoutAvailability(actor: CurrentActor): Promise<Chec
     }
   }
 
-  return { hasExistingSubscription, products: result, enterpriseProducts };
+  return { hasExistingSubscription, products: result };
 }

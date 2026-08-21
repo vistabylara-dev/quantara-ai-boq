@@ -157,8 +157,9 @@ export default function MarketplacePackagePage(props: PageProps) {
           {pkg.hasAccess ? (
             <span className="inline-flex rounded-2xl border border-emerald-900 bg-emerald-950/30 px-4 py-2 text-sm font-semibold text-emerald-300">{t("marketplaceDetail.accessGranted")}</span>
           ) : (() => {
-            const price = pkg.purchase?.prices.find((candidate) => candidate.billingInterval === "MONTH");
-            if (!price) {
+            const monthPrice = pkg.purchase?.prices.find((candidate) => candidate.billingInterval === "MONTH");
+            const yearPrice = pkg.purchase?.prices.find((candidate) => candidate.billingInterval === "YEAR");
+            if (!monthPrice && !yearPrice) {
               return (
                 <span className="inline-flex flex-col items-end gap-1 text-right">
                   <span className="inline-flex rounded-2xl border border-slate-700 bg-slate-900 px-4 py-2 text-sm font-semibold text-slate-400">
@@ -167,29 +168,57 @@ export default function MarketplacePackagePage(props: PageProps) {
                 </span>
               );
             }
-            if (!price.available) {
-              return (
-                <span
-                  className="inline-flex rounded-2xl border border-slate-700 bg-slate-900 px-4 py-2 text-sm font-semibold text-slate-400"
-                  title={purchaseUnavailableLabel(price.unavailableReason)}
-                >
-                  {purchaseUnavailableLabel(price.unavailableReason)}
-                </span>
-              );
-            }
             return (
-              <div className="inline-flex flex-col items-end gap-2">
-                <span className="text-sm font-semibold text-slate-300">
-                  {price.currency} {(price.amountMinor / 100).toLocaleString("en-AE")}/{price.billingInterval === "MONTH" ? "mo" : "yr"}
-                </span>
-                <button
-                  type="button"
-                  onClick={() => void checkout(price.priceCode)}
-                  disabled={busy}
-                  className="inline-flex rounded-2xl border border-slate-700 bg-blue-600 px-5 py-3 text-sm font-semibold text-white hover:bg-blue-500 disabled:opacity-50"
-                >
-                  {busy ? t("marketplaceDetail.redirecting") : t("marketplaceDetail.buyAccess")}
-                </button>
+              <div className="flex gap-4 items-center">
+                {monthPrice && (
+                  <div className="inline-flex flex-col items-end gap-2">
+                    <span className="text-sm font-semibold text-slate-300">
+                      {monthPrice.currency} {(monthPrice.amountMinor / 100).toLocaleString("en-AE")}/mo
+                    </span>
+                    {!monthPrice.available ? (
+                      <span
+                        className="inline-flex rounded-2xl border border-slate-700 bg-slate-900 px-4 py-2 text-sm font-semibold text-slate-400"
+                        title={purchaseUnavailableLabel(monthPrice.unavailableReason)}
+                      >
+                        {purchaseUnavailableLabel(monthPrice.unavailableReason)}
+                      </span>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => void checkout(monthPrice.priceCode)}
+                        disabled={busy}
+                        className="inline-flex rounded-2xl border border-slate-600 bg-slate-700 px-5 py-3 text-sm font-semibold text-white hover:bg-slate-600 disabled:opacity-50"
+                      >
+                        {busy ? t("marketplaceDetail.redirecting") : "Buy Monthly"}
+                      </button>
+                    )}
+                  </div>
+                )}
+                
+                {yearPrice && (
+                  <div className="inline-flex flex-col items-end gap-2 pl-4 border-l border-slate-800">
+                    <span className="text-sm font-semibold text-slate-300">
+                      {yearPrice.currency} {(yearPrice.amountMinor / 100).toLocaleString("en-AE")}/yr
+                    </span>
+                    {!yearPrice.available ? (
+                      <span
+                        className="inline-flex rounded-2xl border border-slate-700 bg-slate-900 px-4 py-2 text-sm font-semibold text-slate-400"
+                        title={purchaseUnavailableLabel(yearPrice.unavailableReason)}
+                      >
+                        {purchaseUnavailableLabel(yearPrice.unavailableReason)}
+                      </span>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => void checkout(yearPrice.priceCode)}
+                        disabled={busy}
+                        className="inline-flex rounded-2xl border border-slate-700 bg-blue-600 px-5 py-3 text-sm font-semibold text-white hover:bg-blue-500 disabled:opacity-50"
+                      >
+                        {busy ? t("marketplaceDetail.redirecting") : "Buy Annual"}
+                      </button>
+                    )}
+                  </div>
+                )}
               </div>
             );
           })()}

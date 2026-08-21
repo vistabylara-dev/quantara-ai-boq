@@ -11,7 +11,7 @@ import { generateHtml } from "@/lib/documents/generators/html-generator";
 import { previewHtmlQuerySchema } from "@/lib/validation/document-schema";
 import { projectIdParamsSchema } from "@/lib/validation/boq-route-schemas";
 import { NotFoundError } from "@/lib/errors/app-error";
-import { resolveBoqCommercialRequirements, previewLockedWatermarkText } from "@/lib/commercial/commercial-requirement-service";
+import { resolveBoqCommercialRequirementsEffective, previewLockedWatermarkText } from "@/lib/commercial/commercial-requirement-service";
 
 export const dynamic = "force-dynamic";
 
@@ -53,7 +53,7 @@ async function GETHandler(request: Request, context: RouteContext) {
     if (boqRecord.projectId !== project.id) throw new NotFoundError("BOQ not found for this project.");
     const template = await getTemplate(actor.companyId, templateId);
     const company = await prisma.company.findUniqueOrThrow({ where: { id: actor.companyId } });
-    const commercialDecision = await resolveBoqCommercialRequirements(actor.companyId, boqId);
+    const commercialDecision = await resolveBoqCommercialRequirementsEffective(actor, boqId);
     const isCommerciallyLocked = commercialDecision.status !== "ALLOW";
 
     const boqDto = toBOQDTO(boqRecord);

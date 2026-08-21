@@ -2,7 +2,9 @@ import { createHash } from "node:crypto";
 import { prisma } from "@/lib/db/prisma";
 import { getBOQRecord } from "@/lib/repositories/boq-repository";
 import { canGenerateDocument } from "@/lib/entitlements/entitlement-service";
+import { getEffectiveEntitlements } from "@/lib/entitlements/effective-entitlement-service";
 import { companyHasPackageAccessForItem } from "@/lib/entitlements/package-entitlement-service";
+import type { CurrentActor } from "@/lib/auth/current-actor";
 import type { Locale } from "@/lib/i18n/config";
 import type { CommercialAccessDecision, CommercialOffer, CommercialRequirement } from "./commercial-types";
 
@@ -104,6 +106,21 @@ function planOffer(plan: { key: string; name: string }): CommercialOffer {
     checkoutAvailable: false,
     unavailableReason: "Plan upgrades aren't available for direct checkout yet. Contact us to upgrade.",
   };
+}
+
+export async function resolveBoqCommercialRequirementsEffective(
+  actor: Pick<CurrentActor, "userId" | "companyId">,
+  boqId: string
+): Promise<CommercialAccessDecision> {
+  const effective = await getEffectiveEntitlements(actor);
+  if (effective.source === "owner-override") {
+    return {
+      status: "ALLOW",
+      requirements: [],
+      manifestFingerprint: "bypass_platform_owner",
+    };
+  }
+  return resolveBoqCommercialRequirements(actor.companyId, boqId);
 }
 
 export async function resolveBoqCommercialRequirements(companyId: string, boqId: string): Promise<CommercialAccessDecision> {

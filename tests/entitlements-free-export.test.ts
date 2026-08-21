@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { prisma } from "../src/lib/db/prisma";
-import type { CurrentActor } from "../src/lib/auth/platform-authorization";
+import type { CurrentActor } from "../src/lib/auth/current-actor";
 import { getCompanyEntitlements } from "../src/lib/entitlements/entitlement-service";
 import { canGenerateDocumentEffective } from "../src/lib/entitlements/effective-entitlement-service";
 import { GeneratedDocumentType, PlanType } from "@prisma/client";
@@ -77,19 +77,19 @@ describe("ENTITLEMENTS-FREE-EXPORT: A real FREE customer must not receive a clea
   });
 
   it("2. PDF clean final is blocked, throws DOCUMENT_EXPORT_NOT_ALLOWED, creates no output", async () => {
-    await expect(generateDocument(actor, projectId, { boqId, documentType: GeneratedDocumentType.PDF, audience: "EXTERNAL", templateId, pricingMode: "WITH_PRICES" })).rejects.toMatchObject({ code: "DOCUMENT_EXPORT_NOT_ALLOWED" });
+    await expect(generateDocument(actor, projectId, { boqId, documentType: GeneratedDocumentType.PDF, audience: "CLIENT", templateId, pricingMode: "WITH_PRICES" })).rejects.toMatchObject({ code: "DOCUMENT_EXPORT_NOT_ALLOWED" });
     const docs = await prisma.generatedDocument.count({ where: { boqId, type: GeneratedDocumentType.PDF } });
     expect(docs).toBe(0);
   });
 
   it("3. DOCX WITH_PRICES clean final is blocked, throws DOCUMENT_EXPORT_NOT_ALLOWED, creates no output", async () => {
-    await expect(generateDocument(actor, projectId, { boqId, documentType: GeneratedDocumentType.DOCX, audience: "EXTERNAL", templateId, pricingMode: "WITH_PRICES" })).rejects.toMatchObject({ code: "DOCUMENT_EXPORT_NOT_ALLOWED" });
+    await expect(generateDocument(actor, projectId, { boqId, documentType: GeneratedDocumentType.DOCX, audience: "CLIENT", templateId, pricingMode: "WITH_PRICES" })).rejects.toMatchObject({ code: "DOCUMENT_EXPORT_NOT_ALLOWED" });
     const docs = await prisma.generatedDocument.count({ where: { boqId, type: GeneratedDocumentType.DOCX } });
     expect(docs).toBe(0);
   });
 
   it("4. XLSX clean final is blocked, throws DOCUMENT_EXPORT_NOT_ALLOWED, creates no output", async () => {
-    await expect(generateDocument(actor, projectId, { boqId, documentType: GeneratedDocumentType.XLSX, audience: "EXTERNAL", templateId, pricingMode: "WITH_PRICES" })).rejects.toMatchObject({ code: "DOCUMENT_EXPORT_NOT_ALLOWED" });
+    await expect(generateDocument(actor, projectId, { boqId, documentType: GeneratedDocumentType.XLSX, audience: "CLIENT", templateId, pricingMode: "WITH_PRICES" })).rejects.toMatchObject({ code: "DOCUMENT_EXPORT_NOT_ALLOWED" });
     const docs = await prisma.generatedDocument.count({ where: { boqId, type: GeneratedDocumentType.XLSX } });
     expect(docs).toBe(0);
   });

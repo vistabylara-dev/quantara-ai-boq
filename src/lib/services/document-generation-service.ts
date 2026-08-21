@@ -31,7 +31,7 @@ import { generateHtml } from "@/lib/documents/generators/html-generator";
 import { calculateBOQTotals } from "@/lib/calculations/boq-calculator";
 import { recordDocumentGenerated } from "@/lib/entitlements/entitlement-service";
 import { canGenerateDocumentEffective, getEffectiveEntitlements } from "@/lib/entitlements/effective-entitlement-service";
-import { assertCleanOutputAuthorized } from "@/lib/services/commercial-entitlement-service";
+import { assertCleanOutputAuthorized, assertCleanOutputAuthorizedEffective } from "@/lib/services/commercial-entitlement-service";
 
 export const TRIAL_WATERMARK_TEXT = "Generated with Quantara — Trial Version";
 
@@ -186,8 +186,8 @@ export async function generateDocument(actor: CurrentActor, projectIdentifier: s
   const isDraft = !isLocked;
 
   // Commercial Canva-style enforcement: require subscription for clean output
-  await assertCleanOutputAuthorized(
-    actor.companyId,
+  await assertCleanOutputAuthorizedEffective(
+    actor,
     project.id,
     boqRecord.id,
     boqRecord.revisionNumber,

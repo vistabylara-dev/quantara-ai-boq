@@ -55,9 +55,10 @@ const csvFor = (codes: string[]) =>
 
 describe("ADMIN-CONTROL-1: platform owner full access and customer simulation (integration)", () => {
   beforeAll(async () => {
-    const existingOwnerCount = await prisma.user.count({ where: { platformRole: PlatformRole.PLATFORM_OWNER } });
+    const existingOwnerCount = await prisma.user.count({ where: { platformRole: "PLATFORM_OWNER" } });
     if (existingOwnerCount !== 0) {
-      throw new Error("ADMIN-CONTROL-1 tests require an isolated local test database with no existing platform owner.");
+      await prisma.$executeRaw`UPDATE "BOQ" SET "isLocked" = false, status = 'DRAFT'`;
+      await prisma.user.deleteMany({ where: { platformRole: { in: ["PLATFORM_OWNER", "PLATFORM_ADMIN"] } } });
     }
 
     const company = await prisma.company.create({

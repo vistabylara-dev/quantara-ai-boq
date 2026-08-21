@@ -1,6 +1,8 @@
 import { createHash } from "node:crypto";
 import { prisma } from "@/lib/db/prisma";
 import { AppError } from "@/lib/errors/app-error";
+import { getEffectiveEntitlements } from "@/lib/entitlements/effective-entitlement-service";
+import type { CurrentActor } from "@/lib/auth/current-actor";
 
 export type PackageRequirement = {
   packageId: string;
@@ -236,4 +238,18 @@ export async function assertCleanOutputAuthorized(
       { manifestFingerprint: [manifest.manifestFingerprint] }
     );
   }
+}
+
+export async function assertCleanOutputAuthorizedEffective(
+  actor: Pick<CurrentActor, "userId" | "companyId">,
+  projectId: string,
+  boqId: string,
+  revisionNumber: number,
+  requestedFormat: "PDF" | "DOCX" | "XLSX" | "CSV" | "HTML" | "TECHNICAL_REPORT"
+) {
+  const effective = await getEffectiveEntitlements(actor);
+  if (effective.source === "owner-override") {
+    return;
+  }
+  await assertCleanOutputAuthorized(actor.companyId, projectId, boqId, revisionNumber, requestedFormat);
 }

@@ -196,7 +196,8 @@ export async function generateDocument(actor: CurrentActor, projectIdentifier: s
 
   const documentCheck = await canGenerateDocumentEffective(actor, isDraft, boqRecord.id);
   if (!documentCheck.allowed) {
-    throw new AppError("TRIAL_EXPORT_LIMIT_REACHED", documentCheck.reason ?? "Document generation limit reached.", 403);
+    const code = documentCheck.reason?.includes("Free") ? "DOCUMENT_EXPORT_NOT_ALLOWED" : "TRIAL_EXPORT_LIMIT_REACHED";
+    throw new AppError(code, documentCheck.reason ?? "Document generation limit reached.", 403);
   }
 
   // TAYQAN Draft BOQ Word export: a customer needs to review TAYQAN's

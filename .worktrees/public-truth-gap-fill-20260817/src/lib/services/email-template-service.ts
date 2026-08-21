@@ -1,0 +1,97 @@
+import type { EmailTemplateCategory } from "@prisma/client";
+import type { CurrentActor } from "@/lib/auth/current-actor";
+import { requireCapability } from "@/lib/auth/rbac";
+import {
+  createEmailTemplate,
+  duplicateEmailTemplate,
+  getEmailTemplate,
+  listEmailTemplates,
+  listEmailTemplatesByCategory,
+  setEmailTemplateActive,
+  setEmailTemplateDefault,
+  updateEmailTemplate,
+  type EmailTemplateWriteInput,
+} from "@/lib/repositories/email-template-repository";
+import { prisma } from "@/lib/db/prisma";
+import { TECHNICAL_REPORT_STARTER_EMAIL_TEMPLATES } from "@/lib/email/starter-technical-report-email-templates";
+import { BOQ_STARTER_EMAIL_TEMPLATES, type StarterEmailTemplateDefinition } from "@/lib/email/starter-boq-email-templates";
+
+export async function listEmailTemplatesForCompany(actor: CurrentActor, includeInactive = false) {
+  return listEmailTemplates(actor.companyId, includeInactive);
+}
+
+/** Category-scoped list for a send picker (proposals -> BOQ, technical reports -> TECHNICAL_REPORT)
+ *  — the server-side half of "you can't accidentally pick the wrong template". */
+export async function listEmailTemplatesForCompanyByCategory(actor: CurrentActor, category: EmailTemplateCategory) {
+  return listEmailTemplatesByCategory(actor.companyId, category);
+}
+
+export async function getEmailTemplateForCompany(actor: CurrentActor, templateId: string) {
+  return getEmailTemplate(actor.companyId, templateId);
+}
+
+export async function createEmailTemplateForCompany(actor: CurrentActor, input: EmailTemplateWriteInput) {
+  requireCapability(actor, "email-templates:manage");
+  return createEmailTemplate(actor.companyId, input);
+}
+
+export async function updateEmailTemplateForCompany(actor: CurrentActor, templateId: string, input: Partial<EmailTemplateWriteInput>) {
+  requireCapability(actor, "email-templates:manage");
+  return updateEmailTemplate(actor.companyId, templateId, input);
+}
+
+export async function setEmailTemplateActiveForCompany(actor: CurrentActor, templateId: string, isActive: boolean) {
+  requireCapability(actor, "email-templates:manage");
+  return setEmailTemplateActive(actor.companyId, templateId, isActive);
+}
+
+export async function setEmailTemplateDefaultForCompany(actor: CurrentActor, templateId: string) {
+  requireCapability(actor, "email-templates:manage");
+  return setEmailTemplateDefault(actor.companyId, templateId);
+}
+
+export async function duplicateEmailTemplateForCompany(actor: CurrentActor, templateId: string) {
+  requireCapability(actor, "email-templates:manage");
+  return duplicateEmailTemplate(actor.companyId, templateId);
+}
+
+/**
+ * Shared by both starter-pack installers below. Idempotent by `code`: a template already installed
+ * (or since renamed/edited by the company, but keeping its original code) is left untouched and
+ * simply skipped rather than duplicated or overwritten — re-clicking "Install" is always safe.
+ */
+async function installStarterTemplates(actor: CurrentActor, definitions: StarterEmailTemplateDefinition[], category: EmailTemplateCategory) {
+  requireCapability(actor, "email-templates:manage");
+  const existingCodes = new Set(
+    (await prisma.emailTemplate.findMany({
+      where: { companyId: actor.companyId, code: { in: definitions.map((t) => t.code) } },
+      select: { code: true },
+    })).map((row) => row.code),
+  );
+
+  const created = [];
+  for (const template of definitions) {
+    if (existingCodes.has(template.code)) continue;
+    created.push(await createEmailTemplate(actor.companyId, {
+      name: template.name,
+      code: template.code,
+      category,
+      subject: template.subject,
+      bodyHtml: template.bodyHtml,
+      bodyText: template.bodyText,
+    }));
+  }
+  return { created, skipped: definitions.length - created.length };
+}
+
+/** Installs the built-in technical-report starter templates (attach-and-send + automated-secure-
+ *  link) into this company's own EmailTemplate table. */
+export async function installTechnicalReportStarterTemplatesForCompany(actor: CurrentActor) {
+  return installStarterTemplates(actor, TECHNICAL_REPORT_STARTER_EMAIL_TEMPLATES, "TECHNICAL_REPORT");
+}
+
+/** Installs the built-in BOQ proposal starter templates (attach-and-send + automated-secure-link)
+ *  into this company's own EmailTemplate table. */
+export async function installBoqStarterTemplatesForCompany(actor: CurrentActor) {
+  return installStarterTemplates(actor, BOQ_STARTER_EMAIL_TEMPLATES, "BOQ");
+}

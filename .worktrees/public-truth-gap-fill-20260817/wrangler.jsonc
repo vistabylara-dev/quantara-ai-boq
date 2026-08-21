@@ -1,0 +1,38 @@
+{
+	"$schema": "node_modules/wrangler/config-schema.json",
+	"main": ".open-next/worker.js",
+	"name": "quantara-ai-boq",
+	"compatibility_date": "2026-08-01",
+	"compatibility_flags": [
+		"nodejs_compat",
+		"global_fetch_strictly_public"
+	],
+	"assets": {
+		"directory": ".open-next/assets",
+		"binding": "ASSETS"
+	},
+	"services": [
+		{
+			// Self-reference service binding, the service name must match the worker name
+			// see https://opennext.js.org/cloudflare/caching
+			"binding": "WORKER_SELF_REFERENCE",
+			"service": "quantara-ai-boq"
+		}
+	],
+	"images": {
+		// Enable image optimization
+		// see https://opennext.js.org/cloudflare/howtos/image
+		"binding": "IMAGES"
+	},
+	"hyperdrive": [
+		{
+			"binding": "HYPERDRIVE",
+			"id": "1f26ca4bd7f644969aa2b9d8901a7e70",
+			"localConnectionString": "postgresql://postgres:postgres@localhost:5432/quantara_db"
+		}
+	]
+	// The binding is declared for the hosted Worker and local preview uses the
+	// explicit localConnectionString above. A successful local preview proves
+	// adapter/runtime compatibility only; the referenced Cloudflare resource
+	// must still be verified separately before any deployment.
+}

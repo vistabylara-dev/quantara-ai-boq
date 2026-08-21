@@ -1,0 +1,24 @@
+import { apiSuccess, handleApiError } from "@/lib/http/api-response";
+import { getCurrentActor } from "@/lib/auth/current-actor";
+import { setActorContext } from "@/lib/auth/request-context";
+import { triggerFileExtraction } from "@/lib/services/table-extraction-service";
+import { projectFileIdParamsSchema } from "@/lib/validation/route-params";
+
+export const dynamic = "force-dynamic";
+/** Table extraction over a single already-stored file; 60s leaves generous headroom over observed local runtimes. */
+export const maxDuration = 60;
+
+type RouteContext = { params: Promise<{ fileId: string }> };
+
+export async function POST(_request: Request, context: RouteContext) {
+  try {
+    const actor = await getCurrentActor();
+    setActorContext(actor);
+    const params = await context.params;
+    const { fileId } = projectFileIdParamsSchema.parse(params);
+    const data = await triggerFileExtraction(actor, fileId);
+    return apiSuccess(data, 202);
+  } catch (error) {
+    return handleApiError(error);
+  }
+}

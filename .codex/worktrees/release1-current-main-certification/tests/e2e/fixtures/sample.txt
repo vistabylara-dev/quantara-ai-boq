@@ -1,0 +1,1 @@
+Sample construction BOQ item: 100x100mm wood block, Quantity: 50, Unit: PCS

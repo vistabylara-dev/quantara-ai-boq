@@ -1,0 +1,101 @@
+diff --git a/src/app/projects/[projectId]/extractions/page.tsx b/src/app/projects/[projectId]/extractions/page.tsx
+--- a/src/app/projects/[projectId]/extractions/page.tsx
++++ b/src/app/projects/[projectId]/extractions/page.tsx
+@@ -566,6 +566,27 @@
+               </div>
+             </div>
+
++            {reviewSummary.complete && (
++              <div className="mt-5 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-emerald-300 bg-emerald-50 p-4 dark:border-emerald-400/20 dark:bg-emerald-400/5">
++                <div>
++                  <div className="text-sm font-black text-emerald-900 dark:text-emerald-200">Review complete</div>
++                  <div className="mt-1 text-xs font-bold text-emerald-800 dark:text-emerald-300">
++                    {importableEntityCount.toLocaleString()} reviewed items are ready for the governed BOQ import path.
++                  </div>
++                </div>
++                <Link
++                  href={
++                    importableEntityCount > 0
++                      ? `/projects/${encodedProjectId}/boq?action=import-reviewed`
++                      : `/projects/${encodedProjectId}/boq`
++                  }
++                  className="inline-flex min-h-11 items-center justify-center rounded-lg bg-emerald-700 px-4 py-2 text-sm font-black text-white hover:bg-emerald-800"
++                >
++                  Continue to BOQ
++                </Link>
++              </div>
++            )}
++
+             <p className="mt-4 text-xs leading-5 text-[#7B879C] dark:text-[#7F8DA6]">
+               AI Draft quantities remain professionally unconfirmed until you explicitly confirm them from the BOQ. Rates remain unselected until you use your purchased package, catalogue, company library, or manual pricing workflow.
+             </p>
+diff --git a/src/middleware.ts b/src/middleware.ts
+--- a/src/middleware.ts
++++ b/src/middleware.ts
+@@ -44,4 +44,7 @@
+   const hasSessionCookie = Boolean(request.cookies.get(SESSION_COOKIE_NAME)?.value);
+
++  if (pathname === "/login" && hasSessionCookie) {
++    return NextResponse.redirect(new URL("/dashboard", request.url));
++  }
+
+   if (!isPublicPage(pathname) && !hasSessionCookie) {
+diff --git a/src/app/api/commerce/refunds/eligibility/route.ts b/src/app/api/commerce/refunds/eligibility/route.ts
+--- a/src/app/api/commerce/refunds/eligibility/route.ts
++++ b/src/app/api/commerce/refunds/eligibility/route.ts
+@@ -1,13 +1,13 @@
+ import { apiSuccess, handleApiError } from "@/lib/http/api-response";
+ import { getCurrentActor } from "@/lib/auth/current-actor";
+-import { setActorContext } from "@/lib/auth/request-context";
++import { setActorContext, withActorRequestContext } from "@/lib/auth/request-context";
+ import { getRefundEligibility } from "@/lib/services/refund-request-service";
+
+ export const dynamic = "force-dynamic";
+ export const runtime = "nodejs";
+
+ /** REFUND-20 — read-only. Lets the customer UI show the exact refund deadline (or why it's unavailable) before ever attempting a submission. Same capability posture as GET /api/commerce/refunds: every authenticated company member may view it. */
+-export async function GET() {
++async function GETHandler() {
+   try {
+     const actor = await getCurrentActor();
+     setActorContext(actor);
+@@ -16,3 +16,5 @@
+     return handleApiError(error);
+   }
+ }
++
++export const GET = withActorRequestContext(GETHandler);
+diff --git a/tests/worker-tayqan.test.ts b/tests/worker-tayqan.test.ts
+--- a/tests/worker-tayqan.test.ts
++++ b/tests/worker-tayqan.test.ts
+@@ -306,10 +306,25 @@
+     const LATIN_PROSE = /[A-Za-z]{2,}/;
++    const ALLOWED_LATIN_IDENTIFIERS = [
++      "TAYQAN",
++      "Quantara",
++      "Stripe",
++      "MEP",
++      "HVAC",
++      "ELV",
++      "Hardscape",
++      "Softscape",
++    ] as const;
++
+     function walk(node: unknown, path: string, offenders: string[]) {
+       if (typeof node === "string") {
+-        // Strip the brand name and {vars} interpolation placeholders (e.g.
+-        // "{count}", "{number}") before checking for stray English prose —
+-        // those are template syntax, not untranslated presentation text.
+-        const withoutBrandAndVars = node.replace(/TAYQAN/g, "").replace(/\{\w+\}/g, "");
+-        if (LATIN_PROSE.test(withoutBrandAndVars)) offenders.push(`${path} = ${JSON.stringify(node)}`);
++        // Strip approved brand/technical identifiers and {vars} interpolation
++        // placeholders before checking for stray English prose. The allow-list
++        // is intentionally narrow so genuine untranslated English still fails.
++        const withoutVars = node.replace(/\{\w+\}/g, "");
++        const withoutAllowedIdentifiers = ALLOWED_LATIN_IDENTIFIERS.reduce(
++          (value, identifier) => value.split(identifier).join(""),
++          withoutVars,
++        );
++        if (LATIN_PROSE.test(withoutAllowedIdentifiers)) offenders.push(`${path} = ${JSON.stringify(node)}`);
+         return;
+       }

@@ -1,0 +1,554 @@
+import { randomUUID } from "node:crypto";
+import type Stripe from "stripe";
+import type { CommerceProviderEnvironment, Prisma } from "@prisma/client";
+import { prisma } from "@/lib/db/prisma";
+import type { CurrentActor } from "@/lib/auth/current-actor";
+import { AppError } from "@/lib/errors/app-error";
+import {
+  getConfiguredStripeMode,
+  getStripeCommercialClient,
+  StripeInvalidKeyError,
+  StripeNotConfiguredError,
+} from "@/lib/payments/stripe-client";
+import { findPriceMapping } from "@/lib/repositories/commerce-provider-mapping-repository";
+import { generateBoqCommercialManifest } from "@/lib/services/commercial-entitlement-service";
+import {
+  createStripeBillingCustomer,
+  findStripeBillingCustomer,
+} from "@/lib/repositories/stripe-billing-repository";
+
+/**
+ * STRIPE-COMMERCIAL-2 — server-side checkout. The browser sends only a
+ * trusted internal `priceCode`; every other fact (amount, currency, Stripe
+ * price ID, company identity) is resolved here from server-controlled state.
+ * Never accept amount/currency/providerPriceId/companyId/metadata from the
+ * request body — see createCommerceCheckoutSession's single input field.
+ *
+ * STRIPE-COMMERCIAL-7 — one-time fulfillment (BOQ/report export unlocks, AI
+ * credit packs, bundles, ...) is not implemented anywhere in this codebase:
+ * no webhook path grants a one-time entitlement, no ledger consumes an AI
+ * credit. Until that genuinely exists, self-checkout accepts SUBSCRIPTION
+ * products with a MONTH/YEAR price only — a customer must never be charged
+ * for a one-time product that nothing will ever fulfill.
+ */
+
+export const SUPPORTED_CHECKOUT_CURRENCIES = new Set(["AED"]);
+/** Deliberately MONTH/YEAR only — see the STRIPE-COMMERCIAL-7 note above. Exported so commerce-checkout-availability-service.ts applies the identical filter when reporting availability to the UI. */
+export const CHECKOUT_ELIGIBLE_INTERVALS = new Set(["MONTH", "YEAR"]);
+/** Non-final CompanySoftwareSubscription statuses — a company with one of these already has a live-or-pending Stripe subscription and must use the billing portal, not start a second checkout. Only CANCELLED/EXPIRED subscriptions may be superseded by a fresh checkout. */
+export const NON_FINAL_SUBSCRIPTION_STATUSES = ["TRIAL", "ACTIVE", "PAST_DUE", "SUSPENDED"] as const;
+
+export type CheckoutPriceRejectionReason =
+  | "PRICE_NOT_FOUND"
+  | "PRODUCT_INACTIVE"
+  | "PRODUCT_NOT_PUBLIC"
+  | "PRODUCT_NOT_DIRECT_PURCHASE"
+  | "PRODUCT_NOT_SUBSCRIPTION"
+  | "PRICE_INACTIVE"
+  | "PRICE_NOT_APPROVED"
+  | "ZERO_OR_NEGATIVE_AMOUNT"
+  | "UNSUPPORTED_CURRENCY"
+  | "UNSUPPORTED_INTERVAL"
+  | "PROVIDER_MAPPING_MISSING"
+  | "PROVIDER_MAPPING_NOT_SYNCED";
+
+export class CheckoutNotEligibleError extends AppError {
+  readonly reason: CheckoutPriceRejectionReason;
+  constructor(reason: CheckoutPriceRejectionReason, message: string) {
+    super("CHECKOUT_PRICE_NOT_ELIGIBLE", message, 409);
+    this.name = "CheckoutNotEligibleError";
+    this.reason = reason;
+  }
+}
+
+/** STRIPE-COMMERCIAL-6 — a company must not be able to pay for two subscriptions simultaneously (e.g. Starter + Professional). Thrown before a Checkout Session is created; the route surfaces this as a safe, machine-readable code the UI maps to "Manage Billing" instead of a generic failure. */
+export class ExistingSubscriptionError extends AppError {
+  constructor() {
+    super(
+      "CHECKOUT_EXISTING_SUBSCRIPTION",
+      "This company already has an active or pending subscription. Manage it from the billing portal instead of starting a new checkout.",
+      409,
+    );
+    this.name = "ExistingSubscriptionError";
+  }
+}
+
+export function resolveCheckoutEnvironment(): CommerceProviderEnvironment {
+  return getConfiguredStripeMode() === "live" ? "LIVE" : "TEST";
+}
+
+function resolveCommercialStripeClient(overrideClient?: Stripe): Stripe {
+  try {
+    return getStripeCommercialClient(overrideClient);
+  } catch (error) {
+    if (error instanceof StripeNotConfiguredError || error instanceof StripeInvalidKeyError) {
+      throw new AppError("STRIPE_NOT_CONFIGURED", "Checkout is not available right now.", 503);
+    }
+    throw error;
+  }
+}
+
+/** Absolute, http(s), and https-only when this checkout is live-mode. Never trusts a request header for the base URL. */
+export function validateAppBaseUrl(liveMode: boolean): string {
+  const raw = process.env.APP_BASE_URL?.trim();
+  if (!raw) {
+    throw new AppError("APP_BASE_URL_NOT_CONFIGURED", "The application base URL is not configured.", 500);
+  }
+
+  let parsed: URL;
+  try {
+    parsed = new URL(raw);
+  } catch {
+    throw new AppError("APP_BASE_URL_INVALID", "The configured application base URL is not a valid absolute URL.", 500);
+  }
+
+  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+    throw new AppError("APP_BASE_URL_INVALID", "The configured application base URL must use http or https.", 500);
+  }
+  if (liveMode && parsed.protocol !== "https:") {
+    throw new AppError("APP_BASE_URL_INVALID", "The configured application base URL must use https for live checkout.", 500);
+  }
+
+  return raw.replace(/\/+$/, "");
+}
+
+/**
+ * Every check a price/product must pass before a customer can self-checkout
+ * it. Mirrors (and must stay in lockstep with) the availability logic in
+ * commerce-checkout-availability-service.ts, which reports these same facts
+ * to the UI without exposing Stripe price IDs.
+ */
+async function loadEligibleCommercePrice(priceCode: string) {
+  const price = await prisma.commercePrice.findUnique({
+    where: { code: priceCode },
+    include: { product: true },
+  });
+
+  if (!price) throw new CheckoutNotEligibleError("PRICE_NOT_FOUND", "This price is not available for checkout.");
+  if (!price.product.isActive) throw new CheckoutNotEligibleError("PRODUCT_INACTIVE", "This product is not currently available.");
+  if (!price.product.isPublic) throw new CheckoutNotEligibleError("PRODUCT_NOT_PUBLIC", "This product is not available for self-checkout.");
+  if (price.product.purchaseMode !== "DIRECT") {
+    throw new CheckoutNotEligibleError("PRODUCT_NOT_DIRECT_PURCHASE", "This product requires contacting sales and cannot be checked out directly.");
+  }
+  if (price.product.type !== "SUBSCRIPTION") {
+    throw new CheckoutNotEligibleError("PRODUCT_NOT_SUBSCRIPTION", "Only subscription products can be checked out directly right now.");
+  }
+  if (!price.isActive) throw new CheckoutNotEligibleError("PRICE_INACTIVE", "This price is no longer active.");
+  if (price.reviewStatus !== "APPROVED") throw new CheckoutNotEligibleError("PRICE_NOT_APPROVED", "This price has not been approved for checkout.");
+  if (price.isFromPrice) throw new CheckoutNotEligibleError("PRICE_NOT_APPROVED", "This price is an indicative amount and cannot be checked out directly.");
+  if (price.amountMinor <= 0) throw new CheckoutNotEligibleError("ZERO_OR_NEGATIVE_AMOUNT", "This price is not checkout-eligible.");
+  if (!SUPPORTED_CHECKOUT_CURRENCIES.has(price.currency)) throw new CheckoutNotEligibleError("UNSUPPORTED_CURRENCY", "This price's currency is not supported for checkout.");
+  if (!CHECKOUT_ELIGIBLE_INTERVALS.has(price.billingInterval)) {
+    throw new CheckoutNotEligibleError("UNSUPPORTED_INTERVAL", "One-time purchases are not yet available for checkout.");
+  }
+
+  return price;
+}
+
+async function resolveProviderPriceMapping(environment: CommerceProviderEnvironment, commercePriceId: string) {
+  const mapping = await findPriceMapping("STRIPE", environment, commercePriceId);
+  if (!mapping || !mapping.providerPriceId) {
+    throw new CheckoutNotEligibleError("PROVIDER_MAPPING_MISSING", "This price is not yet available for checkout.");
+  }
+  if (!mapping.providerActive || mapping.synchronizationStatus !== "SYNCED") {
+    throw new CheckoutNotEligibleError("PROVIDER_MAPPING_NOT_SYNCED", "This price is not currently available for checkout.");
+  }
+  return mapping;
+}
+
+type CompanySubscriptionClient = Pick<Prisma.TransactionClient, "companySoftwareSubscription">;
+
+/** Exported so commerce-checkout-availability-service.ts can report the same "already subscribed" fact to the UI without duplicating this query. Accepts an optional transaction client so the per-company-lock recheck in createCommerceCheckoutSession reads through the SAME transaction, not a separate connection. */
+export async function hasNonFinalStripeSubscription(companyId: string, client: CompanySubscriptionClient = prisma): Promise<boolean> {
+  const existing = await client.companySoftwareSubscription.findFirst({
+    where: { companyId, source: "stripe", status: { in: [...NON_FINAL_SUBSCRIPTION_STATUSES] } },
+    select: { id: true },
+  });
+  return existing !== null;
+}
+
+/** STRIPE-COMMERCIAL-6 — a company cannot start a second subscription checkout while a non-final Stripe subscription already exists (see NON_FINAL_SUBSCRIPTION_STATUSES). A CANCELLED/EXPIRED subscription never blocks a fresh checkout. */
+async function assertNoExistingNonFinalSubscription(companyId: string, client: CompanySubscriptionClient = prisma): Promise<void> {
+  if (await hasNonFinalStripeSubscription(companyId, client)) throw new ExistingSubscriptionError();
+}
+
+/**
+ * STRIPE-COMMERCIAL-11 — the DB-only check above cannot protect the window
+ * between a Checkout Session being created and the webhook that eventually
+ * records a CompanySoftwareSubscription row for it (webhook delivery is
+ * asynchronous and can lag by seconds to minutes). This asks Stripe itself,
+ * which is authoritative immediately. `canceled` and `incomplete_expired`
+ * are the only two genuinely terminal Stripe subscription statuses — every
+ * other value (including any future status Stripe might add) is treated as
+ * blocking, deliberately failing closed rather than open.
+ *
+ * STRIPE-COMMERCIAL-16 — walks every page of the customer's subscriptions
+ * rather than inspecting only the first (a customer with a long history of
+ * canceled subscriptions could otherwise push a genuinely blocking one past
+ * page 1). A provider/network error mid-pagination fails closed — treated
+ * as "cannot rule out an existing subscription", never as "none found".
+ */
+const NON_BLOCKING_STRIPE_SUBSCRIPTION_STATUSES = new Set<Stripe.Subscription.Status>(["canceled", "incomplete_expired"]);
+
+async function hasBlockingStripeSubscription(stripe: Stripe, stripeCustomerId: string): Promise<boolean> {
+  let startingAfter: string | undefined;
+  for (;;) {
+    let page: Stripe.ApiList<Stripe.Subscription>;
+    try {
+      page = await stripe.subscriptions.list({ customer: stripeCustomerId, status: "all", limit: 100, starting_after: startingAfter });
+    } catch (error) {
+      throw new AppError("STRIPE_SUBSCRIPTION_LOOKUP_FAILED", "Could not verify existing subscriptions with Stripe. Please try again.", 502);
+    }
+    if (page.data.some((subscription) => !NON_BLOCKING_STRIPE_SUBSCRIPTION_STATUSES.has(subscription.status))) {
+      return true;
+    }
+    if (!page.has_more || page.data.length === 0) return false;
+    startingAfter = page.data[page.data.length - 1].id;
+  }
+}
+
+async function assertNoExistingStripeSubscription(stripe: Stripe, stripeCustomerId: string): Promise<void> {
+  if (await hasBlockingStripeSubscription(stripe, stripeCustomerId)) throw new ExistingSubscriptionError();
+}
+
+/**
+ * Every open Checkout Session Stripe has for this customer that this app
+ * itself created (quantara_company_id metadata matches) — never an
+ * arbitrary open session that merely happens to share the same Stripe
+ * customer. Paginated for the same reason as hasBlockingStripeSubscription
+ * above; fails closed on a provider error.
+ */
+async function findAppOwnedOpenCheckoutSessions(
+  stripe: Stripe,
+  stripeCustomerId: string,
+  companyId: string,
+): Promise<Stripe.Checkout.Session[]> {
+  const matches: Stripe.Checkout.Session[] = [];
+  let startingAfter: string | undefined;
+  for (;;) {
+    let page: Stripe.ApiList<Stripe.Checkout.Session>;
+    try {
+      page = await stripe.checkout.sessions.list({ customer: stripeCustomerId, status: "open", limit: 100, starting_after: startingAfter });
+    } catch (error) {
+      throw new AppError("STRIPE_CHECKOUT_SESSION_LOOKUP_FAILED", "Could not verify existing checkout sessions with Stripe. Please try again.", 502);
+    }
+    for (const session of page.data) {
+      if (session.metadata?.quantara_company_id === companyId) matches.push(session);
+    }
+    if (!page.has_more || page.data.length === 0) return matches;
+    startingAfter = page.data[page.data.length - 1].id;
+  }
+}
+
+/**
+ * STRIPE-COMMERCIAL-18 — a fixed, arbitrary int32 namespace, distinct from
+ * STRIPE_WEBHOOK_LOCK_NAMESPACE in stripe-webhook-service.ts, so this app's
+ * per-company checkout-creation lock can never collide with the
+ * per-subscription webhook lock or any other advisory lock this codebase
+ * might take. Combined with `hashtext(companyId)` via the two-argument
+ * `pg_advisory_xact_lock(key1, key2)` overload.
+ *
+ * Serializes the entire "resolve customer, recheck for an existing
+ * subscription/open session, reuse-or-expire-or-create" sequence for ONE
+ * company, across every concurrent Node process/serverless instance — not
+ * just within one. Two simultaneous requests for the SAME company (even for
+ * two different prices, e.g. Starter + Professional) can never both pass
+ * the checks before either session exists: whichever acquires the lock
+ * second waits for the first to fully commit (create its session, or
+ * discover and reuse an existing one) before it re-reads any state,
+ * guaranteeing its recheck sees the first's result.
+ */
+const CHECKOUT_LOCK_NAMESPACE = 419_628_331;
+
+async function acquireCompanyCheckoutLock(tx: Prisma.TransactionClient, companyId: string): Promise<void> {
+  await tx.$executeRaw`SELECT pg_advisory_xact_lock(${CHECKOUT_LOCK_NAMESPACE}, hashtext(${companyId}))`;
+}
+
+/**
+ * Reuses the company's existing Stripe customer for the current mode, or
+ * creates one. The Stripe-side create call still carries a deterministic
+ * idempotency key (customer identity is a stable, permanent fact about a
+ * company+mode, unlike a one-shot Checkout Session — see the note on
+ * randomUUID() at the call site below) so a request racing this one before
+ * the per-company lock existed, or a raw network retry, resolves to the
+ * *same* Stripe customer object; the DB-level unique(companyId, livemode)
+ * constraint (via createStripeBillingCustomer's catch-and-refetch) then
+ * guarantees only one StripeBillingCustomer row survives regardless.
+ */
+async function getOrCreateStripeCustomerForCompany(
+  stripe: Stripe,
+  actor: CurrentActor,
+  livemode: boolean,
+  tx: Prisma.TransactionClient,
+): Promise<string> {
+  const existing = await findStripeBillingCustomer(actor.companyId, livemode, tx);
+  if (existing) return existing.stripeCustomerId;
+
+  const company = await tx.company.findUniqueOrThrow({ where: { id: actor.companyId } });
+  const stripeCustomer = await stripe.customers.create(
+    {
+      name: company.legalName,
+      email: company.email || actor.email,
+      metadata: { quantara_company_id: actor.companyId },
+    },
+    { idempotencyKey: `quantara:${livemode ? "live" : "test"}:customer:${actor.companyId}` },
+  );
+
+  const created = await createStripeBillingCustomer(actor.companyId, stripeCustomer.id, livemode, tx);
+  return created.stripeCustomerId;
+}
+
+export type CreateCheckoutSessionInput = {
+  checkoutMode?: "SUBSCRIPTION" | "BOQ_UNLOCK";
+  priceCode?: string;
+  boqId?: string;
+  revisionNumber?: number;
+  billingInterval?: "MONTH" | "YEAR";
+};
+export type CreateCheckoutSessionResult = { checkoutSessionId: string; checkoutUrl: string };
+
+export async function createCommerceCheckoutSession(
+  actor: CurrentActor,
+  input: CreateCheckoutSessionInput,
+  overrideClient?: Stripe,
+): Promise<CreateCheckoutSessionResult> {
+  const environment = resolveCheckoutEnvironment();
+  const liveMode = environment === "LIVE";
+  const stripe = resolveCommercialStripeClient(overrideClient);
+  const baseUrl = validateAppBaseUrl(liveMode);
+
+  // Global catalog validation — not company-specific, so it doesn't need the
+  // per-company lock below. Never trusts client-supplied amount/currency/
+  // providerPriceId; both are resolved purely from the trusted priceCode.
+  const price = await loadEligibleCommercePrice(input.priceCode!);
+  const mapping = await resolveProviderPriceMapping(environment, price.id);
+
+  /**
+   * STRIPE-COMMERCIAL-18 — everything from here on is serialized per company
+   * by acquireCompanyCheckoutLock, and every check is RE-DONE after
+   * acquiring the lock (never trusts a pre-lock read): two concurrent
+   * requests for the same company — even for two different prices, e.g.
+   * Starter and Professional, or monthly and annual — can no longer both
+   * pass the subscription/session checks before either session exists.
+   * Whichever request acquires the lock second waits for the first's
+   * transaction to fully commit, then re-reads Stripe/DB state that already
+   * reflects the first's outcome.
+   */
+  return prisma.$transaction(
+    async (tx) => {
+      await acquireCompanyCheckoutLock(tx, actor.companyId);
+
+      await assertNoExistingNonFinalSubscription(actor.companyId, tx);
+      const stripeCustomerId = await getOrCreateStripeCustomerForCompany(stripe, actor, liveMode, tx);
+
+      // Stripe-side checks close the window the DB-only check above cannot: the
+      // gap between session creation and the (asynchronous) webhook that would
+      // otherwise be the only thing recording a CompanySoftwareSubscription row.
+      await assertNoExistingStripeSubscription(stripe, stripeCustomerId);
+
+      /**
+       * STRIPE-COMMERCIAL-21 — invariant: after this function returns
+       * successfully, at most ONE Quantara-owned Checkout Session may be
+       * open for this company. An app-owned open session is only ever a
+       * reuse CANDIDATE when it is for THIS EXACT price (quantara_price_code
+       * matches too, not just the company) and carries a URL — a Starter
+       * session must never be handed back to a customer now requesting
+       * Professional, or a monthly session to an annual request. At most one
+       * candidate is chosen as the survivor; every OTHER app-owned open
+       * session — whether a different price/interval, or a duplicate open
+       * session for the SAME price — must be confirmed expired before this
+       * function returns or creates anything. Never touches a session
+       * lacking Quantara's own metadata — see findAppOwnedOpenCheckoutSessions.
+       */
+      const appOwnedOpenSessions = await findAppOwnedOpenCheckoutSessions(stripe, stripeCustomerId, actor.companyId);
+      const reusableIndex = appOwnedOpenSessions.findIndex(
+        (session) => session.metadata?.quantara_price_code === price.code && Boolean(session.url),
+      );
+      const reusableSession = reusableIndex === -1 ? null : appOwnedOpenSessions[reusableIndex];
+      const extraSessions = appOwnedOpenSessions.filter((_session, index) => index !== reusableIndex);
+
+      /**
+       * STRIPE-COMMERCIAL-19/21 — every extra open session (stale
+       * different-price attempts AND duplicate same-price attempts beyond
+       * the one chosen survivor) must be confirmed expired before either the
+       * survivor is returned or a new session is created — never left open
+       * to be discovered by a later request. If ANY expiry cannot be
+       * confirmed, this fails closed: neither the survivor is returned nor a
+       * new Checkout Session is created, and the caller must retry. The
+       * alternative (returning/creating anyway) would risk leaving two
+       * simultaneously-payable open sessions for the same company.
+       */
+      for (const extra of extraSessions) {
+        try {
+          await stripe.checkout.sessions.expire(extra.id);
+        } catch (error) {
+          console.error("[commerce-checkout] Failed to expire stale open Checkout Session", extra.id, error);
+          throw new AppError(
+            "STRIPE_STALE_SESSION_EXPIRE_FAILED",
+            "Could not confirm cancellation of a previous checkout attempt. Please try again.",
+            502,
+          );
+        }
+      }
+
+      if (reusableSession?.url) {
+        return { checkoutSessionId: reusableSession.id, checkoutUrl: reusableSession.url };
+      }
+
+      const session = await stripe.checkout.sessions.create(
+        {
+          mode: "subscription",
+          customer: stripeCustomerId,
+          line_items: [{ price: mapping.providerPriceId as string, quantity: 1 }],
+          success_url: `${baseUrl}/settings/subscription?checkout=success&session_id={CHECKOUT_SESSION_ID}`,
+          cancel_url: `${baseUrl}/settings/subscription?checkout=cancelled`,
+          client_reference_id: actor.companyId,
+          metadata: {
+            quantara_company_id: actor.companyId,
+            quantara_price_code: price.code,
+            quantara_environment: liveMode ? "live" : "test",
+          },
+          subscription_data: {
+            metadata: { quantara_company_id: actor.companyId, quantara_price_code: price.code },
+          },
+        },
+        // STRIPE-COMMERCIAL-20 — a fresh, high-entropy key per genuine new
+        // Checkout Session creation attempt, generated once for this
+        // invocation and reused only if Stripe's own SDK internally retries
+        // this exact request (a transport-level retry of the same call,
+        // never a separate later attempt). Checkout creation is now
+        // serialized per company above, so the old 5-minute-bucket
+        // deterministic key is no longer needed to prevent a duplicate
+        // session — and reusing a bucketed key across genuinely separate
+        // attempts risked Stripe replaying an already-expired session
+        // instead of creating the newly requested one.
+        { idempotencyKey: randomUUID() },
+      );
+
+      if (!session.url) {
+        throw new AppError("STRIPE_CHECKOUT_SESSION_NO_URL", "Stripe did not return a checkout URL.", 502);
+      }
+
+      return { checkoutSessionId: session.id, checkoutUrl: session.url! };
+    },
+    // Generous timeout: this transaction holds a per-company advisory lock
+    // and makes several real Stripe API calls while open, not just DB writes.
+    { maxWait: 10_000, timeout: 30_000 },
+  );
+}
+
+export type CreateBillingPortalSessionResult = { portalUrl: string };
+
+export async function createBillingPortalSession(
+  actor: CurrentActor,
+  overrideClient?: Stripe,
+): Promise<CreateBillingPortalSessionResult> {
+  const liveMode = resolveCheckoutEnvironment() === "LIVE";
+  const stripe = resolveCommercialStripeClient(overrideClient);
+  const baseUrl = validateAppBaseUrl(liveMode);
+
+  const customer = await findStripeBillingCustomer(actor.companyId, liveMode);
+  if (!customer) {
+    throw new AppError("STRIPE_CUSTOMER_NOT_FOUND", "No billing record exists for this company yet.", 404);
+  }
+
+  const session = await stripe.billingPortal.sessions.create({
+    customer: customer.stripeCustomerId,
+    return_url: `${baseUrl}/settings/subscription`,
+  });
+
+  return { portalUrl: session.url };
+}
+
+
+async function handleBoqUnlockCheckoutSession(
+  actor: CurrentActor,
+  input: CreateCheckoutSessionInput,
+  stripe: Stripe,
+  environment: CommerceProviderEnvironment,
+  liveMode: boolean,
+  baseUrl: string,
+): Promise<CreateCheckoutSessionResult> {
+  const { boqId, revisionNumber, billingInterval = "YEAR" } = input;
+  if (!boqId || revisionNumber === undefined) {
+    throw new AppError("INVALID_INPUT", "boqId and revisionNumber are required for BOQ unlocks.", 400);
+  }
+
+  const boq = await prisma.bOQ.findUnique({ where: { id: boqId } });
+  if (!boq) throw new AppError("NOT_FOUND", "BOQ not found.", 404);
+
+  const manifest = await generateBoqCommercialManifest(
+    actor.companyId,
+    boq.projectId,
+    boq.id,
+    revisionNumber,
+    "BOQ",
+    "PDF"
+  );
+
+  const unsatisfiedPackages = manifest.packageRequirements.filter((r) => !r.isSatisfied);
+  if (unsatisfiedPackages.length === 0) {
+    throw new AppError("BOQ_ALREADY_UNLOCKED", "This BOQ requires no additional commercial unlocks.", 400);
+  }
+
+  const packageIds = unsatisfiedPackages.map((p) => p.packageId);
+
+  const products = await prisma.commerceProduct.findMany({
+    where: { industryPackageId: { in: packageIds }, isActive: true, isPublic: true },
+    include: { prices: { where: { isActive: true } } }
+  });
+
+  if (products.length !== packageIds.length) {
+    throw new CheckoutNotEligibleError("PRODUCT_NOT_PUBLIC", "One or more required packages are not available for purchase.");
+  }
+
+  const lineItems: Stripe.Checkout.SessionCreateParams.LineItem[] = [];
+  const metadataMap: Record<string, string> = {
+    quantara_checkout_mode: "BOQ_UNLOCK",
+    quantara_boq_id: boqId,
+    quantara_revision_number: revisionNumber.toString()
+  };
+
+  for (const product of products) {
+    const price = product.prices.find((p) => p.billingInterval === billingInterval) || product.prices[0];
+    if (!price) {
+      throw new CheckoutNotEligibleError("PRICE_NOT_APPROVED", "PRICE SETUP PENDING: A required package is missing an approved price.");
+    }
+    const mapping = await prisma.commerceProviderMapping.findFirst({
+      where: { environment, commercePriceId: price.id, providerObjectType: "PRICE" }
+    });
+    if (!mapping || mapping.synchronizationStatus !== "SYNCED") {
+       throw new CheckoutNotEligibleError("PROVIDER_MAPPING_MISSING", "PRICE SETUP PENDING: Price not synced with Stripe.");
+    }
+    lineItems.push({ price: mapping.providerPriceId!, quantity: 1 });
+  }
+
+  return prisma.$transaction(async (tx) => {
+    await acquireCompanyCheckoutLock(tx, actor.companyId);
+
+    const stripeCustomerId = await getOrCreateStripeCustomerForCompany(stripe, actor, liveMode, tx);
+
+    const appOwnedOpenSessions = await findAppOwnedOpenCheckoutSessions(stripe, stripeCustomerId, actor.companyId);
+    for (const session of appOwnedOpenSessions) {
+      try {
+        await stripe.checkout.sessions.expire(session.id);
+      } catch (e) {
+        console.error("[commerce-checkout] Failed to expire stale open Checkout Session", session.id, e);
+      }
+    }
+
+    const session = await stripe.checkout.sessions.create({
+      mode: "subscription",
+      customer: stripeCustomerId,
+      line_items: lineItems,
+      success_url: `${baseUrl}/checkout/success?session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${baseUrl}/checkout/cancel?session_id={CHECKOUT_SESSION_ID}`,
+      metadata: {
+        quantara_company_id: actor.companyId,
+        ...metadataMap
+      }
+    });
+
+    return { checkoutSessionId: session.id, checkoutUrl: session.url! };
+  });
+}

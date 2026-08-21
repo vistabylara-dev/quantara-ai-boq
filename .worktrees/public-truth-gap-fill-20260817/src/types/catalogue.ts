@@ -1,0 +1,70 @@
+export type CatalogueStatus = "ACTIVE" | "PENDING" | "EXPIRED" | "INACTIVE";
+export type CatalogueMarginMode = "MARKUP" | "GROSS_MARGIN";
+
+export type CatalogueItem = {
+  id: string;
+  itemCode: string;
+  industryId: string;
+  industryEngineId: string;
+  category: string;
+  subcategory: string | null;
+  description: string;
+  specification: string | null;
+  unit: string;
+  supplierId: string | null;
+  supplierName: string | null;
+  manufacturer: string | null;
+  brand: string | null;
+  model: string | null;
+  countryOfOrigin: string | null;
+  baseCost: number;
+  freightCost: number;
+  installationCost: number;
+  additionalCost: number;
+  landedCost: number;
+  marginMode: CatalogueMarginMode;
+  defaultMargin: number;
+  sellingRate: number;
+  minimumSellingRate: number | null;
+  belowMinimum: boolean;
+  currency: string;
+  effectiveDate: string;
+  expiryDate: string | null;
+  status: CatalogueStatus;
+  sourceReference: string | null;
+  supplierQuotationReference: string | null;
+  metadataJson: Record<string, unknown> | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type CatalogueListResult = {
+  items: CatalogueItem[];
+  total: number;
+  page: number;
+  pageSize: number;
+};
+
+export type CataloguePriceHistoryEntry = {
+  id: string;
+  previousBaseCost: number;
+  newBaseCost: number;
+  previousFreightCost: number;
+  newFreightCost: number;
+  previousInstallationCost: number;
+  newInstallationCost: number;
+  previousAdditionalCost: number;
+  newAdditionalCost: number;
+  previousLandedCost: number;
+  newLandedCost: number;
+  previousMargin: number;
+  newMargin: number;
+  previousSellingRate: number;
+  newSellingRate: number;
+  currency: string;
+  effectiveDate: string;
+  expiryDate: string | null;
+  changedByName: string | null;
+  changeReason: string | null;
+  createdAt: string;
+};

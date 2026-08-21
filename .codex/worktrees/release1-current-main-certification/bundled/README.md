@@ -1,0 +1,1 @@
+This folder contains the built output assets for the worker "quantara-ai-boq" generated at 2026-08-05T12:33:22.252Z.

@@ -1,0 +1,51 @@
+{
+	"$schema": "node_modules/wrangler/config-schema.json",
+	"main": ".open-next/worker.js",
+	"name": "quantara-ai-boq",
+	"compatibility_date": "2026-08-01",
+	"compatibility_flags": [
+		"nodejs_compat",
+		"global_fetch_strictly_public"
+	],
+	"assets": {
+		"directory": ".open-next/assets",
+		"binding": "ASSETS"
+	},
+	"services": [
+		{
+			// Self-reference service binding, the service name must match the worker name
+			// see https://opennext.js.org/cloudflare/caching
+			"binding": "WORKER_SELF_REFERENCE",
+			"service": "quantara-ai-boq"
+		}
+	],
+	"images": {
+		// Enable image optimization
+		// see https://opennext.js.org/cloudflare/howtos/image
+		"binding": "IMAGES"
+	},
+	"hyperdrive": [
+		{
+			"binding": "HYPERDRIVE",
+			"id": "1f26ca4bd7f644969aa2b9d8901a7e70",
+			"localConnectionString": "postgresql://postgres:postgres@localhost:5432/quantara_db"
+		}
+	]
+	// Hyperdrive binding — NOT yet configured. No Hyperdrive resource has
+	// been created for this project, so no ID exists to put here (a
+	// placeholder/fake ID would make `wrangler deploy` fail against a
+	// non-existent resource). Once a real Hyperdrive config exists
+	// (see docs/cloudflare-hyperdrive-setup.md), add:
+	//
+	// "hyperdrive": [
+	//   {
+	//     "binding": "HYPERDRIVE",
+	//     "id": "<REAL_HYPERDRIVE_ID>"
+	//   }
+	// ]
+	//
+	// The application code in src/lib/db/prisma.ts and
+	// src/lib/cloudflare/env.ts already detects and uses this binding via
+	// `env.HYPERDRIVE` the moment it's added — no further code changes are
+	// needed after this block is uncommented and filled in.
+}

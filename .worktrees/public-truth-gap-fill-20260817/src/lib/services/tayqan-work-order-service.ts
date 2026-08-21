@@ -1,0 +1,1932 @@
+import {
+  ExtractionEngineType,
+  ExtractionJobStatus,
+  ExtractedEntityStatus,
+  Prisma,
+  QuantityProvenanceSource,
+  RateProvenanceSource,
+  TayqanIntakeMessageRole,
+  TayqanIntakeStatus,
+  TayqanWorkStage,
+  TayqanWorkStatus,
+  WorkerRunStatus,
+} from "@prisma/client";
+import type { CurrentActor } from "@/lib/auth/current-actor";
+import { prisma } from "@/lib/db/prisma";
+import { AppError, ConflictError, NotFoundError } from "@/lib/errors/app-error";
+import { getSourceProcessingCapability } from "@/lib/files/source-processing-capability";
+import { getAiDraftExtractedEntityId } from "@/lib/guidance/ai-draft-boq";
+import { extractionJobQueue } from "@/lib/jobs/extraction-worker";
+import {
+  createProjectBOQ,
+  getBOQRecord,
+} from "@/lib/repositories/boq-repository";
+import { getProjectRecord } from "@/lib/repositories/project-repository";
+import { generateAiDraftBoq } from "@/lib/services/ai-draft-boq-service";
+import {
+  confirmExtractedEntity,
+  correctExtractedEntity,
+  rejectExtractedEntity,
+} from "@/lib/services/extracted-entity-service";
+import { importExtractedEntityToBoq } from "@/lib/services/extraction-to-boq-service";
+import {
+  assertTayqanAccessEntitlement,
+  getTayqanIntakeConversationContext,
+} from "@/lib/services/tayqan-hire-service";
+import {
+  enqueueWorkerReview,
+  getWorkerRunForCompany,
+} from "@/lib/services/worker-runner-service";
+import { getWorkerAssignmentWorkspace } from "@/lib/services/worker-review-service";
+import { TAYQAN_RATE_QUESTION_TYPES } from "@/lib/tayqan/tayqan-workflow-contract";
+
+type GoverningInstructionContext = {
+  projectCategory: string | null;
+  categoryScope: string | null;
+  measurementStandard: string | null;
+  exclusions: string | null;
+  deadlineText: string | null;
+  specialInstructions: string | null;
+  pricingBasis: string | null;
+  authoritativeSourcePolicy: string | null;
+};
+
+type WorkProgress = {
+  quantityOverrides?: Record<string, { quantity: number; unit: string; note: string }>;
+  rateOverrides?: Record<string, { unitCost: number; sourceNote: string }>;
+
+  /**
+   * B1: immutable snapshot of what the customer told TAYQAN
+   * before work began. Stored inside the EXISTING progressJson
+   * so Prisma/schema remain untouched.
+   */
+  instructionContext?: GoverningInstructionContext;
+
+  /**
+   * Source evidence is frozen to these ProjectFile ids after
+   * SOURCE_DISCOVERY. This prevents unrelated project evidence
+   * or a later file upload from silently entering this job.
+   */
+  selectedSourceFileIds?: string[];
+
+  /**
+   * Draft-first handoff state. Kept inside the EXISTING progressJson so
+   * there is no Prisma/schema change. The normal Quantara AI Draft service
+   * remains the single implementation of draft creation.
+   */
+  aiDraft?: {
+    boqId: string;
+    addedCount: number;
+    skippedCount: number;
+    alreadyPresentCount: number;
+    unreviewedAddedCount: number;
+    reviewedAddedCount: number;
+  };
+};
+
+type WorkBlocker = {
+  kind: "ACTION" | "ENTITY_REVIEW" | "QUANTITY_REQUIRED" | "RATE_REQUIRED" | "QA_QUESTION" | "ERROR";
+  i18nKey: string;
+  actionHref?: string;
+  entity?: {
+    id: string;
+    label: string;
+    quantity: number | null;
+    unit: string | null;
+    sourceReference: string | null;
+    confidence: number;
+  };
+  qa?: {
+    assignmentId: string;
+    questionId: string;
+    questionType: string;
+    prompt: string;
+    whyMaterial: string;
+    recommendedAction: string;
+  };
+};
+
+function jsonObject(value: unknown): Prisma.InputJsonObject {
+  return JSON.parse(JSON.stringify(value)) as Prisma.InputJsonObject;
+}
+
+function parseProgress(value: Prisma.JsonValue | null): WorkProgress {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  return value as unknown as WorkProgress;
+}
+
+function instructionContextFromProgress(
+  progress: WorkProgress,
+): GoverningInstructionContext | null {
+  return progress.instructionContext ?? null;
+}
+
+type InstructionSession = {
+  id: string;
+  measurementStandard: string | null;
+  exclusions: string | null;
+  deadlineText: string | null;
+  specialInstructions: string | null;
+  pricingBasis: string | null;
+  authoritativeSourcePolicy: string | null;
+};
+
+async function buildGoverningInstructionContext(
+  actor: CurrentActor,
+  session: InstructionSession,
+): Promise<GoverningInstructionContext> {
+  const conversation =
+    await getTayqanIntakeConversationContext(
+      actor.companyId,
+      session.id,
+    );
+
+  return {
+    projectCategory:
+      conversation.projectCategory,
+
+    categoryScope:
+      conversation.categoryScope,
+
+    measurementStandard:
+      session.measurementStandard,
+
+    exclusions:
+      session.exclusions,
+
+    deadlineText:
+      session.deadlineText,
+
+    specialInstructions:
+      session.specialInstructions,
+
+    pricingBasis:
+      session.pricingBasis,
+
+    authoritativeSourcePolicy:
+      session.authoritativeSourcePolicy,
+  };
+}
+
+type InstructionWorkOrder = {
+  id: string;
+  companyId: string;
+  intakeSessionId: string;
+  stage: TayqanWorkStage;
+  progressJson: Prisma.JsonValue | null;
+  pricingBasis: string | null;
+  authoritativeSourcePolicy: string | null;
+};
+
+async function ensureInstructionContext(
+  actor: CurrentActor,
+  order: InstructionWorkOrder,
+): Promise<GoverningInstructionContext> {
+  const progress =
+    parseProgress(order.progressJson);
+
+  const existing =
+    instructionContextFromProgress(progress);
+
+  if (existing) return existing;
+
+  const session =
+    await prisma.tayqanIntakeSession.findFirst({
+      where: {
+        id: order.intakeSessionId,
+        companyId: actor.companyId,
+      },
+
+      select: {
+        id: true,
+        measurementStandard: true,
+        exclusions: true,
+        deadlineText: true,
+        specialInstructions: true,
+        pricingBasis: true,
+        authoritativeSourcePolicy: true,
+      },
+    });
+
+  if (!session) {
+    throw new NotFoundError(
+      "TAYQAN intake session not found for this work order.",
+    );
+  }
+
+  const context =
+    await buildGoverningInstructionContext(
+      actor,
+      session,
+    );
+
+  await prisma.tayqanWorkOrder.update({
+    where: { id: order.id },
+
+    data: {
+      progressJson: jsonObject({
+        ...progress,
+        instructionContext: context,
+      }),
+    },
+  });
+
+  await appendWorkEvent(
+    actor.companyId,
+    order.id,
+    order.stage,
+    "WORK_INSTRUCTIONS_SNAPSHOTTED",
+    {
+      projectCategory:
+        context.projectCategory,
+
+      categoryScope:
+        context.categoryScope,
+
+      measurementStandard:
+        context.measurementStandard,
+
+      authoritativeSourcePolicy:
+        context.authoritativeSourcePolicy,
+
+      hasExclusions:
+        Boolean(context.exclusions?.trim()),
+
+      hasSpecialInstructions:
+        Boolean(
+          context.specialInstructions?.trim(),
+        ),
+
+      hasDeadline:
+        Boolean(context.deadlineText?.trim()),
+    },
+  );
+
+  return context;
+}
+
+function sourceFileIdsFromProgress(
+  order: { progressJson: Prisma.JsonValue | null },
+): string[] {
+  return (
+    parseProgress(order.progressJson)
+      .selectedSourceFileIds ?? []
+  );
+}
+
+function pricingBasisAllowsMatchedCatalogue(
+  order: {
+    progressJson: Prisma.JsonValue | null;
+    pricingBasis: string | null;
+  },
+): boolean {
+  const context =
+    instructionContextFromProgress(
+      parseProgress(order.progressJson),
+    );
+
+  const basis =
+    (
+      context?.pricingBasis
+      ?? order.pricingBasis
+      ?? ""
+    )
+      .trim()
+      .toLocaleLowerCase();
+
+  // If no explicit basis exists, retain the existing
+  // governed matched-catalogue behavior.
+  if (!basis) return true;
+
+  /**
+   * Only automatically consume a matched catalogue rate
+   * when the customer explicitly requested a catalogue/
+   * company-rate basis. Any other free-text basis (supplier
+   * quotation, tender quote, client schedule, etc.) must
+   * fall back to RATE_REQUIRED rather than silently using
+   * the wrong commercial source.
+   */
+  return (
+    basis.includes("catalogue")
+    || basis.includes("catalog")
+    || basis.includes("company rate")
+    || basis.includes("company pricing")
+  );
+}
+
+function governingQaInstructions(
+  order: {
+    progressJson: Prisma.JsonValue | null;
+    pricingBasis: string | null;
+    authoritativeSourcePolicy: string | null;
+  },
+): string {
+  const progress =
+    parseProgress(order.progressJson);
+
+  const context =
+    instructionContextFromProgress(progress);
+
+  const lines = [
+    "Do not lock, issue, approve, submit, or contractually certify the BOQ.",
+
+    context?.projectCategory
+      ? `Project category: ${context.projectCategory}.`
+      : null,
+
+    context?.categoryScope
+      ? `Project responsibility scope: ${context.categoryScope}.`
+      : null,
+
+    context?.measurementStandard
+      ? `Measurement standard requested by customer: ${context.measurementStandard}.`
+      : null,
+
+    context?.pricingBasis
+      ? `Pricing basis requested by customer: ${context.pricingBasis}.`
+      : null,
+
+    context?.authoritativeSourcePolicy
+      ? `Source authority policy: ${context.authoritativeSourcePolicy}.`
+      : (
+          order.authoritativeSourcePolicy
+            ? `Source authority policy: ${order.authoritativeSourcePolicy}.`
+            : null
+        ),
+
+    context?.exclusions?.trim()
+      ? `Customer exclusions: ${context.exclusions.trim()}`
+      : null,
+
+    context?.deadlineText?.trim()
+      ? `Customer deadline/context: ${context.deadlineText.trim()}`
+      : null,
+
+    context?.specialInstructions?.trim()
+      ? `Customer special instructions: ${context.specialInstructions.trim()}`
+      : null,
+
+    progress.selectedSourceFileIds?.length
+      ? `This work order is scoped to ${progress.selectedSourceFileIds.length} frozen project source file(s).`
+      : null,
+
+    "Review evidence, quantities, rates when applicable, unresolved verification issues, and compliance with the governing customer instructions above.",
+  ].filter(
+    (line): line is string =>
+      Boolean(line),
+  );
+
+  return lines.join("\n");
+}
+
+function blockerFromJson(value: Prisma.JsonValue | null): WorkBlocker | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  return value as unknown as WorkBlocker;
+}
+
+async function appendWorkEvent(
+  companyId: string,
+  workOrderId: string,
+  stage: TayqanWorkStage,
+  eventType: string,
+  payload: Record<string, unknown> = {},
+) {
+  await prisma.tayqanWorkEvent.create({
+    data: {
+      companyId,
+      workOrderId,
+      stage,
+      eventType,
+      payloadJson: jsonObject(payload),
+    },
+  });
+}
+
+async function persistConversationStatus(
+  companyId: string,
+  sessionId: string,
+  i18nKey: string,
+  vars: Record<string, string | number> = {},
+) {
+  const latest = await prisma.tayqanIntakeMessage.findFirst({
+    where: { companyId, sessionId, role: TayqanIntakeMessageRole.TAYQAN },
+    orderBy: { createdAt: "desc" },
+  });
+  const structured = latest?.structuredDataJson;
+  const previousKey = structured && typeof structured === "object" && !Array.isArray(structured)
+    ? (structured as Record<string, unknown>).i18nKey
+    : null;
+  if (previousKey === i18nKey) return;
+  await prisma.tayqanIntakeMessage.create({
+    data: {
+      companyId,
+      sessionId,
+      role: TayqanIntakeMessageRole.TAYQAN,
+      message: i18nKey,
+      structuredDataJson: jsonObject({ kind: "WORK_STATUS", i18nKey, vars }),
+    },
+  });
+}
+
+async function updateOrder(
+  actor: CurrentActor,
+  orderId: string,
+  data: Prisma.TayqanWorkOrderUpdateInput,
+  eventType: string,
+  payload: Record<string, unknown> = {},
+) {
+  const updated = await prisma.tayqanWorkOrder.update({ where: { id: orderId }, data });
+  await appendWorkEvent(actor.companyId, orderId, updated.stage, eventType, payload);
+  return updated;
+}
+
+function toState(order: Awaited<ReturnType<typeof loadOrder>>) {
+  return {
+    id: order.id,
+    status: order.status,
+    stage: order.stage,
+    projectId: order.projectId,
+    boqId: order.boqId,
+    intakeSessionId: order.intakeSessionId,
+    hireEntitlementId: order.hireEntitlementId,
+    desiredDeliverable: order.desiredDeliverable,
+    includeRates: order.includeRates,
+    pricingBasis: order.pricingBasis,
+    blockerCode: order.blockerCode,
+    blockerMessage: order.blockerMessage,
+    blocker: blockerFromJson(order.blockerJson),
+    qaWorkerRunId: order.qaWorkerRunId,
+    startedAt: order.startedAt.toISOString(),
+    lastAdvancedAt: order.lastAdvancedAt.toISOString(),
+    completedAt: order.completedAt?.toISOString() ?? null,
+    events: order.events.map((event) => ({
+      id: event.id,
+      stage: event.stage,
+      eventType: event.eventType,
+      payload: event.payloadJson,
+      createdAt: event.createdAt.toISOString(),
+    })),
+  };
+}
+
+async function loadOrder(companyId: string, orderId: string) {
+  const order = await prisma.tayqanWorkOrder.findFirst({
+    where: { id: orderId, companyId },
+    include: { events: { orderBy: { createdAt: "asc" } } },
+  });
+  if (!order) throw new NotFoundError("TAYQAN work order not found.");
+  return order;
+}
+
+async function getSessionForWork(actor: CurrentActor, projectId: string, sessionId: string) {
+  const entitlement = await assertTayqanAccessEntitlement(actor);
+  const project = await getProjectRecord(actor.companyId, projectId);
+  const session = await prisma.tayqanIntakeSession.findFirst({
+    where: {
+      id: sessionId,
+      companyId: actor.companyId,
+      projectId: project.id,
+      hireEntitlementId: entitlement.id,
+    },
+  });
+  if (!session) throw new NotFoundError("TAYQAN intake session not found.");
+  if (session.status !== TayqanIntakeStatus.READY && session.status !== TayqanIntakeStatus.WORK_STARTED) {
+    throw new ConflictError("TAYQAN_INTAKE_NOT_READY", "Complete TAYQAN's intake before starting the work order.");
+  }
+  return { entitlement, project, session };
+}
+
+export async function startOrResumeTayqanWorkOrder(
+  actor: CurrentActor,
+  projectIdentifier: string,
+  sessionId: string,
+  idempotencyKey: string,
+) {
+  if (idempotencyKey.length < 8 || idempotencyKey.length > 200) {
+    throw new AppError("INVALID_IDEMPOTENCY_KEY", "A valid Idempotency-Key is required.", 400);
+  }
+  const { entitlement, project, session } = await getSessionForWork(actor, projectIdentifier, sessionId);
+
+  const existing =
+    await prisma.tayqanWorkOrder.findUnique({
+      where: {
+        intakeSessionId: session.id,
+      },
+    });
+
+  if (existing) {
+    const loaded =
+      await loadOrder(
+        actor.companyId,
+        existing.id,
+      );
+
+    await ensureInstructionContext(
+      actor,
+      loaded,
+    );
+
+    return toState(
+      await loadOrder(
+        actor.companyId,
+        existing.id,
+      ),
+    );
+  }
+
+  const instructionContext =
+    await buildGoverningInstructionContext(
+      actor,
+      session,
+    );
+
+  let initialStage: TayqanWorkStage = TayqanWorkStage.SOURCE_DISCOVERY;
+  if (session.desiredDeliverable === "REVIEW_EXISTING_BOQ") initialStage = TayqanWorkStage.VALIDATION;
+
+  let created;
+  try {
+    created = await prisma.tayqanWorkOrder.create({
+      data: {
+        companyId: actor.companyId,
+        projectId: project.id,
+        boqId: session.boqId,
+        intakeSessionId: session.id,
+        hireEntitlementId: entitlement.id,
+        createdByUserId: actor.userId,
+        status: TayqanWorkStatus.RUNNING,
+        stage: initialStage,
+        desiredDeliverable: session.desiredDeliverable ?? "UNKNOWN",
+        includeRates: session.includeRates ?? false,
+        pricingBasis: session.pricingBasis,
+        authoritativeSourcePolicy: session.authoritativeSourcePolicy,
+        startIdempotencyKey: idempotencyKey,
+
+        progressJson: jsonObject({
+          instructionContext,
+        }),
+      },
+    });
+  } catch (error) {
+    if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== "P2002") throw error;
+    const raced = await prisma.tayqanWorkOrder.findUnique({ where: { intakeSessionId: session.id } });
+    if (!raced) throw error;
+    created = raced;
+  }
+
+  await prisma.tayqanIntakeSession.update({
+    where: { id: session.id },
+    data: { status: TayqanIntakeStatus.WORK_STARTED },
+  });
+  await appendWorkEvent(actor.companyId, created.id, created.stage, "WORK_ORDER_CREATED", {
+    desiredDeliverable: created.desiredDeliverable,
+    includeRates: created.includeRates,
+  });
+  await persistConversationStatus(actor.companyId, session.id, "tayqan.hire.workflow.workOrderStarted");
+  return advanceTayqanWorkOrder(actor, project.slug, created.id);
+}
+
+async function block(
+  actor: CurrentActor,
+  order: Awaited<ReturnType<typeof loadOrder>>,
+  code: string,
+  i18nKey: string,
+  blocker: WorkBlocker,
+) {
+  const updated = await updateOrder(
+    actor,
+    order.id,
+    {
+      status: TayqanWorkStatus.NEEDS_INPUT,
+      blockerCode: code,
+      blockerMessage: i18nKey,
+      blockerJson: jsonObject(blocker),
+      lastAdvancedAt: new Date(),
+    },
+    "WORK_BLOCKED",
+    { code, i18nKey },
+  );
+  await persistConversationStatus(actor.companyId, order.intakeSessionId, i18nKey);
+  return toState(await loadOrder(actor.companyId, updated.id));
+}
+
+async function moveStage(
+  actor: CurrentActor,
+  order: Awaited<ReturnType<typeof loadOrder>>,
+  stage: TayqanWorkStage,
+  eventType: string,
+) {
+  await updateOrder(
+    actor,
+    order.id,
+    {
+      status: TayqanWorkStatus.RUNNING,
+      stage,
+      blockerCode: null,
+      blockerMessage: null,
+      blockerJson: Prisma.DbNull,
+      lastAdvancedAt: new Date(),
+    },
+    eventType,
+    { toStage: stage },
+  );
+  return loadOrder(actor.companyId, order.id);
+}
+
+async function ensureWorkingBoq(
+  actor: CurrentActor,
+  projectSlug: string,
+  order: Awaited<ReturnType<typeof loadOrder>>,
+) {
+  if (order.boqId) {
+    const existing = await prisma.bOQ.findFirst({
+      where: { id: order.boqId, companyId: actor.companyId, projectId: order.projectId },
+      select: { id: true, status: true },
+    });
+    if (!existing) throw new NotFoundError("TAYQAN target BOQ not found.");
+    if (["LOCKED", "ISSUED", "APPROVED"].includes(existing.status)) {
+      throw new ConflictError("TAYQAN_TARGET_BOQ_LOCKED", "TAYQAN cannot modify a locked, issued, or approved BOQ revision.");
+    }
+    return existing.id;
+  }
+
+  const created = await createProjectBOQ(actor.companyId, projectSlug, {
+    title: `TAYQAN Working BOQ`,
+  });
+  await updateOrder(actor, order.id, { boqId: created.databaseId }, "WORKING_BOQ_RESOLVED", {
+    boqId: created.databaseId,
+  });
+  return created.databaseId;
+}
+
+async function sourceRequirements(
+  actor: CurrentActor,
+  order: Awaited<ReturnType<typeof loadOrder>>,
+) {
+  const context =
+    await ensureInstructionContext(
+      actor,
+      order,
+    );
+
+  const progress =
+    parseProgress(order.progressJson);
+
+  const allFiles =
+    await prisma.projectFile.findMany({
+      where: {
+        companyId: actor.companyId,
+        projectId: order.projectId,
+        status: { not: "ARCHIVED" },
+      },
+
+      // Newest upload first. Project revision identifiers
+      // are arbitrary strings, so TAYQAN must not invent
+      // an A/B/C/P01 ordering algorithm.
+      orderBy: {
+        createdAt: "desc",
+      },
+    });
+
+  const frozenIds =
+    progress.selectedSourceFileIds ?? [];
+
+  let files =
+    frozenIds.length > 0
+      ? allFiles.filter(
+          (file) =>
+            frozenIds.includes(file.id),
+        )
+      : allFiles;
+
+  const groups =
+    new Map<
+      string,
+      {
+        revisions: Set<string>;
+        fileIds: string[];
+      }
+    >();
+
+  for (const file of allFiles) {
+    const drawingNumber =
+      file.drawingNumber?.trim();
+
+    if (!drawingNumber) continue;
+
+    const group =
+      groups.get(drawingNumber)
+      ?? {
+        revisions: new Set<string>(),
+        fileIds: [],
+      };
+
+    group.revisions.add(
+      file.revisionNumber?.trim()
+      || "UNSPECIFIED",
+    );
+
+    group.fileIds.push(file.id);
+
+    groups.set(
+      drawingNumber,
+      group,
+    );
+  }
+
+  const conflicts =
+    [...groups.entries()]
+      .filter(
+        ([, group]) =>
+          group.revisions.size > 1,
+      )
+      .map(
+        ([drawingNumber, group]) => ({
+          drawingNumber,
+          revisions:
+            [...group.revisions],
+
+          fileIds:
+            [...group.fileIds],
+        }),
+      );
+
+  if (
+    frozenIds.length === 0
+    && context.authoritativeSourcePolicy
+      === "USE_LATEST_REVISION"
+  ) {
+    const seenDrawings =
+      new Set<string>();
+
+    files = allFiles.filter((file) => {
+      const drawingNumber =
+        file.drawingNumber?.trim();
+
+      // Files without a drawing number are not
+      // silently discarded.
+      if (!drawingNumber) return true;
+
+      if (
+        seenDrawings.has(
+          drawingNumber,
+        )
+      ) {
+        return false;
+      }
+
+      seenDrawings.add(
+        drawingNumber,
+      );
+
+      // Because allFiles is newest-first, the
+      // first file for a drawing number is the
+      // latest uploaded source. We choose this
+      // deterministic rule instead of guessing
+      // semantic ordering between arbitrary
+      // revision strings.
+      return true;
+    });
+  }
+
+  const requirements =
+    files.map((file) => {
+      const capability =
+        getSourceProcessingCapability(
+          file.extension,
+        );
+
+      const engines:
+        ExtractionEngineType[] = [];
+
+      if (
+        file.classification === "UNKNOWN"
+        || file.status === "UPLOADED"
+      ) {
+        engines.push(
+          ExtractionEngineType
+            .DOCUMENT_CLASSIFICATION,
+        );
+      }
+
+      if (capability.canRenderPages) {
+        engines.push(
+          ExtractionEngineType
+            .FILE_PREPROCESSING,
+        );
+      }
+
+      if (capability.canExtractTables) {
+        engines.push(
+          ExtractionEngineType
+            .TABLE_EXTRACTION,
+        );
+      }
+
+      return {
+        file,
+        engines,
+      };
+    });
+
+  return {
+    requirements,
+
+    selectedSourceFileIds:
+      files.map((file) => file.id),
+
+    conflicts:
+      frozenIds.length === 0
+      && context.authoritativeSourcePolicy
+        === "ASK_ON_EACH_CONFLICT"
+        ? conflicts
+        : [],
+
+    context,
+  };
+}
+
+async function advanceSourceDiscovery(
+  actor: CurrentActor,
+  projectSlug: string,
+  order: Awaited<ReturnType<typeof loadOrder>>,
+) {
+  const sourceState =
+    await sourceRequirements(
+      actor,
+      order,
+    );
+
+  if (sourceState.conflicts.length > 0) {
+    return block(
+      actor,
+      order,
+      "SOURCE_REVISION_CONFLICT",
+      "tayqan.hire.workflow.sourceRevisionConflict",
+      {
+        kind: "ACTION",
+        i18nKey:
+          "tayqan.hire.workflow.sourceRevisionConflict",
+        actionHref:
+          `/projects/${projectSlug}/files`,
+      },
+    );
+  }
+
+  if (
+    sourceState.requirements.length === 0
+  ) {
+    return block(
+      actor,
+      order,
+      "TAYQAN_SOURCES_REQUIRED",
+      "tayqan.hire.workflow.sourcesRequired",
+      {
+        kind: "ACTION",
+        i18nKey:
+          "tayqan.hire.workflow.sourcesRequired",
+        actionHref:
+          `/projects/${projectSlug}/files`,
+      },
+    );
+  }
+
+  let workingOrder = order;
+
+  const progress =
+    parseProgress(order.progressJson);
+
+  if (
+    (
+      progress.selectedSourceFileIds
+      ?? []
+    ).length === 0
+  ) {
+    await updateOrder(
+      actor,
+      order.id,
+      {
+        progressJson: jsonObject({
+          ...progress,
+
+          selectedSourceFileIds:
+            sourceState
+              .selectedSourceFileIds,
+        }),
+      },
+
+      "SOURCE_SCOPE_SNAPSHOTTED",
+
+      {
+        selectedSourceFileIds:
+          sourceState
+            .selectedSourceFileIds,
+
+        authoritativeSourcePolicy:
+          sourceState.context
+            .authoritativeSourcePolicy,
+
+        selectionRule:
+          sourceState.context
+            .authoritativeSourcePolicy
+            === "USE_LATEST_REVISION"
+            ? "NEWEST_UPLOADED_PER_DRAWING_NUMBER"
+            : "ALL_NON_ARCHIVED_PROJECT_SOURCES",
+      },
+    );
+
+    workingOrder =
+      await loadOrder(
+        actor.companyId,
+        order.id,
+      );
+  }
+
+  await ensureWorkingBoq(
+    actor,
+    projectSlug,
+    workingOrder,
+  );
+
+  const next =
+    await moveStage(
+      actor,
+
+      await loadOrder(
+        actor.companyId,
+        order.id,
+      ),
+
+      TayqanWorkStage.SOURCE_PROCESSING,
+      "SOURCE_DISCOVERY_COMPLETE",
+    );
+
+  return advanceSourceProcessing(
+    actor,
+    projectSlug,
+    next,
+  );
+}
+
+async function advanceSourceProcessing(actor: CurrentActor, projectSlug: string, order: Awaited<ReturnType<typeof loadOrder>>) {
+  await import("@/lib/jobs/register-handlers");
+  const {
+    requirements,
+    conflicts,
+  } = await sourceRequirements(
+    actor,
+    order,
+  );
+
+  if (conflicts.length > 0) {
+    return block(
+      actor,
+      order,
+      "SOURCE_REVISION_CONFLICT",
+      "tayqan.hire.workflow.sourceRevisionConflict",
+      {
+        kind: "ACTION",
+        i18nKey:
+          "tayqan.hire.workflow.sourceRevisionConflict",
+        actionHref:
+          `/projects/${projectSlug}/files`,
+      },
+    );
+  }
+
+  let pending = 0;
+  let queued = 0;
+
+  for (const { file, engines } of requirements) {
+    for (const engineType of engines) {
+      const latest = await prisma.extractionJob.findFirst({
+        where: { companyId: actor.companyId, projectFileId: file.id, engineType },
+        orderBy: { createdAt: "desc" },
+      });
+      if (latest) {
+        if (latest.status === ExtractionJobStatus.COMPLETED || latest.status === ExtractionJobStatus.NEEDS_REVIEW) continue;
+        if (latest.status === ExtractionJobStatus.QUEUED || latest.status === ExtractionJobStatus.RUNNING) {
+          pending += 1;
+          continue;
+        }
+        if (latest.status === ExtractionJobStatus.NEEDS_INPUT) {
+          return block(actor, order, "SOURCE_JOB_NEEDS_INPUT", "tayqan.hire.workflow.sourceNeedsInput", {
+            kind: "ACTION",
+            i18nKey: "tayqan.hire.workflow.sourceNeedsInput",
+            actionHref: `/projects/${projectSlug}/files`,
+          });
+        }
+        if (latest.status === ExtractionJobStatus.FAILED || latest.status === ExtractionJobStatus.CANCELLED) {
+          return block(actor, order, "SOURCE_JOB_FAILED", "tayqan.hire.workflow.sourceFailed", {
+            kind: "ACTION",
+            i18nKey: "tayqan.hire.workflow.sourceFailed",
+            actionHref: `/projects/${projectSlug}/files`,
+          });
+        }
+      }
+
+      const job = await extractionJobQueue.enqueue({
+        companyId: actor.companyId,
+        projectId: order.projectId,
+        projectFileId: file.id,
+        engineType,
+        createdByUserId: actor.userId,
+      });
+      queued += 1;
+      if (job.status === ExtractionJobStatus.QUEUED || job.status === ExtractionJobStatus.RUNNING) pending += 1;
+    }
+  }
+
+  if (pending > 0) {
+    await updateOrder(actor, order.id, { status: TayqanWorkStatus.RUNNING, lastAdvancedAt: new Date() }, "SOURCE_PROCESSING_WAITING", { pending, queued });
+    await persistConversationStatus(actor.companyId, order.intakeSessionId, "tayqan.hire.workflow.sourceProcessing", { count: pending });
+    return toState(await loadOrder(actor.companyId, order.id));
+  }
+
+  if (usesDraftFirstWorkflow(order)) {
+    return prepareTayqanAiDraft(
+      actor,
+      projectSlug,
+      order,
+    );
+  }
+
+  const next = await moveStage(actor, order, TayqanWorkStage.EVIDENCE_REVIEW, "SOURCE_PROCESSING_COMPLETE");
+  return advanceEvidenceReview(actor, projectSlug, next);
+}
+
+function entityBlocker(entity: {
+  id: string;
+  label: string;
+  quantity: Prisma.Decimal | null;
+  unit: string | null;
+  sourceReference: string | null;
+  confidence: Prisma.Decimal;
+}): WorkBlocker["entity"] {
+  return {
+    id: entity.id,
+    label: entity.label,
+    quantity: entity.quantity?.toNumber() ?? null,
+    unit: entity.unit,
+    sourceReference: entity.sourceReference,
+    confidence: entity.confidence.toNumber(),
+  };
+}
+
+function sourceScopedEntityFilter(
+  order: {
+    progressJson: Prisma.JsonValue | null;
+  },
+) {
+  const sourceFileIds =
+    sourceFileIdsFromProgress(order);
+
+  return sourceFileIds.length > 0
+    ? {
+        projectFileId: {
+          in: sourceFileIds,
+        },
+      }
+    : {};
+}
+
+function usesDraftFirstWorkflow(
+  order: {
+    desiredDeliverable: string;
+  },
+): boolean {
+  return (
+    order.desiredDeliverable === "COMPLETE_BOQ_FROM_SOURCES"
+    || order.desiredDeliverable === "UPDATE_EXISTING_BOQ"
+  );
+}
+
+function aiDraftBoqHref(
+  projectSlug: string,
+  summary: WorkProgress["aiDraft"],
+): string {
+  const params = new URLSearchParams({
+    aiDraft: "1",
+    added: String(summary?.addedCount ?? 0),
+    skipped: String(summary?.skippedCount ?? 0),
+    existing: String(summary?.alreadyPresentCount ?? 0),
+  });
+
+  return `/projects/${projectSlug}/boq?${params.toString()}`;
+}
+
+async function prepareTayqanAiDraft(
+  actor: CurrentActor,
+  projectSlug: string,
+  order: Awaited<ReturnType<typeof loadOrder>>,
+) {
+  const boqId =
+    await ensureWorkingBoq(
+      actor,
+      projectSlug,
+      order,
+    );
+
+  const selectedSourceFileIds =
+    sourceFileIdsFromProgress(order);
+
+  const result =
+    await generateAiDraftBoq(
+      actor,
+      projectSlug,
+      {
+        targetBoqId: boqId,
+        projectFileIds: selectedSourceFileIds,
+      },
+    );
+
+  const progress =
+    parseProgress(order.progressJson);
+
+  const aiDraft: NonNullable<
+    WorkProgress["aiDraft"]
+  > = {
+    boqId: result.boqId,
+    addedCount: result.addedCount,
+    skippedCount: result.skippedCount,
+    alreadyPresentCount:
+      result.alreadyPresentCount,
+    unreviewedAddedCount:
+      result.unreviewedAddedCount,
+    reviewedAddedCount:
+      result.reviewedAddedCount,
+  };
+
+  await updateOrder(
+    actor,
+    order.id,
+    {
+      boqId,
+      progressJson: jsonObject({
+        ...progress,
+        aiDraft,
+      }),
+      lastAdvancedAt: new Date(),
+    },
+    "AI_DRAFT_BOQ_GENERATED",
+    {
+      ...aiDraft,
+      selectedSourceCount:
+        selectedSourceFileIds.length,
+    },
+  );
+
+  const loaded =
+    await loadOrder(
+      actor.companyId,
+      order.id,
+    );
+
+  if (
+    aiDraft.addedCount === 0
+    && aiDraft.alreadyPresentCount === 0
+  ) {
+    return block(
+      actor,
+      loaded,
+      "AI_DRAFT_NO_USABLE_ITEMS",
+      "tayqan.hire.workflow.draftNoUsableItems",
+      {
+        kind: "ACTION",
+        i18nKey:
+          "tayqan.hire.workflow.draftNoUsableItems",
+        actionHref:
+          `/projects/${projectSlug}/extractions`,
+      },
+    );
+  }
+
+  const assembly =
+    await moveStage(
+      actor,
+      loaded,
+      TayqanWorkStage.BOQ_ASSEMBLY,
+      "AI_DRAFT_BOQ_READY_FOR_REVIEW",
+    );
+
+  return block(
+    actor,
+    assembly,
+    "AI_DRAFT_REVIEW_REQUIRED",
+    "tayqan.hire.workflow.draftReadyForReview",
+    {
+      kind: "ACTION",
+      i18nKey:
+        "tayqan.hire.workflow.draftReadyForReview",
+      actionHref:
+        aiDraftBoqHref(
+          projectSlug,
+          aiDraft,
+        ),
+    },
+  );
+}
+
+async function advanceAiDraftProfessionalReview(
+  actor: CurrentActor,
+  projectSlug: string,
+  order: Awaited<ReturnType<typeof loadOrder>>,
+) {
+  if (!order.boqId) {
+    throw new ConflictError(
+      "TAYQAN_BOQ_REQUIRED",
+      "TAYQAN needs a working BOQ before professional review.",
+    );
+  }
+
+  const boq =
+    await getBOQRecord(
+      actor.companyId,
+      order.boqId,
+    );
+
+  const aiDraftItems =
+    boq.sections
+      .flatMap((section) => section.items)
+      .filter(
+        (item) =>
+          getAiDraftExtractedEntityId(
+            item.sourceReference,
+          ) !== null,
+      );
+
+  if (aiDraftItems.length === 0) {
+    return block(
+      actor,
+      order,
+      "AI_DRAFT_NO_USABLE_ITEMS",
+      "tayqan.hire.workflow.draftNoUsableItems",
+      {
+        kind: "ACTION",
+        i18nKey:
+          "tayqan.hire.workflow.draftNoUsableItems",
+        actionHref:
+          `/projects/${projectSlug}/extractions`,
+      },
+    );
+  }
+
+  const pendingQuantityCount =
+    aiDraftItems.filter((item) => {
+      const provenance =
+        item.quantityProvenance;
+
+      return (
+        !provenance
+        || provenance.sourceType
+          === QuantityProvenanceSource
+            .LEGACY_UNVERIFIED
+        || provenance.confirmedAt === null
+      );
+    }).length;
+
+  if (pendingQuantityCount > 0) {
+    return block(
+      actor,
+      order,
+      "AI_DRAFT_REVIEW_REQUIRED",
+      "tayqan.hire.workflow.draftReadyForReview",
+      {
+        kind: "ACTION",
+        i18nKey:
+          "tayqan.hire.workflow.draftReadyForReview",
+        actionHref:
+          aiDraftBoqHref(
+            projectSlug,
+            parseProgress(order.progressJson)
+              .aiDraft,
+          ),
+      },
+    );
+  }
+
+  const remainingExtractionCount =
+    await prisma.extractedEntity.count({
+      where: {
+        companyId: actor.companyId,
+        projectId: order.projectId,
+        ...sourceScopedEntityFilter(order),
+        status: {
+          in: [
+            ExtractedEntityStatus.EXTRACTED,
+            ExtractedEntityStatus.NEEDS_REVIEW,
+          ],
+        },
+      },
+    });
+
+  if (remainingExtractionCount > 0) {
+    return block(
+      actor,
+      order,
+      "AI_DRAFT_EXCEPTIONS_REMAIN",
+      "tayqan.hire.workflow.draftExceptionsRemain",
+      {
+        kind: "ACTION",
+        i18nKey:
+          "tayqan.hire.workflow.draftExceptionsRemain",
+        actionHref:
+          `/projects/${projectSlug}/extractions`,
+      },
+    );
+  }
+
+  if (order.includeRates) {
+    const pendingRateCount =
+      aiDraftItems.filter((item) => {
+        const provenance =
+          item.rateProvenance;
+
+        return (
+          !provenance
+          || provenance.sourceType
+            === RateProvenanceSource
+              .LEGACY_UNVERIFIED
+          || provenance.confirmedAt === null
+        );
+      }).length;
+
+    if (pendingRateCount > 0) {
+      return block(
+        actor,
+        order,
+        "AI_DRAFT_RATES_REMAIN",
+        "tayqan.hire.workflow.draftRatesRemain",
+        {
+          kind: "ACTION",
+          i18nKey:
+            "tayqan.hire.workflow.draftRatesRemain",
+          actionHref:
+            aiDraftBoqHref(
+              projectSlug,
+              parseProgress(order.progressJson)
+                .aiDraft,
+            ),
+        },
+      );
+    }
+  }
+
+  const next =
+    await moveStage(
+      actor,
+      order,
+      TayqanWorkStage.VALIDATION,
+      "AI_DRAFT_PROFESSIONAL_REVIEW_COMPLETE",
+    );
+
+  return advanceValidation(
+    actor,
+    projectSlug,
+    next,
+  );
+}
+
+async function advanceEvidenceReview(
+  actor: CurrentActor,
+  projectSlug: string,
+  order: Awaited<ReturnType<typeof loadOrder>>,
+) {
+  const sourceFilter =
+    sourceScopedEntityFilter(order);
+
+  const reviewable =
+    await prisma.extractedEntity.findFirst({
+      where: {
+        companyId: actor.companyId,
+        projectId: order.projectId,
+
+        ...sourceFilter,
+
+        status: {
+          in: [
+            ExtractedEntityStatus.EXTRACTED,
+            ExtractedEntityStatus.NEEDS_REVIEW,
+          ],
+        },
+      },
+
+      orderBy: {
+        createdAt: "asc",
+      },
+    });
+
+  if (reviewable) {
+    return block(
+      actor,
+      order,
+      "EVIDENCE_REVIEW_REQUIRED",
+      "tayqan.hire.workflow.reviewEvidence",
+      {
+        kind: "ENTITY_REVIEW",
+        i18nKey:
+          "tayqan.hire.workflow.reviewEvidence",
+        entity:
+          entityBlocker(reviewable),
+      },
+    );
+  }
+
+  const usableCount =
+    await prisma.extractedEntity.count({
+      where: {
+        companyId: actor.companyId,
+        projectId: order.projectId,
+
+        ...sourceFilter,
+
+        status: {
+          in: [
+            ExtractedEntityStatus.CONFIRMED,
+            ExtractedEntityStatus.CORRECTED,
+            ExtractedEntityStatus.IMPORTED,
+          ],
+        },
+      },
+    });
+
+  if (usableCount === 0) {
+    return block(
+      actor,
+      order,
+      "NO_CONFIRMED_EVIDENCE",
+      "tayqan.hire.workflow.noEvidence",
+      {
+        kind: "ACTION",
+        i18nKey:
+          "tayqan.hire.workflow.noEvidence",
+        actionHref:
+          `/projects/${projectSlug}/files`,
+      },
+    );
+  }
+
+  const next =
+    await moveStage(
+      actor,
+      order,
+      TayqanWorkStage
+        .QUANTITY_PREPARATION,
+      "EVIDENCE_REVIEW_COMPLETE",
+    );
+
+  return advanceQuantityPreparation(
+    actor,
+    projectSlug,
+    next,
+  );
+}
+
+async function activeEvidence(
+  actor: CurrentActor,
+  order: Awaited<ReturnType<typeof loadOrder>>,
+) {
+  const sourceFilter =
+    sourceScopedEntityFilter(order);
+
+  return prisma.extractedEntity.findMany({
+    where: {
+      companyId: actor.companyId,
+      projectId: order.projectId,
+
+      ...sourceFilter,
+
+      status: {
+        in: [
+          ExtractedEntityStatus.CONFIRMED,
+          ExtractedEntityStatus.CORRECTED,
+        ],
+      },
+    },
+
+    orderBy: {
+      createdAt: "asc",
+    },
+  });
+}
+
+async function advanceQuantityPreparation(actor: CurrentActor, projectSlug: string, order: Awaited<ReturnType<typeof loadOrder>>) {
+  const progress = parseProgress(order.progressJson);
+  const entities = await activeEvidence(actor, order);
+  for (const entity of entities) {
+    const confirmedCalculation = await prisma.quantityCalculation.findFirst({
+      where: { companyId: actor.companyId, projectId: order.projectId, extractedEntityId: entity.id, status: "CONFIRMED" },
+      orderBy: { updatedAt: "desc" },
+    });
+    if (confirmedCalculation) continue;
+    if (entity.quantity && entity.unit) continue;
+    if (progress.quantityOverrides?.[entity.id]) continue;
+    return block(actor, order, "QUANTITY_REQUIRED", "tayqan.hire.workflow.quantityRequired", {
+      kind: "QUANTITY_REQUIRED",
+      i18nKey: "tayqan.hire.workflow.quantityRequired",
+      entity: entityBlocker(entity),
+    });
+  }
+
+  const nextStage = order.includeRates ? TayqanWorkStage.RATE_PREPARATION : TayqanWorkStage.BOQ_ASSEMBLY;
+  const next = await moveStage(actor, order, nextStage, "QUANTITY_PREPARATION_COMPLETE");
+  return order.includeRates
+    ? advanceRatePreparation(actor, projectSlug, next)
+    : advanceBoqAssembly(actor, projectSlug, next);
+}
+
+async function resolvedRate(
+  actor: CurrentActor,
+  order: Awaited<ReturnType<typeof loadOrder>>,
+  entity: {
+    matchedCatalogueItemId: string | null;
+  },
+  progress: WorkProgress,
+  entityId: string,
+) {
+  const override =
+    progress.rateOverrides?.[entityId];
+
+  if (override) {
+    return {
+      unitCost: override.unitCost,
+      sourceNote: override.sourceNote,
+    };
+  }
+
+  if (
+    !pricingBasisAllowsMatchedCatalogue(
+      order,
+    )
+  ) {
+    return null;
+  }
+
+  if (!entity.matchedCatalogueItemId) {
+    return null;
+  }
+  const rate = await prisma.rateCatalogueItem.findFirst({
+    where: {
+      id: entity.matchedCatalogueItemId,
+      companyId: actor.companyId,
+      status: "ACTIVE",
+      OR: [{ expiryDate: null }, { expiryDate: { gt: new Date() } }],
+    },
+  });
+  if (!rate) return null;
+  return {
+    unitCost: rate.sellingRate.toNumber(),
+    sourceNote: rate.sourceReference || rate.supplierQuotationReference || `Rate catalogue ${rate.itemCode}`,
+  };
+}
+
+async function advanceRatePreparation(actor: CurrentActor, projectSlug: string, order: Awaited<ReturnType<typeof loadOrder>>) {
+  const progress = parseProgress(order.progressJson);
+  const entities = await activeEvidence(actor, order);
+  for (const entity of entities) {
+    const rate =
+      await resolvedRate(
+        actor,
+        order,
+        entity,
+        progress,
+        entity.id,
+      );
+    if (rate) continue;
+    return block(actor, order, "RATE_REQUIRED", "tayqan.hire.workflow.rateRequired", {
+      kind: "RATE_REQUIRED",
+      i18nKey: "tayqan.hire.workflow.rateRequired",
+      entity: entityBlocker(entity),
+    });
+  }
+  const next = await moveStage(actor, order, TayqanWorkStage.BOQ_ASSEMBLY, "RATE_PREPARATION_COMPLETE");
+  return advanceBoqAssembly(actor, projectSlug, next);
+}
+
+async function getOrCreateTayqanSection(actor: CurrentActor, boqId: string) {
+  const code = "TAYQAN";
+  const existing = await prisma.bOQSection.findFirst({ where: { boqId, companyId: actor.companyId, code } });
+  if (existing) return existing;
+  const last = await prisma.bOQSection.findFirst({ where: { boqId, companyId: actor.companyId }, orderBy: { sortOrder: "desc" } });
+  try {
+    return await prisma.bOQSection.create({
+      data: {
+        companyId: actor.companyId,
+        boqId,
+        code,
+        title: "TAYQAN Working Items",
+        description: "Items assembled by TAYQAN from reviewed project evidence. Final professional acceptance is still required.",
+        sortOrder: (last?.sortOrder ?? 0) + 1,
+      },
+    });
+  } catch (error) {
+    if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== "P2002") throw error;
+    const raced = await prisma.bOQSection.findFirst({ where: { boqId, companyId: actor.companyId, code } });
+    if (!raced) throw error;
+    return raced;
+  }
+}
+
+async function resolveQuantity(actor: CurrentActor, order: Awaited<ReturnType<typeof loadOrder>>, entity: Awaited<ReturnType<typeof activeEvidence>>[number], progress: WorkProgress) {
+  const calculation = await prisma.quantityCalculation.findFirst({
+    where: { companyId: actor.companyId, projectId: order.projectId, extractedEntityId: entity.id, status: "CONFIRMED" },
+    orderBy: { updatedAt: "desc" },
+  });
+  if (calculation) return { quantity: calculation.resultValue.toNumber(), unit: calculation.resultUnit, calculationId: calculation.id };
+  if (entity.quantity && entity.unit) return { quantity: entity.quantity.toNumber(), unit: entity.unit, calculationId: undefined };
+  const override = progress.quantityOverrides?.[entity.id];
+  if (override) return { quantity: override.quantity, unit: override.unit, calculationId: undefined };
+  throw new ConflictError("QUANTITY_REQUIRED", "A reviewed quantity is required before BOQ assembly.");
+}
+
+async function advanceBoqAssembly(actor: CurrentActor, projectSlug: string, order: Awaited<ReturnType<typeof loadOrder>>) {
+  const boqId = await ensureWorkingBoq(actor, projectSlug, order);
+  const section = await getOrCreateTayqanSection(actor, boqId);
+  const progress = parseProgress(order.progressJson);
+  const entities = await activeEvidence(actor, order);
+
+  for (const entity of entities) {
+    const alreadyImported = await prisma.bOQItemQuantityProvenance.findFirst({
+      where: { companyId: actor.companyId, projectId: order.projectId, extractedEntityId: entity.id },
+      select: { boqItemId: true },
+    });
+    if (alreadyImported) continue;
+
+    const quantity = await resolveQuantity(actor, order, entity, progress);
+    const rate =
+      order.includeRates
+        ? await resolvedRate(
+            actor,
+            order,
+            entity,
+            progress,
+            entity.id,
+          )
+        : null;
+    if (order.includeRates && !rate) throw new ConflictError("RATE_REQUIRED", "A reviewed rate is required before BOQ assembly.");
+    const max = await prisma.bOQItem.aggregate({
+      where: { sectionId: section.id },
+      _max: { itemNumber: true },
+    });
+    await importExtractedEntityToBoq(
+      actor,
+      boqId,
+      entity.id,
+      {
+        sectionId: section.id,
+        itemNumber: (max._max.itemNumber ?? 0) + 1,
+        itemCode: entity.categoryKey || `TQ-${entity.id.slice(0, 8).toUpperCase()}`,
+        category: entity.entityType,
+        description: entity.label,
+        specification: entity.sourceText || "",
+        unit: quantity.unit,
+        quantity: quantity.quantity,
+        unitCost: rate?.unitCost ?? 0,
+        marginPercentage: 0,
+        ...(quantity.calculationId ? { quantityCalculationId: quantity.calculationId } : {}),
+      },
+      { id: order.projectId },
+    );
+    await appendWorkEvent(actor.companyId, order.id, order.stage, "EVIDENCE_IMPORTED_TO_BOQ", {
+      entityId: entity.id,
+      boqId,
+      quantity: quantity.quantity,
+      unit: quantity.unit,
+      rateSource: rate?.sourceNote ?? "QUANTITIES_ONLY",
+    });
+  }
+
+  const next = await moveStage(actor, await loadOrder(actor.companyId, order.id), TayqanWorkStage.VALIDATION, "BOQ_ASSEMBLY_COMPLETE");
+  return advanceValidation(actor, projectSlug, next);
+}
+
+async function advanceValidation(actor: CurrentActor, _projectSlug: string, order: Awaited<ReturnType<typeof loadOrder>>) {
+  if (!order.boqId) throw new ConflictError("TAYQAN_BOQ_REQUIRED", "TAYQAN needs a working BOQ before final QA.");
+  let qaRunId = order.qaWorkerRunId;
+  if (!qaRunId) {
+    const boq = await prisma.bOQ.findFirst({ where: { id: order.boqId, companyId: actor.companyId } });
+    if (!boq) throw new NotFoundError("TAYQAN working BOQ not found.");
+    const run = await enqueueWorkerReview(
+      actor,
+      order.boqId,
+      `tayqan-work-order:${order.id}:qa:v${boq.version}`,
+      process.env,
+      {
+        assignmentObjective:
+          "Final governed QA for the paid TAYQAN work order before human acceptance.",
+
+        specialInstructions:
+          governingQaInstructions(order),
+      },
+    );
+    qaRunId = run.id;
+    await updateOrder(actor, order.id, { qaWorkerRunId: qaRunId }, "FINAL_QA_ENQUEUED", { qaWorkerRunId: qaRunId });
+    await persistConversationStatus(actor.companyId, order.intakeSessionId, "tayqan.hire.workflow.finalQaRunning");
+    return toState(await loadOrder(actor.companyId, order.id));
+  }
+
+  const run = await getWorkerRunForCompany(actor.companyId, qaRunId);
+  if (run.status === WorkerRunStatus.QUEUED || run.status === WorkerRunStatus.RUNNING) {
+    return toState(await loadOrder(actor.companyId, order.id));
+  }
+  if (run.status !== WorkerRunStatus.COMPLETED || !run.resultAssignment) {
+    return block(actor, order, "FINAL_QA_FAILED", "tayqan.hire.workflow.finalQaFailed", {
+      kind: "ERROR",
+      i18nKey: "tayqan.hire.workflow.finalQaFailed",
+    });
+  }
+
+  const assignment = await getWorkerAssignmentWorkspace(actor.companyId, run.resultAssignment.id);
+  const openQuestions = assignment.materialQuestions.filter((question) => {
+    if (question.status !== "OPEN") return false;
+    if (!order.includeRates && TAYQAN_RATE_QUESTION_TYPES.has(question.questionType)) return false;
+    return true;
+  });
+  const question = openQuestions[0];
+  if (question) {
+    return block(actor, order, "FINAL_QA_NEEDS_INPUT", "tayqan.hire.workflow.qaQuestion", {
+      kind: "QA_QUESTION",
+      i18nKey: "tayqan.hire.workflow.qaQuestion",
+      qa: {
+        assignmentId: assignment.id,
+        questionId: question.id,
+        questionType: question.questionType,
+        prompt: question.prompt,
+        whyMaterial: question.whyMaterial,
+        recommendedAction: question.recommendedAction,
+      },
+    });
+  }
+
+  await updateOrder(
+    actor,
+    order.id,
+    {
+      status: TayqanWorkStatus.READY_FOR_ACCEPTANCE,
+      stage: TayqanWorkStage.READY_FOR_ACCEPTANCE,
+      blockerCode: null,
+      blockerMessage: null,
+      blockerJson: Prisma.DbNull,
+      completedAt: new Date(),
+      lastAdvancedAt: new Date(),
+    },
+    "READY_FOR_ACCEPTANCE",
+    { boqId: order.boqId, qaWorkerRunId: qaRunId },
+  );
+  await prisma.tayqanIntakeSession.update({
+    where: { id: order.intakeSessionId },
+    data: { status: TayqanIntakeStatus.COMPLETED, completedAt: new Date() },
+  });
+  await persistConversationStatus(actor.companyId, order.intakeSessionId, "tayqan.hire.workflow.readyForAcceptance");
+  return toState(await loadOrder(actor.companyId, order.id));
+}
+
+export async function advanceTayqanWorkOrder(actor: CurrentActor, projectIdentifier: string, orderId: string) {
+  await assertTayqanAccessEntitlement(actor);
+  const project = await getProjectRecord(actor.companyId, projectIdentifier);
+  let order = await loadOrder(actor.companyId, orderId);
+  if (order.projectId !== project.id) throw new AppError("TAYQAN_WORK_PROJECT_MISMATCH", "This TAYQAN work order belongs to another project.", 403);
+  if (order.status === TayqanWorkStatus.READY_FOR_ACCEPTANCE || order.status === TayqanWorkStatus.COMPLETED) return toState(order);
+  if (order.status === TayqanWorkStatus.FAILED || order.status === TayqanWorkStatus.CANCELLED) return toState(order);
+  if (order.status === TayqanWorkStatus.NEEDS_INPUT) return toState(order);
+
+  switch (order.stage) {
+    case TayqanWorkStage.SOURCE_DISCOVERY:
+      return advanceSourceDiscovery(actor, project.slug, order);
+    case TayqanWorkStage.SOURCE_PROCESSING:
+      return advanceSourceProcessing(actor, project.slug, order);
+    case TayqanWorkStage.EVIDENCE_REVIEW:
+      if (
+        usesDraftFirstWorkflow(order)
+        && !parseProgress(order.progressJson)
+          .aiDraft
+      ) {
+        return prepareTayqanAiDraft(
+          actor,
+          project.slug,
+          order,
+        );
+      }
+      return advanceEvidenceReview(actor, project.slug, order);
+    case TayqanWorkStage.QUANTITY_PREPARATION:
+      return advanceQuantityPreparation(actor, project.slug, order);
+    case TayqanWorkStage.RATE_PREPARATION:
+      return advanceRatePreparation(actor, project.slug, order);
+    case TayqanWorkStage.BOQ_ASSEMBLY:
+      if (
+        parseProgress(order.progressJson)
+          .aiDraft
+      ) {
+        return advanceAiDraftProfessionalReview(
+          actor,
+          project.slug,
+          order,
+        );
+      }
+      return advanceBoqAssembly(actor, project.slug, order);
+    case TayqanWorkStage.VALIDATION:
+      return advanceValidation(actor, project.slug, order);
+    case TayqanWorkStage.READY_FOR_ACCEPTANCE:
+      return toState(order);
+    default:
+      throw new AppError("TAYQAN_WORK_STAGE_INVALID", "TAYQAN work order is in an unsupported stage.", 500);
+  }
+}
+
+export async function getTayqanWorkOrderState(actor: CurrentActor, projectIdentifier: string, sessionId: string) {
+  const project = await getProjectRecord(actor.companyId, projectIdentifier);
+  const order = await prisma.tayqanWorkOrder.findFirst({ where: { companyId: actor.companyId, projectId: project.id, intakeSessionId: sessionId } });
+  return order ? toState(await loadOrder(actor.companyId, order.id)) : null;
+}
+
+function mergeProgress(progress: WorkProgress, patch: WorkProgress): WorkProgress {
+  return {
+    ...progress,
+    ...patch,
+    quantityOverrides: { ...(progress.quantityOverrides ?? {}), ...(patch.quantityOverrides ?? {}) },
+    rateOverrides: { ...(progress.rateOverrides ?? {}), ...(patch.rateOverrides ?? {}) },
+  };
+}
+
+export async function answerTayqanWorkOrderBlocker(
+  actor: CurrentActor,
+  projectIdentifier: string,
+  input: {
+    workOrderId: string;
+    action: "CONFIRM_ENTITY" | "CORRECT_ENTITY" | "REJECT_ENTITY" | "SET_QUANTITY" | "SET_RATE" | "ANSWER_QA" | "RETRY";
+    entityId?: string;
+    quantity?: number;
+    unit?: string;
+    unitCost?: number;
+    note?: string;
+    label?: string;
+    qaAnswerType?: "ACKNOWLEDGED" | "WILL_CORRECT_SOURCE" | "EXPLAINED_WITH_NOTE";
+  },
+) {
+  await assertTayqanAccessEntitlement(actor);
+  const project = await getProjectRecord(actor.companyId, projectIdentifier);
+  let order = await loadOrder(actor.companyId, input.workOrderId);
+  if (order.projectId !== project.id) throw new AppError("TAYQAN_WORK_PROJECT_MISMATCH", "This work order belongs to another project.", 403);
+  if (order.status !== TayqanWorkStatus.NEEDS_INPUT && input.action !== "RETRY") {
+    throw new ConflictError("TAYQAN_WORK_NOT_WAITING", "TAYQAN is not waiting for this answer.");
+  }
+  const blocker = blockerFromJson(order.blockerJson);
+  const progress = parseProgress(order.progressJson);
+
+  if (input.action === "CONFIRM_ENTITY") {
+    if (!blocker?.entity?.id) throw new ConflictError("TAYQAN_BLOCKER_CHANGED", "The current TAYQAN blocker is not an evidence review.");
+    await confirmExtractedEntity(actor, blocker.entity.id);
+  } else if (input.action === "CORRECT_ENTITY") {
+    if (!blocker?.entity?.id) throw new ConflictError("TAYQAN_BLOCKER_CHANGED", "The current TAYQAN blocker is not an evidence review.");
+    await correctExtractedEntity(actor, blocker.entity.id, {
+      ...(input.label ? { label: input.label } : {}),
+      ...(input.quantity !== undefined ? { quantity: input.quantity } : {}),
+      ...(input.unit ? { unit: input.unit } : {}),
+      reason: input.note?.trim() || "Corrected during the TAYQAN paid work-order review.",
+    });
+  } else if (input.action === "REJECT_ENTITY") {
+    if (!blocker?.entity?.id) throw new ConflictError("TAYQAN_BLOCKER_CHANGED", "The current TAYQAN blocker is not an evidence review.");
+    await rejectExtractedEntity(actor, blocker.entity.id, input.note?.trim() || "Rejected during TAYQAN review.");
+  } else if (input.action === "SET_QUANTITY") {
+    const entityId = blocker?.entity?.id;
+    if (!entityId || !(input.quantity !== undefined && input.quantity >= 0) || !input.unit?.trim()) {
+      throw new AppError("TAYQAN_QUANTITY_INPUT_INVALID", "Quantity and unit are required.", 400);
+    }
+    const next = mergeProgress(progress, { quantityOverrides: { [entityId]: { quantity: input.quantity, unit: input.unit.trim(), note: input.note?.trim() || "User-confirmed in TAYQAN conversation." } } });
+    await prisma.tayqanWorkOrder.update({ where: { id: order.id }, data: { progressJson: jsonObject(next) } });
+  } else if (input.action === "SET_RATE") {
+    const entityId = blocker?.entity?.id;
+    if (!entityId || !(input.unitCost !== undefined && input.unitCost >= 0)) {
+      throw new AppError("TAYQAN_RATE_INPUT_INVALID", "A valid unit cost is required.", 400);
+    }
+    const next = mergeProgress(progress, { rateOverrides: { [entityId]: { unitCost: input.unitCost, sourceNote: input.note?.trim() || "User-confirmed rate in TAYQAN conversation." } } });
+    await prisma.tayqanWorkOrder.update({ where: { id: order.id }, data: { progressJson: jsonObject(next) } });
+  } else if (input.action === "ANSWER_QA") {
+    if (!blocker?.qa) throw new ConflictError("TAYQAN_BLOCKER_CHANGED", "The current blocker is not a QA question.");
+    const { answerWorkerMaterialQuestion } = await import("@/lib/services/worker-review-service");
+    await answerWorkerMaterialQuestion(actor, blocker.qa.assignmentId, blocker.qa.questionId, {
+      answerType: input.qaAnswerType ?? "EXPLAINED_WITH_NOTE",
+      note: input.note?.trim() || "Answered through the TAYQAN paid work-order conversation.",
+    });
+  } else if (input.action !== "RETRY") {
+    throw new AppError("TAYQAN_WORK_ACTION_INVALID", "Unsupported TAYQAN work-order action.", 400);
+  }
+
+  await prisma.tayqanIntakeMessage.create({
+    data: {
+      companyId: actor.companyId,
+      sessionId: order.intakeSessionId,
+      role: TayqanIntakeMessageRole.USER,
+      message: input.note?.trim() || input.action,
+      structuredDataJson: jsonObject({ kind: "WORK_ANSWER", action: input.action, entityId: input.entityId ?? blocker?.entity?.id ?? null }),
+    },
+  });
+  await updateOrder(actor, order.id, {
+    status: TayqanWorkStatus.RUNNING,
+    blockerCode: null,
+    blockerMessage: null,
+    blockerJson: Prisma.DbNull,
+    lastAdvancedAt: new Date(),
+  }, "WORK_BLOCKER_RESOLVED", { action: input.action });
+  order = await loadOrder(actor.companyId, order.id);
+  return advanceTayqanWorkOrder(actor, project.slug, order.id);
+}

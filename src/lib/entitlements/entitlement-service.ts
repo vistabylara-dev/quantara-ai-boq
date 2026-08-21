@@ -276,6 +276,11 @@ export async function recordPremiumItemUnlock(companyId: string, masterItemId: s
 export async function canGenerateDocument(companyId: string, isDraft: boolean): Promise<CheckResult> {
   if (isDraft) return allow();
   const entitlements = await getCompanyEntitlements(companyId);
+
+  if (entitlements.planType === PlanType.FREE || entitlements.status === "NONE") {
+    return deny("Free accounts do not include clean final exports. Upgrade to continue.");
+  }
+
   if (!entitlements.isTrial || !entitlements.subscriptionId) return allow();
 
   const usage = await getOrCreateTrialUsage(companyId, entitlements.subscriptionId);

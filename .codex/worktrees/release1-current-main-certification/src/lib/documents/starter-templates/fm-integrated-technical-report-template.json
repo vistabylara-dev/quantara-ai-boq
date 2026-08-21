@@ -1,0 +1,3289 @@
+{
+  "templateName": "Integrated Facilities Management Technical Report & Preventive Maintenance Strategy",
+  "templateCode": "FM-INTEGRATED-TECHNICAL-REPORT",
+  "sourceDocumentType": "DOCX",
+  "intendedAppDestination": "DocumentTemplate.contentConfigJson (Quantara Phase 8 sub-phase 16 — Technical Reports — NOT_STARTED as of this build; staged for when that feature ships)",
+  "disciplinesCovered": [
+    "HVAC",
+    "Electrical",
+    "Decorative Finishes",
+    "Painting",
+    "Plaster",
+    "Tiling"
+  ],
+  "note": "All narrative/task-library/KPI content below is Lara's own authored professional content genericized from a real client deliverable (client name and document reference replaced with placeholders). No content was invented — every task, standard, and KPI is carried over verbatim from the source document.",
+  "frontMatter": [],
+  "sections": [
+    {
+      "sectionCode": "01",
+      "title": "DOCUMENT CONTROL",
+      "blocks": [
+        {
+          "type": "sectionIntro",
+          "text": "Purpose, issue status, basis of report and authorization."
+        },
+        {
+          "type": "heading",
+          "text": "Document Information"
+        },
+        {
+          "type": "table",
+          "columns": [
+            "FIELD",
+            "DETAIL"
+          ],
+          "rows": [
+            [
+              "Document title",
+              "Integrated Facilities Management Technical Report & Preventive Maintenance Strategy"
+            ],
+            [
+              "Prepared for",
+              "[Client Name]"
+            ],
+            [
+              "Project / property",
+              "[Insert project or property name]"
+            ],
+            [
+              "Service provider",
+              "[Insert facilities management company]"
+            ],
+            [
+              "Document reference",
+              "[CLIENT CODE]-IFM-TR-001"
+            ],
+            [
+              "Revision / status",
+              "Rev 01 - Full-Scope Update / Draft for Review"
+            ],
+            [
+              "Issue date",
+              "[Insert issue date]"
+            ],
+            [
+              "Detailed technical scope",
+              "HVAC, Electrical, Decorative Finishes, Painting, Plaster and Tiling"
+            ]
+          ]
+        },
+        {
+          "type": "heading",
+          "text": "Revision History"
+        },
+        {
+          "type": "table",
+          "columns": [
+            "REV",
+            "DATE",
+            "DESCRIPTION",
+            "STATUS"
+          ],
+          "rows": [
+            [
+              "00",
+              "[Insert issue date]",
+              "Initial integrated FM technical framework",
+              "Draft for review"
+            ],
+            [
+              "01",
+              "[Insert issue date]",
+              "Added full detailed standards for decor, painting, plaster, electrical and tiling; retained and expanded HVAC scope.",
+              "Full-scope update"
+            ]
+          ]
+        },
+        {
+          "type": "heading",
+          "text": "Basis of Report"
+        },
+        {
+          "type": "paragraph",
+          "text": "• The Arabic preventive-maintenance sheets supplied for central chillers, chilled-water pumps, AHU/FCU equipment and DX systems were converted into auditable task libraries with frequencies, acceptance controls and required evidence."
+        },
+        {
+          "type": "paragraph",
+          "text": "• The supplied FM classification was incorporated as one Hard FM, Soft FM and Strategic FM service model."
+        },
+        {
+          "type": "paragraph",
+          "text": "• Electrical, decorative finishes, painting, plaster and tiling are now developed to the same control depth as HVAC, including preventive tasks, repair methods, quality hold points and escalation rules."
+        },
+        {
+          "type": "paragraph",
+          "text": "• Final frequencies and limits must be validated against the actual asset register, OEM manuals, drawings, warranties, authority requirements, operating duty and contract. The most stringent applicable requirement prevails."
+        },
+        {
+          "type": "callout",
+          "text": "Important use limitation\nThis report is a premium technical framework for tendering, mobilization and operations. It does not replace project-specific design documents, statutory certification, OEM instructions, approved method statements, risk assessments, permits to work or specialist engineering decisions."
+        },
+        {
+          "type": "heading",
+          "text": "Approval and Authorization"
+        },
+        {
+          "type": "table",
+          "columns": [
+            "ROLE",
+            "NAME / POSITION",
+            "AUTHORIZATION"
+          ],
+          "rows": [
+            [
+              "Prepared by",
+              "[Name / Title]",
+              "Signature / Date"
+            ],
+            [
+              "Reviewed by",
+              "[Name / Title]",
+              "Signature / Date"
+            ],
+            [
+              "Approved by",
+              "[Client Representative]",
+              "Signature / Date"
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "sectionCode": "02",
+      "title": "REPORT NAVIGATION",
+      "blocks": [
+        {
+          "type": "sectionIntro",
+          "text": "A structured route from governance and mobilization to trade-level task libraries and reporting."
+        },
+        {
+          "type": "table",
+          "columns": [
+            "SEC",
+            "TOPIC",
+            "SEC",
+            "TOPIC"
+          ],
+          "rows": [
+            [
+              "01",
+              "Document Control",
+              "02",
+              "Report Navigation"
+            ],
+            [
+              "03",
+              "Executive Summary",
+              "04",
+              "Integrated FM Service Model"
+            ],
+            [
+              "05",
+              "Scope, Boundaries and Service Zoning",
+              "06",
+              "Maintenance Strategy and Work Priorities"
+            ],
+            [
+              "07",
+              "90-Day Mobilization and Takeover",
+              "08",
+              "HSE, Permit-to-Work and Quality Assurance"
+            ],
+            [
+              "09",
+              "CAFM, BMS and Information Control",
+              "10",
+              "HVAC Technical Maintenance Standard"
+            ],
+            [
+              "11",
+              "Electrical Technical Maintenance Standard",
+              "12",
+              "Decorative Finishes Maintenance Standard"
+            ],
+            [
+              "13",
+              "Painting Maintenance Standard",
+              "14",
+              "Plaster Maintenance Standard"
+            ],
+            [
+              "15",
+              "Tiling Maintenance Standard",
+              "16",
+              "Corrective Maintenance and Defect Control"
+            ],
+            [
+              "17",
+              "SLA and KPI Framework",
+              "18",
+              "Organization, Competency and Resources"
+            ],
+            [
+              "19",
+              "Spares, Tools and Materials Control",
+              "20",
+              "Risk, Sustainability and Lifecycle Planning"
+            ],
+            [
+              "21",
+              "Reporting, Governance and Appendices",
+              "",
+              ""
+            ]
+          ]
+        },
+        {
+          "type": "callout",
+          "text": "Reading priority\nSections 03-09 define the operating model; Sections 10-15 contain the detailed trade standards; Sections 16-21 define response performance, resources, risk, governance and sample records."
+        }
+      ]
+    },
+    {
+      "sectionCode": "03",
+      "title": "EXECUTIVE SUMMARY",
+      "blocks": [
+        {
+          "type": "sectionIntro",
+          "text": "A premium, evidence-led operating model for reliable systems and consistently high-quality finishes."
+        },
+        {
+          "type": "heading",
+          "text": "EXECUTIVE INTENT  Purpose and Outcome"
+        },
+        {
+          "type": "paragraph",
+          "text": "This report establishes one technical standard for operating and maintaining HVAC, electrical systems and premium architectural finishes. Basic checklist actions are converted into controlled work packages with clear frequencies, competent-person requirements, acceptance criteria, evidence, escalation and lifecycle feedback."
+        },
+        {
+          "type": "paragraph",
+          "text": "The model is suitable for high-profile residential, hospitality, commercial and mixed-use assets where equipment reliability and visual presentation carry equal importance. Technical rooms, public areas, resident and guest routes, and signature spaces are managed through different inspection intensities, while all defects are controlled through one CAFM, quality and governance process."
+        },
+        {
+          "type": "paragraph",
+          "text": "Six detailed technical disciplines governed through one integrated maintenance framework."
+        },
+        {
+          "type": "heading",
+          "text": "Expected Operational Benefits"
+        },
+        {
+          "type": "table",
+          "columns": [
+            "Reliability\nReduced unplanned failure through risk-based PPM, baseline readings and condition trending.",
+            "Safety and compliance\nControlled permits, isolation, inspection, testing and auditable certification."
+          ],
+          "rows": [
+            [
+              "Premium appearance\nRapid detection and consistent restoration using approved samples, finish codes and batch control.",
+              "Lifecycle and transparency\nReadings, photographs, costs and condition grades are converted into auditable renewal and CAPEX decisions."
+            ]
+          ]
+        },
+        {
+          "type": "heading",
+          "text": "Critical Success Conditions"
+        },
+        {
+          "type": "paragraph",
+          "text": "• A verified asset register with location, criticality, make/model/serial, warranty and maintainable components."
+        },
+        {
+          "type": "paragraph",
+          "text": "• Approved finishes schedule, colour/texture sample library and adequate attic stock for visible materials."
+        },
+        {
+          "type": "paragraph",
+          "text": "• Competent authorized supervisors and technicians with calibrated tools and clear permit responsibilities."
+        },
+        {
+          "type": "paragraph",
+          "text": "• CAFM work orders that capture labour, materials, readings, photographs, failure code, downtime, cause and verification."
+        },
+        {
+          "type": "paragraph",
+          "text": "• Client approval of property-specific response targets, access rules, service windows, shutdowns and aesthetic standards."
+        }
+      ]
+    },
+    {
+      "sectionCode": "04",
+      "title": "INTEGRATED FM SERVICE MODEL",
+      "blocks": [
+        {
+          "type": "sectionIntro",
+          "text": "Hard FM, Soft FM and Strategic FM aligned to one client experience and asset-value objective."
+        },
+        {
+          "type": "heading",
+          "text": "Operating Principle"
+        },
+        {
+          "type": "paragraph",
+          "text": "Hard FM delivers technical reliability and safe asset operation. Soft FM protects the occupant experience and provides immediate visibility of defects. Strategic FM converts operational data into energy, risk, vendor, renewal and lifecycle decisions. The three service types therefore share one helpdesk, inspection regime, escalation process, reporting calendar and client governance forum."
+        },
+        {
+          "type": "heading",
+          "text": "Cross-Service Interfaces"
+        },
+        {
+          "type": "table",
+          "columns": [
+            "Cleaning\nReport stains, leaks, loose finishes, failed lighting and recurring dirt patterns; use finish-compatible chemicals.",
+            "Security / reception\nRaise public-area defects immediately, control access and support barriers and communication."
+          ],
+          "rows": [
+            [
+              "BMS / helpdesk\nConvert alarms, complaints and trends into prioritized work orders and verify closure.",
+              "Fire and life safety\nCoordinate impairments, emergency lighting, fire stopping, smoke control and shutdown permits."
+            ],
+            [
+              "Projects / fit-out\nControl handover documents, warranties, finish samples and as-built changes.",
+              "Procurement / stores\nMaintain approved spares and finish materials with batch, shelf-life and shade records."
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "sectionCode": "05",
+      "title": "SCOPE, BOUNDARIES AND SERVICE ZONING",
+      "blocks": [
+        {
+          "type": "sectionIntro",
+          "text": "Clear ownership, specialist interfaces and visibility-based service levels."
+        },
+        {
+          "type": "heading",
+          "text": "Detailed In-Scope Disciplines"
+        },
+        {
+          "type": "table",
+          "columns": [
+            "DISCIPLINE",
+            "TECHNICAL COVERAGE"
+          ],
+          "rows": [
+            [
+              "HVAC",
+              "Central chillers, chilled-water pumps, AHU/FCU, DX/VRF/split/package units, ventilation, controls and BMS interfaces."
+            ],
+            [
+              "Electrical",
+              "LV distribution, transformers, generators, ATS, UPS/batteries, capacitor banks, lighting, emergency lighting, small power, earthing, lightning protection, motors/VFDs and metering."
+            ],
+            [
+              "Decorative finishes",
+              "Wall panels/cladding, wallpaper/fabric, decorative ceilings/mouldings, joinery, trims, metal/glass/mirror features, signage, artwork interfaces and sealants."
+            ],
+            [
+              "Painting",
+              "Internal/external paint, metal protective coatings, timber finishes, wet-area paint, operational markings, touch-up and planned repainting."
+            ],
+            [
+              "Plaster",
+              "Gypsum and cementitious plaster, crack/hollow/damp investigation, ceilings, corners/beads, substrate preparation, curing and finish restoration."
+            ],
+            [
+              "Tiling",
+              "Ceramic/porcelain/natural-stone tiles, grout, sealant, movement joints, skirting/trims, wet areas, isolated replacement and stock control."
+            ]
+          ]
+        },
+        {
+          "type": "heading",
+          "text": "Interfaces and Specialist Boundaries"
+        },
+        {
+          "type": "paragraph",
+          "text": "• Plumbing/drainage, waterproofing, façade, structural, fire alarm, fire-fighting, lifts, access control and ELV may be separate specialist scopes. The originating defect must be corrected before finish reinstatement."
+        },
+        {
+          "type": "paragraph",
+          "text": "• Structural or active cracking, hazardous materials, high-voltage or exceptional live work, major refrigerant intervention, façade rope access and statutory fire/life-safety certification require authorized specialists."
+        },
+        {
+          "type": "paragraph",
+          "text": "• Major replacement, redesign and capital improvement are controlled through variation/CAPEX, not disguised as routine PPM."
+        },
+        {
+          "type": "heading",
+          "text": "Service Zoning for Premium Assets"
+        },
+        {
+          "type": "table",
+          "columns": [
+            "ZONE",
+            "TYPICAL AREAS",
+            "SERVICE EXPECTATION"
+          ],
+          "rows": [
+            [
+              "Z1 - Signature / VIP",
+              "Main lobbies, reception, show units, VIP routes, branded areas",
+              "Daily visual inspection; hazards immediate; visible cosmetic restoration prioritized within the premium-service window."
+            ],
+            [
+              "Z2 - Public / resident / guest",
+              "Lift lobbies, corridors, amenities and public interfaces",
+              "Daily/weekly inspection based on traffic; safety, visibility and user impact drive priority."
+            ],
+            [
+              "Z3 - Back of house / service",
+              "Stores, service corridors, staff areas, loading and car parks",
+              "Weekly/monthly inspection; safety and functionality first, with planned cosmetic repair."
+            ],
+            [
+              "Z4 - Technical / restricted",
+              "Plant rooms, electrical rooms, roofs and service shafts",
+              "Risk- and asset-based PPM with controlled access, housekeeping and statutory safety."
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "sectionCode": "06",
+      "title": "MAINTENANCE STRATEGY AND WORK PRIORITIES",
+      "blocks": [
+        {
+          "type": "sectionIntro",
+          "text": "Risk-based planning, controlled execution and continuous improvement."
+        },
+        {
+          "type": "heading",
+          "text": "Maintenance Mix"
+        },
+        {
+          "type": "table",
+          "columns": [
+            "MAINTENANCE TYPE",
+            "APPLICATION"
+          ],
+          "rows": [
+            [
+              "Statutory / mandatory",
+              "Inspection, testing and certification required by law, authority, insurer or approved fire/life-safety regime."
+            ],
+            [
+              "Planned preventive",
+              "Time- or usage-based tasks derived from OEM, warranty, design and operating context."
+            ],
+            [
+              "Condition-based",
+              "Work triggered by readings, wear, finish condition, pressure drop, thermal image, vibration or defect grade."
+            ],
+            [
+              "Predictive",
+              "Trend analysis to identify deterioration before service failure or visible damage."
+            ],
+            [
+              "Corrective / reactive",
+              "Controlled response to alarms, complaints, failures and safety defects."
+            ],
+            [
+              "Lifecycle / renewal",
+              "Replacement or refurbishment based on condition, obsolescence, risk, cost and business impact."
+            ]
+          ]
+        },
+        {
+          "type": "heading",
+          "text": "Proposed Work Priority and SLA Matrix"
+        },
+        {
+          "type": "table",
+          "columns": [
+            "PRIORITY",
+            "EXAMPLES",
+            "PROPOSED SERVICE CONTROL"
+          ],
+          "rows": [
+            [
+              "P1 - Emergency",
+              "Life safety, exposed live part, critical outage, falling finish, major leak",
+              "Attend <= 15 min; make safe immediately; continuous action and executive escalation."
+            ],
+            [
+              "P2 - Urgent",
+              "Major service degradation, high-visibility defect, partial outage, active water damage, repeated trip",
+              "Attend <= 30 min; stabilize <= 2 h; permanent repair plan same shift."
+            ],
+            [
+              "P3 - Routine",
+              "Localized functional defect with acceptable temporary condition",
+              "Attend <= 4 h; close normally within 24-48 h or approved parts lead time."
+            ],
+            [
+              "P4 - Planned / cosmetic",
+              "Non-critical improvement, planned touch-up, minor BOH aesthetic defect",
+              "Plan within 1 business day; close within agreed maintenance window, normally 5-10 days."
+            ]
+          ]
+        },
+        {
+          "type": "callout",
+          "text": "SLA note\nThe response and restoration times above are proposed premium baselines. Final commitments must be approved against property occupancy, staffing, access, contract, spare availability and specialist dependencies."
+        }
+      ]
+    },
+    {
+      "sectionCode": "07",
+      "title": "90-DAY MOBILIZATION AND TAKEOVER",
+      "blocks": [
+        {
+          "type": "sectionIntro",
+          "text": "A controlled path from risk containment to stable, measurable service delivery."
+        },
+        {
+          "type": "heading",
+          "text": "Mandatory Takeover Deliverables"
+        },
+        {
+          "type": "paragraph",
+          "text": "• Joint condition survey with photos, active alarms, missing documents, overdue statutory items and life-safety concerns."
+        },
+        {
+          "type": "paragraph",
+          "text": "• Verified asset register and location hierarchy with unique IDs and criticality ranking."
+        },
+        {
+          "type": "paragraph",
+          "text": "• Baseline readings for critical HVAC/electrical assets, with thermal, vibration, insulation or other condition data as appropriate."
+        },
+        {
+          "type": "paragraph",
+          "text": "• Finish schedule and sample library covering paint code/sheen, plaster texture, tile code/shade/calibre, grout, sealant, decor materials, trims and cleaning method."
+        },
+        {
+          "type": "paragraph",
+          "text": "• 90-day backlog plan separating safety, operational, cosmetic, warranty and capital items."
+        },
+        {
+          "type": "paragraph",
+          "text": "• Approved PPM calendar, manpower plan, permit matrix, emergency contacts, spares list and reporting calendar."
+        },
+        {
+          "type": "heading",
+          "text": "Asset and Finish Validation Fields"
+        },
+        {
+          "type": "table",
+          "columns": [
+            "RECORD TYPE",
+            "MINIMUM DATA"
+          ],
+          "rows": [
+            [
+              "Technical asset",
+              "Asset ID, system, location, make/model/serial, rating, power source, criticality, warranty, OEM document, PPM, baseline readings, spare list and photo."
+            ],
+            [
+              "Finish asset / zone",
+              "Zone, surface/element, manufacturer, code, colour/shade, sheen/texture, batch/calibre, substrate, installation detail, cleaning method, retained sample, stock and photo."
+            ],
+            [
+              "Document record",
+              "Approved drawing, schematic, O&M manual, warranty, test certificate, method statement, SDS, material approval, sample signoff, defect history and change record."
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "sectionCode": "08",
+      "title": "HSE, PERMIT-TO-WORK AND QUALITY ASSURANCE",
+      "blocks": [
+        {
+          "type": "sectionIntro",
+          "text": "Safe execution and evidence-based acceptance are mandatory for every work order."
+        },
+        {
+          "type": "heading",
+          "text": "Permit and Critical Safety Controls"
+        },
+        {
+          "type": "table",
+          "columns": [
+            "HAZARD / PERMIT",
+            "MINIMUM CONTROL"
+          ],
+          "rows": [
+            [
+              "Electrical isolation / LOTO",
+              "Authorized switching, lock/tag, test-before-touch, stored-energy discharge, barriers, correct PPE and controlled re-energization."
+            ],
+            [
+              "Hot work",
+              "Permit, fire watch, combustible control, detector impairment coordination and post-work monitoring."
+            ],
+            [
+              "Work at height",
+              "Approved access equipment, inspection tags, fall protection, dropped-object controls and exclusion zone."
+            ],
+            [
+              "Refrigerant work",
+              "Competent technicians, leak control, recovery equipment, ventilation, cylinder management and environmental compliance."
+            ],
+            [
+              "Dust / noise / occupied areas",
+              "Containment, extraction, low-dust method, work-hour control, protection of furniture/finishes and occupant communication."
+            ],
+            [
+              "Chemicals / coatings / adhesives",
+              "Approved product, SDS, ventilation, storage, spill control, PPE and compatibility with occupied environment."
+            ],
+            [
+              "Wet / slippery work",
+              "Barriers, warnings, controlled access, drainage and reopening only after safe cure/cleaning."
+            ],
+            [
+              "Falling finishes / overhead work",
+              "Immediate isolation, secure loose material, competent inspection and safe access before repair."
+            ]
+          ]
+        },
+        {
+          "type": "heading",
+          "text": "Quality Assurance Gate"
+        },
+        {
+          "type": "table",
+          "columns": [
+            "QUALITY STAGE",
+            "CONTROL REQUIREMENT"
+          ],
+          "rows": [
+            [
+              "Before work",
+              "Approved scope, risk assessment, method statement, permit, competent resources, calibrated tools, material approval and access protection."
+            ],
+            [
+              "Hold point",
+              "Root-cause confirmation, electrical isolation, waterproofing/substrate release, finish sample/mock-up, concealed fixing or reinforcement inspection."
+            ],
+            [
+              "During work",
+              "Material/batch traceability, readings, environmental controls, photographs and supervisor inspection."
+            ],
+            [
+              "Testing / inspection",
+              "Functional test, electrical certificate, stable HVAC performance, flatness/alignment/visual finish, drainage or security of fixings as applicable."
+            ],
+            [
+              "Handover",
+              "Area clean and safe; labels/drawings updated; parts/materials recorded; client/user acceptance where required."
+            ],
+            [
+              "Learning",
+              "Failure cause, repeat-defect flag, PPM improvement, spare requirement and CAPEX recommendation captured in CAFM."
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "sectionCode": "09",
+      "title": "CAFM, BMS AND INFORMATION CONTROL",
+      "blocks": [
+        {
+          "type": "sectionIntro",
+          "text": "A complete digital audit trail from alarm or inspection to verified closure and lifecycle decision."
+        },
+        {
+          "type": "heading",
+          "text": "Work Order Minimum Data"
+        },
+        {
+          "type": "table",
+          "columns": [
+            "DATA GROUP",
+            "REQUIRED INFORMATION"
+          ],
+          "rows": [
+            [
+              "Identification",
+              "Work-order number, asset/finish ID, location, zone, service type and priority."
+            ],
+            [
+              "Problem statement",
+              "Observed symptom, alarm/complaint source, impact, photographs and initial make-safe action."
+            ],
+            [
+              "Planning",
+              "Permit, risk, method, shutdown/access, labour, parts, materials and target date."
+            ],
+            [
+              "Execution",
+              "Arrival/start/finish times, actions, readings, instruments, parts/material batch and technician/supervisor."
+            ],
+            [
+              "Verification",
+              "Functional result, acceptance criteria, photographs, client/user confirmation and reopened-service time."
+            ],
+            [
+              "Analysis",
+              "Failure code, root cause, repeat fault, downtime, cost, warranty, PPM change and CAPEX recommendation."
+            ]
+          ]
+        },
+        {
+          "type": "heading",
+          "text": "BMS and Condition Data Use"
+        },
+        {
+          "type": "paragraph",
+          "text": "• Critical alarms are linked to the correct asset, location, response team and escalation tree."
+        },
+        {
+          "type": "paragraph",
+          "text": "• Overrides, disabled points, unstable control loops, temperature excursions and repeated trips are managed as exceptions, not permanent workarounds."
+        },
+        {
+          "type": "paragraph",
+          "text": "• Baseline trends are retained for chiller performance, chilled-water delta-T, pump current/pressure, AHU temperature/valve position, generator/UPS condition, electrical demand/power factor and environmental conditions affecting finishes."
+        },
+        {
+          "type": "paragraph",
+          "text": "• Finish photographs and records are searchable by zone, surface, finish code and defect type."
+        },
+        {
+          "type": "heading",
+          "text": "Monthly Data Quality Checks"
+        },
+        {
+          "type": "table",
+          "columns": [
+            "DATA CONTROL",
+            "MANAGEMENT CHECK"
+          ],
+          "rows": [
+            [
+              "Asset completeness",
+              "% of assets with valid ID, location, model/serial and PPM."
+            ],
+            [
+              "PPM evidence",
+              "% of completed PPM with required readings, photos and supervisor approval."
+            ],
+            [
+              "Closure quality",
+              "% of work orders with cause, action, verification and correct failure code."
+            ],
+            [
+              "Repeat faults",
+              "Repeated asset/symptom or finish defect within the monitoring window."
+            ],
+            [
+              "Open overrides / alarms",
+              "Age and business impact of active overrides, isolated points and recurring alarms."
+            ],
+            [
+              "Finish traceability",
+              "% of critical visible finishes with approved code/sample and adequate stock."
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "sectionCode": "10",
+      "title": "HVAC TECHNICAL MAINTENANCE STANDARD",
+      "blocks": [
+        {
+          "type": "sectionIntro",
+          "text": "Detailed preventive, condition-based and corrective controls derived from the supplied HVAC checklists."
+        },
+        {
+          "type": "heading",
+          "text": "Objectives and Acceptance Philosophy"
+        },
+        {
+          "type": "paragraph",
+          "text": "HVAC maintenance shall maintain thermal comfort, indoor-air quality, plant safety, energy performance and equipment life. The task library expands the supplied chiller, chilled-water pump, AHU/FCU and DX maintenance sheets into measurable controls. Readings are compared with design/OEM requirements and the equipment’s own clean, stable baseline rather than treated as isolated numbers."
+        },
+        {
+          "type": "table",
+          "columns": [
+            "No hidden bypass\nSafeties, flow proof, alarms and interlocks are tested and never left bypassed.",
+            "Readings before opinion\nTemperature, pressure, current, vibration, flow and trend data support diagnosis."
+          ],
+          "rows": [
+            [
+              "Clean heat transfer\nFilters, coils, tubes, strainers and airflow paths are maintained to prevent avoidable loss.",
+              "Dry and hygienic air side\nDrain pans, traps, condensate lines and internal surfaces remain clean and free-draining."
+            ],
+            [
+              "Stable control\nSensors, valves, dampers and BMS logic respond without hunting or permanent overrides.",
+              "Root-cause closure\nTrips, low delta-T, leaks and condensate problems trigger analysis, not repeated resets."
+            ]
+          ]
+        },
+        {
+          "type": "heading",
+          "text": "HVAC Preventive and Condition-Based Task Library"
+        },
+        {
+          "type": "table",
+          "columns": [
+            "SYSTEM / COMPONENT",
+            "FREQUENCY",
+            "MAINTENANCE TASK",
+            "ACCEPTANCE / CONTROL STANDARD",
+            "EVIDENCE"
+          ],
+          "rows": [
+            [
+              "Central chiller",
+              "Daily / each shift",
+              "Record evaporator/condenser entering and leaving temperatures, refrigerant/oil pressures, motor current, flow indication, noise, vibration and alarms.",
+              "Readings within OEM/design limits and stable baseline; no leak, trip, abnormal noise or unstable control.",
+              "CAFM readings / BMS trend"
+            ],
+            [
+              "Central chiller",
+              "Weekly",
+              "Inspect refrigerant and oil circuits, sight glass/levels, purge system where fitted, insulation, panel ventilation, access and housekeeping.",
+              "No leakage, contamination, damaged insulation or blocked access; guards and covers secure.",
+              "Checklist / defect WO"
+            ],
+            [
+              "Chiller safeties",
+              "Monthly planned test",
+              "Function-test oil-pressure, high/low-pressure, antifreeze, chilled-water temperature, flow-proof and interlock protection using approved OEM procedure.",
+              "Each protection produces intended alarm/trip; settings match approved schedule; no bypass remains.",
+              "Signed test sheet"
+            ],
+            [
+              "Capacity / refrigerant controls",
+              "Monthly",
+              "Inspect guide vanes or slide valve, capacity control, pump-down, expansion and solenoid valves, actuator feedback and stability.",
+              "Smooth modulation with no hunting, sticking or leakage; commanded and actual position agree.",
+              "Trend / inspection record"
+            ],
+            [
+              "Chiller starter / VFD / controls",
+              "Quarterly",
+              "Review fault logs; inspect cooling, contactors and terminals; thermographic scan under representative load; torque only during authorized shutdown.",
+              "No abnormal hot spot, loose connection or recurrent fault; current balanced and within nameplate duty.",
+              "Thermal / torque report"
+            ],
+            [
+              "Chiller instruments",
+              "Quarterly",
+              "Compare critical temperature, pressure and flow sensors with calibrated references and verify BMS mapping, units and alarm limits.",
+              "Deviation within project/OEM tolerance; tags, units and alarm thresholds correct.",
+              "Calibration record"
+            ],
+            [
+              "Chiller water-side performance",
+              "Semi-annual",
+              "Trend approach, pressure drop, flow and chilled-water delta-T; inspect strainers and water-treatment information.",
+              "Performance stable against clean baseline; flow and water quality acceptable; deterioration investigated.",
+              "Performance report"
+            ],
+            [
+              "Central chiller",
+              "Annual / OEM service",
+              "OEM service, leak test, oil/refrigerant analysis where applicable, tube inspection/cleaning based on condition, controls calibration and performance verification.",
+              "No unresolved alarm or leak; accepted performance under available load.",
+              "OEM report / certificates"
+            ],
+            [
+              "Chilled-water pump",
+              "Daily / each shift",
+              "Check suction/discharge pressure, leakage, seal drain, current, bearing temperature, noise and vibration.",
+              "No cavitation, leak, overheating or abnormal vibration; stable duty readings.",
+              "Operating log"
+            ],
+            [
+              "Chilled-water pump",
+              "Weekly / monthly",
+              "Inspect guard, foundation, anchors, flexible connectors, valves, gauges, insulation, coupling, phase balance and strainer differential pressure.",
+              "Secure installation; correct valve positions; dry insulation; alignment/vibration within OEM tolerance.",
+              "Checklist / readings"
+            ],
+            [
+              "Chilled-water pump",
+              "Quarterly / annual",
+              "Lubricate where specified, clean strainers, inspect bearings/coupling/non-return valve; annual insulation, alignment and duty-point performance check.",
+              "Smooth operation; no backflow or excessive wear; performance meets approved duty.",
+              "PPM / test certificate"
+            ],
+            [
+              "AHU / FCU filters and drain",
+              "Weekly / monthly",
+              "Check filter differential pressure and bypass; clean/replace filters; clean drain pan, trap and line; verify fall, water seal and free discharge.",
+              "No filter bypass, standing water, blockage, odor, corrosion or leakage.",
+              "DP / photo / drain test"
+            ],
+            [
+              "AHU / FCU fan and drive",
+              "Monthly",
+              "Inspect fan wheel, motor, bearings, belts, pulleys, tension, alignment, guards, anti-vibration mounts and fasteners.",
+              "Clean and secure assembly with correct tension/alignment and no abnormal noise/vibration.",
+              "Inspection / vibration record"
+            ],
+            [
+              "AHU / FCU coils / valves / controls",
+              "Quarterly",
+              "Clean coils; inspect fins, valves, actuators, flexible connections and vents; verify sensors, dampers, airflow switch and fire/smoke interface.",
+              "No leak or damaged coil; valve/damper full travel; sensor and interlock response correct.",
+              "Functional / point test"
+            ],
+            [
+              "AHU / FCU air distribution",
+              "Semi-annual / annual",
+              "Inspect accessible duct insulation, flexible connections, grilles and diffusers; representative airflow/temperature checks; annual internal deep clean and corrosion inspection.",
+              "No condensation, leakage, damaged insulation or material airflow imbalance; unit clean and sealed.",
+              "Airflow / annual report"
+            ],
+            [
+              "DX / split / package unit",
+              "Monthly",
+              "Clean/replace filters; inspect coils, condensate, refrigerant piping/insulation, thermostat, compressor/fan current and visible leaks.",
+              "Clean heat-transfer surfaces, free drainage, intact insulation and stable current; no leak or alarm.",
+              "Checklist / readings"
+            ],
+            [
+              "DX / VRF diagnostics",
+              "Quarterly / semi-annual",
+              "Check operating pressure/temperature or OEM diagnostics, superheat/subcooling as applicable, electrical connections, fans, expansion devices, error history and electronic leak survey.",
+              "Values consistent with load/ambient and OEM limits; no recurring error or leak.",
+              "Diagnostic / leak record"
+            ],
+            [
+              "DX / package unit",
+              "Annual",
+              "Comprehensive OEM service, deep coil clean, insulation test, control calibration and capacity/temperature-drop verification.",
+              "Safe, stable operation and accepted cooling performance.",
+              "Annual service report"
+            ],
+            [
+              "Ventilation / exhaust fans",
+              "Monthly / quarterly",
+              "Inspect and clean fan, motor, bearings, drive, guards, flexible connections, dampers and grilles; check airflow, current, vibration and interlock.",
+              "Secure, clean and smooth operation with unobstructed airflow and correct status/interlock.",
+              "Checklist / readings"
+            ],
+            [
+              "HVAC BMS and controls",
+              "Weekly / monthly",
+              "Review alarms, overrides, disabled points, schedules and trends; validate representative sensors, setpoints, deadbands, valves/dampers and plant sequence.",
+              "No unexplained override or stale alarm; stable control without hunting or simultaneous demand.",
+              "BMS report / trend"
+            ],
+            [
+              "HVAC BMS and controls",
+              "Quarterly / annual",
+              "Calibrate critical sensors, back up controller databases, verify alarm routing and complete seasonal/integrated functional test.",
+              "Backups current; alarms routed; fail-safe and seasonal sequence confirmed.",
+              "Calibration / backup record"
+            ]
+          ]
+        },
+        {
+          "type": "heading",
+          "text": "HVAC Corrective Maintenance Method"
+        },
+        {
+          "type": "table",
+          "columns": [
+            "STEP",
+            "CONTROL STAGE",
+            "REQUIRED ACTION"
+          ],
+          "rows": [
+            [
+              "01",
+              "Diagnose and authorize",
+              "Review alarm/trend, operating data and OEM guidance; define isolation, permit, environmental and service-continuity controls."
+            ],
+            [
+              "02",
+              "Make safe",
+              "Apply LOTO and refrigerant/electrical controls; protect occupied areas and provide alternative cooling where required."
+            ],
+            [
+              "03",
+              "Inspect and test",
+              "Confirm root cause using calibrated instruments and record baseline before dismantling."
+            ],
+            [
+              "04",
+              "Repair / replace",
+              "Use approved spare, torque and cleanliness controls; prevent circuit contamination."
+            ],
+            [
+              "05",
+              "Recommission",
+              "Restore valves, safeties, controls and interlocks; perform controlled start."
+            ],
+            [
+              "06",
+              "Verify performance",
+              "Record temperatures, pressures, current, vibration, flow and BMS response under stable load."
+            ],
+            [
+              "07",
+              "Close and learn",
+              "Attach readings/photos/parts; update failure code, warranty, PPM and lifecycle action."
+            ]
+          ]
+        },
+        {
+          "type": "heading",
+          "text": "HVAC Quality Hold Points"
+        },
+        {
+          "type": "table",
+          "columns": [
+            "CONTROL",
+            "RELEASE REQUIREMENT"
+          ],
+          "rows": [
+            [
+              "Readings",
+              "Temperatures, pressures, current, vibration and flow recorded before and after work."
+            ],
+            [
+              "Safeties",
+              "No safety, alarm or interlock remains bypassed; settings controlled."
+            ],
+            [
+              "Cleanliness",
+              "Air, water and refrigerant circuits protected from contamination."
+            ],
+            [
+              "Performance",
+              "Equipment run to stable condition and compared with baseline."
+            ],
+            [
+              "Documentation",
+              "BMS points, history, parts and failure code updated."
+            ]
+          ]
+        },
+        {
+          "type": "callout",
+          "text": "HVAC escalation triggers\nRepeated safety trip, refrigerant leak, compressor abnormality, significant performance deterioration, persistent low chilled-water delta-T, biological contamination, uncontrolled condensation or any condition outside OEM safe operating limits requires engineering escalation and an approved recovery plan."
+        }
+      ]
+    },
+    {
+      "sectionCode": "11",
+      "title": "ELECTRICAL TECHNICAL MAINTENANCE STANDARD",
+      "blocks": [
+        {
+          "type": "sectionIntro",
+          "text": "Power continuity, safe isolation, protection integrity and auditable testing for all LV systems."
+        },
+        {
+          "type": "heading",
+          "text": "Objectives and Acceptance Philosophy"
+        },
+        {
+          "type": "paragraph",
+          "text": "Electrical maintenance shall protect life, prevent fire and equipment damage, maintain power continuity and preserve the integrity of protection, earthing and distribution systems. Only competent authorized personnel may perform electrical work. De-energized work is the default; exceptional live diagnostic activity must be formally justified, risk assessed and approved."
+        },
+        {
+          "type": "table",
+          "columns": [
+            "Protection first\nBreaker, relay, RCD, earth-fault and interlock settings remain controlled and tested.",
+            "Thermal condition\nThermography is performed under meaningful load and defects are confirmed by inspection."
+          ],
+          "rows": [
+            [
+              "Verified isolation\nLOTO, test-before-touch and controlled re-energization are independently verified.",
+              "Continuity of supply\nGenerators, ATS, UPS and batteries are functionally tested with documented capacity."
+            ],
+            [
+              "Accurate records\nLabels, schedules, settings, single-line diagrams and test certificates remain current.",
+              "Controlled rooms\nElectrical rooms remain dry, secure, ventilated, clean and unobstructed."
+            ]
+          ]
+        },
+        {
+          "type": "heading",
+          "text": "Electrical Preventive and Condition-Based Task Library"
+        },
+        {
+          "type": "table",
+          "columns": [
+            "SYSTEM / COMPONENT",
+            "FREQUENCY",
+            "MAINTENANCE TASK",
+            "ACCEPTANCE / CONTROL STANDARD",
+            "EVIDENCE"
+          ],
+          "rows": [
+            [
+              "MDB / SMDB / DB",
+              "Daily / weekly by criticality",
+              "Inspect alarms, abnormal noise/odor/heat, discoloration, moisture, access, room ventilation and housekeeping.",
+              "No overheating, arcing sign, contamination or obstruction; doors, covers and labels intact.",
+              "Inspection log"
+            ],
+            [
+              "MDB / SMDB / DB",
+              "Monthly",
+              "Record voltage, current, demand and power factor; review phase balance, loading, meters, circuit labels and schedules.",
+              "Loading within approved capacity; imbalance/deviation investigated against baseline and design.",
+              "Load schedule"
+            ],
+            [
+              "Switchgear connections",
+              "Quarterly",
+              "Thermographic scan under representative load; inspect cable/busbar/neutral/earth joints; tighten to OEM torque during authorized isolation.",
+              "No unexplained hot spot, loose joint, carbon tracking or insulation damage.",
+              "Thermal / torque report"
+            ],
+            [
+              "Breakers / protection / RCD",
+              "Quarterly / annual",
+              "Exercise mechanisms and test protection, earth-leakage/RCD and interlocks; verify settings against approved coordination schedule.",
+              "Trip function and settings correct; no unauthorized setting change or bypass.",
+              "Protection test certificate"
+            ],
+            [
+              "LV switchgear",
+              "Annual shutdown",
+              "Internal approved cleaning; inspect busbars, shutters, insulation, earthing and mechanisms; insulation and functional tests before energization.",
+              "Panel dry, clean, mechanically sound and passes approved tests.",
+              "Shutdown checklist"
+            ],
+            [
+              "Transformer",
+              "Weekly / monthly",
+              "Check temperature, loading, noise, vibration, ventilation, alarms and enclosure; oil level/leak, breather and bund for oil-filled units.",
+              "Within rating with no abnormal hum, contamination, blocked cooling or leakage.",
+              "Transformer log"
+            ],
+            [
+              "Transformer",
+              "Quarterly / annual",
+              "Thermography; inspect terminations, earthing, fans and protection; OEM service, insulation/winding tests and oil test where applicable.",
+              "No hot spot; alarms/protection functional; results meet approved/OEM limits and baseline.",
+              "Thermal / OEM test report"
+            ],
+            [
+              "Standby generator",
+              "Weekly",
+              "Check fuel, oil, coolant, battery/charger, belts, leaks, exhaust and controls; automatic start/no-load run as permitted.",
+              "Starts and stabilizes voltage/frequency without leak or alarm.",
+              "Run log"
+            ],
+            [
+              "Standby generator",
+              "Monthly / quarterly",
+              "Run under available or approved test load; record electrical/mechanical parameters; test alarms and ATS; service by run hours.",
+              "Stable output/load, correct interface and no abnormal temperature, smoke or vibration.",
+              "Monthly / service report"
+            ],
+            [
+              "Standby generator",
+              "Annual",
+              "Major OEM service and approved load-bank test where required; verify protection, emergency stop and full ATS sequence.",
+              "Sustains test within approved limits and all safety functions operate.",
+              "Load-bank / OEM report"
+            ],
+            [
+              "ATS / changeover",
+              "Monthly / annual",
+              "Test auto/manual transfer, sensing, delays and interlocks; inspect/clean contacts during isolation; verify settings and thermography.",
+              "Correct transfer/retransfer with no unintended parallel; contacts and settings sound.",
+              "Functional / inspection report"
+            ],
+            [
+              "UPS and batteries",
+              "Daily / weekly",
+              "Review load, alarms, bypass, battery status and temperature.",
+              "No critical alarm, overload or unexpected bypass; environment acceptable.",
+              "UPS log"
+            ],
+            [
+              "UPS and batteries",
+              "Monthly / quarterly",
+              "Inspect swelling, leakage, corrosion and terminals; record string/cell readings; impedance/conductance test as specified.",
+              "No damaged cell; readings consistent within OEM trend limits.",
+              "Battery report"
+            ],
+            [
+              "UPS",
+              "Annual",
+              "OEM service, internal cleaning, fan/capacitor inspection, controlled autonomy/discharge and bypass test.",
+              "Required support time achieved or reduced capacity formally escalated.",
+              "OEM / autonomy report"
+            ],
+            [
+              "Capacitor bank / PFC",
+              "Monthly / annual",
+              "Check power factor, step switching, contactors, fuses, swelling/leaks and alarms; thermography and electrical tests during shutdown.",
+              "Stable target power factor, no failed/hot step or damaged capacitor.",
+              "PFC report"
+            ],
+            [
+              "Emergency lighting",
+              "Monthly / annual",
+              "Function-test luminaires/exit signs; replace failures; conduct approved duration test and restore charging.",
+              "All required fittings illuminate and achieve required duration, or failures are prioritized.",
+              "Emergency-light register"
+            ],
+            [
+              "General lighting / controls",
+              "Daily / weekly / quarterly",
+              "Inspect failed, flickering, mismatched or loose fittings; test timers, sensors, dimming, photocells and BMS schedules.",
+              "Uniform appearance, secure fittings and correct control without nuisance operation or override.",
+              "Zone / functional checklist"
+            ],
+            [
+              "Sockets / isolators / small power",
+              "Monthly / quarterly",
+              "Inspect fixation, shutters, labels, heat signs and misuse; test representative RCDs/isolators under approved regime.",
+              "Secure, undamaged and correctly operating; no overheating or unsafe loading.",
+              "Inspection / test record"
+            ],
+            [
+              "Earthing / bonding / lightning protection",
+              "Quarterly visual / annual test",
+              "Inspect conductors, bonds, earth bars, down conductors, test joints and surge indicators; test continuity and resistance.",
+              "Complete, secure system and test results within design/authority limits and trend.",
+              "Test certificate"
+            ],
+            [
+              "Motors and VFDs",
+              "Monthly / annual",
+              "Review current, temperature, vibration, cooling, fault history and control; annual thermography, terminals, insulation and protection/settings check.",
+              "No overload, recurrent trip, blocked cooling, hot spot or insulation deterioration.",
+              "Readings / test report"
+            ],
+            [
+              "Energy meters / power monitoring",
+              "Monthly / annual",
+              "Validate communications, time, CT ratio, data completeness and plausibility; cross-check or calibrate representative meters.",
+              "Reliable complete data with no unexplained gap or scaling error.",
+              "Meter validation"
+            ],
+            [
+              "Electrical rooms",
+              "Monthly",
+              "Verify access control, rubber mats, signs, single-line diagrams, LOTO information, fire stopping and no storage.",
+              "Room secure, dry, clean, ventilated and unobstructed.",
+              "Room audit"
+            ]
+          ]
+        },
+        {
+          "type": "heading",
+          "text": "Electrical Corrective Maintenance Method"
+        },
+        {
+          "type": "table",
+          "columns": [
+            "STEP",
+            "CONTROL STAGE",
+            "REQUIRED ACTION"
+          ],
+          "rows": [
+            [
+              "01",
+              "Plan and permit",
+              "Review single-line diagram, load impact, switching schedule and contingency; obtain authorized permit."
+            ],
+            [
+              "02",
+              "Isolate and prove dead",
+              "Apply LOTO, test-before-touch, discharge stored energy and install barriers/earths where required."
+            ],
+            [
+              "03",
+              "Inspect and diagnose",
+              "Use calibrated instruments and task-appropriate arc-rated PPE; live work only if formally justified and approved."
+            ],
+            [
+              "04",
+              "Repair / replace",
+              "Install approved correctly rated component with controlled torque, identification and fire stopping."
+            ],
+            [
+              "05",
+              "Test before energization",
+              "Complete applicable continuity, insulation, polarity/protection and mechanical checks."
+            ],
+            [
+              "06",
+              "Controlled energization",
+              "Energize in sequence and monitor load, temperature, alarms and phase balance."
+            ],
+            [
+              "07",
+              "Document",
+              "Update schedules, labels, settings, test certificates, as-built change and spare use."
+            ]
+          ]
+        },
+        {
+          "type": "heading",
+          "text": "Electrical Quality Hold Points"
+        },
+        {
+          "type": "table",
+          "columns": [
+            "CONTROL",
+            "RELEASE REQUIREMENT"
+          ],
+          "rows": [
+            [
+              "Authorization",
+              "Competent authorized persons, permit and switching schedule in place."
+            ],
+            [
+              "Isolation",
+              "LOTO and test-before-touch independently verified."
+            ],
+            [
+              "Testing",
+              "Applicable electrical tests and protection functions pass before energization."
+            ],
+            [
+              "Identification",
+              "Labels, schedules, settings and single-line information remain correct."
+            ],
+            [
+              "Post-energization",
+              "Temperature and load stable with no abnormal condition."
+            ]
+          ]
+        },
+        {
+          "type": "callout",
+          "text": "Electrical escalation triggers\nArcing evidence, protection operation, unexplained hot spot, damaged insulation, exposed live part, recurrent trip, earth fault, transformer/generator abnormality or any failed protection/statutory test requires immediate risk control and authorized engineering review."
+        }
+      ]
+    },
+    {
+      "sectionCode": "12",
+      "title": "DECORATIVE FINISHES MAINTENANCE STANDARD",
+      "blocks": [
+        {
+          "type": "sectionIntro",
+          "text": "Premium appearance, secure fixings and consistent material matching across visible architectural features."
+        },
+        {
+          "type": "heading",
+          "text": "Definition and Control Intent"
+        },
+        {
+          "type": "paragraph",
+          "text": "Decorative finishes include architectural wall and ceiling features, cladding, panels, mouldings, joinery, veneers, laminates, metal and glass features, mirrors, trims, signage, artwork interfaces and sealants. Each critical visible finish is treated as an asset: coded, photographed, inspected, maintained and linked to an approved sample and cleaning method."
+        },
+        {
+          "type": "heading",
+          "text": "Premium Visual Acceptance Standard"
+        },
+        {
+          "type": "paragraph",
+          "text": "• No loose, sharp, unstable or falling component; safety defects are isolated immediately."
+        },
+        {
+          "type": "paragraph",
+          "text": "• Alignment, joints, grain/pattern, sheen, trims and interfaces remain consistent with the approved installation."
+        },
+        {
+          "type": "paragraph",
+          "text": "• Repairs use approved compatible materials with traceable finish code and batch; substitutions require approval."
+        },
+        {
+          "type": "paragraph",
+          "text": "• Moisture, movement, impact or cleaning damage is corrected before cosmetic reinstatement."
+        },
+        {
+          "type": "paragraph",
+          "text": "• Acceptance is checked under actual lighting and normal viewing conditions."
+        },
+        {
+          "type": "paragraph",
+          "text": "Decorative Finishes Preventive and Condition-Based Task Library"
+        },
+        {
+          "type": "table",
+          "columns": [
+            "SYSTEM / COMPONENT",
+            "FREQUENCY",
+            "MAINTENANCE TASK",
+            "ACCEPTANCE / CONTROL STANDARD",
+            "EVIDENCE"
+          ],
+          "rows": [
+            [
+              "Premium-zone decorative finishes",
+              "Daily visual",
+              "Inspect lobbies, reception, lift lobbies, corridors, show areas and VIP routes for chips, stains, scratches, loose elements, sharp edges, misalignment and water damage.",
+              "No unsafe or prominent defect; hazards isolated immediately and defects logged by zone and finish code.",
+              "Zone checklist / photo"
+            ],
+            [
+              "Wall panels / cladding",
+              "Weekly",
+              "Check alignment, joints, trims, fixings, drumming/looseness, impact damage and sealant continuity.",
+              "Panels secure, flush and aligned; joints uniform; no movement, sharp edge or open seal.",
+              "Inspection record"
+            ],
+            [
+              "Wall panels / cladding",
+              "Monthly / quarterly",
+              "Inspect moisture, adhesive failure, corrosion, service penetrations, accessible brackets/anchors and movement interfaces.",
+              "No active moisture, corrosion or progressive debonding; approved fixings and movement allowance intact.",
+              "Condition survey"
+            ],
+            [
+              "Wallpaper / fabric wallcovering",
+              "Weekly / as required",
+              "Inspect seams, bubbles, lifting edges, tears, stains and fading; clean/repair using approved compatible product and matched material.",
+              "Seams closed and aligned; repair does not alter texture or colour at normal viewing distance.",
+              "Material / photo record"
+            ],
+            [
+              "Decorative ceilings / cornices / mouldings",
+              "Weekly / quarterly",
+              "Inspect cracks, loose sections, sagging, staining and service interfaces; check accessible supports and recurring movement/moisture.",
+              "No falling/loose element, sag or open joint; root cause corrected before finish repair.",
+              "Ceiling checklist"
+            ],
+            [
+              "Joinery / cabinetry / feature doors",
+              "Weekly / monthly",
+              "Check alignment, hinges, runners, handles, locks, closers, veneers/laminates, edges and moisture at plinths; adjust/lubricate approved hardware.",
+              "Smooth operation, secure hardware, consistent gaps and no lifting, swelling or sharp edges.",
+              "Joinery record"
+            ],
+            [
+              "Veneer / laminate / solid surface",
+              "Monthly",
+              "Inspect delamination, heat damage, cracks, burns, stains, joint opening and cleaning-chemical compatibility.",
+              "Surface bonded, uniform and clean with sealed joints.",
+              "Condition survey"
+            ],
+            [
+              "Skirting / trims / corner guards",
+              "Weekly",
+              "Inspect detachment, dents, open mitres, sharp corners, sealant failure and colour mismatch.",
+              "Secure continuous alignment with closed joints and safe edges.",
+              "Zone checklist"
+            ],
+            [
+              "Metal / brass / stainless features",
+              "Weekly",
+              "Inspect scratches, corrosion, loose fixings, sharp edges and coating damage; clean with approved non-abrasive product.",
+              "Even appearance, no corrosion or loose part, and cleaning causes no damage.",
+              "Inspection log"
+            ],
+            [
+              "Glass / mirror decorative features",
+              "Daily / weekly",
+              "Inspect cracks, chips, loose clips, backing, sealant, sharp edges, distortion and staining.",
+              "No crack/chip or loose fixing; edges protected and seals intact.",
+              "Safety inspection"
+            ],
+            [
+              "Feature lighting integration",
+              "Monthly",
+              "Check decorative luminaire mounting, alignment, diffuser condition, heat effects and cable concealment.",
+              "Secure and visually aligned with no heat damage or exposed wiring.",
+              "Joint checklist"
+            ],
+            [
+              "Signage / artwork / accessories",
+              "Weekly",
+              "Check level, position, stability, fixings, cleanliness, legibility and damage.",
+              "Secure, level, clean and correctly located with no sharp projection.",
+              "Inspection record"
+            ],
+            [
+              "Sealants at decorative interfaces",
+              "Monthly / quarterly",
+              "Inspect adhesion, cracking, staining, shrinkage and colour; renew after correct substrate preparation.",
+              "Continuous, neatly tooled, compatible and colour-matched seal with no void.",
+              "Batch / photo"
+            ],
+            [
+              "Finish sample library",
+              "Quarterly",
+              "Verify code, manufacturer, colour, sheen, grain direction, joint detail, cleaning method and retained sample.",
+              "Current approved sample available for every critical visible finish.",
+              "Sample register"
+            ],
+            [
+              "Decorative finishes",
+              "Annual condition survey",
+              "Grade finishes by zone, quantify recurring defects and prepare repair/renewal/CAPEX plan.",
+              "Condition index and costed plan issued; loose/high-risk items actioned immediately.",
+              "Annual report"
+            ]
+          ]
+        },
+        {
+          "type": "heading",
+          "text": "Decorative Finish Repair Method"
+        },
+        {
+          "type": "table",
+          "columns": [
+            "STEP",
+            "CONTROL STAGE",
+            "REQUIRED ACTION"
+          ],
+          "rows": [
+            [
+              "01",
+              "Survey and protect",
+              "Photograph defect, identify finish code and protect public routes, adjacent finishes and artwork."
+            ],
+            [
+              "02",
+              "Confirm root cause",
+              "Check moisture, movement, impact, cleaning chemicals and fixing condition."
+            ],
+            [
+              "03",
+              "Approve sample",
+              "Confirm manufacturer, colour, grain, sheen, joint and retained sample; produce mock-up where needed."
+            ],
+            [
+              "04",
+              "Remove defective work",
+              "Dismantle without damaging adjacent elements/services; control dust and noise."
+            ],
+            [
+              "05",
+              "Repair substrate / fixing",
+              "Correct support, anchor, backing, sealant or moisture issue using approved materials."
+            ],
+            [
+              "06",
+              "Reinstate finish",
+              "Install aligned, secure and clean finish with consistent joints, trims and orientation."
+            ],
+            [
+              "07",
+              "Inspect and hand over",
+              "Verify safety and visual match under actual lighting; update finish record."
+            ]
+          ]
+        },
+        {
+          "type": "heading",
+          "text": "Decorative Finishes Quality Hold Points"
+        },
+        {
+          "type": "table",
+          "columns": [
+            "CONTROL",
+            "RELEASE REQUIREMENT"
+          ],
+          "rows": [
+            [
+              "Finish code",
+              "Approved material, manufacturer, colour, grain and sheen traceable."
+            ],
+            [
+              "Security",
+              "Fixings, anchors and edges safe and secure."
+            ],
+            [
+              "Alignment",
+              "Panels, joints, trims and accessories level and consistent."
+            ],
+            [
+              "Compatibility",
+              "Adhesives, sealants and cleaners compatible."
+            ],
+            [
+              "Visual acceptance",
+              "Mock-up/final finish accepted under actual lighting."
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "sectionCode": "13",
+      "title": "PAINTING MAINTENANCE STANDARD",
+      "blocks": [
+        {
+          "type": "sectionIntro",
+          "text": "Controlled surface preparation, colour matching, coating compatibility and premium visual finish."
+        },
+        {
+          "type": "heading",
+          "text": "Definition and Control Intent"
+        },
+        {
+          "type": "paragraph",
+          "text": "Painting maintenance covers internal and external decorative coatings, metal protective coatings, timber paint systems, wet-area finishes and operational markings. Touch-up is not simply applying paint: the defect source, substrate, primer, product, code, sheen, batch, environment and final appearance are controlled."
+        },
+        {
+          "type": "heading",
+          "text": "Defect Diagnosis Before Painting"
+        },
+        {
+          "type": "table",
+          "columns": [
+            "DEFECT",
+            "REQUIRED DIAGNOSIS / ACTION"
+          ],
+          "rows": [
+            [
+              "Blistering / bubbling",
+              "Investigate moisture, heat, incompatible coating or trapped contamination; do not overpaint active blistering."
+            ],
+            [
+              "Peeling / flaking",
+              "Determine adhesion failure, weak substrate, poor preparation or moisture; remove to sound edge."
+            ],
+            [
+              "Cracking / crazing",
+              "Separate coating crack from moving plaster or structural crack; repair the source first."
+            ],
+            [
+              "Efflorescence / staining",
+              "Identify salts and water path; clean and dry substrate and use a compatible system."
+            ],
+            [
+              "Fungal growth",
+              "Correct moisture/ventilation cause and use an approved cleaning and coating system."
+            ],
+            [
+              "Rust bleed / corrosion",
+              "Prepare metal to sound condition and reinstate compatible corrosion protection."
+            ],
+            [
+              "Patchiness / sheen mismatch",
+              "Use approved sample and repaint a logical plane where local touch-up remains visible."
+            ]
+          ]
+        },
+        {
+          "type": "heading",
+          "text": "Painting Preventive and Condition-Based Task Library"
+        },
+        {
+          "type": "table",
+          "columns": [
+            "SYSTEM / COMPONENT",
+            "FREQUENCY",
+            "MAINTENANCE TASK",
+            "ACCEPTANCE / CONTROL STANDARD",
+            "EVIDENCE"
+          ],
+          "rows": [
+            [
+              "Painted walls / ceilings - premium zones",
+              "Daily visual",
+              "Identify scuffs, scratches, stains, chips, peeling, bubbling, water marks and colour inconsistency.",
+              "No prominent defect at normal viewing distance; source logged before touch-up.",
+              "Zone checklist / photo"
+            ],
+            [
+              "Painted walls / ceilings - general zones",
+              "Weekly",
+              "Inspect corners, frames, penetrations and high-contact points; compile controlled touch-up list by colour and area.",
+              "Surface clean and uniform; repairs grouped to avoid patchiness.",
+              "Weekly snag list"
+            ],
+            [
+              "All painted surfaces",
+              "Monthly",
+              "Check cracking, flaking, blistering, chalking, efflorescence, fungal growth, staining, corrosion bleed, fading and adhesion loss.",
+              "Defect type/root cause recorded; active moisture or movement not overpainted.",
+              "Condition survey"
+            ],
+            [
+              "Internal emulsion surfaces",
+              "As required / batch repair",
+              "Protect area; clean, fill, sand, spot-prime and apply approved matching system; repaint logical panel where local patch would remain visible.",
+              "Uniform colour, texture and sheen with clean cut lines and no marks, sagging or overspray.",
+              "Paint code / photos"
+            ],
+            [
+              "External coating surfaces",
+              "Quarterly / seasonal",
+              "Inspect UV fading, cracking, water penetration, salts/efflorescence, algae, sealant interfaces and adhesion.",
+              "No active water path or unstable coating; repair plan accounts for access, weather and compatibility.",
+              "External finish survey"
+            ],
+            [
+              "Metal painted surfaces",
+              "Monthly / as required",
+              "Inspect corrosion and coating damage; prepare to sound substrate and apply compatible primer/intermediate/top coats under controlled conditions.",
+              "No exposed corrosion; complete coverage, protected edges and approved colour/finish.",
+              "Coating record"
+            ],
+            [
+              "Timber painted surfaces",
+              "Monthly",
+              "Inspect swelling, cracking, peeling, joint movement, moisture and edge abrasion.",
+              "Dry, stable substrate with intact finish and no splinter/open joint.",
+              "Inspection record"
+            ],
+            [
+              "Wet-area paint",
+              "Monthly",
+              "Inspect mould, condensation, peeling and junction/sealant condition; confirm ventilation and source control.",
+              "Area dry and clean; compatible anti-fungal system used only after cause is resolved.",
+              "Moisture / ventilation record"
+            ],
+            [
+              "Car park / BOH markings",
+              "Monthly / quarterly",
+              "Inspect floor lines, bay numbers, arrows, wall bands and safety markings.",
+              "Legible, correctly located and slip-compatible.",
+              "Area audit"
+            ],
+            [
+              "Colour / sheen / batch control",
+              "Before each repair",
+              "Verify approved manufacturer, product, code, sheen, substrate, primer, batch and retained sample; test patch when matching risk exists.",
+              "Client-approved match under actual lighting before full application.",
+              "Material approval"
+            ],
+            [
+              "Substrate moisture / source",
+              "Before repair",
+              "Measure moisture where blistering, staining or dampness exists; investigate source and allow drying.",
+              "Within coating-manufacturer requirement and no active leak/condensation.",
+              "Moisture reading"
+            ],
+            [
+              "Surface preparation",
+              "Every repair",
+              "Remove loose coating, contaminants, dust and weak filler; abrade, fill, feather and prime correctly.",
+              "Sound, clean, dry and properly prepared substrate with no visible ridge.",
+              "QA checklist"
+            ],
+            [
+              "Application environment",
+              "Every repair",
+              "Control ventilation, dust, temperature, humidity, occupied-area protection and recoat/cure time.",
+              "Conditions within manufacturer limits; no contamination, complaint or premature use.",
+              "Permit / environment record"
+            ],
+            [
+              "Finish inspection",
+              "Every repair",
+              "Inspect under representative lighting for colour, opacity, sheen, texture, cut lines, pinholes, runs and overspray.",
+              "Uniform, clean finish matching approved sample.",
+              "Completion inspection"
+            ],
+            [
+              "Paint stock / planned renewal",
+              "Monthly / annual",
+              "Control shelf life, storage, labels, batch and quantity of critical colours; annually define phased repaint by zone.",
+              "Only approved in-date stock; risk- and visibility-based repaint plan and budget.",
+              "Store / renewal plan"
+            ]
+          ]
+        },
+        {
+          "type": "heading",
+          "text": "Painting Repair and Reinstatement Method"
+        },
+        {
+          "type": "table",
+          "columns": [
+            "STEP",
+            "CONTROL STAGE",
+            "REQUIRED ACTION"
+          ],
+          "rows": [
+            [
+              "01",
+              "Diagnose defect",
+              "Classify staining, blistering, cracking, corrosion or adhesion loss and eliminate the source."
+            ],
+            [
+              "02",
+              "Approve material",
+              "Confirm substrate, primer, paint code, sheen, batch and sample."
+            ],
+            [
+              "03",
+              "Protect and prepare",
+              "Isolate area, cover surfaces, clean, scrape, fill, sand and feather."
+            ],
+            [
+              "04",
+              "Prime / seal",
+              "Apply compatible primer, stain block, anti-corrosion or sealer and allow cure."
+            ],
+            [
+              "05",
+              "Apply finish coats",
+              "Control dust, ventilation, conditions and recoat time; achieve full coverage."
+            ],
+            [
+              "06",
+              "Quality inspection",
+              "Check colour, sheen, opacity, texture, cut lines, runs and overspray."
+            ],
+            [
+              "07",
+              "Release area",
+              "Clean, confirm cure and record batch and photos."
+            ]
+          ]
+        },
+        {
+          "type": "heading",
+          "text": "Painting Quality Hold Points"
+        },
+        {
+          "type": "table",
+          "columns": [
+            "CONTROL",
+            "RELEASE REQUIREMENT"
+          ],
+          "rows": [
+            [
+              "Root cause",
+              "Active moisture, rust or movement corrected before coating."
+            ],
+            [
+              "Surface preparation",
+              "Substrate sound, clean, dry and properly primed."
+            ],
+            [
+              "Material control",
+              "Product, code, sheen, batch and shelf life recorded."
+            ],
+            [
+              "Application",
+              "Environmental and recoat requirements observed."
+            ],
+            [
+              "Appearance",
+              "Colour, opacity, texture and cut lines match sample."
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "sectionCode": "14",
+      "title": "PLASTER MAINTENANCE STANDARD",
+      "blocks": [
+        {
+          "type": "sectionIntro",
+          "text": "Sound substrates, crack diagnosis, controlled repairs and accurate finish restoration."
+        },
+        {
+          "type": "heading",
+          "text": "Definition and Control Intent"
+        },
+        {
+          "type": "paragraph",
+          "text": "Plaster maintenance covers gypsum and cementitious wall/ceiling finishes, corners, beads and repair interfaces. Correct diagnosis is essential: active or structural cracking and moisture-related failure are not concealed by filler and paint. Loose overhead plaster is treated as an immediate safety risk."
+        },
+        {
+          "type": "heading",
+          "text": "Crack and Defect Classification"
+        },
+        {
+          "type": "table",
+          "columns": [
+            "CLASSIFICATION",
+            "CONTROL ACTION"
+          ],
+          "rows": [
+            [
+              "Hairline / non-moving",
+              "Fine stable surface crack with no displacement or recurrence; compatible cosmetic repair may be suitable after confirmation."
+            ],
+            [
+              "Junction / recurring",
+              "Crack at material transition, opening, service penetration or prior repair; investigate movement and approved reinforcement/detail."
+            ],
+            [
+              "Moisture-related",
+              "Staining, efflorescence, softening or hollowing; eliminate water source and dry the substrate."
+            ],
+            [
+              "Hollow / delaminated",
+              "Loss of bond shown by bulging, movement or sounding; map and remove unsafe loose material."
+            ],
+            [
+              "Active / structural indicator",
+              "Widening, displacement, diagonal pattern or repeated opening; make safe and refer to structural engineer."
+            ]
+          ]
+        },
+        {
+          "type": "heading",
+          "text": "Plaster Preventive and Condition-Based Task Library"
+        },
+        {
+          "type": "table",
+          "columns": [
+            "SYSTEM / COMPONENT",
+            "FREQUENCY",
+            "MAINTENANCE TASK",
+            "ACCEPTANCE / CONTROL STANDARD",
+            "EVIDENCE"
+          ],
+          "rows": [
+            [
+              "Premium-zone plastered surfaces",
+              "Daily / weekly",
+              "Inspect cracks, impact damage, hollow areas, bulging, delamination, staining and loose material.",
+              "No loose/falling material; unsafe area isolated and defect mapped.",
+              "Zone checklist / photo"
+            ],
+            [
+              "Plastered walls / ceilings",
+              "Monthly",
+              "Map cracks by width, pattern and location; note active/recurring condition, material junction and moisture/structural association.",
+              "Crack classified before cosmetic repair; structural indicators escalated.",
+              "Crack map"
+            ],
+            [
+              "Hollow / debonded plaster",
+              "Monthly / targeted",
+              "Sound suspect areas using approved method and inspect bulges/edge movement.",
+              "Extent marked; loose overhead area removed under controlled method.",
+              "Survey sketch"
+            ],
+            [
+              "Damp / efflorescence",
+              "As observed",
+              "Measure moisture, identify source and inspect salts, mould and coating condition.",
+              "Source corrected and substrate dry before plaster/paint restoration.",
+              "Moisture / source WO"
+            ],
+            [
+              "Internal gypsum plaster",
+              "As required",
+              "Remove loose material to sound edge, clean, apply compatible bonding, repair in layers, reinforce approved junctions and finish/dry.",
+              "Sound, smooth, dry repair with no hollow response, shrinkage crack or ridge.",
+              "Repair checklist"
+            ],
+            [
+              "Cement-sand plaster",
+              "As required",
+              "Cut back to sound substrate, roughen/clean, pre-wet as required, apply compatible bond/coats, cure and finish.",
+              "Adequate bond and curing with uniform texture and no crazing/debonding.",
+              "Material / cure record"
+            ],
+            [
+              "Non-moving hairline crack",
+              "As required",
+              "Open/clean as appropriate, fill with compatible material, finish, prime and repaint.",
+              "Crack invisible after cure and finish; movement joints not rigidly bridged.",
+              "Before/after photo"
+            ],
+            [
+              "Junction / recurring crack",
+              "As required with approval",
+              "Investigate movement; install approved mesh/reinforcement or movement-joint detail.",
+              "Root cause and detail approved; recurrence monitored.",
+              "Engineer / QA signoff"
+            ],
+            [
+              "Structural / active crack",
+              "Immediate escalation",
+              "Make safe, monitor/measure and refer to structural engineer; do not conceal.",
+              "Approved engineering assessment and repair instruction before reinstatement.",
+              "Engineer report"
+            ],
+            [
+              "Corners / beads / arrises",
+              "Monthly",
+              "Inspect damaged corners, exposed/rusted beads, misalignment and impact; repair/replace and reinstate finish.",
+              "Straight, secure, rust-free corner with consistent finish.",
+              "Inspection record"
+            ],
+            [
+              "Ceiling plaster",
+              "Monthly",
+              "Inspect sagging, cracks, moisture, access-panel and service-penetration interfaces.",
+              "No loose/sagging material; support concerns escalated.",
+              "Ceiling survey"
+            ],
+            [
+              "Substrate preparation",
+              "Every repair",
+              "Remove dust, salts, paint, oil and weak material; confirm soundness, suction and compatibility.",
+              "Clean, sound and correctly prepared substrate with protected adjacent finishes.",
+              "QA hold point"
+            ],
+            [
+              "Mixing / application",
+              "Every repair",
+              "Use approved product, clean water, measured ratio and controlled pot life/layer thickness; no retempering.",
+              "Traceable material and application to manufacturer method.",
+              "Batch / mix record"
+            ],
+            [
+              "Curing / drying / flatness",
+              "Every repair",
+              "Cure cementitious repair, dry gypsum, protect from rapid drying/impact and check with straightedge under representative light.",
+              "Fully cured/dry, sound and visually matched with no ridge, hollow or waviness.",
+              "Final inspection"
+            ],
+            [
+              "Plaster material / renewal plan",
+              "Monthly / annual",
+              "Control shelf life and dry storage; annually quantify crack/damp/hollow defects and budget repairs.",
+              "Approved, traceable stock and risk-based annual condition plan.",
+              "Store / annual report"
+            ]
+          ]
+        },
+        {
+          "type": "heading",
+          "text": "Plaster Repair and Reinstatement Method"
+        },
+        {
+          "type": "table",
+          "columns": [
+            "STEP",
+            "CONTROL STAGE",
+            "REQUIRED ACTION"
+          ],
+          "rows": [
+            [
+              "01",
+              "Classify and make safe",
+              "Map cracks/hollow/loose areas; isolate overhead risk and refer active/structural cracking."
+            ],
+            [
+              "02",
+              "Eliminate source",
+              "Repair moisture ingress, movement or service leak and confirm substrate condition."
+            ],
+            [
+              "03",
+              "Cut back and prepare",
+              "Remove loose plaster to sound edge, clean and prepare bonding/suction."
+            ],
+            [
+              "04",
+              "Reinforce where approved",
+              "Install mesh, bead or junction detail to approved repair design."
+            ],
+            [
+              "05",
+              "Apply repair system",
+              "Mix traceable material correctly, build layers, compact and match texture."
+            ],
+            [
+              "06",
+              "Cure / dry",
+              "Control curing/drying and protect from rapid loss, impact and premature paint."
+            ],
+            [
+              "07",
+              "Verify and finish",
+              "Check soundness, flatness and dryness; then prime/paint and close records."
+            ]
+          ]
+        },
+        {
+          "type": "heading",
+          "text": "Plaster Quality Hold Points"
+        },
+        {
+          "type": "table",
+          "columns": [
+            "CONTROL",
+            "RELEASE REQUIREMENT"
+          ],
+          "rows": [
+            [
+              "Diagnosis",
+              "Structural/active cracks not concealed and escalated."
+            ],
+            [
+              "Bond",
+              "Substrate preparation and bonding inspected."
+            ],
+            [
+              "Reinforcement",
+              "Mesh/bead/junction detail approved and photographed."
+            ],
+            [
+              "Cure / dryness",
+              "Repair fully cured/dry before paint."
+            ],
+            [
+              "Finish",
+              "Soundness, flatness and texture match surroundings."
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "sectionCode": "15",
+      "title": "TILING MAINTENANCE STANDARD",
+      "blocks": [
+        {
+          "type": "sectionIntro",
+          "text": "Safe, bonded, aligned and watertight floor and wall finishes with controlled material matching."
+        },
+        {
+          "type": "heading",
+          "text": "Definition and Control Intent"
+        },
+        {
+          "type": "paragraph",
+          "text": "Tiling maintenance covers ceramic, porcelain and natural-stone floor and wall tiles, skirtings, trims, grout, sealants and movement joints. Safety is first, followed by water integrity, bond, alignment and visual matching. Wet-area repairs must protect waterproofing, drainage falls and movement joints."
+        },
+        {
+          "type": "heading",
+          "text": "Immediate Safety Conditions"
+        },
+        {
+          "type": "paragraph",
+          "text": "• Cracked or chipped tile with sharp edge, loose tile, raised tile, trip point or unstable wall tile is isolated and made safe immediately."
+        },
+        {
+          "type": "paragraph",
+          "text": "• Ponding, recurring wetness, failed sealant or leakage below a wet area triggers waterproofing/plumbing investigation before cosmetic repair."
+        },
+        {
+          "type": "paragraph",
+          "text": "• Designed movement joints are never filled with rigid grout, adhesive or plaster."
+        },
+        {
+          "type": "paragraph",
+          "text": "• Obsolete or shade-sensitive tiles require controlled stock and a client-approved matching strategy."
+        },
+        {
+          "type": "heading",
+          "text": "Tiling Preventive and Condition-Based Task Library"
+        },
+        {
+          "type": "table",
+          "columns": [
+            "SYSTEM / COMPONENT",
+            "FREQUENCY",
+            "MAINTENANCE TASK",
+            "ACCEPTANCE / CONTROL STANDARD",
+            "EVIDENCE"
+          ],
+          "rows": [
+            [
+              "Floor / wall tiles - premium zones",
+              "Daily visual",
+              "Inspect cracks, chips, sharp edges, loose tiles, staining, wet/slippery areas, grout loss and trip points.",
+              "No unsafe edge, loose tile or trip hazard; isolate and make safe immediately.",
+              "Zone checklist / photo"
+            ],
+            [
+              "Floor / wall tiles",
+              "Weekly",
+              "Check alignment, lippage, hollow sound, joint uniformity, grout, skirting and thresholds/drains.",
+              "Securely bonded and aligned; joints full and consistent; no progressive hollowing.",
+              "Inspection record"
+            ],
+            [
+              "Wet-area tiles",
+              "Weekly / monthly",
+              "Inspect sealant, grout, movement joints, falls, drainage, ponding, staining and leakage indicators.",
+              "Free drainage with no ponding/leak sign; flexible joints intact and not hard-grouted.",
+              "Wet-area checklist"
+            ],
+            [
+              "High-traffic floors",
+              "Monthly / quarterly",
+              "Targeted sounding and condition mapping; inspect wear, polish loss, slip contamination and transitions.",
+              "No widespread debonding or unsafe slip condition; cleaning compatible.",
+              "Condition map"
+            ],
+            [
+              "Isolated tile replacement",
+              "As required",
+              "Isolate area, protect adjacent finishes, remove defective tile without damaging services/waterproofing, inspect substrate and install matched tile.",
+              "Secure, aligned and matched repair with correct cure and undamaged adjacent tiles.",
+              "Method / material record"
+            ],
+            [
+              "Substrate / waterproofing",
+              "Before replacement",
+              "Check flatness, soundness, moisture, cracks, contamination and membrane; specialist release if waterproofing affected.",
+              "Sound, clean substrate and continuous approved waterproofing before tiling.",
+              "QA / waterproofing signoff"
+            ],
+            [
+              "Adhesive selection / mixing",
+              "Every repair",
+              "Use approved adhesive for tile, substrate, environment and movement; control ratio, pot life and coverage.",
+              "Correct traceable product and effective bond per manufacturer/project requirement.",
+              "Batch / mix record"
+            ],
+            [
+              "Setting out / installation",
+              "Every repair",
+              "Maintain joint lines, pattern, grain/orientation, levels and falls; back-butter where required and keep movement joints clear.",
+              "Consistent alignment, plane and pattern; no adhesive bridge across movement joint.",
+              "Installation checklist"
+            ],
+            [
+              "Lippage / flatness",
+              "Every repair",
+              "Check with straightedge and adjacent surface before adhesive sets.",
+              "Within project/manufacturer tolerance and visually consistent.",
+              "QA inspection"
+            ],
+            [
+              "Grouting",
+              "After adhesive cure",
+              "Clean joints, apply approved grout colour/type, compact and tool consistently; remove haze.",
+              "Full, uniform, crack-free joints and clean surface.",
+              "Grout batch / photo"
+            ],
+            [
+              "Sealant / movement joints",
+              "Monthly / repair",
+              "Remove failed material, prepare sides, install backing rod where required and apply compatible flexible sealant.",
+              "Continuous, neat flexible joint with proper adhesion and movement capacity.",
+              "Sealant record"
+            ],
+            [
+              "Natural stone / sensitive tile",
+              "Monthly / as required",
+              "Use pH-neutral compatible cleaning and products; inspect staining, etching, spalling and sealer condition.",
+              "No chemical damage; specialist treatment where required.",
+              "Care record"
+            ],
+            [
+              "Skirting / trims",
+              "Monthly",
+              "Inspect detachment, open joints, sharp corners, dented trims and floor/wall seals.",
+              "Secure, aligned, safe edge and closed joints.",
+              "Inspection log"
+            ],
+            [
+              "Slip-risk management",
+              "After complaint / monthly",
+              "Check residue, wear and wet-area controls; specialist slip assessment when recurring.",
+              "Safe use restored without finish damage; barriers remain until resolved.",
+              "Investigation report"
+            ],
+            [
+              "Tile stock / annual condition",
+              "Quarterly / annual",
+              "Control attic stock by code, batch, calibre/shade and quantity; annually grade cracked, hollow, stained and obsolete tiles.",
+              "Traceable critical stock and approved risk-based renewal plan.",
+              "Stock / annual report"
+            ]
+          ]
+        },
+        {
+          "type": "heading",
+          "text": "Tile Repair and Reinstatement Method"
+        },
+        {
+          "type": "table",
+          "columns": [
+            "STEP",
+            "CONTROL STAGE",
+            "REQUIRED ACTION"
+          ],
+          "rows": [
+            [
+              "01",
+              "Make safe and survey",
+              "Barrier area, remove sharp/loose fragments and identify tile code and wet-area risk."
+            ],
+            [
+              "02",
+              "Remove carefully",
+              "Cut joints and remove tile without damaging adjacent finishes, services or waterproofing."
+            ],
+            [
+              "03",
+              "Inspect substrate",
+              "Check soundness, cracks, moisture, level and membrane; obtain release."
+            ],
+            [
+              "04",
+              "Prepare and set out",
+              "Clean/prime, confirm pattern, joints, grain, falls and movement joints."
+            ],
+            [
+              "05",
+              "Install tile",
+              "Mix approved adhesive, achieve effective coverage, align and maintain levels/joints."
+            ],
+            [
+              "06",
+              "Grout and seal",
+              "After cure, use approved grout and flexible sealant; keep movement joints functional."
+            ],
+            [
+              "07",
+              "Inspect and reopen",
+              "Verify bond, alignment, lippage, drainage, cleanliness and cure."
+            ]
+          ]
+        },
+        {
+          "type": "heading",
+          "text": "Tiling Quality Hold Points"
+        },
+        {
+          "type": "table",
+          "columns": [
+            "CONTROL",
+            "RELEASE REQUIREMENT"
+          ],
+          "rows": [
+            [
+              "Substrate / membrane",
+              "Soundness and waterproofing released before tiling."
+            ],
+            [
+              "Material match",
+              "Tile code, shade/calibre, grout and trim approved."
+            ],
+            [
+              "Bond / alignment",
+              "Coverage, joint lines, levels and lippage checked before cure."
+            ],
+            [
+              "Movement / seal",
+              "Movement joints remain flexible and continuous."
+            ],
+            [
+              "Handover",
+              "Surface clean, cured, safe and drains correctly."
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "sectionCode": "16",
+      "title": "CORRECTIVE MAINTENANCE AND DEFECT CONTROL",
+      "blocks": [
+        {
+          "type": "sectionIntro",
+          "text": "One controlled response process for system failures, safety defects and cosmetic restoration."
+        },
+        {
+          "type": "heading",
+          "text": "Standard Corrective Workflow"
+        },
+        {
+          "type": "table",
+          "columns": [
+            "STAGE",
+            "CONTROL REQUIREMENT"
+          ],
+          "rows": [
+            [
+              "1. Receive and classify",
+              "Validate location, asset/finish ID, symptom, impact and priority; request photo or alarm data where available."
+            ],
+            [
+              "2. Attend and make safe",
+              "Protect people, property and service continuity; isolate electricity, falling finishes, wet floors, leaks or unsafe areas."
+            ],
+            [
+              "3. Diagnose root cause",
+              "Use readings, test instruments, drawings, history and cross-trade investigation; avoid repeated resets or cosmetic cover-up."
+            ],
+            [
+              "4. Plan permanent repair",
+              "Define permit, method, parts/material, access, shutdown, specialist input, sample and target."
+            ],
+            [
+              "5. Execute and inspect",
+              "Complete work under approved controls and capture evidence and hold points."
+            ],
+            [
+              "6. Test and restore",
+              "Prove function, performance, visual finish, safety and cleanliness before reopening."
+            ],
+            [
+              "7. Close and monitor",
+              "Record cause, action, readings, materials and warranty; monitor repeat risk and update PPM/lifecycle."
+            ]
+          ]
+        },
+        {
+          "type": "heading",
+          "text": "Asset / Finish Condition Grades"
+        },
+        {
+          "type": "table",
+          "columns": [
+            "GRADE",
+            "DESCRIPTION",
+            "REQUIRED ACTION"
+          ],
+          "rows": [
+            [
+              "A - Good",
+              "No significant defect; normal planned maintenance.",
+              "Monitor through PPM."
+            ],
+            [
+              "B - Minor deterioration",
+              "Early wear or minor cosmetic defect without functional impact.",
+              "Plan minor repair/touch-up and trend."
+            ],
+            [
+              "C - Degraded",
+              "Performance or appearance reduced; defect likely to worsen.",
+              "Program repair and budget within defined period."
+            ],
+            [
+              "D - Poor / high risk",
+              "Major deterioration, repeat failure or potential safety/service impact.",
+              "Urgent repair, specialist assessment or planned replacement."
+            ],
+            [
+              "E - Failed / unsafe",
+              "Unsafe, non-functional, falling, exposed live or major leakage/outage.",
+              "Immediate isolation, P1 response and replacement/engineering decision."
+            ]
+          ]
+        },
+        {
+          "type": "heading",
+          "text": "Repeat Defect Rule"
+        },
+        {
+          "type": "callout",
+          "text": "No repeat repair without analysis\nAny repeat fault or finish defect within the agreed monitoring period is flagged in CAFM, reviewed by the responsible engineer or supervisor, and assigned a root-cause action. Repainting damp walls, resetting tripped protection or replacing cracked tiles without addressing the source is not acceptable closure."
+        }
+      ]
+    },
+    {
+      "sectionCode": "17",
+      "title": "SLA AND KPI FRAMEWORK",
+      "blocks": [
+        {
+          "type": "sectionIntro",
+          "text": "Proposed premium measures for reliability, quality, responsiveness and client confidence."
+        },
+        {
+          "type": "heading",
+          "text": "Proposed KPI Dashboard"
+        },
+        {
+          "type": "table",
+          "columns": [
+            "KPI",
+            "DEFINITION",
+            "PROPOSED TARGET"
+          ],
+          "rows": [
+            [
+              "PPM compliance",
+              "Completed on or before due date with valid evidence.",
+              ">= 95% monthly; critical/statutory 100%"
+            ],
+            [
+              "PPM quality",
+              "Sampled work orders passing technical QA first time.",
+              ">= 95%"
+            ],
+            [
+              "P1 attendance",
+              "Emergency attendance within approved time.",
+              ">= 98%"
+            ],
+            [
+              "First-time fix",
+              "Restored without repeat visit, excluding approved parts/specialist dependency.",
+              ">= 90%"
+            ],
+            [
+              "Repeat fault / defect",
+              "Same asset/symptom or finish defect recurring in monitoring window.",
+              "<= 3%"
+            ],
+            [
+              "Critical alarm / override age",
+              "Unresolved critical alarms, bypasses or overrides beyond approved time.",
+              "Zero unauthorized; aging reported daily"
+            ],
+            [
+              "Energy / demand variance",
+              "Unexplained deviation from normalized baseline.",
+              "Investigate material variance"
+            ],
+            [
+              "Finish condition",
+              "Z1/Z2 visible defects closed within the premium-service window.",
+              ">= 95% within SLA"
+            ],
+            [
+              "Safety / permit compliance",
+              "Audited work meeting PTW/LOTO/HSE controls.",
+              "100% critical controls"
+            ],
+            [
+              "Client satisfaction",
+              "Monthly satisfaction for quality and communication.",
+              ">= 90% or agreed target"
+            ],
+            [
+              "Data completeness",
+              "Closed work orders with cause, action, evidence and correct codes.",
+              ">= 95%"
+            ],
+            [
+              "Backlog health",
+              "Overdue PPM and aged corrective backlog by priority.",
+              "No overdue P1/P2; controlled P3/P4 plan"
+            ]
+          ]
+        },
+        {
+          "type": "heading",
+          "text": "SLA Exclusions and Clock Controls"
+        },
+        {
+          "type": "paragraph",
+          "text": "• The SLA clock starts when sufficient location and defect information is received or the alarm is generated, according to the contract definition."
+        },
+        {
+          "type": "paragraph",
+          "text": "• Access restrictions, specialist/authority approvals, force majeure, obsolete parts and approved material lead time are recorded transparently; make-safe and communication obligations still apply."
+        },
+        {
+          "type": "paragraph",
+          "text": "• A work order is not closed only because a temporary repair is in place. The permanent action remains open with a linked target and escalation."
+        }
+      ]
+    },
+    {
+      "sectionCode": "18",
+      "title": "ORGANIZATION, COMPETENCY AND RESOURCES",
+      "blocks": [
+        {
+          "type": "sectionIntro",
+          "text": "Clear technical ownership, authorized roles and trade-specific competence."
+        },
+        {
+          "type": "heading",
+          "text": "Recommended Core Team Structure"
+        },
+        {
+          "type": "table",
+          "columns": [
+            "ROLE",
+            "PRIMARY ACCOUNTABILITY"
+          ],
+          "rows": [
+            [
+              "Account / FM Manager",
+              "Client governance, service integration, commercial control, escalation and performance."
+            ],
+            [
+              "MEP / Facilities Engineer",
+              "Technical authority for HVAC/electrical, shutdowns, analysis, lifecycle and standards."
+            ],
+            [
+              "Civil / Finishes Engineer or Supervisor",
+              "Decor, painting, plaster, tiling, samples, quality and renewal planning."
+            ],
+            [
+              "HVAC Supervisor and Technicians",
+              "Plant operation, PPM, diagnostics, controls, refrigerant and emergency response."
+            ],
+            [
+              "Electrical Supervisor and Technicians",
+              "Authorized switching, distribution, generation/UPS, testing, lighting and safety."
+            ],
+            [
+              "Finishing Team",
+              "Skilled painter, plasterer/mason, tiler and multi-skilled decorative support."
+            ],
+            [
+              "CAFM Planner / Helpdesk",
+              "Asset data, PPM planning, work-order control, SLA monitoring and reporting."
+            ],
+            [
+              "HSE / QA Support",
+              "Permit audits, risk controls, inspection/test plans and work quality sampling."
+            ],
+            [
+              "Storekeeper / Procurement Interface",
+              "Approved spares, finish materials, batch/shelf-life and min/max control."
+            ]
+          ]
+        },
+        {
+          "type": "heading",
+          "text": "Competency Requirements"
+        },
+        {
+          "type": "table",
+          "columns": [
+            "DISCIPLINE",
+            "MINIMUM COMPETENCE"
+          ],
+          "rows": [
+            [
+              "HVAC",
+              "Appropriate OEM/product training, refrigerant competence, electrical awareness, BMS/controls knowledge and calibrated diagnostic tools."
+            ],
+            [
+              "Electrical",
+              "Authorized-person matrix, switching/LOTO and test competence, arc-flash awareness, generator/UPS/protection training as applicable."
+            ],
+            [
+              "Decor / painting / plaster / tile",
+              "Proven trade skill, approved material/system training, finish matching, dust/occupied-area controls and sample/QA discipline."
+            ],
+            [
+              "Supervision",
+              "Risk/method review, permit control, root-cause analysis, quality inspection, CAFM evidence and client communication."
+            ],
+            [
+              "All personnel",
+              "Site induction, emergency response, work at height/manual handling, chemical/SDS awareness, housekeeping and service etiquette."
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "sectionCode": "19",
+      "title": "SPARES, TOOLS AND MATERIALS CONTROL",
+      "blocks": [
+        {
+          "type": "sectionIntro",
+          "text": "Approved, traceable resources that protect uptime, safety and visual consistency."
+        },
+        {
+          "type": "heading",
+          "text": "Critical Spares and Materials"
+        },
+        {
+          "type": "table",
+          "columns": [
+            "DISCIPLINE",
+            "CONTROLLED STOCK"
+          ],
+          "rows": [
+            [
+              "HVAC",
+              "Filters, belts, bearings, seals, sensors, actuators, contactors, valves, fuses, drain components, approved refrigerant/oil and OEM critical spares."
+            ],
+            [
+              "Electrical",
+              "Approved breakers/fuses/contactors, relays, lamps/LED drivers, emergency-light batteries, control components, surge devices and generator/UPS consumables."
+            ],
+            [
+              "Decor",
+              "Retained panels, veneers/laminates, trims, hardware, sealants, fixings, mirror/glass accessories, wallpaper/fabric and approved cleaners."
+            ],
+            [
+              "Painting",
+              "Critical paint codes/sheens, primers, fillers, stain blocks, anti-corrosion systems, masking and matching applicators."
+            ],
+            [
+              "Plaster",
+              "Approved gypsum/cement repair products, bonding agents, mesh, corner beads, fillers and compatible primers."
+            ],
+            [
+              "Tiling",
+              "Attic stock by code/shade/calibre, approved adhesive, grout, sealant, backing rod, trims and waterproofing repair system."
+            ]
+          ]
+        },
+        {
+          "type": "heading",
+          "text": "Specialist Tools and Calibration"
+        },
+        {
+          "type": "table",
+          "columns": [
+            "GROUP",
+            "MINIMUM CONTROL"
+          ],
+          "rows": [
+            [
+              "HVAC",
+              "Clamp meter, temperature/pressure instruments, differential-pressure meter, vibration meter, leak detector, airflow meter, recovery/vacuum equipment and OEM diagnostics."
+            ],
+            [
+              "Electrical",
+              "Multimeter, insulation tester, earth tester, RCD/protection equipment, thermal camera, torque tools, proving unit, LOTO kit and arc-rated PPE."
+            ],
+            [
+              "Finishes",
+              "Moisture meter, straightedge/laser/levels, inspection light, coating tools where specified, dust extraction, mixers, tile cutters and joint tools."
+            ],
+            [
+              "Control",
+              "Calibration register, ID labels, valid certificates, pre-use check and quarantine of damaged or expired equipment."
+            ]
+          ]
+        },
+        {
+          "type": "heading",
+          "text": "Finish Sample and Batch Register"
+        },
+        {
+          "type": "table",
+          "columns": [
+            "FINISH",
+            "REGISTER FIELDS"
+          ],
+          "rows": [
+            [
+              "Paint",
+              "Manufacturer, product, substrate, colour code, sheen, batch, approved sample and touch-up area."
+            ],
+            [
+              "Tile",
+              "Manufacturer, product code, size, finish, shade/calibre/batch, grout, trim, pattern, retained quantity and zone."
+            ],
+            [
+              "Plaster",
+              "System/product, substrate, texture, bonding/mesh detail, compatible primer and approved repair sample."
+            ],
+            [
+              "Decor",
+              "Material code, grain/orientation, colour, sheen, joint/trim, fixing/adhesive/sealant, cleaning method and retained sample."
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "sectionCode": "20",
+      "title": "RISK, SUSTAINABILITY AND LIFECYCLE PLANNING",
+      "blocks": [
+        {
+          "type": "sectionIntro",
+          "text": "Operational risks are controlled immediately and converted into long-term asset decisions."
+        },
+        {
+          "type": "heading",
+          "text": "Key Technical Risk Register"
+        },
+        {
+          "type": "table",
+          "columns": [
+            "RISK",
+            "RATING",
+            "PRIMARY CONTROLS"
+          ],
+          "rows": [
+            [
+              "Electrical arc / shock / fire",
+              "Severe",
+              "Authorized personnel, LOTO, protection tests, thermography, dry/secure rooms and no live work without formal approval."
+            ],
+            [
+              "HVAC critical failure / refrigerant leak",
+              "High",
+              "Criticality-based PPM, alarms, leak control, redundancy, OEM support and critical spares."
+            ],
+            [
+              "Falling decorative element / plaster",
+              "Severe",
+              "Daily premium-zone checks, immediate isolation, fixing inspection and specialist access."
+            ],
+            [
+              "Water damage concealed by finish repair",
+              "High",
+              "Moisture/source diagnosis before repaint, replaster or retiling; source WO remains open."
+            ],
+            [
+              "Waterproofing damage during tile repair",
+              "High",
+              "Controlled removal, membrane hold point and specialist repair/testing."
+            ],
+            [
+              "Finish mismatch / brand damage",
+              "Medium",
+              "Approved samples, batch/shade control, mock-up and actual-lighting acceptance."
+            ],
+            [
+              "Dust, odor or noise in occupied areas",
+              "Medium",
+              "Work-hour planning, containment/extraction, approved materials and communication."
+            ],
+            [
+              "Obsolete parts or finishes",
+              "High",
+              "Obsolescence register, attic stock, approved alternatives and early procurement."
+            ],
+            [
+              "Repeat fault hidden by temporary fix",
+              "High",
+              "Repeat-defect rule, root-cause review and linked permanent work order."
+            ],
+            [
+              "Poor data / false KPI closure",
+              "Medium",
+              "Mandatory evidence, QA sampling, reopen rules and data-quality audit."
+            ]
+          ]
+        },
+        {
+          "type": "heading",
+          "text": "Sustainability and Efficiency Actions"
+        },
+        {
+          "type": "table",
+          "columns": [
+            "FOCUS",
+            "ACTION"
+          ],
+          "rows": [
+            [
+              "HVAC energy",
+              "Optimize schedules/setpoints, clean heat transfer, correct low delta-T, verify sensors/valves and eliminate simultaneous demand."
+            ],
+            [
+              "Electrical energy",
+              "Maintain power factor, lighting controls, meter integrity, demand profile and efficient motor/VFD operation."
+            ],
+            [
+              "Materials",
+              "Repair before replacement where sound; control waste, use durable compatible products and avoid short-life patching."
+            ],
+            [
+              "Indoor environment",
+              "Use approved low-odor/low-emission products, control dust and maintain clean HVAC drainage and surfaces."
+            ],
+            [
+              "Water / leakage",
+              "Rapid root-cause closure before finish restoration; prevent repeated water-damaged materials."
+            ],
+            [
+              "Lifecycle",
+              "Use condition, failure, energy, obsolescence and user-impact data to prioritize renewal and CAPEX."
+            ]
+          ]
+        },
+        {
+          "type": "heading",
+          "text": "Lifecycle Recommendation Categories"
+        },
+        {
+          "type": "table",
+          "columns": [
+            "CATEGORY",
+            "DECISION BASIS"
+          ],
+          "rows": [
+            [
+              "Maintain",
+              "Condition acceptable; continue PPM and monitor."
+            ],
+            [
+              "Repair",
+              "Targeted repair restores function/appearance with acceptable residual life."
+            ],
+            [
+              "Refurbish",
+              "Planned overhaul or finish renewal is more economical than repeated repair."
+            ],
+            [
+              "Replace",
+              "Safety, obsolescence, failure rate, energy or poor condition justifies replacement."
+            ],
+            [
+              "Redesign / improve",
+              "Root cause requires design, access, drainage, control, material or protection improvement."
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "sectionCode": "21",
+      "title": "REPORTING, GOVERNANCE AND APPENDICES",
+      "blocks": [
+        {
+          "type": "sectionIntro",
+          "text": "A client-ready reporting rhythm supported by practical inspection and completion records."
+        },
+        {
+          "type": "heading",
+          "text": "Governance Calendar"
+        },
+        {
+          "type": "table",
+          "columns": [
+            "FREQUENCY",
+            "GOVERNANCE OUTPUT"
+          ],
+          "rows": [
+            [
+              "Daily",
+              "Critical alarms/incidents, P1/P2 status, shutdowns, public-area finish risks and executive exceptions."
+            ],
+            [
+              "Weekly",
+              "PPM look-ahead, backlog, repeat defects, access/permit plan, material risks and client actions."
+            ],
+            [
+              "Monthly",
+              "KPI dashboard, PPM evidence, reactive analysis, energy trends, finish-condition dashboard, HSE/QA, spares, risk and lifecycle recommendations."
+            ],
+            [
+              "Quarterly",
+              "Asset/finish condition, statutory status, vendor performance, CAPEX/renewal priorities and optimization."
+            ],
+            [
+              "Annual",
+              "Full service review, maintenance strategy, budget, lifecycle plan and contract improvement plan."
+            ]
+          ]
+        },
+        {
+          "type": "heading",
+          "text": "Monthly Technical Report Structure"
+        },
+        {
+          "type": "paragraph",
+          "text": "• Executive summary and client decisions required."
+        },
+        {
+          "type": "paragraph",
+          "text": "• SLA/KPI dashboard and trend versus previous months."
+        },
+        {
+          "type": "paragraph",
+          "text": "• P1/P2 events, service interruptions and root-cause status."
+        },
+        {
+          "type": "paragraph",
+          "text": "• PPM compliance, QA sampling, overdue statutory/critical tasks and backlog aging."
+        },
+        {
+          "type": "paragraph",
+          "text": "• HVAC performance, BMS overrides/alarms, energy and comfort exceptions."
+        },
+        {
+          "type": "paragraph",
+          "text": "• Electrical demand, protection/thermography findings, generator/UPS and emergency lighting."
+        },
+        {
+          "type": "paragraph",
+          "text": "• Decor, painting, plaster and tile condition by Z1-Z4 zone, recurring causes and premium-area closures."
+        },
+        {
+          "type": "paragraph",
+          "text": "• HSE/permit/quality audits, incidents and corrective actions."
+        },
+        {
+          "type": "paragraph",
+          "text": "• Spares/materials, obsolescence, finish stock, procurement risk and warranty recovery."
+        },
+        {
+          "type": "paragraph",
+          "text": "• Lifecycle/CAPEX recommendations with risk, cost, timing and benefit."
+        }
+      ]
+    },
+    {
+      "sectionCode": "APPENDIX_A",
+      "title": "Daily / Weekly Premium Zone Inspection",
+      "blocks": [
+        {
+          "type": "table",
+          "columns": [
+            "FIELD",
+            "ENTRY",
+            "FIELD",
+            "ENTRY"
+          ],
+          "rows": [
+            [
+              "Date / shift",
+              "[ ]",
+              "Inspector",
+              "[ ]"
+            ],
+            [
+              "Property / zone",
+              "[ ]",
+              "Weather / occupancy",
+              "[ ]"
+            ],
+            [
+              "HVAC comfort / leaks / noise",
+              "□ Acceptable  □ Defect",
+              "Electrical lighting / sockets / signs",
+              "□ Acceptable  □ Defect"
+            ],
+            [
+              "Decor / joinery / panels / glass",
+              "□ Acceptable  □ Defect",
+              "Paint / plaster",
+              "□ Acceptable  □ Defect"
+            ],
+            [
+              "Tiles / grout / sealant / slip risk",
+              "□ Acceptable  □ Defect",
+              "Safety barrier required",
+              "□ No  □ Yes"
+            ],
+            [
+              "Work order numbers",
+              "[ ]",
+              "Supervisor review",
+              "[ ]"
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "sectionCode": "APPENDIX_B",
+      "title": "PPM Completion Certificate",
+      "blocks": [
+        {
+          "type": "table",
+          "columns": [
+            "CONTROL FIELD",
+            "RECORD"
+          ],
+          "rows": [
+            [
+              "Asset / finish ID",
+              "[ ]"
+            ],
+            [
+              "Location / zone",
+              "[ ]"
+            ],
+            [
+              "PPM reference / frequency",
+              "[ ]"
+            ],
+            [
+              "Permit / isolation reference",
+              "[ ]"
+            ],
+            [
+              "Tasks completed",
+              "□ Yes  □ No - linked defect WO"
+            ],
+            [
+              "Readings / tests attached",
+              "□ Yes  □ Not applicable"
+            ],
+            [
+              "Parts / material / batch",
+              "[ ]"
+            ],
+            [
+              "Before / after photos",
+              "□ Attached"
+            ],
+            [
+              "Safety / interlocks restored",
+              "□ Confirmed"
+            ],
+            [
+              "Area clean and reopened",
+              "□ Confirmed"
+            ],
+            [
+              "Technician / date",
+              "[ ]"
+            ],
+            [
+              "Supervisor QA / date",
+              "[ ]"
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "sectionCode": "APPENDIX_C",
+      "title": "Finish Defect and Sample Approval",
+      "blocks": [
+        {
+          "type": "table",
+          "columns": [
+            "CONTROL FIELD",
+            "RECORD"
+          ],
+          "rows": [
+            [
+              "Property / zone / surface",
+              "[ ]"
+            ],
+            [
+              "Defect type / cause",
+              "[ ]"
+            ],
+            [
+              "Existing finish code / manufacturer",
+              "[ ]"
+            ],
+            [
+              "Proposed product / code / sheen / shade",
+              "[ ]"
+            ],
+            [
+              "Substrate / moisture condition",
+              "[ ]"
+            ],
+            [
+              "Mock-up location / size",
+              "[ ]"
+            ],
+            [
+              "Joint / pattern / grain / texture",
+              "[ ]"
+            ],
+            [
+              "Cleaning / maintenance compatibility",
+              "[ ]"
+            ],
+            [
+              "Client approval",
+              "□ Approved  □ Revise  □ Rejected"
+            ],
+            [
+              "Approved by / date",
+              "[ ]"
+            ],
+            [
+              "Batch / retained sample location",
+              "[ ]"
+            ],
+            [
+              "Completion photo / WO",
+              "[ ]"
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "sectionCode": "APPENDIX_D",
+      "title": "Corrective Work Closeout",
+      "blocks": [
+        {
+          "type": "table",
+          "columns": [
+            "CLOSEOUT CONTROL",
+            "STATUS / RECORD"
+          ],
+          "rows": [
+            [
+              "Root cause identified and corrected",
+              "□ Yes  □ No - reason documented"
+            ],
+            [
+              "Temporary repair linked to permanent WO",
+              "□ N/A  □ Yes"
+            ],
+            [
+              "System / area tested under normal condition",
+              "□ Yes"
+            ],
+            [
+              "Safeties / interlocks / covers restored",
+              "□ Yes"
+            ],
+            [
+              "Finish matches sample / adjacent area",
+              "□ N/A  □ Yes"
+            ],
+            [
+              "Labels, drawings, settings and history updated",
+              "□ Yes  □ N/A"
+            ],
+            [
+              "Waste removed and area cleaned",
+              "□ Yes"
+            ],
+            [
+              "User / client informed",
+              "□ Yes"
+            ],
+            [
+              "Repeat monitoring date",
+              "[ ]"
+            ],
+            [
+              "Supervisor acceptance",
+              "[Name / signature / date]"
+            ]
+          ]
+        },
+        {
+          "type": "heading",
+          "text": "Technical Reference Hierarchy"
+        },
+        {
+          "type": "paragraph",
+          "text": "• Applicable UAE laws, local authority and utility requirements, fire/life-safety requirements and property rules."
+        },
+        {
+          "type": "paragraph",
+          "text": "• Approved design drawings, specifications, equipment schedules, controls narrative, finishes schedule and handover documents."
+        },
+        {
+          "type": "paragraph",
+          "text": "• Current OEM O&M manuals, product data sheets, warranties and approved specialist instructions."
+        },
+        {
+          "type": "paragraph",
+          "text": "• Applicable ISO management-system principles for facilities, quality, environment and occupational health and safety."
+        },
+        {
+          "type": "paragraph",
+          "text": "• Applicable ASHRAE/CIBSE guidance for HVAC, IEC/BS/NFPA principles for electrical systems, and manufacturer/project requirements for coatings, plaster, tile, sealants and decorative finishes."
+        },
+        {
+          "type": "paragraph",
+          "text": "• Where requirements conflict, the legally binding and more stringent approved requirement governs, subject to formal clarification."
+        },
+        {
+          "type": "callout",
+          "text": "Finalization required before issue\nReplace all bracketed placeholders, validate quantities and frequencies, confirm authority/statutory requirements, insert the organization chart and emergency contacts, agree SLA/KPI targets, and approve the property-specific finish sample library before operational issue."
+        },
+        {
+          "type": "heading",
+          "text": "Approval and Authorization"
+        },
+        {
+          "type": "table",
+          "columns": [
+            "ROLE",
+            "NAME / POSITION",
+            "AUTHORIZATION"
+          ],
+          "rows": [
+            [
+              "Prepared by",
+              "[Name / Title]",
+              "Signature / Date"
+            ],
+            [
+              "Reviewed by",
+              "[Name / Title]",
+              "Signature / Date"
+            ],
+            [
+              "Approved by",
+              "[Client Representative]",
+              "Signature / Date"
+            ]
+          ]
+        }
+      ]
+    }
+  ]
+}

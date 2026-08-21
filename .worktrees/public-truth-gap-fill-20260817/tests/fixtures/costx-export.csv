@@ -1,0 +1,5 @@
+Code,Description,Quantity,Unit,Rate,Total
+"STR.01","Concrete Column C1",12.5,"m3",350.00,4375.00
+"STR.02","Concrete Beam B1",24.0,"m3",320.00,7680.00
+"STR.03","Steel Reinforcement",4.5,"t",2500.00,11250.00
+"STR.04","Formwork for columns",85.0,"m2",45.00,3825.00

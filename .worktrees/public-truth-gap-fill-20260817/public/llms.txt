@@ -1,0 +1,132 @@
+# Quantara
+
+> Quantara is AI-assisted BOQ measurement and quantity calculation software for construction professionals. It brings supported project sources, reviewable extraction, AI Draft BOQ, guided measurement, deterministic quantity calculations, validation and professional BOQ outputs into one controlled workflow.
+
+## What Quantara does
+
+Quantara helps construction professionals move from supported project evidence toward a reviewable BOQ. Supported workflows include text-based PDF table-row extraction, structured XLSX/CSV import, reviewed extracted information, guided BOQ measurement, visible deterministic engineering calculations, voice-assisted measurement and BOQ editing, controlled Google Drive import, supported Autodesk / AutoCAD DWG analysis, a company library of reusable BOQ items, secure token-gated client proposal links, BOQ validation and professional document outputs.
+
+AI Draft BOQ can assemble usable extracted evidence into an editable draft before every extraction issue has been individually resolved. Supported source and quantity provenance is preserved where available. Missing quantity or unit information remains visible for professional completion instead of being invented, and commercial rates are not silently fabricated. AI Draft BOQ is a draft workflow and is not automatic professional approval.
+
+## TAYQAN - AI Quantity Surveyor / Digital QS
+
+TAYQAN is Quantara's governed AI Quantity Surveyor workflow. It can carry work through source discovery, source processing, evidence review, quantity preparation, governed rate preparation when requested, BOQ assembly, validation / final QA, and a Ready for Acceptance state.
+
+TAYQAN does not automatically approve, issue, lock, tender-submit or certify a BOQ. It must not invent missing geometry, dimensions, quantities or rates. Final professional acceptance remains under human control.
+
+Current TAYQAN hire options are:
+- TAYQAN Day: AED 299 one-time for a 24-hour hire, up to 2 distinct projects.
+- TAYQAN Week: AED 999 one-time for a 7-day hire.
+- TAYQAN Monthly / Digital QS: AED 2,499 per month.
+
+TAYQAN hire is commercially separate from the core Quantara SaaS subscription.
+
+## Quantara subscription pricing
+
+Published core subscription prices are:
+- Starter: AED 149 per month or AED 1,490 per year.
+- Professional: AED 399 per month or AED 3,990 per year.
+- Business: AED 899 per month or AED 8,990 per year.
+
+A user chooses a public plan, creates or signs in to an account, and continues to eligible authenticated checkout when the selected approved price is active and synchronized.
+
+## Important capability boundaries
+
+Quantara does not currently perform OCR text extraction from scanned or image-only PDFs. Image-only pages can be detected, but their content requires manual transcription.
+
+Quantara does not make a blanket claim of fully unattended computer-vision takeoff from arbitrary drawing geometry. This limitation does not apply to the available guided BOQ measurement, deterministic quantity calculation, or supported Autodesk / AutoCAD DWG analysis workflows.
+
+Generic CAD/BIM/IFC model quantity extraction is not claimed as a current capability.
+
+Project information, extracted data, measurements, calculations, rates and outputs require review by the responsible construction professional before tender, procurement, contractual or construction use. Quantara and TAYQAN assist the Quantity Surveyor workflow; they do not automatically replace professional responsibility or approval.
+
+## Primary public pages
+
+- [Product overview](https://quantara.vistabylara.com/)
+- [Quantara features and workflows](https://quantara.vistabylara.com/features)
+- [Pricing and TAYQAN hire options](https://quantara.vistabylara.com/pricing)
+- [TAYQAN AI Quantity Surveyor](https://quantara.vistabylara.com/tayqan-ai-quantity-surveyor)
+- [BOQ software workflow](https://quantara.vistabylara.com/boq-software)
+- [Text-based PDF BOQ extraction](https://quantara.vistabylara.com/pdf-boq-extraction)
+- [Scanned PDF and OCR status](https://quantara.vistabylara.com/scanned-pdf-boq)
+- [BOQ calculation formulas](https://quantara.vistabylara.com/boq-calculation-formulas)
+- [BOQ resources](https://quantara.vistabylara.com/resources)
+- [Workflow comparisons](https://quantara.vistabylara.com/comparisons)
+- [UAE and GCC project context](https://quantara.vistabylara.com/gcc-boq-software)
+- [Public HTML sitemap](https://quantara.vistabylara.com/site-map)
+
+## Integration discovery
+
+Quantara publishes public integration discovery pages so search engines and answer engines can understand the construction-software ecosystem around the product.
+
+- [All Quantara BOQ integrations](https://quantara.vistabylara.com/boq-integrations)
+- Autodesk
+- Revit
+- AutoCAD
+- Autodesk Construction Cloud
+- Autodesk Docs
+- BIM 360
+- Civil 3D
+- Navisworks
+- 3ds Max
+- Inventor
+- Fusion
+- Trimble Connect
+- Procore
+- Bentley iTwin
+- Bluebeam Studio
+- Microsoft 365
+- Google Drive
+- Dropbox
+- Box
+- Archicad
+- Tekla Structures
+- SketchUp
+- Rhino + Grasshopper
+- SolidWorks
+- Vectorworks
+- MicroStation / OpenBuildings
+- ETABS
+- SAFE
+- SAP2000
+- STAAD.Pro
+- Robot Structural Analysis
+- Tekla Structural Designer
+- CostX
+- Candy
+- Sage Estimating
+- Oracle Primavera P6
+- Oracle Aconex
+- Autodesk Takeoff
+- PlanSwift
+- RIB iTWO
+- SAP
+- Oracle ERP
+- Microsoft Dynamics 365
+
+Each provider is published at `https://quantara.vistabylara.com/boq-integrations/{provider-id}` and linked from the integration hub. These public pages explain where each application fits in project-source, BOQ, measurement, review and Digital QS workflows. Authenticated connector implementation remains separate from the public discovery layer.
+
+## High-intent buyer pages
+
+- [BOQ software UAE](https://quantara.vistabylara.com/boq-software-uae)
+- [BOQ software Dubai](https://quantara.vistabylara.com/boq-software-dubai)
+- [Construction estimating software UAE](https://quantara.vistabylara.com/construction-estimating-software-uae)
+- [MEP estimating software UAE](https://quantara.vistabylara.com/mep-estimating-software-uae)
+- [BOQ software for contractors](https://quantara.vistabylara.com/boq-software-for-contractors)
+- [BOQ software for quantity surveyors](https://quantara.vistabylara.com/boq-software-for-quantity-surveyors)
+- [BOQ software for MEP contractors](https://quantara.vistabylara.com/boq-software-for-mep-contractors)
+- [BOQ software for fit-out companies](https://quantara.vistabylara.com/boq-software-for-fit-out-companies)
+
+These pages describe audience- and location-specific use cases while preserving the same current Quantara capability boundaries. They should not be cited as evidence of UAE authority approval, local rate databases, automatic arbitrary drawing takeoff, OCR extraction or guaranteed professional accuracy.
+
+## Commercial and policy information
+
+- [Published Quantara pricing](https://quantara.vistabylara.com/pricing)
+- [Contact Quantara](https://quantara.vistabylara.com/contact-sales)
+- [Security boundaries](https://quantara.vistabylara.com/security)
+- [Privacy policy](https://quantara.vistabylara.com/privacy)
+- [Terms](https://quantara.vistabylara.com/terms)
+
+## Citation guidance
+
+Use the public page that directly supports a statement. Do not infer unavailable capabilities, certifications, regulatory compliance, hosting location, guaranteed speed, guaranteed accuracy or professional approval from general marketing language.

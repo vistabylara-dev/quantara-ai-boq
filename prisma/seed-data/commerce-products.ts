@@ -148,6 +148,104 @@ const CATALOGUE_PRODUCTS: ProductSpec[] = [
       entitlementDurationDays: SUBSCRIPTION_TEMPLATE_DURATION_DAYS,
     },
   },
+  /**
+   * Enterprise Core/Scale/Authority — annual-prepaid-only SaaS subscriptions
+   * (a single YEAR price each, deliberately no MONTH price: unlike
+   * starter/professional/business, these are not offered on a monthly
+   * cadence). Distinct from the pre-existing `enterprise_installation`
+   * below, which is a one-time, CONTACT_SALES professional-services
+   * engagement with no SoftwarePlan mapping — these three ARE real
+   * `type: "SUBSCRIPTION"` products with real annual CommercePrice rows,
+   * mapped to commerce_enterprise_core/scale/authority in
+   * src/lib/entitlements/commerce-plan-mapping.ts, but are deliberately
+   * `purchaseMode: "CONTACT_SALES"`, NOT "DIRECT" — Enterprise is sales-led
+   * (see legal.terms.checkoutBody: Enterprise scope requires a separate
+   * written quotation/agreement). This keeps them rejected by
+   * loadEligibleCommercePrice/PRODUCT_NOT_DIRECT_PURCHASE in
+   * commerce-checkout-service.ts and absent from getCheckoutAvailability's
+   * DIRECT-only query in commerce-checkout-availability-service.ts, while
+   * still allowing a narrow, exact-code LIVE-only sync exception
+   * (SALES_LED_LIVE_SYNC_PRODUCT_CODES in stripe-live-sync-service.ts) so an
+   * approved price can be created/mapped in live Stripe for a manually
+   * issued Stripe Payment Link. The 15 paid Industry Libraries are
+   * deliberately NOT included in any of these — that catalogue stays a
+   * separate purchase on every tier, same as starter/professional/business
+   * above.
+   */
+  {
+    code: "enterprise_core",
+    type: "SUBSCRIPTION",
+    name: "Enterprise Core",
+    shortDescription: "For established contractors and consultancies needing high-volume BOQ production.",
+    description:
+      "Annual enterprise subscription: high-volume BOQ generation, API enablement subject to configured availability, company branding included as a setup service, and enterprise onboarding.",
+    purchaseMode: "CONTACT_SALES",
+    sortOrder: 34,
+    prices: [{ code: "enterprise_core_annual_aed_15000", amountMinor: 1500000, billingInterval: "YEAR" }],
+    entitlement: {
+      maxUsers: 50,
+      maxWorkspaces: 20,
+      maxActiveProjects: null,
+      maxBoqGenerationsPerMonth: 500,
+      maxTechnicalReportsPerMonth: 250,
+      maxWatermarkFreeExportsPerMonth: 250,
+      permittedExportFormats: ["PDF", "DOCX", "XLSX", "CSV"],
+      removesWatermark: true,
+      allowsCompanyBranding: true,
+      allowsApiAccess: true,
+      entitlementDurationDays: SUBSCRIPTION_TEMPLATE_DURATION_DAYS,
+    },
+  },
+  {
+    code: "enterprise_scale",
+    type: "SUBSCRIPTION",
+    name: "Enterprise Scale",
+    shortDescription: "For multi-team and multi-department companies running BOQ production at scale.",
+    description:
+      "Annual enterprise subscription: higher-volume BOQ generation, white-label setup included as an implementation service, API enablement subject to configured availability, and priority onboarding/support.",
+    purchaseMode: "CONTACT_SALES",
+    sortOrder: 35,
+    prices: [{ code: "enterprise_scale_annual_aed_25000", amountMinor: 2500000, billingInterval: "YEAR" }],
+    entitlement: {
+      maxUsers: 100,
+      maxWorkspaces: 50,
+      maxActiveProjects: null,
+      maxBoqGenerationsPerMonth: 1500,
+      maxTechnicalReportsPerMonth: 750,
+      maxWatermarkFreeExportsPerMonth: 750,
+      permittedExportFormats: ["PDF", "DOCX", "XLSX", "CSV"],
+      removesWatermark: true,
+      allowsCompanyBranding: true,
+      allowsApiAccess: true,
+      allowsWhiteLabel: true,
+      entitlementDurationDays: SUBSCRIPTION_TEMPLATE_DURATION_DAYS,
+    },
+  },
+  {
+    code: "enterprise_authority",
+    type: "SUBSCRIPTION",
+    name: "Enterprise Authority",
+    shortDescription: "For large groups, consultancies and institutional customers needing dedicated onboarding.",
+    description:
+      "Annual enterprise subscription: unlimited user and workspace commercial allowance, full white-label setup included as an implementation service, private catalogue/data onboarding and executive-priority support.",
+    purchaseMode: "CONTACT_SALES",
+    sortOrder: 36,
+    prices: [{ code: "enterprise_authority_annual_aed_35000", amountMinor: 3500000, billingInterval: "YEAR" }],
+    entitlement: {
+      maxUsers: null,
+      maxWorkspaces: null,
+      maxActiveProjects: null,
+      maxBoqGenerationsPerMonth: 5000,
+      maxTechnicalReportsPerMonth: 2500,
+      maxWatermarkFreeExportsPerMonth: 2500,
+      permittedExportFormats: ["PDF", "DOCX", "XLSX", "CSV"],
+      removesWatermark: true,
+      allowsCompanyBranding: true,
+      allowsApiAccess: true,
+      allowsWhiteLabel: true,
+      entitlementDurationDays: SUBSCRIPTION_TEMPLATE_DURATION_DAYS,
+    },
+  },
   {
     code: "tayqan_day",
     type: "ONE_TIME",
@@ -573,6 +671,54 @@ export async function seedCommerceProducts(prisma: PrismaClient): Promise<Commer
     }
 
     report.industryProductsCreated.push(candidate.key);
+  }
+
+  return report;
+}
+
+const ENTERPRISE_PRODUCT_CODES = ["enterprise_core", "enterprise_scale", "enterprise_authority"] as const;
+
+/**
+ * CORRECTION-1 mission 5 — target-only production activation for the three
+ * Enterprise tiers. Unlike seedCommerceProducts above (which iterates the
+ * ENTIRE CATALOGUE_PRODUCTS array plus every INDUSTRY_ACCESS_CANDIDATES
+ * library), this touches ONLY the CommerceProduct/CommercePrice/
+ * EntitlementTemplate rows for enterprise_core/enterprise_scale/
+ * enterprise_authority — reusing the exact same seedCatalogueProduct upsert
+ * logic (so behavior is byte-identical to what seedCommerceProducts would do
+ * for these three products), with a hard, structural guarantee that
+ * Starter, Professional, Business, TAYQAN, every Industry Library, and any
+ * future catalogue product are never read or written by this function.
+ * Idempotent — safe to run more than once against production.
+ *
+ * New/changed prices still default to reviewStatus: REQUIRES_REVIEW; owner/
+ * admin approval via PATCH /api/admin/commerce/prices/[priceId]/approval
+ * (see src/lib/services/commerce-price-approval-service.ts) remains the
+ * required next step before these three prices can be synced to LIVE Stripe.
+ */
+export async function seedEnterpriseCommerceProducts(prisma: PrismaClient): Promise<CommerceSeedReport> {
+  const report: CommerceSeedReport = {
+    productsInserted: 0,
+    productsUpdated: 0,
+    productsUnchanged: 0,
+    pricesInserted: 0,
+    pricesUnchanged: 0,
+    pricesArchived: 0,
+    templatesInserted: 0,
+    templatesUpdated: 0,
+    industryProductsCreated: [],
+    industryProductsSkipped: [],
+  };
+
+  const specs = CATALOGUE_PRODUCTS.filter((spec) => (ENTERPRISE_PRODUCT_CODES as readonly string[]).includes(spec.code));
+  if (specs.length !== ENTERPRISE_PRODUCT_CODES.length) {
+    throw new Error(
+      `seedEnterpriseCommerceProducts: expected exactly ${ENTERPRISE_PRODUCT_CODES.length} Enterprise product specs (${ENTERPRISE_PRODUCT_CODES.join(", ")}) in CATALOGUE_PRODUCTS but found ${specs.length} — refusing to run partially.`,
+    );
+  }
+
+  for (const spec of specs) {
+    await seedCatalogueProduct(prisma, spec, report);
   }
 
   return report;

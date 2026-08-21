@@ -155,9 +155,22 @@ export type PriceBlockedReason =
   | "UNSUPPORTED_INTERVAL"
   | "PURCHASE_MODE_NOT_DIRECT";
 
+/**
+ * item-A (Round 3 correction) — `options.allowNonDirectPurchaseMode` exists
+ * ONLY so stripe-live-sync-service.ts can grant a narrow, exact-product-code
+ * LIVE-only exception to the three sales-led Enterprise annual prices (see
+ * SALES_LED_LIVE_SYNC_PRODUCT_CODES there) without weakening this shared,
+ * provider/environment-agnostic function for every other caller. Every
+ * existing call site (this file's own buildSyncPlan/TEST-mode sync, and any
+ * call omitting the third argument) keeps the exact original behavior —
+ * purchaseMode !== "DIRECT" still blocks with PURCHASE_MODE_NOT_DIRECT.
+ * Never call this with allowNonDirectPurchaseMode: true outside that one,
+ * narrowly-scoped LIVE call site.
+ */
 export function classifyPriceEligibility(
   product: CommerceProductRecord,
   price: CommerceProductRecord["prices"][number],
+  options?: { allowNonDirectPurchaseMode?: boolean },
 ): { eligible: boolean; reason?: PriceBlockedReason } {
   if (!product.isActive) return { eligible: false, reason: "PRODUCT_INACTIVE" };
   if (!price.isActive) return { eligible: false, reason: "PRICE_INACTIVE" };
@@ -165,7 +178,9 @@ export function classifyPriceEligibility(
   if (price.amountMinor <= 0) return { eligible: false, reason: "ZERO_OR_NEGATIVE_AMOUNT" };
   if (!SUPPORTED_CURRENCIES.has(price.currency)) return { eligible: false, reason: "UNSUPPORTED_CURRENCY" };
   if (!SUPPORTED_INTERVALS.has(price.billingInterval)) return { eligible: false, reason: "UNSUPPORTED_INTERVAL" };
-  if (product.purchaseMode !== "DIRECT") return { eligible: false, reason: "PURCHASE_MODE_NOT_DIRECT" };
+  if (product.purchaseMode !== "DIRECT" && !options?.allowNonDirectPurchaseMode) {
+    return { eligible: false, reason: "PURCHASE_MODE_NOT_DIRECT" };
+  }
   return { eligible: true };
 }
 

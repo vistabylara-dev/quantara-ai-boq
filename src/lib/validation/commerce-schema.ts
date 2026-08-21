@@ -95,6 +95,32 @@ export const commerceCheckoutRequestSchema = z
 
 export type CommerceCheckoutRequestInput = z.output<typeof commerceCheckoutRequestSchema>;
 
+// ---------------------------------------------------------------------------
+// v5 — sales-led Enterprise checkout (owner/admin only).
+//
+// Deliberately just two fields, both trusted internal identifiers chosen by a
+// platform operator from their own admin surface — never a customer-facing
+// input, and never a Stripe object ID. `.strict()` rejects any extra field
+// (amount, currency, providerPriceId, stripeCustomerId, metadata, ...)
+// outright rather than silently ignoring it. `priceCode` is additionally
+// re-validated server-side against the closed three-code allowlist in
+// enterprise-sales-checkout-service.ts; this enum is the first of the two
+// gates, not the only one.
+// ---------------------------------------------------------------------------
+
+export const enterpriseCheckoutRequestSchema = z
+  .object({
+    companyId: z.string().uuid("A valid company ID is required."),
+    priceCode: z.enum([
+      "enterprise_core_annual_aed_15000",
+      "enterprise_scale_annual_aed_25000",
+      "enterprise_authority_annual_aed_35000",
+    ]),
+  })
+  .strict();
+
+export type EnterpriseCheckoutRequestInput = z.output<typeof enterpriseCheckoutRequestSchema>;
+
 // REFUND-8 — deliberately just `reason`. The customer never supplies an
 // amount, currency, or any Stripe object ID — see refund-request-service.ts.
 export const refundRequestSchema = z

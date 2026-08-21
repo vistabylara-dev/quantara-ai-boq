@@ -231,6 +231,7 @@ describe("processStripeWebhookEvent (integration, real local Postgres)", () => {
   let otherCompanyId: string;
   let softwarePlanId: string;
   let providerPriceId: string;
+  let liveEnterpriseProviderPriceId: string;
   const originalMode = process.env.STRIPE_MODE;
   const originalKey = process.env.STRIPE_SECRET_KEY;
 
@@ -251,6 +252,32 @@ describe("processStripeWebhookEvent (integration, real local Postgres)", () => {
     const plan = await prisma.softwarePlan.create({ data: { key: `test_webhook_plan_${RUN_ID}`, name: "Webhook Test Plan", planType: "PRO", maxProjects: 3 } });
     softwarePlanId = plan.id;
     void softwarePlanId;
+
+    // v4 gate 2 — LIVE-environment fixtures for the manual Enterprise
+    // Payment Link fulfillment investigation. A second, LIVE
+    // StripeBillingCustomer for the SAME company (livemode: true; the
+    // existing `cus_${RUN_ID}` above is TEST/livemode: false), and a real
+    // enterprise_core-linked test price with a LIVE provider mapping —
+    // mirroring the "starter" TEST fixture above exactly, just for LIVE.
+    await createStripeBillingCustomer(companyId, `cus_live_${RUN_ID}`, true);
+    const enterpriseProduct = await getOrCreateRealCommerceProduct("enterprise_core");
+    const { price: enterprisePrice } = await upsertCommercePrice({
+      productId: enterpriseProduct.id,
+      code: `test_webhook_enterprise_price_${RUN_ID}`,
+      amountMinor: 1500000,
+      billingInterval: "YEAR",
+    });
+    await prisma.commercePrice.update({ where: { id: enterprisePrice.id }, data: { reviewStatus: "APPROVED" } });
+    liveEnterpriseProviderPriceId = `price_live_webhook_enterprise_${RUN_ID}`;
+    await createMapping({
+      provider: "STRIPE",
+      environment: "LIVE",
+      commerceProductId: enterpriseProduct.id,
+      commercePriceId: enterprisePrice.id,
+      providerProductId: `prod_live_webhook_enterprise_${RUN_ID}`,
+      providerPriceId: liveEnterpriseProviderPriceId,
+      providerObjectType: "PRICE",
+    });
   });
 
   beforeEach(() => {
@@ -295,6 +322,85 @@ describe("processStripeWebhookEvent (integration, real local Postgres)", () => {
     expect(result.outcome).toBe("processed");
     const subs = await prisma.companySoftwareSubscription.findMany({ where: { externalSubscriptionId: current.id } });
     expect(subs).toHaveLength(0);
+  });
+
+  /**
+   * v4 gate 2 — manual Enterprise Payment Link / Checkout Session
+   * fulfillment. Traces the real flow: a LIVE Enterprise CommercePrice
+   * mapping -> a subscription created against a Stripe customer -> this
+   * webhook -> StripeBillingCustomer lookup -> CompanySoftwareSubscription.
+   * applyCurrentSubscriptionState never trusts event/session metadata for
+   * tenant identity (see its own docstring) — it always re-fetches the
+   * CURRENT subscription from Stripe and resolves the company solely via
+   * `subscription.customer` cross-referenced against StripeBillingCustomer,
+   * a row only this app ever creates. These two tests prove both halves of
+   * that claim specifically for a LIVE, Enterprise-priced subscription
+   * (the "no-ops for an unknown Stripe customer" test above already proves
+   * the fail-closed half generically, for TEST/Starter):
+   */
+  it("Enterprise (gate 2, Outcome A): a manually created LIVE subscription for enterprise_core, attached to this company's EXISTING Quantara-owned Stripe customer, correctly fulfills a CompanySoftwareSubscription for the correct company", async () => {
+    process.env.STRIPE_MODE = "live";
+    const subscriptionId = `sub_enterprise_live_${RUN_ID}`;
+    // Simulates a subscription created by attaching a manually issued
+    // Payment Link's Checkout Session to the company's existing LIVE
+    // StripeBillingCustomer.stripeCustomerId (`cus_live_${RUN_ID}`, seeded
+    // in beforeAll) — exactly the operator requirement this gate documents.
+    const current = fakeCurrentSubscription({
+      id: subscriptionId,
+      livemode: true,
+      status: "active",
+      stripeCustomerId: `cus_live_${RUN_ID}`,
+      providerPriceId: liveEnterpriseProviderPriceId,
+    });
+    const client = mockClientReturningSubscription(current);
+    const event = fakeSubscriptionEventEnvelope({
+      id: `evt_enterprise_live_${RUN_ID}`,
+      livemode: true,
+      stripeCustomerId: `cus_live_${RUN_ID}`,
+      subscriptionId,
+      type: "customer.subscription.created",
+    });
+
+    const result = await processStripeWebhookEvent(event, client);
+    expect(result.outcome).toBe("processed");
+
+    const sub = await prisma.companySoftwareSubscription.findUnique({ where: { externalSubscriptionId: subscriptionId } });
+    expect(sub).not.toBeNull();
+    expect(sub?.companyId).toBe(companyId);
+    expect(sub?.status).toBe("ACTIVE");
+    expect(sub?.source).toBe("stripe");
+
+    const plan = await prisma.softwarePlan.findUnique({ where: { id: sub!.softwarePlanId } });
+    expect(plan?.key).toBe("commerce_enterprise_core");
+  });
+
+  it("Enterprise (gate 2, Outcome A's failure mode): a LIVE enterprise_core subscription attached to an unrecognized Stripe customer (e.g. Stripe auto-created a NEW customer for a bare Payment Link) never creates an entitlement for any company — silent, safe, no metadata fallback", async () => {
+    process.env.STRIPE_MODE = "live";
+    const subscriptionId = `sub_enterprise_live_unattached_${RUN_ID}`;
+    const current = fakeCurrentSubscription({
+      id: subscriptionId,
+      livemode: true,
+      status: "active",
+      // Not `cus_live_${RUN_ID}` — simulates a Payment Link left to let
+      // Stripe create a brand-new Customer rather than being explicitly
+      // attached to the company's existing StripeBillingCustomer row.
+      stripeCustomerId: `cus_live_unattached_${RUN_ID}`,
+      providerPriceId: liveEnterpriseProviderPriceId,
+    });
+    const client = mockClientReturningSubscription(current);
+    const event = fakeSubscriptionEventEnvelope({
+      id: `evt_enterprise_live_unattached_${RUN_ID}`,
+      livemode: true,
+      stripeCustomerId: `cus_live_unattached_${RUN_ID}`,
+      subscriptionId,
+      type: "customer.subscription.created",
+    });
+
+    const result = await processStripeWebhookEvent(event, client);
+    expect(result.outcome).toBe("processed"); // the event is still recorded (ledger-only) — never silently dropped
+
+    const subs = await prisma.companySoftwareSubscription.findMany({ where: { externalSubscriptionId: subscriptionId } });
+    expect(subs).toHaveLength(0); // but no entitlement was ever granted, to any company
   });
 
   it("records the event exactly once and treats a replayed event id as a safe no-op", async () => {

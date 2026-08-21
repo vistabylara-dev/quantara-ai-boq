@@ -5,7 +5,7 @@ import { seedMechanicalDiscipline, seedTaxonomyFoundations } from "./seed-data/m
 import { seedMechanicalPackage, seedSoftwarePlans } from "./seed-data/commercial";
 import { seedCommerceProducts } from "./seed-data/commerce-products";
 import { approveLibraryPackagePrices, backfillLibraryPackagePricing } from "./seed-data/library-package-pricing";
-import { seedCommerceLinkedSoftwarePlans } from "../src/lib/entitlements/commerce-plan-mapping";
+import { COMMERCE_LINKED_SOFTWARE_PLANS, seedCommerceLinkedSoftwarePlans } from "../src/lib/entitlements/commerce-plan-mapping";
 import { getDevelopmentCompanyId } from "../src/lib/tenancy/development-company";
 import { hashPassword } from "../src/lib/auth/password";
 import { calculateLandedCost, calculateSellingRate } from "../src/lib/calculations/boq-calculator";
@@ -1263,7 +1263,9 @@ async function main(): Promise<void> {
   );
 
   await seedCommerceLinkedSoftwarePlans(prisma);
-  console.log("Seeded commerce-linked SoftwarePlan rows (commerce_starter, commerce_professional, commerce_business) for Stripe subscription entitlement mapping.");
+  console.log(
+    `Seeded commerce-linked SoftwarePlan rows (${COMMERCE_LINKED_SOFTWARE_PLANS.map((spec) => spec.softwarePlanKey).join(", ")}) for Stripe subscription entitlement mapping.`,
+  );
 
   console.log(
     `Seeded Quantara development tenant with ${INDUSTRY_KEYS.length} industries, ${projectSeeds.length} projects, ${supplierSeeds.length} suppliers, ${catalogueSeeds.length} catalogue rates, ${templateSeeds.length} document templates, 2 email templates, 9 master-data disciplines, ${mechanical.itemIds.length} Mechanical master items, and 5 software plans.`,

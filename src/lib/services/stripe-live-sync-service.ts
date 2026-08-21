@@ -47,13 +47,33 @@ import { isTayqanOneTimeProductCode } from "@/lib/tayqan/tayqan-commerce";
  * requires APPROVED, and this file has no code path that writes
  * CommercePrice.reviewStatus at all. Never syncs a QUOTATION_REQUIRED/
  * CONTACT_SALES product as a direct-checkout price — classifyPriceEligibility
- * requires purchaseMode === DIRECT. A CommerceProduct is only ever
- * represented as a live Stripe Product while it has at least one currently
- * eligible price (see buildLiveSyncPlan) — an ADD_ON/ENTERPRISE/private
- * product, or a SUBSCRIPTION product none of whose prices are eligible, is
- * never live-synced at all, and a product that loses its last eligible
- * price is archived on the next run.
+ * requires purchaseMode === DIRECT — with exactly ONE narrow, exact-code
+ * exception: SALES_LED_LIVE_SYNC_PRODUCT_CODES (enterprise_core/scale/
+ * authority) below. Those three are genuinely CONTACT_SALES products
+ * (Enterprise is sales-led — see prisma/seed-data/commerce-products.ts) that
+ * must still be creatable/mappable as live Stripe Prices so an approved
+ * annual amount can back a manually issued Stripe Payment Link; they remain
+ * fully rejected by customer self-checkout (loadEligibleCommercePrice's
+ * PRODUCT_NOT_DIRECT_PURCHASE check in commerce-checkout-service.ts) and
+ * absent from getCheckoutAvailability's DIRECT-only query — this exception
+ * only affects whether the LIVE sync plan will create/map their Stripe
+ * Price, never whether a customer can check them out. Never broaden this
+ * allowlist to any other CONTACT_SALES/QUOTATION_REQUIRED product. A
+ * CommerceProduct is only ever represented as a live Stripe Product while it
+ * has at least one currently eligible price (see buildLiveSyncPlan) — an
+ * ADD_ON/private product, or a SUBSCRIPTION product none of whose prices are
+ * eligible, is never live-synced at all, and a product that loses its last
+ * eligible price is archived on the next run.
  */
+
+/**
+ * item-A (Round 3 correction) — the ONLY product codes permitted to bypass
+ * classifyPriceEligibility's purchaseMode === DIRECT requirement, and only
+ * for LIVE provider sync (never for checkout — see the docstring above).
+ * Exact-code, not a purchaseMode/family check, so this can never silently
+ * widen to catch a future CONTACT_SALES/QUOTATION_REQUIRED product.
+ */
+const SALES_LED_LIVE_SYNC_PRODUCT_CODES = new Set(["enterprise_core", "enterprise_scale", "enterprise_authority"]);
 
 export type LivePriceBlockedReason =
   | PriceBlockedReason
@@ -94,7 +114,9 @@ export function classifyLiveCheckoutEligibility(
 
   if (product.type !== "SUBSCRIPTION") return { eligible: false, reason: "PRODUCT_NOT_SUBSCRIPTION" };
   if (price.billingInterval === "ONE_TIME") return { eligible: false, reason: "UNSUPPORTED_LIVE_INTERVAL" };
-  return classifyPriceEligibility(product, price);
+  return classifyPriceEligibility(product, price, {
+    allowNonDirectPurchaseMode: SALES_LED_LIVE_SYNC_PRODUCT_CODES.has(product.code),
+  });
 }
 
 /** True if at least one of this product's prices currently passes classifyLiveCheckoutEligibility — the same signal buildLiveSyncPlan uses to decide whether a product should be represented as a live Stripe Product at all. Shared with verifyLiveStripeMapping so "desired active state" is computed identically in both places. */

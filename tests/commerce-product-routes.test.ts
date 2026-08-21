@@ -41,6 +41,15 @@ describe("commerce product API routes (integration, real local Postgres)", () =>
   beforeAll(async () => {
     await seedCommerceProducts(prisma);
 
+    // item-D (Round 3 correction) — the public catalogue route now excludes
+    // any price still REQUIRES_REVIEW (see toPublicCommerceProductDTO). This
+    // anchor SKU's price is otherwise never routed through the governed
+    // approval flow in this suite, so approve it directly here (a
+    // test-database-only fixture write, not a production approval) so the
+    // "public route returns real active+public AED products" assertion
+    // below continues to reflect a real, approved catalogue entry.
+    // Governed Starter approval is applied below after ownerUserId exists.
+
     const company = await prisma.company.create({
       data: { legalName: `Commerce Routes Co ${RUN_ID}`, tradeName: "Commerce Routes", email: `commerce-routes-${RUN_ID}@example.com` },
     });
@@ -49,6 +58,15 @@ describe("commerce product API routes (integration, real local Postgres)", () =>
       data: { companyId: ownerCompanyId, email: `commerce-route-owner-${RUN_ID}@example.com`, passwordHash: "hash", fullName: "Route Owner", role: "COMPANY_OWNER", platformRole: PlatformRole.PLATFORM_OWNER, isActive: true, emailVerifiedAt: new Date() },
     });
     ownerUserId = owner.id;
+
+    await prisma.commercePrice.updateMany({
+      where: { code: "starter_monthly_aed_149" },
+      data: {
+        reviewStatus: "APPROVED",
+        reviewedByUserId: ownerUserId,
+        reviewedAt: new Date(),
+      },
+    });
 
     privateProductCode = `test_route_private_${RUN_ID}`;
     const { product } = await upsertCommerceProduct({ code: privateProductCode, type: "ONE_TIME", name: "Route Private Product", isActive: true, isPublic: false });
@@ -61,9 +79,21 @@ describe("commerce product API routes (integration, real local Postgres)", () =>
   });
 
   afterAll(async () => {
+    // v4 gate 1 — reset the REAL, shared, never-deleted Starter and Enterprise
+    // anchor price BEFORE deleting ownerUserId below — reviewedByUserId's
+    // FK is onDelete: SetNull, so deleting the user first would silently
+    // leave it APPROVED with a null reviewer, corrupting the governance
+    // invariant commerce-product-service.test.ts's byte-for-byte guard test
+    // checks on this same row.
+    await prisma.commercePrice.updateMany({
+      where: { code: { in: ["starter_monthly_aed_149", "enterprise_core_annual_aed_15000", "enterprise_scale_annual_aed_25000", "enterprise_authority_annual_aed_35000"] } },
+      data: { reviewStatus: "REQUIRES_REVIEW", reviewedByUserId: null, reviewedAt: null },
+    });
     await prisma.platformAuditLog.deleteMany({ where: { actorUserId: ownerUserId } });
     await prisma.commercePrice.deleteMany({ where: { productId: privateProductId } });
     await prisma.commerceProduct.delete({ where: { id: privateProductId } }).catch(() => undefined);
+    await prisma.commercePrice.deleteMany({ where: { code: { contains: RUN_ID } } });
+    await prisma.commerceProduct.deleteMany({ where: { code: { contains: RUN_ID } } });
     await prisma.user.delete({ where: { id: ownerUserId } }).catch(() => undefined);
     await prisma.company.delete({ where: { id: ownerCompanyId } }).catch(() => undefined);
     await prisma.$disconnect();
@@ -104,6 +134,59 @@ describe("commerce product API routes (integration, real local Postgres)", () =>
     it("rejects an unrecognized query parameter", async () => {
       const res = await publicProductsGET(new Request("http://localhost/api/commerce/products?bogus=1"));
       expect(res.status).toBe(400);
+    });
+
+    it("item-D: a REQUIRES_REVIEW price is absent from the public projection, and appears once APPROVED", async () => {
+      const productCode = `test_route_review_gate_${RUN_ID}`;
+      const priceCode = `test_route_review_gate_price_${RUN_ID}`;
+      const { product } = await upsertCommerceProduct({ code: productCode, type: "SUBSCRIPTION", name: "Review Gate Product", purchaseMode: "DIRECT", isActive: true, isPublic: true });
+      const { price } = await upsertCommercePrice({ productId: product.id, code: priceCode, amountMinor: 5000, billingInterval: "MONTH" });
+
+      // Freshly created — never approved. reviewStatus defaults to
+      // REQUIRES_REVIEW (see prisma/schema.prisma), so the price must not be
+      // published yet, even though the product itself is active+public.
+      const beforeApproval = await publicProductsGET(new Request("http://localhost/api/commerce/products"));
+      const beforeBody = await json(beforeApproval);
+      const beforeProduct = beforeBody.data.find((p: { code: string }) => p.code === productCode);
+      expect(beforeProduct).toBeDefined();
+      expect(beforeProduct.prices.some((pr: { code: string }) => pr.code === priceCode)).toBe(false);
+
+      await prisma.commercePrice.update({ where: { id: price.id }, data: { reviewStatus: "APPROVED" } });
+
+      const afterApproval = await publicProductsGET(new Request("http://localhost/api/commerce/products"));
+      const afterBody = await json(afterApproval);
+      const afterProduct = afterBody.data.find((p: { code: string }) => p.code === productCode);
+      expect(afterProduct).toBeDefined();
+      expect(afterProduct.prices.some((pr: { code: string }) => pr.code === priceCode)).toBe(true);
+    });
+
+    it("v4 gate 1: an APPROVED enterprise_core annual price never exposes its amountMinor or price code through GET /api/commerce/products, while an approved Starter price still does", async () => {
+      await seedCommerceProducts(prisma);
+      const enterpriseStub = await prisma.commerceProduct.findUniqueOrThrow({ where: { code: "enterprise_core" }, include: { prices: true } });
+      expect(enterpriseStub.purchaseMode).toBe("CONTACT_SALES");
+      const annualPrice = enterpriseStub.prices.find((p) => p.billingInterval === "YEAR" && p.isActive);
+      expect(annualPrice).toBeDefined();
+      await prisma.commercePrice.update({ where: { id: annualPrice!.id }, data: { reviewStatus: "APPROVED", reviewedByUserId: ownerUserId, reviewedAt: new Date() } });
+      await prisma.commercePrice.updateMany({ where: { code: "starter_monthly_aed_149" }, data: { reviewStatus: "APPROVED", reviewedByUserId: ownerUserId, reviewedAt: new Date() } });
+
+      const res = await publicProductsGET(new Request("http://localhost/api/commerce/products"));
+      const body = await json(res);
+
+      const enterpriseCore = body.data.find((p: { code: string }) => p.code === "enterprise_core");
+      // Product metadata stays public...
+      expect(enterpriseCore).toBeDefined();
+      expect(enterpriseCore.purchaseMode).toBe("CONTACT_SALES");
+      // ...but the approved annual price is withheld entirely — no price code, no amount.
+      expect(enterpriseCore.prices).toHaveLength(0);
+      expect(JSON.stringify(enterpriseCore)).not.toContain(annualPrice!.code);
+      expect(JSON.stringify(enterpriseCore)).not.toContain(String(annualPrice!.amountMinor));
+
+      // Starter — a non-redacted, non-Enterprise product — is entirely unaffected.
+      const starter = body.data.find((p: { code: string }) => p.code === "starter");
+      expect(starter).toBeDefined();
+      const starterMonthly = starter.prices.find((p: { code: string }) => p.code === "starter_monthly_aed_149");
+      expect(starterMonthly).toBeDefined();
+      expect(starterMonthly.amountMinor).toBe(14900);
     });
   });
 

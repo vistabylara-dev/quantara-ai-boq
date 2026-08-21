@@ -85,7 +85,7 @@ type CheckoutOptionProduct = {
 
 /**
  * item-A (Round 3 correction) — Enterprise Core/Scale/Authority are
- * purchaseMode: "CONTACT_SALES", so they never appear in
+ * purchaseMode: "DIRECT", so they appear in
  * CheckoutAvailability.products (that list is DIRECT-only self-checkout
  * eligibility). This is the separate, non-checkout shape
  * getEnterpriseAnnualPlans (commerce-checkout-availability-service.ts)
@@ -436,7 +436,7 @@ function SubscriptionSettingsContent() {
 
   // item-A (Round 3 correction) — Enterprise cards no longer source from
   // checkoutAvailability.products (DIRECT-only self-checkout availability;
-  // Enterprise is purchaseMode: "CONTACT_SALES" and is deliberately absent
+  // Enterprise is purchaseMode: "DIRECT"
   // from it). enterpriseProducts now comes from the separate, non-checkout
   // checkoutAvailability.enterpriseProducts catalogue read.
   const enterpriseProducts = ENTERPRISE_PRODUCT_ORDER.map((productCode) =>

@@ -163,7 +163,7 @@ describe("commerce product API routes (integration, real local Postgres)", () =>
     it("v4 gate 1: an APPROVED enterprise_core annual price never exposes its amountMinor or price code through GET /api/commerce/products, while an approved Starter price still does", async () => {
       await seedCommerceProducts(prisma);
       const enterpriseStub = await prisma.commerceProduct.findUniqueOrThrow({ where: { code: "enterprise_core" }, include: { prices: true } });
-      expect(enterpriseStub.purchaseMode).toBe("CONTACT_SALES");
+      expect(enterpriseStub.purchaseMode).toBe("DIRECT");
       const annualPrice = enterpriseStub.prices.find((p) => p.billingInterval === "YEAR" && p.isActive);
       expect(annualPrice).toBeDefined();
       await prisma.commercePrice.update({ where: { id: annualPrice!.id }, data: { reviewStatus: "APPROVED", reviewedByUserId: ownerUserId, reviewedAt: new Date() } });
@@ -175,7 +175,7 @@ describe("commerce product API routes (integration, real local Postgres)", () =>
       const enterpriseCore = body.data.find((p: { code: string }) => p.code === "enterprise_core");
       // Product metadata stays public...
       expect(enterpriseCore).toBeDefined();
-      expect(enterpriseCore.purchaseMode).toBe("CONTACT_SALES");
+      expect(enterpriseCore.purchaseMode).toBe("DIRECT");
       // ...but the approved annual price is withheld entirely — no price code, no amount.
       expect(enterpriseCore.prices).toHaveLength(0);
       expect(JSON.stringify(enterpriseCore)).not.toContain(annualPrice!.code);

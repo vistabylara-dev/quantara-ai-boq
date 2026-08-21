@@ -89,7 +89,7 @@ export type CommerceProductDTO = ReturnType<typeof toCommerceProductDTO>;
 /**
  * v4 gate 1 — the exact, narrow allowlist of sales-led product codes whose
  * CommercePrice rows must never appear in the public DTO, even once
- * APPROVED. Enterprise is CONTACT_SALES precisely because the annual amount
+ * APPROVED. Enterprise is DIRECT now
  * is a private commercial term communicated by sales, not a self-serve
  * price — approving the price (to allow the authenticated settings page and
  * LIVE Payment Link sync to read it) must not turn the unauthenticated,

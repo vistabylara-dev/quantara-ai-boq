@@ -158,7 +158,7 @@ const CATALOGUE_PRODUCTS: ProductSpec[] = [
    * `type: "SUBSCRIPTION"` products with real annual CommercePrice rows,
    * mapped to commerce_enterprise_core/scale/authority in
    * src/lib/entitlements/commerce-plan-mapping.ts, but are deliberately
-   * `purchaseMode: "CONTACT_SALES"`, NOT "DIRECT" — Enterprise is sales-led
+   * `purchaseMode: "DIRECT"` — Enterprise is direct-checkout
    * (see legal.terms.checkoutBody: Enterprise scope requires a separate
    * written quotation/agreement). This keeps them rejected by
    * loadEligibleCommercePrice/PRODUCT_NOT_DIRECT_PURCHASE in

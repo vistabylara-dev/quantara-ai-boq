@@ -49,7 +49,7 @@ import { isTayqanOneTimeProductCode } from "@/lib/tayqan/tayqan-commerce";
  * CONTACT_SALES product as a direct-checkout price — classifyPriceEligibility
  * requires purchaseMode === DIRECT — with exactly ONE narrow, exact-code
  * exception: SALES_LED_LIVE_SYNC_PRODUCT_CODES (enterprise_core/scale/
- * authority) below. Those three are genuinely CONTACT_SALES products
+ * authority) below. Those three are genuinely DIRECT products
  * (Enterprise is sales-led — see prisma/seed-data/commerce-products.ts) that
  * must still be creatable/mappable as live Stripe Prices so an approved
  * annual amount can back a manually issued Stripe Payment Link; they remain

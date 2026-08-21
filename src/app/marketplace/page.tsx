@@ -203,8 +203,7 @@ export default function MarketplacePage() {
         <p className="text-sm uppercase tracking-[0.28em] text-slate-500">Marketplace</p>
         <h1 className="mt-2 text-3xl font-semibold text-white">Industry data packages</h1>
         <p className="mt-2 max-w-2xl text-sm text-slate-400">
-          Full searchable technical libraries by discipline. Buy a package below to unlock it immediately, or contact
-          sales for enterprise packages.
+          Full searchable technical libraries by discipline. Buy a package below to unlock it immediately, 
         </p>
         {(actionMessage || actionError) && (
           <div className={`mt-4 rounded-2xl border p-3 text-xs ${actionError ? "border-rose-900 bg-rose-950/30 text-rose-300" : "border-emerald-900 bg-emerald-950/30 text-emerald-300"}`}>
@@ -229,26 +228,48 @@ export default function MarketplacePage() {
                   return order[a.productCode] - order[b.productCode];
                 })
                 .map(plan => {
-                  const price = plan.prices.find(p => p.billingInterval === "MONTH") || plan.prices[0];
-                  if (!price) return null;
+                  const monthPrice = plan.prices.find(p => p.billingInterval === "MONTH");
+                  const yearPrice = plan.prices.find(p => p.billingInterval === "YEAR");
+                  if (!monthPrice && !yearPrice) return null;
                   return (
                     <div key={plan.productCode} className="flex flex-col rounded-2xl border border-slate-800 bg-slate-900 p-6 text-slate-300">
                       <h3 className="text-lg font-bold text-white capitalize">{plan.name}</h3>
                       <p className="mt-2 flex-grow text-sm text-slate-400">{plan.shortDescription}</p>
-                      <div className="mt-6 border-t border-slate-800 pt-6">
-                        <p className="text-2xl font-semibold text-white">
-                          {price.currency} {(price.amountMinor / 100).toLocaleString("en-AE")}
-                          <span className="text-sm font-normal text-slate-500">/mo</span>
-                        </p>
+                      
+                      <div className="mt-4 flex flex-col gap-4">
+                        {monthPrice && (
+                          <div className="flex flex-col gap-3 border-t border-slate-800 pt-4">
+                            <p className="text-2xl font-semibold text-white">
+                              {monthPrice.currency} {(monthPrice.amountMinor / 100).toLocaleString("en-AE")}
+                              <span className="text-sm font-normal text-slate-500">/mo</span>
+                            </p>
+                            <button
+                              type="button"
+                              onClick={() => checkout(monthPrice.priceCode)}
+                              disabled={busyKey === monthPrice.priceCode || !monthPrice.available}
+                              className="rounded-xl border border-blue-600 bg-blue-600 px-4 py-3 text-sm font-bold text-white hover:bg-blue-500 disabled:opacity-50"
+                            >
+                              {busyKey === monthPrice.priceCode ? "Redirecting..." : monthPrice.available ? "Buy Monthly" : purchaseUnavailableLabel(monthPrice.unavailableReason as any)}
+                            </button>
+                          </div>
+                        )}
+                        {yearPrice && (
+                          <div className="flex flex-col gap-3 border-t border-slate-800 pt-4">
+                            <p className="text-2xl font-semibold text-white">
+                              {yearPrice.currency} {(yearPrice.amountMinor / 100).toLocaleString("en-AE")}
+                              <span className="text-sm font-normal text-slate-500">/yr</span>
+                            </p>
+                            <button
+                              type="button"
+                              onClick={() => checkout(yearPrice.priceCode)}
+                              disabled={busyKey === yearPrice.priceCode || !yearPrice.available}
+                              className="rounded-xl border border-blue-600 bg-blue-600 px-4 py-3 text-sm font-bold text-white hover:bg-blue-500 disabled:opacity-50"
+                            >
+                              {busyKey === yearPrice.priceCode ? "Redirecting..." : yearPrice.available ? "Buy Annual" : purchaseUnavailableLabel(yearPrice.unavailableReason as any)}
+                            </button>
+                          </div>
+                        )}
                       </div>
-                      <button
-                        type="button"
-                        onClick={() => checkout(price.priceCode)}
-                        disabled={busyKey === price.priceCode || !price.available}
-                        className="mt-6 rounded-xl border border-blue-600 bg-blue-600 px-4 py-3 text-sm font-bold text-white hover:bg-blue-500 disabled:opacity-50"
-                      >
-                        {busyKey === price.priceCode ? "Redirecting..." : price.available ? "Buy plan" : (price.unavailableReason || "Unavailable")}
-                      </button>
                     </div>
                   );
                 })}
@@ -286,7 +307,7 @@ export default function MarketplacePage() {
                         disabled={busyKey === price.priceCode || !price.available}
                         className="mt-6 rounded-xl border border-purple-600 bg-purple-600 px-4 py-3 text-sm font-bold text-white hover:bg-purple-500 disabled:opacity-50"
                       >
-                        {busyKey === price.priceCode ? "Redirecting..." : price.available ? "Buy enterprise" : (price.unavailableReason || "Setup pending")}
+                        {busyKey === price.priceCode ? "Redirecting..." : price.available ? "Buy enterprise" : purchaseUnavailableLabel(price.unavailableReason as any)}
                       </button>
                     </div>
                   );
@@ -484,3 +505,4 @@ export default function MarketplacePage() {
     </div>
   );
 }
+

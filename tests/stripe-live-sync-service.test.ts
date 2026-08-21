@@ -264,7 +264,7 @@ describe("stripe-live-sync-service (integration, real local Postgres, mocked Str
     await seedCommerceProducts(prisma);
     for (const code of ["enterprise_core", "enterprise_scale", "enterprise_authority"]) {
       const stub = await prisma.commerceProduct.findUniqueOrThrow({ where: { code } });
-      expect(stub.purchaseMode).toBe("CONTACT_SALES");
+      expect(stub.purchaseMode).toBe("DIRECT");
       const product = await getCommerceProduct(stub.id);
       const annualPrice = product.prices.find((p) => p.billingInterval === "YEAR");
       expect(annualPrice).toBeDefined();
@@ -284,7 +284,7 @@ describe("stripe-live-sync-service (integration, real local Postgres, mocked Str
     await seedCommerceProducts(prisma);
     for (const code of ["enterprise_core", "enterprise_scale", "enterprise_authority"]) {
       const stub = await prisma.commerceProduct.findUniqueOrThrow({ where: { code } });
-      expect(stub.purchaseMode).toBe("CONTACT_SALES");
+      expect(stub.purchaseMode).toBe("DIRECT");
       const product = await getCommerceProduct(stub.id);
       const annualPrice = product.prices.find((p) => p.billingInterval === "YEAR")!;
       await prisma.commercePrice.update({ where: { id: annualPrice.id }, data: { reviewStatus: "APPROVED", reviewedByUserId: ownerUserId } });

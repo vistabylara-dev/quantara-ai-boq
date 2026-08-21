@@ -24,7 +24,7 @@ import {
  *
  * WHY THIS EXISTS (the gap it closes)
  * -----------------------------------
- * Enterprise Core/Scale/Authority are `purchaseMode: "CONTACT_SALES"` and are
+ * Enterprise Core/Scale/Authority are `purchaseMode: "DIRECT"` and are
  * therefore, correctly, rejected by self-serve checkout
  * (commerce-checkout-service.ts's loadEligibleCommercePrice →
  * PRODUCT_NOT_DIRECT_PURCHASE). The previously assumed fulfillment route was

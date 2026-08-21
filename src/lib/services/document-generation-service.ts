@@ -30,8 +30,8 @@ import { generateDocx } from "@/lib/documents/generators/docx-generator";
 import { generateHtml } from "@/lib/documents/generators/html-generator";
 import { calculateBOQTotals } from "@/lib/calculations/boq-calculator";
 import { recordDocumentGenerated } from "@/lib/entitlements/entitlement-service";
-import { canGenerateDocumentEffective } from "@/lib/entitlements/effective-entitlement-service";
-import { assertCleanOutputAuthorized } from "@/lib/services/commercial-entitlement-service";
+import { canGenerateDocumentEffective, getEffectiveEntitlements } from "@/lib/entitlements/effective-entitlement-service";
+import { assertCleanOutputAuthorized, assertCleanOutputAuthorizedEffective } from "@/lib/services/commercial-entitlement-service";
 
 export const TRIAL_WATERMARK_TEXT = "Generated with Quantara — Trial Version";
 
@@ -186,8 +186,8 @@ export async function generateDocument(actor: CurrentActor, projectIdentifier: s
   const isDraft = !isLocked;
 
   // Commercial Canva-style enforcement: require subscription for clean output
-  await assertCleanOutputAuthorized(
-    actor.companyId,
+  await assertCleanOutputAuthorizedEffective(
+    actor,
     project.id,
     boqRecord.id,
     boqRecord.revisionNumber,
@@ -196,7 +196,10 @@ export async function generateDocument(actor: CurrentActor, projectIdentifier: s
 
   const documentCheck = await canGenerateDocumentEffective(actor, isDraft, boqRecord.id);
   if (!documentCheck.allowed) {
-    throw new AppError("TRIAL_EXPORT_LIMIT_REACHED", documentCheck.reason ?? "Document generation limit reached.", 403);
+    const effective = await getEffectiveEntitlements(actor);
+    const isFree = effective.planType === "FREE" || effective.status === "NONE";
+    const code = isFree ? "DOCUMENT_EXPORT_NOT_ALLOWED" : "TRIAL_EXPORT_LIMIT_REACHED";
+    throw new AppError(code, documentCheck.reason ?? "Document generation limit reached.", 403);
   }
 
   // TAYQAN Draft BOQ Word export: a customer needs to review TAYQAN's

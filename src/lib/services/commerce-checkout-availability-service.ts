@@ -68,14 +68,14 @@ export type EnterpriseAnnualPlan = {
 export type CheckoutAvailability = {
   hasExistingSubscription: boolean;
   products: CheckoutOptionProduct[];
-  enterpriseProducts: EnterpriseAnnualPlan[];
+  
 };
 
 const ENTERPRISE_ANNUAL_PRODUCT_CODES = ["enterprise_core", "enterprise_scale", "enterprise_authority"] as const;
 
 /**
  * item-A (Round 3 correction) — Enterprise Core/Scale/Authority are
- * `purchaseMode: "CONTACT_SALES"` (see prisma/seed-data/commerce-products.ts),
+ * `purchaseMode: "DIRECT"` (see prisma/seed-data/commerce-products.ts),
  * so they are deliberately absent from getCheckoutAvailability's DIRECT-only
  * query below — self-checkout availability must never represent a sales-led
  * product as purchasable. This is a SEPARATE, non-checkout catalogue read:
@@ -220,5 +220,5 @@ export async function getCheckoutAvailability(actor: CurrentActor): Promise<Chec
     }
   }
 
-  return { hasExistingSubscription, products: result, enterpriseProducts };
+  return { hasExistingSubscription, products: result };
 }

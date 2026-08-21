@@ -180,3 +180,176 @@ describe("MARKETPLACE-FIX-2: package purchase-option (priceCode) resolution (int
     expect(options.has(unconfiguredPackageId)).toBe(false);
   });
 });
+
+describe("MARKETPLACE-FULL-STRIPE-LINK: all 15 libraries provide BOTH MONTH and YEAR prices to the UI", () => {
+  let companyId: string;
+  let actor: CurrentActor;
+  let packageIds: string[] = [];
+  
+  beforeAll(async () => {
+    const { LIBRARY_PACKAGE_PRICES, backfillLibraryPackagePricing, approveLibraryPackagePrices } = await import("../prisma/seed-data/library-package-pricing");
+    const { seedCommerceProducts } = await import("../prisma/seed-data/commerce-products");
+    const { createMapping } = await import("../src/lib/repositories/commerce-provider-mapping-repository");
+
+    const company = await prisma.company.create({ data: { legalName: `Real Purchase 15 Libs ${RUN_ID}`, tradeName: "15 Libs Co", email: `15libs-${RUN_ID}@example.com` } });
+    companyId = company.id;
+    actor = actorFor(companyId);
+
+    const discipline = await prisma.masterDiscipline.create({ data: { key: `ui-regression-${RUN_ID}`, name: "UI Reg Discipline", sortOrder: 999 } });
+
+    for (const spec of LIBRARY_PACKAGE_PRICES) {
+      const pkg = await prisma.industryDataPackage.create({
+        data: {
+          key: spec.key,
+          name: spec.name,
+          description: spec.name,
+          disciplineId: discipline.id,
+          packageType: "PROFESSIONAL",
+          monthlyPrice: spec.monthlyPrice,
+          annualPrice: spec.annualPrice,
+          currency: "AED",
+          status: "ACTIVE",
+        },
+      });
+      packageIds.push(pkg.id);
+    }
+
+    await seedCommerceProducts(prisma);
+    await approveLibraryPackagePrices(prisma);
+
+    // Mock the Stripe mappings so resolvePackagePurchaseOptions sees them as available
+    for (const spec of LIBRARY_PACKAGE_PRICES) {
+      const stem = `industry_${spec.key.replace(/-/g, "_")}`;
+      const product = await prisma.commerceProduct.findUniqueOrThrow({ where: { code: stem } });
+      const monthly = await prisma.commercePrice.findUniqueOrThrow({ where: { code: `${stem}_monthly` } });
+      const annual = await prisma.commercePrice.findUniqueOrThrow({ where: { code: `${stem}_annual` } });
+
+      await createMapping({
+        provider: "STRIPE",
+        environment: "TEST",
+        commerceProductId: product.id,
+        commercePriceId: null,
+        providerProductId: `prod_test_${stem}`,
+        providerPriceId: null,
+        providerObjectType: "PRODUCT",
+      });
+      await createMapping({
+        provider: "STRIPE",
+        environment: "TEST",
+        commerceProductId: product.id,
+        commercePriceId: monthly.id,
+        providerProductId: `prod_test_${stem}`,
+        providerPriceId: `price_test_${stem}_monthly`,
+        providerObjectType: "PRICE",
+      });
+      await createMapping({
+        provider: "STRIPE",
+        environment: "TEST",
+        commerceProductId: product.id,
+        commercePriceId: annual.id,
+        providerProductId: `prod_test_${stem}`,
+        providerPriceId: `price_test_${stem}_annual`,
+        providerObjectType: "PRICE",
+      });
+    }
+  });
+
+  afterAll(async () => {
+    const { LIBRARY_PACKAGE_PRICES } = await import("../prisma/seed-data/library-package-pricing");
+    const ALL_LIBRARY_PRODUCT_CODES = LIBRARY_PACKAGE_PRICES.map((spec) => `industry_${spec.key.replace(/-/g, "_")}`);
+    
+    await prisma.companyPackageSubscription.deleteMany({ where: { companyId } });
+    await prisma.commerceProduct.deleteMany({ where: { code: { in: ALL_LIBRARY_PRODUCT_CODES } } });
+    await prisma.industryDataPackage.deleteMany({ where: { id: { in: packageIds } } });
+    await prisma.masterDiscipline.deleteMany({ where: { key: `ui-regression-${RUN_ID}` } });
+    await prisma.company.deleteMany({ where: { id: companyId } });
+  });
+
+  it("verifies the exact MONTH and YEAR options are fully available and correctly mapped for all 15 libraries for an UNOWNED package", async () => {
+    const { LIBRARY_PACKAGE_PRICES } = await import("../prisma/seed-data/library-package-pricing");
+    const { resolvePackagePurchaseOptions } = await import("../src/lib/services/package-purchase-options");
+
+    const libraryKeys = LIBRARY_PACKAGE_PRICES.map((p) => p.key);
+    const packages = await prisma.industryDataPackage.findMany({ where: { key: { in: libraryKeys } } });
+    expect(packages.length).toBe(15);
+    
+    const packageIds = packages.map((p) => p.id);
+    const options = await resolvePackagePurchaseOptions(actor, packageIds);
+
+    for (const spec of LIBRARY_PACKAGE_PRICES) {
+      const pkg = packages.find((p) => p.key === spec.key);
+      const entry = options.get(pkg!.id);
+      expect(entry).toBeDefined();
+      expect(entry?.available).toBe(true);
+
+      const monthly = entry?.prices.find((p) => p.billingInterval === "MONTH");
+      const annual = entry?.prices.find((p) => p.billingInterval === "YEAR");
+
+      expect(monthly).toBeDefined();
+      expect(annual).toBeDefined();
+
+      expect(monthly?.available).toBe(true);
+      expect(annual?.available).toBe(true);
+
+      expect(monthly?.amountMinor).toBe(spec.monthlyPrice * 100);
+      expect(annual?.amountMinor).toBe(spec.annualPrice * 100);
+      
+      const stem = `industry_${spec.key.replace(/-/g, "_")}`;
+      expect(monthly?.priceCode).toBe(`${stem}_monthly`);
+      expect(annual?.priceCode).toBe(`${stem}_annual`);
+
+      // Specific explicit assertions requested by the user
+      if (spec.key === "general-requirements-library") {
+        expect(monthly?.amountMinor).toBe(8000);
+        expect(annual?.amountMinor).toBe(80000);
+      } else if (spec.key === "landscaping-library") {
+        expect(monthly?.amountMinor).toBe(11000);
+        expect(annual?.amountMinor).toBe(110000);
+      } else if (spec.key === "roofing-library") {
+        expect(monthly?.amountMinor).toBe(9000);
+        expect(annual?.amountMinor).toBe(90000);
+      } else if (spec.key === "site-infrastructure-library") {
+        expect(monthly?.amountMinor).toBe(16000);
+        expect(annual?.amountMinor).toBe(160000);
+      }
+    }
+  });
+
+  it("verifies that if a package is OWNED, it still returns the prices but flags them as EXISTING_SUBSCRIPTION to block repurchase buttons in UI", async () => {
+    const { LIBRARY_PACKAGE_PRICES } = await import("../prisma/seed-data/library-package-pricing");
+    const { resolvePackagePurchaseOptions } = await import("../src/lib/services/package-purchase-options");
+
+    const testPkgKey = "general-requirements-library";
+    const pkg = await prisma.industryDataPackage.findUniqueOrThrow({ where: { key: testPkgKey } });
+
+    // Grant access
+    await prisma.companyPackageSubscription.create({
+      data: {
+        companyId,
+        packageId: pkg.id,
+        status: "ACTIVE",
+        startsAt: new Date(),
+        source: "stripe",
+      },
+    });
+
+    const options = await resolvePackagePurchaseOptions(actor, [pkg.id]);
+    const entry = options.get(pkg.id);
+
+    expect(entry).toBeDefined();
+    expect(entry?.available).toBe(false); // The overall package is unavailable for purchase
+    
+    const monthly = entry?.prices.find((p) => p.billingInterval === "MONTH");
+    const annual = entry?.prices.find((p) => p.billingInterval === "YEAR");
+
+    // The text prices MUST STILL BE VISIBLE in the UI according to requirements
+    expect(monthly).toBeDefined();
+    expect(annual).toBeDefined();
+
+    // But they must be blocked from repurchase
+    expect(monthly?.available).toBe(false);
+    expect(monthly?.unavailableReason).toBe("EXISTING_SUBSCRIPTION");
+    expect(annual?.available).toBe(false);
+    expect(annual?.unavailableReason).toBe("EXISTING_SUBSCRIPTION");
+  });
+});

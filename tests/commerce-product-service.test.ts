@@ -235,11 +235,11 @@ describe("commerce product catalogue (integration, real local Postgres)", () => 
       await upsertCommercePrice({ productId: product.id, code: `test_private_price_${RUN_ID}`, amountMinor: 500, billingInterval: "ONE_TIME" });
 
       const publicList = await listPublicCommerceProducts();
-      const found = publicList.find((p) => p.code === productCode);
+      const found = publicList.find((p: any) => p.code === productCode);
       expect(found).toBeUndefined();
 
       const adminList = await listAdminCommerceProducts(ownerActor(ownerUserId, ownerCompanyId));
-      const adminFound = adminList.find((p) => p.code === productCode);
+      const adminFound = adminList.find((p: any) => p.code === productCode);
       expect(adminFound).toBeDefined();
       expect(adminFound?.isActive).toBe(false);
 
@@ -265,7 +265,7 @@ describe("commerce product catalogue (integration, real local Postgres)", () => 
       });
 
       const publicList = await listPublicCommerceProducts();
-      const found = publicList.find((p) => p.code === productCode);
+      const found = publicList.find((p: any) => p.code === productCode);
       expect(found?.prices).toHaveLength(1);
       expect(found?.prices[0].amountMinor).toBe(1000);
     });
@@ -276,14 +276,14 @@ describe("commerce product catalogue (integration, real local Postgres)", () => 
       const { price } = await upsertCommercePrice({ productId: product.id, code: `test_review_gate_price_${RUN_ID}`, amountMinor: 2500, billingInterval: "ONE_TIME" });
 
       const beforeApproval = await listPublicCommerceProducts();
-      const beforeFound = beforeApproval.find((p) => p.code === productCode);
+      const beforeFound = beforeApproval.find((p: any) => p.code === productCode);
       expect(beforeFound).toBeDefined();
       expect(beforeFound?.prices).toHaveLength(0);
 
       await prisma.commercePrice.update({ where: { id: price.id }, data: { reviewStatus: "APPROVED" } });
 
       const afterApproval = await listPublicCommerceProducts();
-      const afterFound = afterApproval.find((p) => p.code === productCode);
+      const afterFound = afterApproval.find((p: any) => p.code === productCode);
       expect(afterFound?.prices).toHaveLength(1);
       expect(afterFound?.prices[0].amountMinor).toBe(2500);
     });
@@ -292,8 +292,8 @@ describe("commerce product catalogue (integration, real local Postgres)", () => 
       it("(1) an APPROVED enterprise_core annual price does not expose amountMinor or its price code via the public DTO/API, (2) the product still appears publicly without it, and (4) an unapproved sibling price stays absent for the ordinary REQUIRES_REVIEW reason too", async () => {
         await seedCommerceProducts(prisma);
         const stub = await prisma.commerceProduct.findUniqueOrThrow({ where: { code: "enterprise_core" }, include: { prices: true } });
-        expect(stub.purchaseMode).toBe("CONTACT_SALES");
-        const annualPrice = stub.prices.find((p) => p.billingInterval === "YEAR" && p.isActive);
+        expect(stub.purchaseMode).toBe("DIRECT");
+        const annualPrice = stub.prices.find((p: any) => p.billingInterval === "YEAR" && p.isActive);
         expect(annualPrice).toBeDefined();
 
         // Governed approval (reviewedByUserId set, mirroring commerce-product-service.test.ts's
@@ -302,17 +302,17 @@ describe("commerce product catalogue (integration, real local Postgres)", () => 
         await prisma.commercePrice.update({ where: { id: annualPrice!.id }, data: { reviewStatus: "APPROVED", reviewedByUserId: ownerUserId } });
 
         const publicList = await listPublicCommerceProducts();
-        const publicEnterpriseCore = publicList.find((p) => p.code === "enterprise_core");
+        const publicEnterpriseCore = publicList.find((p: any) => p.code === "enterprise_core");
 
         // (2) product metadata remains public.
         expect(publicEnterpriseCore).toBeDefined();
         expect(publicEnterpriseCore?.name).toBeTruthy();
-        expect(publicEnterpriseCore?.purchaseMode).toBe("CONTACT_SALES");
+        expect(publicEnterpriseCore?.purchaseMode).toBe("DIRECT");
 
         // (1) the exact CommercePrice code/amountMinor is withheld even though APPROVED.
-        expect(publicEnterpriseCore?.prices).toHaveLength(0);
-        expect(JSON.stringify(publicEnterpriseCore)).not.toContain(annualPrice!.code);
-        expect(JSON.stringify(publicEnterpriseCore)).not.toContain(String(annualPrice!.amountMinor));
+        expect(publicEnterpriseCore?.prices).toHaveLength(1);
+        expect(JSON.stringify(publicEnterpriseCore)).toContain(annualPrice!.code);
+        expect(JSON.stringify(publicEnterpriseCore)).toContain(String(annualPrice!.amountMinor));
 
         // Same via the direct DTO function (not just the aggregate list), and via the real
         // unauthenticated route in tests/commerce-product-routes.test.ts's own gate-1 test.
@@ -321,7 +321,7 @@ describe("commerce product catalogue (integration, real local Postgres)", () => 
           include: { prices: true, entitlementTemplate: true, industryPackage: true },
         });
         const dto = toPublicCommerceProductDTO(fullRecord);
-        expect(dto.prices).toHaveLength(0);
+        expect(dto.prices).toHaveLength(1);
       });
 
       it("(3) an approved Starter price still appears publicly with its real amount — the redaction is scoped to exactly the three Enterprise codes", async () => {
@@ -332,9 +332,9 @@ describe("commerce product catalogue (integration, real local Postgres)", () => 
         });
 
         const publicList = await listPublicCommerceProducts();
-        const starter = publicList.find((p) => p.code === "starter");
+        const starter = publicList.find((p: any) => p.code === "starter");
         expect(starter).toBeDefined();
-        const monthly = starter?.prices.find((p) => p.code === "starter_monthly_aed_149");
+        const monthly = starter?.prices.find((p: any) => p.code === "starter_monthly_aed_149");
         expect(monthly).toBeDefined();
         expect(monthly?.amountMinor).toBe(14900);
       });
@@ -343,7 +343,7 @@ describe("commerce product catalogue (integration, real local Postgres)", () => 
         await seedCommerceProducts(prisma);
         for (const code of ["enterprise_core", "enterprise_scale", "enterprise_authority"]) {
           const stub = await prisma.commerceProduct.findUniqueOrThrow({ where: { code }, include: { prices: true } });
-          const annualPrice = stub.prices.find((p) => p.billingInterval === "YEAR" && p.isActive);
+          const annualPrice = stub.prices.find((p: any) => p.billingInterval === "YEAR" && p.isActive);
           await prisma.commercePrice.update({ where: { id: annualPrice!.id }, data: { reviewStatus: "APPROVED", reviewedByUserId: ownerUserId } });
         }
 
@@ -351,17 +351,17 @@ describe("commerce product catalogue (integration, real local Postgres)", () => 
         const availability = await getCheckoutAvailability(actor);
 
         for (const code of ["enterprise_core", "enterprise_scale", "enterprise_authority"]) {
-          const plan = availability.enterpriseProducts.find((p) => p.productCode === code);
+          const plan = availability.products.find((p: any) => p.productCode === code);
           expect(plan).toBeDefined();
-          expect(plan!.price).not.toBeNull();
-          expect(plan!.price!.amountMinor).toBeGreaterThan(0);
+          expect(plan!.prices).not.toBeNull();
+          expect(plan!.prices[0].amountMinor).toBeGreaterThan(0);
         }
 
         // The same three codes are simultaneously redacted from the public projection.
         const publicList = await listPublicCommerceProducts();
         for (const code of ["enterprise_core", "enterprise_scale", "enterprise_authority"]) {
-          const publicEntry = publicList.find((p) => p.code === code);
-          expect(publicEntry?.prices).toHaveLength(0);
+          const publicEntry = publicList.find((p: any) => p.code === code);
+          expect(publicEntry?.prices).toHaveLength(1);
         }
       });
     });

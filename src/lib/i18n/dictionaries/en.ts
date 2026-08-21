@@ -1554,8 +1554,8 @@ const en = {
       subprocessorsDescription: "Review current verified subprocessor information for Quantara services.",
       contactSalesTitle: "Contact Quantara Sales",
       contactSalesDescription: "Discuss Quantara's supported BOQ workflows, enterprise requirements, deployment fit and commercial terms with the Vista By Lara team in the UAE.",
-      pricingTitle: "Quantara Pricing | Starter, Professional, Business & Enterprise Plans",
-      pricingDescription: "Compare Quantara Starter, Professional and Business monthly and annual AED subscription pricing, plus sales-led Enterprise annual plans confirmed through sales.",
+      pricingTitle: "Quantara Pricing | BOQ Software & Enterprise Plans",
+      pricingDescription: "Compare Quantara Starter, Professional and Business monthly and annual AED pricing, plus sales-led Enterprise annual plans confirmed through sales.",
     },
   },
   legal: {

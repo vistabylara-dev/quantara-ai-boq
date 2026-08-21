@@ -249,7 +249,7 @@ async function resolveEnterpriseProviderPriceMapping(
       "This Enterprise price's Stripe mapping points at a different internal product. Resolve this catalogue inconsistency before issuing a checkout link.",
     );
   }
-  return mapping;
+  return mapping.providerPriceId;
 }
 
 /**
@@ -264,6 +264,8 @@ async function resolveEnterpriseProviderPriceMapping(
  * via CommerceProviderMapping, resolves commerce_enterprise_* via
  * commerce-plan-mapping.ts, and writes the CompanySoftwareSubscription.
  */
+const MAX_STALE_ENTERPRISE_CHECKOUT_SESSIONS_TO_EXPIRE = 20;
+
 export async function createEnterpriseSalesCheckoutSession(
   actor: PlatformActor,
   input: CreateEnterpriseCheckoutSessionInput,
@@ -298,8 +300,7 @@ export async function createEnterpriseSalesCheckoutSession(
   // Catalogue validation is company-independent, so it runs before the
   // per-company lock is taken — identical ordering to self-serve checkout.
   const price = await loadEnterpriseCommercePrice(input.priceCode);
-  const mapping = await resolveEnterpriseProviderPriceMapping(environment, price.id, price.productId);
-  const providerPriceId = mapping.providerPriceId as string;
+  const providerPriceId = await resolveEnterpriseProviderPriceMapping(environment, price.id, price.productId);
 
   const result = await prisma.$transaction(
     async (tx) => {
@@ -360,6 +361,27 @@ export async function createEnterpriseSalesCheckoutSession(
       );
       const reusableSession = reusableIndex === -1 ? null : appOwnedOpenSessions[reusableIndex];
       const extraSessions = appOwnedOpenSessions.filter((_session, index) => index !== reusableIndex);
+
+      if (extraSessions.length > 0) {
+        console.warn(
+          "[enterprise-sales-checkout] Stale open Checkout Session count",
+          extraSessions.length,
+        );
+      }
+
+      // Fail closed BEFORE making any Stripe mutations when the stale-session
+      // count is abnormally high. Processing an unbounded list while the
+      // advisory lock and Prisma transaction are held could exceed the
+      // transaction timeout after partially expiring provider-side sessions.
+      // Returning/reusing/creating a session while unprocessed stale sessions
+      // remain would also violate the one-open-session invariant.
+      if (extraSessions.length > MAX_STALE_ENTERPRISE_CHECKOUT_SESSIONS_TO_EXPIRE) {
+        throw new AppError(
+          "STRIPE_STALE_SESSION_LIMIT_EXCEEDED",
+          "Too many previous checkout sessions exist for this company. Reconcile the stale sessions before issuing another Enterprise checkout link.",
+          409,
+        );
+      }
 
       for (const extra of extraSessions) {
         try {

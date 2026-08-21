@@ -234,6 +234,92 @@ describe("commerce-checkout-service (integration, real local Postgres, mocked St
     await expect(createCommerceCheckoutSession(actor, { priceCode: price.code }, mockStripeClient())).rejects.toMatchObject({ reason: "PRODUCT_NOT_DIRECT_PURCHASE" });
   });
 
+  it("generic checkout rejects TAYQAN Monthly before provider mapping or Stripe mutation", async () => {
+    const tayqanProduct = await prisma.commerceProduct.findUniqueOrThrow({
+      where: { code: "tayqan_monthly" },
+      include: { prices: true },
+    });
+
+    const tayqanPrice = tayqanProduct.prices.find(
+      (candidate) => candidate.code === "tayqan_monthly_2499",
+    );
+
+    if (!tayqanPrice) {
+      throw new Error(
+        "Fixture assumption broken: tayqan_monthly_2499 was not seeded.",
+      );
+    }
+
+    // This regression intentionally leaves the TAYQAN price WITHOUT a TEST
+    // provider mapping. Therefore PRODUCT_NOT_DIRECT_PURCHASE proves that
+    // the generic-commerce TAYQAN guard executes before provider mapping
+    // resolution. If the old bypass returns, this becomes
+    // PROVIDER_MAPPING_MISSING instead and the test fails.
+    const existingMapping = await prisma.commerceProviderMapping.findFirst({
+      where: {
+        provider: "STRIPE",
+        environment: "TEST",
+        commercePriceId: tayqanPrice.id,
+      },
+    });
+
+    expect(existingMapping).toBeNull();
+
+    // The catalogue seed keeps governed prices under review. Temporarily
+    // approve only this shared TEST fixture so loadEligibleCommercePrice()
+    // reaches the family guard; restore its exact original governance state
+    // in finally regardless of test outcome.
+    const originalPriceState = await prisma.commercePrice.findUniqueOrThrow({
+      where: { id: tayqanPrice.id },
+      select: {
+        reviewStatus: true,
+        reviewedByUserId: true,
+        reviewedAt: true,
+      },
+    });
+
+    const stripe = mockStripeClient();
+
+    try {
+      await prisma.commercePrice.update({
+        where: { id: tayqanPrice.id },
+        data: {
+          reviewStatus: "APPROVED",
+          reviewedByUserId: userId,
+          reviewedAt: new Date(),
+        },
+      });
+
+      const actor = actorFor(
+        userId,
+        companyId,
+        `checkout-owner-${RUN_ID}@example.com`,
+      );
+
+      await expect(
+        createCommerceCheckoutSession(
+          actor,
+          { priceCode: tayqanPrice.code },
+          stripe,
+        ),
+      ).rejects.toMatchObject({
+        reason: "PRODUCT_NOT_DIRECT_PURCHASE",
+      });
+
+      // No Stripe customer and no generic Checkout Session may be created.
+      expect(stripe.customers.create).not.toHaveBeenCalled();
+      expect(stripe.checkout.sessions.create).not.toHaveBeenCalled();
+    } finally {
+      await prisma.commercePrice.update({
+        where: { id: tayqanPrice.id },
+        data: {
+          reviewStatus: originalPriceState.reviewStatus,
+          reviewedByUserId: originalPriceState.reviewedByUserId,
+          reviewedAt: originalPriceState.reviewedAt,
+        },
+      });
+    }
+  });
   it("item-A: rejects a CONTACT_SALES annual price — the same purchaseMode enterprise_core/scale/authority now use — even when APPROVED and LIVE-mapped", async () => {
     // Uses a test-local CONTACT_SALES fixture rather than mutating the real
     // seeded enterprise_core/scale/authority rows (shared, non-transactional
@@ -411,6 +497,25 @@ describe("commerce-checkout-service (integration, real local Postgres, mocked St
   });
 
   it("still blocks a second core software subscription for a company with an existing one, even after the library-purchase fix", async () => {
+    // Self-contained fixture: this test must not depend on the preceding
+    // library-purchase test having created an active subscription.
+    const blockingPlan = await prisma.softwarePlan.create({
+      data: {
+        key: `test_checkout_second_core_plan_${RUN_ID}`,
+        name: "Second Core Blocking Plan",
+        planType: "PRO",
+      },
+    });
+
+    await prisma.companySoftwareSubscription.create({
+      data: {
+        companyId: librarySubscriberCompanyId,
+        softwarePlanId: blockingPlan.id,
+        status: "ACTIVE",
+        externalSubscriptionId: `sub_second_core_block_${RUN_ID}`,
+        source: "stripe",
+      },
+    });
     // Same company/state as the library test above, but requesting a
     // core-tier (industryPackageId: null) price this time — must still 409.
     const { product, price } = await makeApprovedDirectPrice();
@@ -977,6 +1082,17 @@ describe("commerce-checkout-service (integration, real local Postgres, mocked St
       // and StripeBillingCustomer rows (all onDelete: Cascade on Company) — the outer
       // afterAll's RUN_ID-scoped deletes cover the CommerceProduct/Price/Mapping and
       // IndustryDataPackage rows this block creates (all named with RUN_ID).
+      // The TAYQAN coexistence test maps the REAL shared seeded
+      // tayqan_monthly price. Clean its TEST provider mapping here even if
+      // the test itself fails before reaching its final assertion.
+      await prisma.commerceProviderMapping.deleteMany({
+        where: {
+          provider: "STRIPE",
+          environment: "TEST",
+          providerPriceId: `price_coexist_f_tayqan_${RUN_ID}`,
+        },
+      });
+
       await prisma.company.deleteMany({ where: { id: { in: coexistCompanyIds } } });
     });
 
@@ -1123,11 +1239,11 @@ describe("commerce-checkout-service (integration, real local Postgres, mocked St
       const result = await createCommerceCheckoutSession(actor, { priceCode: core.price.code }, stripe);
       expect(result.checkoutUrl).toMatch(/^https:\/\/checkout\.stripe\.com/);
 
-      // Cleanup this test's mapping on the SHARED seeded tayqan_monthly price explicitly —
-      // it is not RUN_ID-suffixed in its code, so it falls outside the outer afterAll's
-      // `commerceProduct.deleteMany({ code: { contains: RUN_ID } } })` sweep (and must
-      // never be deleted — it's the real seeded product, not test fixture data).
-      await prisma.commerceProviderMapping.deleteMany({ where: { providerPriceId: tayqanProviderPriceId } });
+
+
+
+
+
     });
   });
 });

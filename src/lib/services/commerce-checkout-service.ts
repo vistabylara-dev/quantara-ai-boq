@@ -308,9 +308,15 @@ type SubscriptionBlockingClassification = {
   libraryPackageIds: Set<string>;
 };
 
+type ResolvedSubscriptionPriceProduct = {
+  code: string;
+  industryPackageId: string | null;
+} | null;
+
 async function classifySubscriptionForBlocking(
   environment: CommerceProviderEnvironment,
   subscription: Pick<Stripe.Subscription, "items">,
+  resolvedProductCache: Map<string, ResolvedSubscriptionPriceProduct>,
 ): Promise<SubscriptionBlockingClassification> {
   const items = subscription.items?.data ?? [];
   if (items.length === 0) {
@@ -330,21 +336,46 @@ async function classifySubscriptionForBlocking(
       continue;
     }
 
-    const mapping = await findMappingByProviderPriceId("STRIPE", environment, providerPriceId);
-    const commercePrice = mapping?.commercePriceId
-      ? await prisma.commercePrice.findUnique({ where: { id: mapping.commercePriceId }, include: { product: true } })
-      : null;
+    let resolvedProduct: ResolvedSubscriptionPriceProduct;
 
-    if (!commercePrice) {
+    if (resolvedProductCache.has(providerPriceId)) {
+      // `has` distinguishes a cached unresolved/null result from a cache miss.
+      resolvedProduct = resolvedProductCache.get(providerPriceId) ?? null;
+    } else {
+      const mapping = await findMappingByProviderPriceId("STRIPE", environment, providerPriceId);
+      const commercePrice = mapping?.commercePriceId
+        ? await prisma.commercePrice.findUnique({
+            where: { id: mapping.commercePriceId },
+            select: {
+              product: {
+                select: {
+                  code: true,
+                  industryPackageId: true,
+                },
+              },
+            },
+          })
+        : null;
+
+      resolvedProduct = commercePrice?.product ?? null;
+
+      // Cache both successful resolutions and unresolved/null results so a
+      // customer with repeated subscription items on the same Stripe price
+      // does not repeat database lookups while the checkout transaction and
+      // per-company advisory lock are held.
+      resolvedProductCache.set(providerPriceId, resolvedProduct);
+    }
+
+    if (!resolvedProduct) {
       matchesCoreSoftware = true; // unmapped/unresolvable — fail closed as core-blocking, never as a library match.
       continue;
     }
 
-    const family = classifyCommerceProductFamily(commercePrice.product);
+    const family = classifyCommerceProductFamily(resolvedProduct);
     if (family === "CORE_SOFTWARE") {
       matchesCoreSoftware = true;
-    } else if (family === "INDUSTRY_LIBRARY" && commercePrice.product.industryPackageId) {
-      libraryPackageIds.add(commercePrice.product.industryPackageId);
+    } else if (family === "INDUSTRY_LIBRARY" && resolvedProduct.industryPackageId) {
+      libraryPackageIds.add(resolvedProduct.industryPackageId);
     }
     // TAYQAN family items are neither core-blocking nor library-blocking — deliberately ignored.
   }
@@ -366,6 +397,7 @@ export async function hasBlockingStripeSubscription(
   environment: CommerceProviderEnvironment,
   target: CheckoutSubscriptionTarget,
 ): Promise<boolean> {
+  const resolvedProductCache = new Map<string, ResolvedSubscriptionPriceProduct>();
   let startingAfter: string | undefined;
   for (;;) {
     let page: Stripe.ApiList<Stripe.Subscription>;
@@ -376,7 +408,7 @@ export async function hasBlockingStripeSubscription(
     }
     for (const subscription of page.data) {
       if (NON_BLOCKING_STRIPE_SUBSCRIPTION_STATUSES.has(subscription.status)) continue;
-      const classification = await classifySubscriptionForBlocking(environment, subscription);
+      const classification = await classifySubscriptionForBlocking(environment, subscription, resolvedProductCache);
       if (target.family === "CORE_SOFTWARE") {
         if (classification.matchesCoreSoftware) return true;
       } else if (classification.libraryPackageIds.has(target.industryPackageId)) {
@@ -590,6 +622,17 @@ export async function createCommerceCheckoutSession(
   // per-company lock below. Never trusts client-supplied amount/currency/
   // providerPriceId; both are resolved purely from the trusted priceCode.
   const price = await loadEligibleCommercePrice(input.priceCode!);
+  const purchaseFamily = classifyCommerceProductFamily(price.product);
+
+  // TAYQAN has its own governed checkout and entitlement lifecycle.
+  // Never allow a TAYQAN product through the generic commerce checkout.
+  if (purchaseFamily === "TAYQAN") {
+    throw new CheckoutNotEligibleError(
+      "PRODUCT_NOT_DIRECT_PURCHASE",
+      "TAYQAN hires use their dedicated checkout path and cannot be purchased through general commerce checkout.",
+    );
+  }
+
   const mapping = await resolveProviderPriceMapping(environment, price.id);
 
   /**
@@ -624,21 +667,18 @@ export async function createCommerceCheckoutSession(
    *    resolution below leaves it uncheck-ed rather than silently matching
    *    CORE_SOFTWARE, in case that ever changes.
    */
-  const purchaseFamily = classifyCommerceProductFamily(price.product);
-  const checkoutTarget: CheckoutSubscriptionTarget | null =
+  const checkoutTarget: CheckoutSubscriptionTarget =
     purchaseFamily === "CORE_SOFTWARE"
       ? { family: "CORE_SOFTWARE" }
-      : purchaseFamily === "INDUSTRY_LIBRARY" && price.product.industryPackageId
-        ? { family: "INDUSTRY_LIBRARY", industryPackageId: price.product.industryPackageId }
-        : null;
+      : { family: "INDUSTRY_LIBRARY", industryPackageId: price.product.industryPackageId! };
 
   return prisma.$transaction(
     async (tx) => {
       await acquireCompanyCheckoutLock(tx, actor.companyId);
 
-      if (checkoutTarget?.family === "CORE_SOFTWARE") {
+      if (checkoutTarget.family === "CORE_SOFTWARE") {
         await assertNoExistingNonFinalSubscription(actor.companyId, tx);
-      } else if (checkoutTarget?.family === "INDUSTRY_LIBRARY") {
+      } else {
         await assertNoExistingNonFinalPackageSubscription(actor.companyId, checkoutTarget.industryPackageId, tx);
       }
       const stripeCustomerId = await getOrCreateStripeCustomerForCompany(stripe, actor, liveMode, tx);
@@ -648,9 +688,7 @@ export async function createCommerceCheckoutSession(
       // otherwise be the only thing recording a CompanySoftwareSubscription/
       // CompanyPackageSubscription row. Family-aware and scoped identically to
       // the DB-only check above.
-      if (checkoutTarget) {
-        await assertNoExistingStripeSubscription(stripe, stripeCustomerId, environment, checkoutTarget);
-      }
+      await assertNoExistingStripeSubscription(stripe, stripeCustomerId, environment, checkoutTarget);
 
       /**
        * STRIPE-COMMERCIAL-21 — invariant: after this function returns

@@ -99,7 +99,7 @@ type EnterpriseAnnualPlan = {
   price: { priceCode: string; amountMinor: number; currency: string } | null;
 };
 
-type CheckoutAvailability = { hasExistingSubscription: boolean; products: CheckoutOptionProduct[]; enterpriseProducts: EnterpriseAnnualPlan[] };
+type CheckoutAvailability = { hasExistingSubscription: boolean; products: CheckoutOptionProduct[]; enterpriseProducts?: EnterpriseAnnualPlan[] };
 type BillingInterval = "MONTH" | "YEAR";
 type SoftwareProductCode = "starter" | "professional" | "business";
 
@@ -445,7 +445,7 @@ function SubscriptionSettingsContent() {
   // from it). enterpriseProducts now comes from the separate, non-checkout
   // checkoutAvailability.enterpriseProducts catalogue read.
   const enterpriseProducts = ENTERPRISE_PRODUCT_ORDER.map((productCode) =>
-    checkoutAvailability?.enterpriseProducts.find((product) => product.productCode === productCode),
+    checkoutAvailability?.enterpriseProducts?.find((product) => product.productCode === productCode),
   ).filter((product): product is EnterpriseAnnualPlan => Boolean(product));
 
   const hasExistingSubscription = checkoutAvailability?.hasExistingSubscription ?? false;

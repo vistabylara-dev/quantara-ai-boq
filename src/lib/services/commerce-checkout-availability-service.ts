@@ -88,7 +88,12 @@ const ENTERPRISE_ANNUAL_PRODUCT_CODES = ["enterprise_core", "enterprise_scale", 
 async function getEnterpriseAnnualPlans(): Promise<EnterpriseAnnualPlan[]> {
   const products = await prisma.commerceProduct.findMany({
     where: { code: { in: [...ENTERPRISE_ANNUAL_PRODUCT_CODES] }, isActive: true },
-    include: { prices: { where: { isActive: true, reviewStatus: "APPROVED", billingInterval: "YEAR" } } },
+    include: {
+      prices: {
+        where: { isActive: true, reviewStatus: "APPROVED", billingInterval: "YEAR" },
+        orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      },
+    },
   });
   const byCode = new Map(products.map((product) => [product.code, product]));
 

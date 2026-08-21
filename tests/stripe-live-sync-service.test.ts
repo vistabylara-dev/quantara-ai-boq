@@ -162,6 +162,20 @@ describe("stripe-live-sync-service (integration, real local Postgres, mocked Str
   });
 
   afterAll(async () => {
+    // Every Stripe object created by this suite uses RUN_ID in its mocked
+    // provider IDs. Remove every matching LIVE mapping before deleting
+    // fixture products so this suite cannot leak shared provider state into
+    // later integration tests.
+    await prisma.commerceProviderMapping.deleteMany({
+      where: {
+        provider: "STRIPE",
+        environment: "LIVE",
+        OR: [
+          { providerProductId: { contains: RUN_ID } },
+          { providerPriceId: { contains: RUN_ID } },
+        ],
+      },
+    });
     await prisma.commerceProduct.deleteMany({ where: { code: { contains: RUN_ID } } });
 
     // item-A (Round 3 correction) tests above approve the REAL, shared,
@@ -178,9 +192,6 @@ describe("stripe-live-sync-service (integration, real local Postgres, mocked Str
     await prisma.commercePrice.updateMany({
       where: { code: { in: ["enterprise_core_annual_aed_15000", "enterprise_scale_annual_aed_25000", "enterprise_authority_annual_aed_35000"] } },
       data: { reviewStatus: "REQUIRES_REVIEW", reviewedByUserId: null, reviewedAt: null },
-    });
-    await prisma.commerceProviderMapping.deleteMany({
-      where: { environment: "LIVE", commerceProduct: { code: "enterprise_core" } },
     });
 
     await prisma.commerceSyncRun.deleteMany({ where: { initiatedByUserId: { in: [ownerUserId, adminUserId] } } });

@@ -4,7 +4,7 @@ import type { CurrentActor } from "../src/lib/auth/current-actor";
 import { getCheckoutAvailability } from "../src/lib/services/commerce-checkout-availability-service";
 import { upsertCommerceProduct, upsertCommercePrice } from "../src/lib/repositories/commerce-product-repository";
 import { createMapping } from "../src/lib/repositories/commerce-provider-mapping-repository";
-import { seedCommerceProducts } from "../prisma/seed-data/commerce-products";
+import { seedEnterpriseCommerceProducts } from "../prisma/seed-data/commerce-products";
 
 const RUN_ID = `${Date.now()}-${process.pid}-availability`;
 
@@ -207,7 +207,7 @@ describe("commerce-checkout-availability-service (integration, real local Postgr
   });
 
   it("item-A: the real Enterprise products appear in the separate enterpriseProducts catalogue read, with an approved annual amount and no available/unavailableReason fields", async () => {
-    await seedCommerceProducts(prisma);
+    await seedEnterpriseCommerceProducts(prisma);
     for (const code of ["enterprise_core", "enterprise_scale", "enterprise_authority"]) {
       const stub = await prisma.commerceProduct.findUniqueOrThrow({ where: { code }, include: { prices: true } });
       expect(stub.purchaseMode).toBe("CONTACT_SALES");
@@ -217,7 +217,7 @@ describe("commerce-checkout-availability-service (integration, real local Postgr
       // genuinely governed approval — commerce-product-service.test.ts
       // asserts on these same three anchor rows that reviewStatus:
       // APPROVED never appears without a reviewer.
-      await prisma.commercePrice.update({ where: { id: annualPrice!.id }, data: { reviewStatus: "APPROVED", reviewedByUserId: userId } });
+      await prisma.commercePrice.update({ where: { id: annualPrice!.id }, data: { reviewStatus: "APPROVED", reviewedByUserId: userId, reviewedAt: new Date() } });
     }
 
     const actor = actorFor(userId, companyId, `availability-owner-${RUN_ID}@example.com`);

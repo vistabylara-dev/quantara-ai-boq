@@ -16,6 +16,7 @@ import { upsertCommerceProduct, upsertCommercePrice } from "../src/lib/repositor
 import { createMapping } from "../src/lib/repositories/commerce-provider-mapping-repository";
 import { createStripeBillingCustomer } from "../src/lib/repositories/stripe-billing-repository";
 import { enterpriseCheckoutRequestSchema } from "../src/lib/validation/commerce-schema";
+import { seedEnterpriseCommerceProducts } from "../prisma/seed-data/commerce-products";
 import { TAYQAN_PRODUCT_FAMILY } from "../src/lib/tayqan/tayqan-commerce";
 
 const RUN_ID = `${Date.now()}-${process.pid}-entsales`;
@@ -143,6 +144,11 @@ describe("enterprise sales-led checkout (integration, real local Postgres, mocke
   const originalBaseUrl = process.env.APP_BASE_URL;
 
   beforeAll(async () => {
+    // Target-only and idempotent: this suite depends on the three real
+    // Enterprise catalogue anchors, so it must create them itself rather
+    // than relying on another test or the full catalogue seed having run.
+    await seedEnterpriseCommerceProducts(prisma);
+
     const mk = async (label: string) =>
       prisma.company.create({
         data: { legalName: `${label} ${RUN_ID}`, tradeName: label, email: `entsales-${label.toLowerCase().replace(/\s+/g, "-")}-${RUN_ID}@example.com` },
@@ -351,7 +357,7 @@ describe("enterprise sales-led checkout (integration, real local Postgres, mocke
     expect(createOptions.idempotencyKey).toBe(`quantara:test:customer:${fulfillmentCompanyId}`);
     // The platform operator's own address is never attached to the customer's
     // Stripe record — only the company's own email is used.
-    expect(createParams.email).not.toBe(`entsales-op-${RUN_ID}@example.com`);
+    expect(createParams.email).toBe(`entsales-fulfillment-co-${RUN_ID}@example.com`);
 
     const persisted = await prisma.stripeBillingCustomer.findMany({ where: { companyId: fulfillmentCompanyId } });
     expect(persisted).toHaveLength(1);
@@ -670,6 +676,32 @@ describe("enterprise sales-led checkout (integration, real local Postgres, mocke
     expect(stripe.checkout.sessions.create).not.toHaveBeenCalled();
   });
 
+  it("(8c2) fails closed before any Stripe expiry or create when an abnormal number of stale Enterprise checkout sessions exist", async () => {
+    const staleSessions: OpenSessionFixture[] = Array.from({ length: 21 }, (_value, index) => ({
+      id: `cs_many_stale_${RUN_ID}_${index}`,
+      url: `https://checkout.stripe.com/test/many_stale_${RUN_ID}_${index}`,
+      metadata: {
+        quantara_company_id: existingCustomerCompanyId,
+        quantara_price_code: `stale_price_${index}`,
+      },
+    }));
+
+    const stripe = mockStripeClient({ openSessions: staleSessions });
+
+    await expect(
+      createEnterpriseSalesCheckoutSession(
+        platformActor(ownerUserId, freshCompanyId),
+        { companyId: existingCustomerCompanyId, priceCode: ENTERPRISE_CORE_PRICE_CODE },
+        requestMetadata,
+        stripe,
+      ),
+    ).rejects.toMatchObject({ code: "STRIPE_STALE_SESSION_LIMIT_EXCEEDED" });
+
+    // Fail closed before partial provider-side mutation. None of the stale
+    // sessions is expired and no additional payable session is created.
+    expect(stripe.checkout.sessions.expire).not.toHaveBeenCalled();
+    expect(stripe.checkout.sessions.create).not.toHaveBeenCalled();
+  });
   it("(8d) refuses to issue an Enterprise link for a company that already holds a non-final software subscription (no silent double-billing)", async () => {
     const stripe = mockStripeClient();
     await expect(

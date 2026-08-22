@@ -77,15 +77,60 @@ const testEnv = {
 };
 
 const prismaCli = path.join(repoRoot, "node_modules", "prisma", "build", "index.js");
-// Every invocation starts from the same disposable schema. This makes repeated
-// local and CI runs deterministic and prevents one suite's records from leaking
-// into a later run. assertTestDatabase above is the fail-closed safety gate.
-await runNode(prismaCli, ["migrate", "reset", "--force", "--skip-seed"], testEnv);
-await runNode(prismaCli, ["db", "seed"], testEnv);
+const vitestCli = path.join(repoRoot, "node_modules", "vitest", "vitest.mjs");
+const provisionOwnerTest = "tests/provision-platform-owner.test.ts";
 
 const requestedArgs = process.argv.slice(2);
 const watch = requestedArgs.includes("--watch");
-const vitestArgs = watch
-  ? ["--config", "vitest.config.ts", ...requestedArgs]
-  : ["run", "--config", "vitest.config.ts", ...requestedArgs];
-await runNode(path.join(repoRoot, "node_modules", "vitest", "vitest.mjs"), vitestArgs, testEnv);
+const normalizedRequestedArgs = requestedArgs.map((arg) => arg.replaceAll("\\", "/"));
+
+const provisionOnly =
+  !watch &&
+  normalizedRequestedArgs.length === 1 &&
+  normalizedRequestedArgs[0].endsWith(provisionOwnerTest);
+
+async function resetTestDatabase(seed) {
+  await runNode(
+    prismaCli,
+    ["migrate", "reset", "--force", "--skip-seed"],
+    testEnv,
+  );
+
+  if (seed) {
+    await runNode(prismaCli, ["db", "seed"], testEnv);
+  }
+}
+
+// PLATFORM OWNER PROVISIONING ISOLATION
+//
+// This suite intentionally proves first-owner provisioning and therefore
+// requires a database containing zero existing PLATFORM_OWNER records.
+//
+// Run it in its own freshly-reset, unseeded test database.
+//
+// During a full suite run it is executed first here, then the database is
+// reset again, seeded normally, and the regular suite runs without this
+// special test.
+if (requestedArgs.length === 0 || provisionOnly) {
+  await resetTestDatabase(false);
+
+  await runNode(
+    vitestCli,
+    ["run", "--config", "vitest.config.ts", provisionOwnerTest],
+    testEnv,
+  );
+}
+
+if (!provisionOnly) {
+  await resetTestDatabase(true);
+
+  const vitestArgs = watch
+    ? ["--config", "vitest.config.ts", ...requestedArgs]
+    : ["run", "--config", "vitest.config.ts", ...requestedArgs];
+
+  if (requestedArgs.length === 0) {
+    vitestArgs.push("--exclude", provisionOwnerTest);
+  }
+
+  await runNode(vitestCli, vitestArgs, testEnv);
+}

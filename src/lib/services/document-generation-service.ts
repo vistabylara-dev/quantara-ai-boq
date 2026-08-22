@@ -191,13 +191,15 @@ export async function generateDocument(actor: CurrentActor, projectIdentifier: s
   }
 
   // Commercial Canva-style enforcement: require subscription for clean output
-  await assertCleanOutputAuthorizedEffective(
-    actor,
-    project.id,
-    boqRecord.id,
-    boqRecord.revisionNumber,
-    input.documentType as any
-  );
+  if (!isDraft) {
+    await assertCleanOutputAuthorizedEffective(
+      actor,
+      project.id,
+      boqRecord.id,
+      boqRecord.revisionNumber,
+      input.documentType as any
+    );
+  }
 
   const documentCheck = await canGenerateDocumentEffective(actor, isDraft, boqRecord.id);
   if (!documentCheck.allowed) {

@@ -49,68 +49,16 @@ export type CheckoutOptionProduct = {
   prices: CheckoutOptionPrice[];
 };
 
-/**
- * item-A (Round 3 correction) — the settings/subscription/page.tsx Enterprise
- * cards' non-checkout data source. Deliberately NOT a
- * CheckoutOptionProduct/CheckoutOptionPrice — it carries no `available`/
- * `unavailableReason` fields, because "available for self-checkout" is not a
- * concept that applies to a sales-led product. `price` is null only if the
- * product has no APPROVED annual price yet (still pending owner/admin
- * approval) — the UI already renders "Pricing unavailable" for that case.
- */
-export type EnterpriseAnnualPlan = {
-  productCode: string;
-  name: string;
-  shortDescription: string;
-  price: { priceCode: string; amountMinor: number; currency: string } | null;
-};
-
 export type CheckoutAvailability = {
   hasExistingSubscription: boolean;
   products: CheckoutOptionProduct[];
 };
 
 const ENTERPRISE_PRODUCTS = [
-  {
-    productCode: "enterprise_core",
-    name: "Enterprise Core",
-    shortDescription: "For established contractors and consultancies needing high-volume BOQ production.",
-    prices: [
-      {
-        priceCode: "enterprise_core_one_time_aed_15000",
-        billingInterval: "ONE_TIME" as const,
-        amountMinor: 1500000,
-        currency: "AED",
-      }
-    ]
-  },
-  {
-    productCode: "enterprise_scale",
-    name: "Enterprise Scale",
-    shortDescription: "For multi-team and multi-department companies running BOQ production at scale.",
-    prices: [
-      {
-        priceCode: "enterprise_scale_one_time_aed_25000",
-        billingInterval: "ONE_TIME" as const,
-        amountMinor: 2500000,
-        currency: "AED",
-      }
-    ]
-  },
-  {
-    productCode: "enterprise_authority",
-    name: "Enterprise Authority",
-    shortDescription: "For large groups, consultancies and institutional customers needing dedicated onboarding.",
-    prices: [
-      {
-        priceCode: "enterprise_authority_one_time_aed_35000",
-        billingInterval: "ONE_TIME" as const,
-        amountMinor: 3500000,
-        currency: "AED",
-      }
-    ]
-  }
-];
+  { productCode: "enterprise_core", priceCode: "enterprise_core_one_time_aed_15000", amountMinor: 1_500_000 },
+  { productCode: "enterprise_scale", priceCode: "enterprise_scale_one_time_aed_25000", amountMinor: 2_500_000 },
+  { productCode: "enterprise_authority", priceCode: "enterprise_authority_one_time_aed_35000", amountMinor: 3_500_000 },
+] as const;
 
 /**
  * CORRECTION-1 — every industryPackageId this company already holds a
@@ -144,33 +92,50 @@ export async function getCheckoutAvailability(actor: CurrentActor): Promise<Chec
     include: { prices: { where: { isActive: true } } },
     orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
   });
+  const enterpriseRows = await prisma.commerceProduct.findMany({
+    where: {
+      code: { in: ENTERPRISE_PRODUCTS.map((item) => item.productCode) },
+      isActive: true,
+      isPublic: true,
+      purchaseMode: "DIRECT",
+      type: "ONE_TIME",
+    },
+    include: { prices: { where: { isActive: true } } },
+  });
+  const enterpriseByCode = new Map(enterpriseRows.map((product) => [product.code, product]));
 
   const result: CheckoutOptionProduct[] = [];
 
-  // 1. Inject canonical Enterprise one-time offers FIRST so they are available
-  for (const ent of ENTERPRISE_PRODUCTS) {
-    const prices: CheckoutOptionPrice[] = [];
-    for (const p of ent.prices) {
-      let available = true;
-      let unavailableReason: CheckoutUnavailableReason | null = null;
-      if (hasExistingSubscription) {
-        available = false;
-        unavailableReason = "EXISTING_SUBSCRIPTION";
-      }
-      prices.push({
-        priceCode: p.priceCode,
-        billingInterval: p.billingInterval,
-        amountMinor: p.amountMinor,
-        currency: p.currency,
+  // Enterprise offers come from governed catalogue rows, never hardcoded UI facts.
+  for (const spec of ENTERPRISE_PRODUCTS) {
+    const product = enterpriseByCode.get(spec.productCode);
+    const price = product?.prices.find((candidate) => candidate.code === spec.priceCode);
+    if (!product || !price) continue;
+
+    const canonical =
+      price.amountMinor === spec.amountMinor &&
+      price.currency === "AED" &&
+      price.billingInterval === "ONE_TIME" &&
+      !price.isFromPrice;
+    let available = canonical && price.reviewStatus === "APPROVED";
+    let unavailableReason: CheckoutUnavailableReason | null = available ? null : "PRICE_NOT_APPROVED";
+    if (available && hasExistingSubscription) {
+      available = false;
+      unavailableReason = "EXISTING_SUBSCRIPTION";
+    }
+
+    result.push({
+      productCode: product.code,
+      name: product.name,
+      shortDescription: product.shortDescription,
+      prices: [{
+        priceCode: price.code,
+        billingInterval: "ONE_TIME",
+        amountMinor: price.amountMinor,
+        currency: price.currency,
         available,
         unavailableReason,
-      });
-    }
-    result.push({
-      productCode: ent.productCode,
-      name: ent.name,
-      shortDescription: ent.shortDescription,
-      prices,
+      }],
     });
   }
 
@@ -243,4 +208,3 @@ export async function getCheckoutAvailability(actor: CurrentActor): Promise<Chec
 
   return { hasExistingSubscription, products: result };
 }
-

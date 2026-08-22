@@ -1,15 +1,40 @@
-import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db/prisma";
 import { resolveCheckoutEnvironment } from "./commerce-checkout-service";
 import { resolveCommercialStripeClient } from "./commerce-checkout-service";
 import type Stripe from "stripe";
-import { seedEnterpriseCommerceProducts } from "../../../prisma/seed-data/commerce-products";
-import { findProductMapping, findPriceMapping, createMapping, updateMappingState } from "@/lib/repositories/commerce-provider-mapping-repository";
+import { findProductMapping, findPriceMapping } from "@/lib/repositories/commerce-provider-mapping-repository";
 
-const $READINESS_LOCK_NAMESPACE = 1144;
+const ENTERPRISE_PRICE_SPECS = {
+  enterprise_core_one_time_aed_15000: { productCode: "enterprise_core", amountMinor: 1_500_000 },
+  enterprise_scale_one_time_aed_25000: { productCode: "enterprise_scale", amountMinor: 2_500_000 },
+  enterprise_authority_one_time_aed_35000: { productCode: "enterprise_authority", amountMinor: 3_500_000 },
+} as const;
 
 function isEnterpriseSelfCheckoutPriceCode(code: string): boolean {
-  return ["enterprise_core_one_time_aed_15000", "enterprise_scale_one_time_aed_25000", "enterprise_authority_one_time_aed_35000"].includes(code);
+  return Object.prototype.hasOwnProperty.call(ENTERPRISE_PRICE_SPECS, code);
+}
+
+function assertCanonicalEnterprisePrice(price: {
+  code: string;
+  amountMinor: number;
+  currency: string;
+  billingInterval: string;
+  isFromPrice: boolean;
+  product: { code: string; type: string; purchaseMode: string };
+}): void {
+  const spec = ENTERPRISE_PRICE_SPECS[price.code as keyof typeof ENTERPRISE_PRICE_SPECS];
+  if (
+    !spec ||
+    price.product.code !== spec.productCode ||
+    price.amountMinor !== spec.amountMinor ||
+    price.currency !== "AED" ||
+    price.billingInterval !== "ONE_TIME" ||
+    price.isFromPrice ||
+    price.product.type !== "ONE_TIME" ||
+    price.product.purchaseMode !== "DIRECT"
+  ) {
+    throw new Error("Financial or product parameters are not valid for Enterprise self-checkout.");
+  }
 }
 
 function safeMetadata(type: "product" | "price", code: string, env: string) {
@@ -45,6 +70,9 @@ async function resolveExistingProduct(stripe: Stripe, productCode: string, env: 
   }
   if (candidates.length === 0) return { decision: "create" };
   if (candidates.length > 1) return { decision: "fail", code: "STRIPE_PRODUCT_RECOVERY_AMBIGUOUS", message: "Multiple Stripe Products carry this metadata." };
+  if (!candidates[0].active) {
+    return { decision: "fail", code: "STRIPE_PRODUCT_RECOVERY_INACTIVE", message: "The matching Stripe Product is inactive." };
+  }
   return { decision: "adopt", product: candidates[0] };
 }
 
@@ -80,46 +108,38 @@ async function resolveExistingPrice(
     candidate.product !== providerProductId ||
     candidate.unit_amount !== expected.amountMinor ||
     candidate.currency !== expected.currency.toLowerCase() ||
-    candidate.type !== "one_time"
+    candidate.type !== "one_time" ||
+    !candidate.active
   ) {
     return { decision: "fail", code: "STRIPE_PRICE_RECOVERY_DRIFT", message: "Price drift detected." };
   }
   return { decision: "adopt", price: candidate };
 }
 
-export async function ensureEnterpriseSelfCheckoutPriceReady(priceCode: string): Promise<void> {
+export async function ensureEnterpriseSelfCheckoutPriceReady(priceCode: string, overrideClient?: Stripe): Promise<void> {
   if (!isEnterpriseSelfCheckoutPriceCode(priceCode)) return;
 
   const environment = resolveCheckoutEnvironment();
-  const stripe = resolveCommercialStripeClient();
+  const stripe = resolveCommercialStripeClient(overrideClient);
   const envStr = environment.toLowerCase();
 
   const fastPrice = await prisma.commercePrice.findUnique({ where: { code: priceCode }, include: { product: true } });
-  if (fastPrice && fastPrice.reviewStatus === "APPROVED") {
+  if (fastPrice) assertCanonicalEnterprisePrice(fastPrice);
+  if (fastPrice?.reviewStatus === "APPROVED") {
     const fastMapping = await findPriceMapping("STRIPE", environment, fastPrice.id);
-    if (fastMapping && fastMapping.providerActive && fastMapping.synchronizationStatus === "SYNCED") return;
+    if (fastMapping?.providerPriceId && fastMapping.providerActive && fastMapping.synchronizationStatus === "SYNCED") return;
   }
 
   await prisma.$transaction(async (tx) => {
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(1144, hashtext(${priceCode}))`;
 
-    await seedEnterpriseCommerceProducts(tx as any);
-
     const price = await tx.commercePrice.findUnique({ where: { code: priceCode }, include: { product: true } });
-    if (!price) throw new Error("Seed failed to create price.");
+    if (!price) throw new Error("Enterprise self-checkout price is not configured.");
     const product = price.product;
 
-    let isValid = false;
-    if (product.code === "enterprise_core" && priceCode === "enterprise_core_one_time_aed_15000" && price.amountMinor === 1500000) isValid = true;
-    if (product.code === "enterprise_scale" && priceCode === "enterprise_scale_one_time_aed_25000" && price.amountMinor === 2500000) isValid = true;
-    if (product.code === "enterprise_authority" && priceCode === "enterprise_authority_one_time_aed_35000" && price.amountMinor === 3500000) isValid = true;
-
-    if (!isValid || price.currency !== "AED" || price.billingInterval !== "ONE_TIME" || price.isFromPrice || product.type !== "ONE_TIME" || product.purchaseMode !== "DIRECT") {
-      throw new Error("Financial or product parameters are not valid for Enterprise self-checkout.");
-    }
-
+    assertCanonicalEnterprisePrice(price);
     if (price.reviewStatus !== "APPROVED") {
-      await tx.commercePrice.update({ where: { id: price.id }, data: { reviewStatus: "APPROVED", reviewNote: "System approved for Enterprise self-checkout" } });
+      throw new Error("Enterprise self-checkout price requires owner or admin approval.");
     }
 
     let productMapping = await findProductMapping("STRIPE", environment, product.id, tx);
@@ -140,7 +160,7 @@ export async function ensureEnterpriseSelfCheckoutPriceReady(priceCode: string):
     }
 
     let priceMapping = await findPriceMapping("STRIPE", environment, price.id, tx);
-    if (!priceMapping || !priceMapping.providerActive || priceMapping.synchronizationStatus !== "SYNCED") {
+    if (!priceMapping?.providerPriceId || !priceMapping.providerActive || priceMapping.synchronizationStatus !== "SYNCED") {
       const priceRecovery = await resolveExistingPrice(stripe, price.code, productMapping.providerProductId, { amountMinor: price.amountMinor, currency: price.currency, billingInterval: "ONE_TIME" }, envStr);
       if (priceRecovery.decision === "fail") throw new Error(priceRecovery.message);
       const stripePrice = priceRecovery.decision === "adopt" ? priceRecovery.price : await stripe.prices.create({

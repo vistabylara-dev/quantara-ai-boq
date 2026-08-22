@@ -31,7 +31,7 @@ import { getCheckoutAvailability, type CheckoutUnavailableReason } from "@/lib/s
 
 export type PackagePurchasePrice = {
   priceCode: string;
-  billingInterval: "MONTH" | "YEAR" | "ONE_TIME";
+  billingInterval: "MONTH" | "YEAR";
   amountMinor: number;
   currency: string;
   available: boolean;
@@ -66,7 +66,7 @@ export async function resolvePackagePurchaseOptions(
 
     const prices: PackagePurchasePrice[] = option.prices.map((price) => ({
       priceCode: price.priceCode,
-      billingInterval: price.billingInterval,
+      billingInterval: price.billingInterval as "MONTH" | "YEAR",
       amountMinor: price.amountMinor,
       currency: price.currency,
       available: price.available,

@@ -511,17 +511,22 @@ export async function processStripeWebhookEvent(event: Stripe.Event, overrideCli
           event.type === "checkout.session.async_payment_failed" ||
           event.type === "checkout.session.expired"
         ) {
-            const sessionObj = event.data.object;
-            const stripeClientForSession = resolveWebhookStripeClient(overrideClient);
-            const handledByEnterprise = await applyEnterpriseOneTimeCheckoutSession(tx, sessionObj, event.type, stripeClientForSession);
-            if (!handledByEnterprise) {
-              await applyTayqanCheckoutSession(
-                tx,
-                sessionObj,
-                event.type,
-              );
-            }
-          } else if (currentSubscription) {
+          const sessionObj = event.data.object as Stripe.Checkout.Session;
+          const stripeClientForSession = resolveWebhookStripeClient(overrideClient);
+          const handledByEnterprise = await applyEnterpriseOneTimeCheckoutSession(
+            tx,
+            sessionObj,
+            event.type,
+            stripeClientForSession,
+          );
+          if (!handledByEnterprise) {
+            await applyTayqanCheckoutSession(
+              tx,
+              sessionObj,
+              event.type,
+            );
+          }
+        } else if (currentSubscription) {
           const handledByTayqan = await applyTayqanMonthlySubscriptionIfPresent(
             tx,
             currentSubscription,

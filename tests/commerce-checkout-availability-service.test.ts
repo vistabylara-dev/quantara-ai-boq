@@ -140,15 +140,13 @@ describe("commerce-checkout-availability-service (integration, real local Postgr
     await prisma.industryDataPackageItem.deleteMany({ where: { package: { key: { contains: RUN_ID } } } });
     await prisma.industryDataPackage.deleteMany({ where: { key: { contains: RUN_ID } } });
 
-    // item-A (Round 3 correction) test above approves the REAL, shared,
-    // never-deleted enterprise_core/scale/authority annual prices — mirrors
-    // stripe-live-sync-service.test.ts's cleanup of the same three anchor
-    // rows. Reset BEFORE deleting `userId` below — reviewedByUserId's FK is
+    // The test approves the real, shared, never-deleted Enterprise one-time
+    // prices. Reset BEFORE deleting `userId` below — reviewedByUserId's FK is
     // onDelete: SetNull, so deleting the user first would silently leave
     // these rows APPROVED with a null reviewer, corrupting the invariant
     // commerce-product-service.test.ts's byte-for-byte guard test checks.
     await prisma.commercePrice.updateMany({
-      where: { code: { in: ["enterprise_core_annual_aed_15000", "enterprise_scale_annual_aed_25000", "enterprise_authority_annual_aed_35000"] } },
+      where: { code: { in: ["enterprise_core_one_time_aed_15000", "enterprise_scale_one_time_aed_25000", "enterprise_authority_one_time_aed_35000"] } },
       data: { reviewStatus: "REQUIRES_REVIEW", reviewedByUserId: null, reviewedAt: null },
     });
 
@@ -206,18 +204,19 @@ describe("commerce-checkout-availability-service (integration, real local Postgr
     expect(contactSales).toBeUndefined();
   });
 
-  it("item-A: the real Enterprise products appear in the separate enterpriseProducts catalogue read, with an approved annual amount and no available/unavailableReason fields", async () => {
+  it("the real Enterprise products appear with their approved one-time AED prices", async () => {
     await seedEnterpriseCommerceProducts(prisma);
     for (const code of ["enterprise_core", "enterprise_scale", "enterprise_authority"]) {
       const stub = await prisma.commerceProduct.findUniqueOrThrow({ where: { code }, include: { prices: true } });
       expect(stub.purchaseMode).toBe("DIRECT");
-      const annualPrice = stub.prices.find((p: any) => p.billingInterval === "YEAR" && p.isActive);
-      expect(annualPrice).toBeDefined();
+      expect(stub.type).toBe("ONE_TIME");
+      const oneTimePrice = stub.prices.find((p: any) => p.billingInterval === "ONE_TIME" && p.isActive);
+      expect(oneTimePrice).toBeDefined();
       // reviewedByUserId set alongside reviewStatus so this reads as a
       // genuinely governed approval — commerce-product-service.test.ts
       // asserts on these same three anchor rows that reviewStatus:
       // APPROVED never appears without a reviewer.
-      await prisma.commercePrice.update({ where: { id: annualPrice!.id }, data: { reviewStatus: "APPROVED", reviewedByUserId: userId, reviewedAt: new Date() } });
+      await prisma.commercePrice.update({ where: { id: oneTimePrice!.id }, data: { reviewStatus: "APPROVED", reviewedByUserId: userId, reviewedAt: new Date() } });
     }
 
     const actor = actorFor(userId, companyId, `availability-owner-${RUN_ID}@example.com`);
@@ -228,6 +227,7 @@ describe("commerce-checkout-availability-service (integration, real local Postgr
       expect(plan).toBeDefined();
       expect(plan!.prices).not.toBeNull();
       expect(plan!.prices[0].currency).toBe("AED");
+      expect(plan!.prices[0].billingInterval).toBe("ONE_TIME");
       expect((plan as unknown as { available?: unknown }).available).toBeUndefined();
     }
   });

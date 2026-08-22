@@ -85,7 +85,7 @@ const CATALOGUE_PRODUCTS: ProductSpec[] = [
     sortOrder: 10,
     prices: [
       { code: "starter_monthly_aed_149", amountMinor: 14900, billingInterval: "MONTH" },
-      { code: "starter_annual_aed_1490", amountMinor: 149000, billingInterval: "ONE_TIME" },
+      { code: "starter_annual_aed_1490", amountMinor: 149000, billingInterval: "YEAR" },
     ],
     entitlement: {
       maxUsers: 3,
@@ -108,7 +108,7 @@ const CATALOGUE_PRODUCTS: ProductSpec[] = [
     sortOrder: 20,
     prices: [
       { code: "professional_monthly_aed_399", amountMinor: 39900, billingInterval: "MONTH" },
-      { code: "professional_annual_aed_3990", amountMinor: 399000, billingInterval: "ONE_TIME" },
+      { code: "professional_annual_aed_3990", amountMinor: 399000, billingInterval: "YEAR" },
     ],
     entitlement: {
       maxUsers: 10,
@@ -132,7 +132,7 @@ const CATALOGUE_PRODUCTS: ProductSpec[] = [
     sortOrder: 30,
     prices: [
       { code: "business_monthly_aed_899", amountMinor: 89900, billingInterval: "MONTH" },
-      { code: "business_annual_aed_8990", amountMinor: 899000, billingInterval: "ONE_TIME" },
+      { code: "business_annual_aed_8990", amountMinor: 899000, billingInterval: "YEAR" },
     ],
     entitlement: {
       maxUsers: 30,
@@ -149,28 +149,14 @@ const CATALOGUE_PRODUCTS: ProductSpec[] = [
     },
   },
   /**
-   * Enterprise Core/Scale/Authority — annual-prepaid-only SaaS subscriptions
-   * (a single YEAR price each, deliberately no MONTH price: unlike
-   * starter/professional/business, these are not offered on a monthly
-   * cadence). Distinct from the pre-existing `enterprise_installation`
-   * below, which is a one-time, CONTACT_SALES professional-services
-   * engagement with no SoftwarePlan mapping — these three ARE real
-   * `type: "SUBSCRIPTION"` products with real annual CommercePrice rows,
-   * mapped to commerce_enterprise_core/scale/authority in
-   * src/lib/entitlements/commerce-plan-mapping.ts, but are deliberately
-   * `purchaseMode: "DIRECT"` — Enterprise is direct-checkout
-   * (see legal.terms.checkoutBody: Enterprise scope requires a separate
-   * written quotation/agreement). This keeps them rejected by
-   * loadEligibleCommercePrice/PRODUCT_NOT_DIRECT_PURCHASE in
-   * commerce-checkout-service.ts and absent from getCheckoutAvailability's
-   * DIRECT-only query in commerce-checkout-availability-service.ts, while
-   * still allowing a narrow, exact-code LIVE-only sync exception
-   * (SALES_LED_LIVE_SYNC_PRODUCT_CODES in stripe-live-sync-service.ts) so an
-   * approved price can be created/mapped in live Stripe for a manually
-   * issued Stripe Payment Link. The 15 paid Industry Libraries are
-   * deliberately NOT included in any of these — that catalogue stays a
-   * separate purchase on every tier, same as starter/professional/business
-   * above.
+   * Enterprise Core/Scale/Authority are permanent SaaS entitlements sold as
+   * one-time purchases. Each tier has one exact AED price and no recurring
+   * MONTH/YEAR price. They remain distinct from `enterprise_installation`,
+   * the pre-existing CONTACT_SALES professional-services engagement with no
+   * SoftwarePlan mapping. These three DIRECT products map to
+   * commerce_enterprise_core/scale/authority and are fulfilled only by the
+   * verified Enterprise Checkout webhook path. Industry Libraries remain
+   * separate purchases on every software tier.
    */
   {
     code: "enterprise_core",
@@ -492,6 +478,7 @@ async function seedCatalogueProduct(prisma: PrismaClient, spec: ProductSpec, rep
   let productId: string;
   if (existing) {
     const changed =
+      existing.type !== productData.type ||
       existing.name !== productData.name ||
       existing.shortDescription !== productData.shortDescription ||
       existing.description !== productData.description ||
@@ -563,6 +550,24 @@ async function seedCatalogueProduct(prisma: PrismaClient, spec: ProductSpec, rep
   }
 }
 
+const ENTERPRISE_PRODUCT_CODES = ["enterprise_core", "enterprise_scale", "enterprise_authority"] as const;
+const LEGACY_ENTERPRISE_ANNUAL_PRICE_CODES = [
+  "enterprise_core_annual_aed_15000",
+  "enterprise_scale_annual_aed_25000",
+  "enterprise_authority_annual_aed_35000",
+] as const;
+
+async function archiveLegacyEnterpriseAnnualPrices(prisma: PrismaClient, report: CommerceSeedReport): Promise<void> {
+  const archived = await prisma.commercePrice.updateMany({
+    where: {
+      code: { in: [...LEGACY_ENTERPRISE_ANNUAL_PRICE_CODES] },
+      isActive: true,
+    },
+    data: { isActive: false, validUntil: new Date() },
+  });
+  report.pricesArchived += archived.count;
+}
+
 export async function seedCommerceProducts(prisma: PrismaClient): Promise<CommerceSeedReport> {
   const report: CommerceSeedReport = {
     productsInserted: 0,
@@ -619,7 +624,7 @@ export async function seedCommerceProducts(prisma: PrismaClient): Promise<Commer
     const annualMinor = Math.round(Number(pkg.annualPrice) * 100);
     const priceSpecs: PriceSpec[] = [
       { code: `industry_${candidate.key.replace(/-/g, "_")}_monthly`, amountMinor: monthlyMinor, billingInterval: "MONTH" },
-      { code: `industry_${candidate.key.replace(/-/g, "_")}_annual`, amountMinor: annualMinor, billingInterval: "ONE_TIME" },
+      { code: `industry_${candidate.key.replace(/-/g, "_")}_annual`, amountMinor: annualMinor, billingInterval: "YEAR" },
     ];
     for (const priceSpec of priceSpecs) {
       const existingPrice = await prisma.commercePrice.findUnique({ where: { code: priceSpec.code } });
@@ -673,10 +678,10 @@ export async function seedCommerceProducts(prisma: PrismaClient): Promise<Commer
     report.industryProductsCreated.push(candidate.key);
   }
 
+  await archiveLegacyEnterpriseAnnualPrices(prisma, report);
+
   return report;
 }
-
-const ENTERPRISE_PRODUCT_CODES = ["enterprise_core", "enterprise_scale", "enterprise_authority"] as const;
 
 /**
  * CORRECTION-1 mission 5 — target-only production activation for the three
@@ -720,8 +725,7 @@ export async function seedEnterpriseCommerceProducts(prisma: PrismaClient): Prom
   for (const spec of specs) {
     await seedCatalogueProduct(prisma, spec, report);
   }
+  await archiveLegacyEnterpriseAnnualPrices(prisma, report);
 
   return report;
 }
-
-

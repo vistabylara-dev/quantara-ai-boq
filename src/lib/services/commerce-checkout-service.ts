@@ -36,9 +36,37 @@ import { isTayqanProductCode, TAYQAN_PRODUCT_FAMILY } from "@/lib/tayqan/tayqan-
 
 export const SUPPORTED_CHECKOUT_CURRENCIES = new Set(["AED"]);
 /** Deliberately MONTH/YEAR only — see the STRIPE-COMMERCIAL-7 note above. Exported so commerce-checkout-availability-service.ts applies the identical filter when reporting availability to the UI. */
-export const CHECKOUT_ELIGIBLE_INTERVALS = new Set(["MONTH", "YEAR", "ONE_TIME"]);
+export const CHECKOUT_ELIGIBLE_INTERVALS = new Set(["MONTH", "YEAR"]);
 /** Non-final CompanySoftwareSubscription statuses — a company with one of these already has a live-or-pending Stripe subscription and must use the billing portal, not start a second checkout. Only CANCELLED/EXPIRED subscriptions may be superseded by a fresh checkout. */
 export const NON_FINAL_SUBSCRIPTION_STATUSES = ["TRIAL", "ACTIVE", "PAST_DUE", "SUSPENDED"] as const;
+
+const ENTERPRISE_ONE_TIME_PRICE_SPECS = {
+  enterprise_core_one_time_aed_15000: { productCode: "enterprise_core", amountMinor: 1_500_000 },
+  enterprise_scale_one_time_aed_25000: { productCode: "enterprise_scale", amountMinor: 2_500_000 },
+  enterprise_authority_one_time_aed_35000: { productCode: "enterprise_authority", amountMinor: 3_500_000 },
+} as const;
+
+function isEnterpriseOneTimePrice(price: {
+  code: string;
+  amountMinor: number;
+  currency: string;
+  billingInterval: string;
+  isFromPrice: boolean;
+  product: { code: string; type: string };
+}): boolean {
+  const spec = ENTERPRISE_ONE_TIME_PRICE_SPECS[
+    price.code as keyof typeof ENTERPRISE_ONE_TIME_PRICE_SPECS
+  ];
+  return Boolean(
+    spec &&
+      price.product.code === spec.productCode &&
+      price.product.type === "ONE_TIME" &&
+      price.amountMinor === spec.amountMinor &&
+      price.currency === "AED" &&
+      price.billingInterval === "ONE_TIME" &&
+      !price.isFromPrice,
+  );
+}
 
 export type CheckoutPriceRejectionReason =
   | "PRICE_NOT_FOUND"
@@ -181,8 +209,8 @@ async function loadEligibleCommercePrice(priceCode: string) {
   if (price.product.purchaseMode !== "DIRECT") {
     throw new CheckoutNotEligibleError("PRODUCT_NOT_DIRECT_PURCHASE", "This product requires contacting sales and cannot be checked out directly.");
   }
-  const isEnterprise = ["enterprise_core", "enterprise_scale", "enterprise_authority"].includes(price.product.code);
-    if (price.product.type !== "SUBSCRIPTION" && !isEnterprise) {
+  const isEnterprise = isEnterpriseOneTimePrice(price);
+  if (price.product.type !== "SUBSCRIPTION" && !isEnterprise) {
     throw new CheckoutNotEligibleError("PRODUCT_NOT_SUBSCRIPTION", "Only subscription products can be checked out directly right now.");
   }
   if (!price.isActive) throw new CheckoutNotEligibleError("PRICE_INACTIVE", "This price is no longer active.");
@@ -190,7 +218,7 @@ async function loadEligibleCommercePrice(priceCode: string) {
   if (price.isFromPrice) throw new CheckoutNotEligibleError("PRICE_NOT_APPROVED", "This price is an indicative amount and cannot be checked out directly.");
   if (price.amountMinor <= 0) throw new CheckoutNotEligibleError("ZERO_OR_NEGATIVE_AMOUNT", "This price is not checkout-eligible.");
   if (!SUPPORTED_CHECKOUT_CURRENCIES.has(price.currency)) throw new CheckoutNotEligibleError("UNSUPPORTED_CURRENCY", "This price's currency is not supported for checkout.");
-  if (!CHECKOUT_ELIGIBLE_INTERVALS.has(price.billingInterval)) {
+  if (!isEnterprise && !CHECKOUT_ELIGIBLE_INTERVALS.has(price.billingInterval)) {
     throw new CheckoutNotEligibleError("UNSUPPORTED_INTERVAL", "One-time purchases are not yet available for checkout.");
   }
 
@@ -214,7 +242,11 @@ type CompanyPackageSubscriptionClient = Pick<Prisma.TransactionClient, "companyP
 /** Exported so commerce-checkout-availability-service.ts can report the same "already subscribed" fact to the UI without duplicating this query. Accepts an optional transaction client so the per-company-lock recheck in createCommerceCheckoutSession reads through the SAME transaction, not a separate connection. Inherently CORE_SOFTWARE-only: the webhook (stripe-webhook-service.ts's applyCurrentSubscriptionState) only ever writes a CompanySoftwareSubscription row for a product with no industryPackageId AND a resolvable commerce-plan-mapping.ts entry — TAYQAN products have no such entry, so this never fires for TAYQAN either. */
 export async function hasNonFinalStripeSubscription(companyId: string, client: CompanySubscriptionClient = prisma): Promise<boolean> {
   const existing = await client.companySoftwareSubscription.findFirst({
-    where: { companyId, source: "stripe", status: { in: [...NON_FINAL_SUBSCRIPTION_STATUSES] } },
+    where: {
+      companyId,
+      source: { in: ["stripe", "stripe_enterprise_one_time"] },
+      status: { in: [...NON_FINAL_SUBSCRIPTION_STATUSES] },
+    },
     select: { id: true },
   });
   return existing !== null;
@@ -434,11 +466,11 @@ async function assertNoExistingStripeSubscription(
 }
 
 /**
- * Every open Checkout Session Stripe has for this customer that this app
- * itself created (quantara_company_id metadata matches) — never an
- * arbitrary open session that merely happens to share the same Stripe
- * customer. Paginated for the same reason as hasBlockingStripeSubscription
- * above; fails closed on a provider error.
+ * Lists Checkout Sessions this app created for the company, optionally
+ * limited to open sessions. The unfiltered form gives core checkout one
+ * provider snapshot in which an existing session is either open or complete,
+ * so an open-to-complete transition cannot fall between two filtered calls.
+ * Paginated and fail-closed on provider errors.
  *
  * item-B (Round 3 correction) — explicitly EXCLUDES TAYQAN-owned sessions
  * (quantara_product_family === TAYQAN_PRODUCT_FAMILY, set by
@@ -450,34 +482,23 @@ async function assertNoExistingStripeSubscription(
  * Before this fix, a core/library checkout would see a TAYQAN session as
  * just another app-owned open session and expire it as "stale."
  */
-/**
- * v5 — exported (behavior unchanged) so the sales-led Enterprise checkout
- * path participates in the SAME STRIPE-COMMERCIAL-21 "at most one
- * Quantara-owned open Checkout Session per company" invariant rather than
- * running a parallel, unsynchronized session lifecycle beside it.
- *
- * Deliberately NOT given an Enterprise carve-out mirroring the TAYQAN one
- * above. A TAYQAN hire and a core software subscription are independent
- * purchases that may legitimately be in flight at once; a sales-led
- * Enterprise annual subscription and a self-serve Starter/Professional/
- * Business subscription are the SAME family (CORE_SOFTWARE) and must never
- * both be open and payable for one company — that is precisely the
- * double-charge this invariant exists to prevent. The accepted cost is that
- * a customer starting a self-serve checkout expires a pending sales-issued
- * Enterprise session (and vice versa): recoverable by re-issuing the link,
- * unlike a duplicate charge.
- */
-export async function findAppOwnedOpenCheckoutSessions(
+async function findAppOwnedCheckoutSessions(
   stripe: Stripe,
   stripeCustomerId: string,
   companyId: string,
+  status?: "open",
 ): Promise<Stripe.Checkout.Session[]> {
   const matches: Stripe.Checkout.Session[] = [];
   let startingAfter: string | undefined;
   for (;;) {
     let page: Stripe.ApiList<Stripe.Checkout.Session>;
     try {
-      page = await stripe.checkout.sessions.list({ customer: stripeCustomerId, status: "open", limit: 100, starting_after: startingAfter });
+      page = await stripe.checkout.sessions.list({
+        customer: stripeCustomerId,
+        ...(status ? { status } : { expand: ["data.payment_intent"] }),
+        limit: 100,
+        starting_after: startingAfter,
+      });
     } catch (error) {
       throw new AppError("STRIPE_CHECKOUT_SESSION_LOOKUP_FAILED", "Could not verify existing checkout sessions with Stripe. Please try again.", 502);
     }
@@ -488,6 +509,39 @@ export async function findAppOwnedOpenCheckoutSessions(
     if (!page.has_more || page.data.length === 0) return matches;
     startingAfter = page.data[page.data.length - 1].id;
   }
+}
+
+export async function findAppOwnedOpenCheckoutSessions(
+  stripe: Stripe,
+  stripeCustomerId: string,
+  companyId: string,
+): Promise<Stripe.Checkout.Session[]> {
+  return findAppOwnedCheckoutSessions(stripe, stripeCustomerId, companyId, "open");
+}
+
+/**
+ * Closes the payment-to-webhook gap for Enterprise one-time purchases. A
+ * completed paid (or still-processing delayed-method) Checkout Session is
+ * already a financial commitment even if its entitlement webhook has not
+ * committed yet. Terminally failed PaymentIntents do not block a retry.
+ */
+function hasBlockingEnterpriseCheckoutSession(sessions: Stripe.Checkout.Session[]): boolean {
+  return sessions.some((session) => {
+    const priceCode = session.metadata?.quantara_price_code;
+    if (
+      session.status !== "complete" ||
+      session.mode !== "payment" ||
+      session.metadata?.quantara_checkout_mode !== "ENTERPRISE_ONE_TIME" ||
+      !priceCode ||
+      !Object.prototype.hasOwnProperty.call(ENTERPRISE_ONE_TIME_PRICE_SPECS, priceCode)
+    ) {
+      return false;
+    }
+    if (session.payment_status === "paid") return true;
+
+    const paymentIntent = typeof session.payment_intent === "object" ? session.payment_intent : null;
+    return !paymentIntent || (paymentIntent.status !== "canceled" && paymentIntent.status !== "requires_payment_method");
+  });
 }
 
 /**
@@ -623,9 +677,12 @@ export async function createCommerceCheckoutSession(
   // Global catalog validation — not company-specific, so it doesn't need the
   // per-company lock below. Never trusts client-supplied amount/currency/
   // providerPriceId; both are resolved purely from the trusted priceCode.
-  await ensureEnterpriseSelfCheckoutPriceReady(input.priceCode!);
   const price = await loadEligibleCommercePrice(input.priceCode!);
+  // Eligibility and governed approval are checked before readiness performs
+  // any Stripe or provider-mapping write.
+  await ensureEnterpriseSelfCheckoutPriceReady(price.code, stripe);
   const purchaseFamily = classifyCommerceProductFamily(price.product);
+  const isEnterprise = isEnterpriseOneTimePrice(price);
 
   // TAYQAN has its own governed checkout and entitlement lifecycle.
   // Never allow a TAYQAN product through the generic commerce checkout.
@@ -693,6 +750,16 @@ export async function createCommerceCheckoutSession(
       // the DB-only check above.
       await assertNoExistingStripeSubscription(stripe, stripeCustomerId, environment, checkoutTarget);
 
+      const appOwnedSessions = checkoutTarget.family === "CORE_SOFTWARE"
+        ? await findAppOwnedCheckoutSessions(stripe, stripeCustomerId, actor.companyId)
+        : await findAppOwnedOpenCheckoutSessions(stripe, stripeCustomerId, actor.companyId);
+      if (checkoutTarget.family === "CORE_SOFTWARE" && hasBlockingEnterpriseCheckoutSession(appOwnedSessions)) {
+        throw new ExistingSubscriptionError();
+      }
+      const appOwnedOpenSessions = appOwnedSessions.filter(
+        (session) => session.status === "open" || typeof session.status === "undefined",
+      );
+
       /**
        * STRIPE-COMMERCIAL-21 — invariant: after this function returns
        * successfully, at most ONE Quantara-owned Checkout Session may be
@@ -707,8 +774,6 @@ export async function createCommerceCheckoutSession(
        * function returns or creates anything. Never touches a session
        * lacking Quantara's own metadata — see findAppOwnedOpenCheckoutSessions.
        */
-      const isEnterprise = ["enterprise_core", "enterprise_scale", "enterprise_authority"].includes(price.product.code);
-        const appOwnedOpenSessions = await findAppOwnedOpenCheckoutSessions(stripe, stripeCustomerId, actor.companyId);
       const reusableIndex = appOwnedOpenSessions.findIndex(
         (session) => session.metadata?.quantara_price_code === price.code && Boolean(session.url),
       );

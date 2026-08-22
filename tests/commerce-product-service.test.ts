@@ -23,6 +23,11 @@ import { getCheckoutAvailability } from "../src/lib/services/commerce-checkout-a
 import type { CurrentActor } from "../src/lib/auth/current-actor";
 
 const RUN_ID = `${Date.now()}-${process.pid}`;
+const ENTERPRISE_ONE_TIME_PRICES = [
+  { productCode: "enterprise_core", priceCode: "enterprise_core_one_time_aed_15000", amountMinor: 1_500_000 },
+  { productCode: "enterprise_scale", priceCode: "enterprise_scale_one_time_aed_25000", amountMinor: 2_500_000 },
+  { productCode: "enterprise_authority", priceCode: "enterprise_authority_one_time_aed_35000", amountMinor: 3_500_000 },
+] as const;
 
 function ownerActor(userId: string, companyId: string): PlatformActor {
   return { userId, companyId, platformRole: PlatformRole.PLATFORM_OWNER, fullName: "Commerce Test Owner", email: `commerce-owner-${RUN_ID}@example.com` };
@@ -61,8 +66,8 @@ describe("commerce product catalogue (integration, real local Postgres)", () => 
     // corrupting the governance invariant this same file's byte-for-byte
     // guard test checks on the three Enterprise anchor rows.
     await prisma.commercePrice.updateMany({
-      where: { code: { in: ["enterprise_core_annual_aed_15000", "enterprise_scale_annual_aed_25000", "enterprise_authority_annual_aed_35000"] } },
-      data: { reviewStatus: "REQUIRES_REVIEW", reviewedByUserId: null, reviewedAt: null },
+      where: { code: { in: ["starter_monthly_aed_149", ...ENTERPRISE_ONE_TIME_PRICES.map((spec) => spec.priceCode)] } },
+      data: { reviewStatus: "REQUIRES_REVIEW", reviewNote: null, reviewedByUserId: null, reviewedAt: null },
     });
     await prisma.platformAuditLog.deleteMany({ where: { actorUserId: ownerUserId } });
     await prisma.user.delete({ where: { id: ownerUserId } }).catch(() => undefined);
@@ -203,9 +208,15 @@ describe("commerce product catalogue (integration, real local Postgres)", () => 
       // the schema default put it. See
       // src/lib/services/commerce-price-approval-service.ts's docstring for
       // the only path that may move it to APPROVED.
-      for (const priceCode of ["enterprise_core_annual_aed_15000", "enterprise_scale_annual_aed_25000", "enterprise_authority_annual_aed_35000"]) {
-        const price = await prisma.commercePrice.findUnique({ where: { code: priceCode } });
+      for (const spec of ENTERPRISE_ONE_TIME_PRICES) {
+        const price = await prisma.commercePrice.findUnique({ where: { code: spec.priceCode } });
         expect(price).not.toBeNull();
+        expect(price).toMatchObject({
+          amountMinor: spec.amountMinor,
+          currency: "AED",
+          billingInterval: "ONE_TIME",
+          isActive: true,
+        });
         if (price!.reviewedByUserId === null) {
           expect(price!.reviewStatus).toBe("REQUIRES_REVIEW");
         } else {
@@ -288,43 +299,49 @@ describe("commerce product catalogue (integration, real local Postgres)", () => 
       expect(afterFound?.prices[0].amountMinor).toBe(2500);
     });
 
-    describe("v4 gate 1: Enterprise sales-led prices are never publicly exposed, even once APPROVED", () => {
-      it("(1) an APPROVED enterprise_core annual price does not expose amountMinor or its price code via the public DTO/API, (2) the product still appears publicly without it, and (4) an unapproved sibling price stays absent for the ordinary REQUIRES_REVIEW reason too", async () => {
+    describe("Enterprise one-time Marketplace public projection", () => {
+      it("exposes the exact APPROVED Enterprise Core one-time price through the public DTO/API", async () => {
         await seedCommerceProducts(prisma);
+        const spec = ENTERPRISE_ONE_TIME_PRICES[0];
         const stub = await prisma.commerceProduct.findUniqueOrThrow({ where: { code: "enterprise_core" }, include: { prices: true } });
         expect(stub.purchaseMode).toBe("DIRECT");
-        const annualPrice = stub.prices.find((p: any) => p.billingInterval === "YEAR" && p.isActive);
-        expect(annualPrice).toBeDefined();
+        expect(stub.type).toBe("ONE_TIME");
+        const oneTimePrice = stub.prices.find((p: any) => p.code === spec.priceCode && p.isActive);
+        expect(oneTimePrice).toMatchObject({
+          amountMinor: spec.amountMinor,
+          currency: "AED",
+          billingInterval: "ONE_TIME",
+        });
 
-        // Governed approval (reviewedByUserId set, mirroring commerce-product-service.test.ts's
-        // own byte-for-byte guard invariant on this exact anchor row) — proves the redaction
-        // below is NOT merely an artifact of the price still being REQUIRES_REVIEW.
-        await prisma.commercePrice.update({ where: { id: annualPrice!.id }, data: { reviewStatus: "APPROVED", reviewedByUserId: ownerUserId } });
+        // Governed approval: public prices remain hidden until an owner/admin
+        // has approved the exact server-controlled CommercePrice row.
+        await prisma.commercePrice.update({ where: { id: oneTimePrice!.id }, data: { reviewStatus: "APPROVED", reviewedByUserId: ownerUserId, reviewedAt: new Date() } });
 
         const publicList = await listPublicCommerceProducts();
         const publicEnterpriseCore = publicList.find((p: any) => p.code === "enterprise_core");
 
-        // (2) product metadata remains public.
         expect(publicEnterpriseCore).toBeDefined();
         expect(publicEnterpriseCore?.name).toBeTruthy();
         expect(publicEnterpriseCore?.purchaseMode).toBe("DIRECT");
-
-        // (1) the exact CommercePrice code/amountMinor is withheld even though APPROVED.
         expect(publicEnterpriseCore?.prices).toHaveLength(1);
-        expect(JSON.stringify(publicEnterpriseCore)).toContain(annualPrice!.code);
-        expect(JSON.stringify(publicEnterpriseCore)).toContain(String(annualPrice!.amountMinor));
+        expect(publicEnterpriseCore?.prices[0]).toMatchObject({
+          code: spec.priceCode,
+          amountMinor: spec.amountMinor,
+          currency: "AED",
+          billingInterval: "ONE_TIME",
+        });
 
-        // Same via the direct DTO function (not just the aggregate list), and via the real
-        // unauthenticated route in tests/commerce-product-routes.test.ts's own gate-1 test.
+        // Same via the direct DTO function, not only the aggregate list.
         const fullRecord = await prisma.commerceProduct.findUniqueOrThrow({
           where: { code: "enterprise_core" },
           include: { prices: true, entitlementTemplate: true, industryPackage: true },
         });
         const dto = toPublicCommerceProductDTO(fullRecord);
         expect(dto.prices).toHaveLength(1);
+        expect(dto.prices[0]).toMatchObject({ code: spec.priceCode, amountMinor: spec.amountMinor, billingInterval: "ONE_TIME" });
       });
 
-      it("(3) an approved Starter price still appears publicly with its real amount — the redaction is scoped to exactly the three Enterprise codes", async () => {
+      it("an approved Starter price still appears publicly with its real amount", async () => {
         await seedCommerceProducts(prisma);
         await prisma.commercePrice.updateMany({
           where: { code: "starter_monthly_aed_149" },
@@ -339,29 +356,37 @@ describe("commerce product catalogue (integration, real local Postgres)", () => 
         expect(monthly?.amountMinor).toBe(14900);
       });
 
-      it("(5) getEnterpriseAnnualPlans (via getCheckoutAvailability) still returns the real approved Enterprise annual price for the authenticated settings experience, unaffected by the public redaction", async () => {
+      it("getCheckoutAvailability returns the exact approved Enterprise one-time prices", async () => {
         await seedCommerceProducts(prisma);
-        for (const code of ["enterprise_core", "enterprise_scale", "enterprise_authority"]) {
-          const stub = await prisma.commerceProduct.findUniqueOrThrow({ where: { code }, include: { prices: true } });
-          const annualPrice = stub.prices.find((p: any) => p.billingInterval === "YEAR" && p.isActive);
-          await prisma.commercePrice.update({ where: { id: annualPrice!.id }, data: { reviewStatus: "APPROVED", reviewedByUserId: ownerUserId } });
+        for (const spec of ENTERPRISE_ONE_TIME_PRICES) {
+          const stub = await prisma.commerceProduct.findUniqueOrThrow({ where: { code: spec.productCode }, include: { prices: true } });
+          expect(stub).toMatchObject({ type: "ONE_TIME", purchaseMode: "DIRECT" });
+          const oneTimePrice = stub.prices.find((p: any) => p.code === spec.priceCode && p.isActive);
+          expect(oneTimePrice).toMatchObject({ amountMinor: spec.amountMinor, currency: "AED", billingInterval: "ONE_TIME" });
+          await prisma.commercePrice.update({ where: { id: oneTimePrice!.id }, data: { reviewStatus: "APPROVED", reviewedByUserId: ownerUserId, reviewedAt: new Date() } });
         }
 
         const actor: CurrentActor = { userId: ownerUserId, companyId: ownerCompanyId, role: "COMPANY_OWNER", fullName: "Commerce Test Owner", email: `commerce-owner-${RUN_ID}@example.com` };
         const availability = await getCheckoutAvailability(actor);
 
-        for (const code of ["enterprise_core", "enterprise_scale", "enterprise_authority"]) {
-          const plan = availability.products.find((p: any) => p.productCode === code);
+        for (const spec of ENTERPRISE_ONE_TIME_PRICES) {
+          const plan = availability.products.find((p: any) => p.productCode === spec.productCode);
           expect(plan).toBeDefined();
-          expect(plan!.prices).not.toBeNull();
-          expect(plan!.prices[0].amountMinor).toBeGreaterThan(0);
+          expect(plan!.prices).toHaveLength(1);
+          expect(plan!.prices[0]).toMatchObject({
+            priceCode: spec.priceCode,
+            amountMinor: spec.amountMinor,
+            currency: "AED",
+            billingInterval: "ONE_TIME",
+          });
         }
 
-        // The same three codes are simultaneously redacted from the public projection.
+        // The approved prices are also represented identically in the public catalogue.
         const publicList = await listPublicCommerceProducts();
-        for (const code of ["enterprise_core", "enterprise_scale", "enterprise_authority"]) {
-          const publicEntry = publicList.find((p: any) => p.code === code);
+        for (const spec of ENTERPRISE_ONE_TIME_PRICES) {
+          const publicEntry = publicList.find((p: any) => p.code === spec.productCode);
           expect(publicEntry?.prices).toHaveLength(1);
+          expect(publicEntry?.prices[0]).toMatchObject({ code: spec.priceCode, amountMinor: spec.amountMinor, billingInterval: "ONE_TIME" });
         }
       });
     });

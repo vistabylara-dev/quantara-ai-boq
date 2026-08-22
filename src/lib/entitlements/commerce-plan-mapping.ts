@@ -76,12 +76,12 @@ export const COMMERCE_LINKED_SOFTWARE_PLANS: readonly CommerceLinkedPlanSpec[] =
     maxProjects: null,
   },
   /**
-   * Enterprise Core/Scale/Authority are annual-prepaid-only (see
-   * prisma/seed-data/commerce-products.ts) — monthlyPriceAed is 0 for all
-   * three because no monthly price exists for them, not because they're
-   * free. `enterprise_installation` (the pre-existing one-time,
-   * CONTACT_SALES professional-services product) deliberately has no entry
-   * here and must never resolve via findCommerceLinkedPlanSpec.
+   * Enterprise Core/Scale/Authority are permanent one-time purchases (see
+   * prisma/seed-data/commerce-products.ts). monthlyPriceAed remains 0 because
+   * no recurring monthly price exists; annualPriceAed preserves each tier's
+   * established catalogue amount for the existing SoftwarePlan record shape.
+   * `enterprise_installation`, the separate CONTACT_SALES professional-
+   * services product, deliberately has no mapping here.
    */
   {
     softwarePlanKey: "commerce_enterprise_core",
@@ -90,7 +90,7 @@ export const COMMERCE_LINKED_SOFTWARE_PLANS: readonly CommerceLinkedPlanSpec[] =
     description: "Commerce-purchased Enterprise Core one-time package. Synced from the enterprise_core CommerceProduct entitlement template.",
     planType: PlanType.ENTERPRISE,
     monthlyPriceAed: 0,
-    annualPriceAed: 0,
+    annualPriceAed: 15000,
     maxUsers: 50,
     maxProjects: null,
   },
@@ -101,7 +101,7 @@ export const COMMERCE_LINKED_SOFTWARE_PLANS: readonly CommerceLinkedPlanSpec[] =
     description: "Commerce-purchased Enterprise Scale one-time package. Synced from the enterprise_scale CommerceProduct entitlement template.",
     planType: PlanType.ENTERPRISE,
     monthlyPriceAed: 0,
-    annualPriceAed: 0,
+    annualPriceAed: 25000,
     maxUsers: 100,
     maxProjects: null,
   },
@@ -112,7 +112,7 @@ export const COMMERCE_LINKED_SOFTWARE_PLANS: readonly CommerceLinkedPlanSpec[] =
     description: "Commerce-purchased Enterprise Authority one-time package. Synced from the enterprise_authority CommerceProduct entitlement template.",
     planType: PlanType.ENTERPRISE,
     monthlyPriceAed: 0,
-    annualPriceAed: 0,
+    annualPriceAed: 35000,
     maxUsers: null,
     maxProjects: null,
   },

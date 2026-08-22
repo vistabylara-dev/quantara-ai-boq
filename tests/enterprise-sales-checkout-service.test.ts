@@ -2,11 +2,9 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { prisma } from "../src/lib/db/prisma";
 import type { PlatformActor } from "../src/lib/auth/platform-authorization";
 import type { PlatformRequestMetadata } from "../src/lib/repositories/platform-admin-repository";
-import type { CurrentActor } from "../src/lib/auth/current-actor";
 import { createEnterpriseSalesCheckoutSession } from "../src/lib/services/enterprise-sales-checkout-service";
-import { createCommerceCheckoutSession } from "../src/lib/services/commerce-checkout-service";
 import { seedEnterpriseCommerceProducts } from "../prisma/seed-data/commerce-products";
-import { createStripeBillingCustomer } from "../src/lib/repositories/stripe-billing-repository";
+import { requireIsolatedLocalTestDatabase } from "./helpers/require-isolated-test-database";
 
 const RUN_ID = `${Date.now()}-${process.pid}-entsales`;
 
@@ -14,6 +12,16 @@ const requestMetadata: PlatformRequestMetadata = {
   method: "POST",
   path: "/api/admin/commerce/enterprise-checkout",
 };
+const LEGACY_ENTERPRISE_ANNUAL_PRICE_CODES = [
+  "enterprise_core_annual_aed_15000",
+  "enterprise_scale_annual_aed_25000",
+  "enterprise_authority_annual_aed_35000",
+] as const;
+const ENTERPRISE_ONE_TIME_PRICE_CODES = [
+  "enterprise_core_one_time_aed_15000",
+  "enterprise_scale_one_time_aed_25000",
+  "enterprise_authority_one_time_aed_35000",
+] as const;
 
 let globalCustomerCounter = 0;
 let globalSessionCounter = 0;
@@ -43,11 +51,12 @@ function platformActor(userId: string, companyId: string, platformRole: any = "P
   return { userId, companyId, platformRole, fullName: "Test", email: "test@example.com", isPlatformAdmin: true, hasCapability: (cap: any) => true } as any;
 }
 
-describe("Enterprise Checkout (Direct transition)", () => {
+describe("legacy Enterprise sales checkout after the one-time Marketplace transition", () => {
   let ownerUserId: string;
   let testCompanyId: string;
-  
+
   beforeAll(async () => {
+    requireIsolatedLocalTestDatabase();
     await seedEnterpriseCommerceProducts(prisma);
 
     const company = await prisma.company.create({
@@ -70,138 +79,51 @@ describe("Enterprise Checkout (Direct transition)", () => {
       },
     });
     ownerUserId = user.id;
-
-    // Approve core price and map it
-    const corePrice = await prisma.commercePrice.findUniqueOrThrow({ where: { code: "enterprise_core_annual_aed_15000" } });
-    await prisma.commercePrice.update({ where: { id: corePrice.id }, data: { reviewStatus: "APPROVED" } });
-    await prisma.commerceProviderMapping.create({
-      data: {
-        provider: "STRIPE",
-        environment: "TEST",
-        commerceProductId: corePrice.productId,
-        commercePriceId: corePrice.id,
-        providerProductId: `prod_test_${RUN_ID}`,
-        providerPriceId: `price_test_${RUN_ID}`,
-        synchronizationStatus: "SYNCED",
-        lastSynchronizedAt: new Date(),
-        providerObjectType: "PRICE",
-      }
-    });
   });
 
   afterAll(async () => {
-    // cleanup not required for local test db, but good practice
+    await prisma.platformAuditLog.deleteMany({ where: { actorUserId: ownerUserId } });
+    await prisma.stripeBillingCustomer.deleteMany({ where: { companyId: testCompanyId } });
+    await prisma.user.deleteMany({ where: { id: ownerUserId } });
+    await prisma.company.deleteMany({ where: { id: testCompanyId } });
+    await prisma.$disconnect();
   });
 
-  it("A. enterprise_core passed into createEnterpriseSalesCheckoutSession rejects with PRODUCT_NOT_SALES_LED", async () => {
-    const stripe = mockStripeClient();
-    await expect(
-      createEnterpriseSalesCheckoutSession(
-        platformActor(ownerUserId, testCompanyId),
-        { companyId: testCompanyId, priceCode: "enterprise_core_annual_aed_15000" },
-        requestMetadata,
-        stripe
-      )
-    ).rejects.toMatchObject({
-      reason: "PRODUCT_NOT_SALES_LED"
-    });
-    expect(stripe.checkout.sessions.create).not.toHaveBeenCalled();
-  });
+  it.each(LEGACY_ENTERPRISE_ANNUAL_PRICE_CODES)(
+    "fails closed for removed legacy annual code %s",
+    async (priceCode) => {
+      const stripe = mockStripeClient();
+      await expect(
+        createEnterpriseSalesCheckoutSession(
+          platformActor(ownerUserId, testCompanyId),
+          { companyId: testCompanyId, priceCode },
+          requestMetadata,
+          stripe,
+        ),
+      ).rejects.toMatchObject({
+        code: "ENTERPRISE_CHECKOUT_NOT_ELIGIBLE",
+        reason: "PRICE_NOT_FOUND",
+      });
+      expect(stripe.checkout.sessions.create).not.toHaveBeenCalled();
+    },
+  );
 
-  it("B. enterprise_scale rejects with PRODUCT_NOT_SALES_LED", async () => {
-    const stripe = mockStripeClient();
-    await expect(
-      createEnterpriseSalesCheckoutSession(
-        platformActor(ownerUserId, testCompanyId),
-        { companyId: testCompanyId, priceCode: "enterprise_scale_annual_aed_25000" },
-        requestMetadata,
-        stripe
-      )
-    ).rejects.toMatchObject({
-      reason: "PRODUCT_NOT_SALES_LED"
-    });
-  });
-
-  it("C. enterprise_authority rejects with PRODUCT_NOT_SALES_LED", async () => {
-    const stripe = mockStripeClient();
-    await expect(
-      createEnterpriseSalesCheckoutSession(
-        platformActor(ownerUserId, testCompanyId),
-        { companyId: testCompanyId, priceCode: "enterprise_authority_annual_aed_35000" },
-        requestMetadata,
-        stripe
-      )
-    ).rejects.toMatchObject({
-      reason: "PRODUCT_NOT_SALES_LED"
-    });
-  });
-
-  it("D. invalid/non-enterprise price code rejects with PRICE_CODE_NOT_ENTERPRISE", async () => {
-    const stripe = mockStripeClient();
-    await expect(
-      createEnterpriseSalesCheckoutSession(
-        platformActor(ownerUserId, testCompanyId),
-        { companyId: testCompanyId, priceCode: "starter_monthly_aed_149" },
-        requestMetadata,
-        stripe
-      )
-    ).rejects.toMatchObject({
-      reason: "PRICE_CODE_NOT_ENTERPRISE"
-    });
-  });
-
-  it("E. NORMAL DIRECT ENTERPRISE CHECKOUT WORKS", async () => {
-    const stripe = mockStripeClient();
-    const actor: CurrentActor = {
-      userId: ownerUserId,
-      companyId: testCompanyId,
-      role: "COMPANY_OWNER",
-      fullName: "Test User",
-      email: `entsales-test-${RUN_ID}@example.com`,
-    };
-
-    const result = await createCommerceCheckoutSession(actor, { priceCode: "enterprise_core_annual_aed_15000" }, stripe);
-
-    expect(result.checkoutUrl).toBeTruthy();
-    expect(stripe.checkout.sessions.create).toHaveBeenCalledTimes(1);
-    
-    const callArgs = stripe.checkout.sessions.create.mock.calls[0][0];
-    expect(callArgs.mode).toBe("subscription");
-    expect(callArgs.line_items).toHaveLength(1);
-    expect(callArgs.line_items[0].price).toBe(`price_test_${RUN_ID}`);
-    expect(callArgs.customer).toBeTruthy();
-  });
-
-  it("F. NORMAL DIRECT CHECKOUT STILL BLOCKS DUPLICATE CORE SOFTWARE SUBSCRIPTION", async () => {
-    const stripe = mockStripeClient();
-    const actor: CurrentActor = {
-      userId: ownerUserId,
-      companyId: testCompanyId,
-      role: "COMPANY_OWNER",
-      fullName: "Test User",
-      email: `entsales-test-${RUN_ID}@example.com`,
-    };
-
-    // Pretend company has an active software subscription
-    const plan = await prisma.softwarePlan.findUniqueOrThrow({ where: { key: "commerce_starter" } });
-    await prisma.companySoftwareSubscription.create({
-      data: {
-        companyId: testCompanyId,
-        softwarePlanId: plan.id,
-        status: "ACTIVE",
-        startsAt: new Date(),
-        expiresAt: new Date(Date.now() + 86400000),
-        externalSubscriptionId: `sub_test_${RUN_ID}`,
-        source: "stripe",
-      }
-    });
-
-    await expect(
-      createCommerceCheckoutSession(actor, { priceCode: "enterprise_core_annual_aed_15000" }, stripe)
-    ).rejects.toMatchObject({
-      code: "CHECKOUT_EXISTING_SUBSCRIPTION"
-    });
-
-    expect(stripe.checkout.sessions.create).not.toHaveBeenCalled();
-  });
+  it.each(ENTERPRISE_ONE_TIME_PRICE_CODES)(
+    "does not admit Marketplace one-time code %s into the protected legacy sales path",
+    async (priceCode) => {
+      const stripe = mockStripeClient();
+      await expect(
+        createEnterpriseSalesCheckoutSession(
+          platformActor(ownerUserId, testCompanyId),
+          { companyId: testCompanyId, priceCode },
+          requestMetadata,
+          stripe,
+        ),
+      ).rejects.toMatchObject({
+        code: "ENTERPRISE_CHECKOUT_NOT_ELIGIBLE",
+        reason: "PRICE_CODE_NOT_ENTERPRISE",
+      });
+      expect(stripe.checkout.sessions.create).not.toHaveBeenCalled();
+    },
+  );
 });

@@ -79,15 +79,15 @@ describe("commerce product API routes (integration, real local Postgres)", () =>
   });
 
   afterAll(async () => {
-    // v4 gate 1 — reset the REAL, shared, never-deleted Starter and Enterprise
+    // Reset the REAL, shared, never-deleted Starter and Enterprise
     // anchor price BEFORE deleting ownerUserId below — reviewedByUserId's
     // FK is onDelete: SetNull, so deleting the user first would silently
     // leave it APPROVED with a null reviewer, corrupting the governance
     // invariant commerce-product-service.test.ts's byte-for-byte guard test
     // checks on this same row.
     await prisma.commercePrice.updateMany({
-      where: { code: { in: ["starter_monthly_aed_149", "enterprise_core_annual_aed_15000", "enterprise_scale_annual_aed_25000", "enterprise_authority_annual_aed_35000"] } },
-      data: { reviewStatus: "REQUIRES_REVIEW", reviewedByUserId: null, reviewedAt: null },
+      where: { code: { in: ["starter_monthly_aed_149", "enterprise_core_one_time_aed_15000", "enterprise_scale_one_time_aed_25000", "enterprise_authority_one_time_aed_35000"] } },
+      data: { reviewStatus: "REQUIRES_REVIEW", reviewNote: null, reviewedByUserId: null, reviewedAt: null },
     });
     await prisma.platformAuditLog.deleteMany({ where: { actorUserId: ownerUserId } });
     await prisma.commercePrice.deleteMany({ where: { productId: privateProductId } });
@@ -160,13 +160,18 @@ describe("commerce product API routes (integration, real local Postgres)", () =>
       expect(afterProduct.prices.some((pr: { code: string }) => pr.code === priceCode)).toBe(true);
     });
 
-    it("an APPROVED enterprise_core annual price correctly exposes its amountMinor and price code through GET /api/commerce/products because Enterprise is DIRECT", async () => {
+    it("an APPROVED Enterprise Core one-time price exposes its exact AED amount and code through GET /api/commerce/products", async () => {
       await seedCommerceProducts(prisma);
       const enterpriseStub = await prisma.commerceProduct.findUniqueOrThrow({ where: { code: "enterprise_core" }, include: { prices: true } });
       expect(enterpriseStub.purchaseMode).toBe("DIRECT");
-      const annualPrice = enterpriseStub.prices.find((p) => p.billingInterval === "YEAR" && p.isActive);
-      expect(annualPrice).toBeDefined();
-      await prisma.commercePrice.update({ where: { id: annualPrice!.id }, data: { reviewStatus: "APPROVED", reviewedByUserId: ownerUserId, reviewedAt: new Date() } });
+      expect(enterpriseStub.type).toBe("ONE_TIME");
+      const oneTimePrice = enterpriseStub.prices.find((p) => p.code === "enterprise_core_one_time_aed_15000" && p.isActive);
+      expect(oneTimePrice).toMatchObject({
+        amountMinor: 1_500_000,
+        currency: "AED",
+        billingInterval: "ONE_TIME",
+      });
+      await prisma.commercePrice.update({ where: { id: oneTimePrice!.id }, data: { reviewStatus: "APPROVED", reviewedByUserId: ownerUserId, reviewedAt: new Date() } });
       await prisma.commercePrice.updateMany({ where: { code: "starter_monthly_aed_149" }, data: { reviewStatus: "APPROVED", reviewedByUserId: ownerUserId, reviewedAt: new Date() } });
 
       const res = await publicProductsGET(new Request("http://localhost/api/commerce/products"));
@@ -175,11 +180,16 @@ describe("commerce product API routes (integration, real local Postgres)", () =>
       const enterpriseCore = body.data.find((p: { code: string }) => p.code === "enterprise_core");
       expect(enterpriseCore).toBeDefined();
       expect(enterpriseCore.purchaseMode).toBe("DIRECT");
-      
+      expect(enterpriseCore.type).toBe("ONE_TIME");
+
       expect(enterpriseCore.prices).toHaveLength(1);
       const exposedPrice = enterpriseCore.prices[0];
-      expect(exposedPrice.code).toBe(annualPrice!.code);
-      expect(exposedPrice.amountMinor).toBe(annualPrice!.amountMinor);
+      expect(exposedPrice).toMatchObject({
+        code: "enterprise_core_one_time_aed_15000",
+        amountMinor: 1_500_000,
+        currency: "AED",
+        billingInterval: "ONE_TIME",
+      });
 
       // Starter is also fully public.
       const starter = body.data.find((p: { code: string }) => p.code === "starter");

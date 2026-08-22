@@ -32,7 +32,7 @@ describe("commerce-plan-mapping", () => {
     }
   });
 
-  it("the three Enterprise tiers are annual-prepaid-only (monthlyPriceAed 0, not free) at their exact AED prices, use PlanType.ENTERPRISE, and are all unlimited-project", () => {
+  it("the three Enterprise one-time tiers retain their exact AED SoftwarePlan amounts, use PlanType.ENTERPRISE, and are all unlimited-project", () => {
     const core = findCommerceLinkedPlanSpec("enterprise_core")!;
     const scale = findCommerceLinkedPlanSpec("enterprise_scale")!;
     const authority = findCommerceLinkedPlanSpec("enterprise_authority")!;

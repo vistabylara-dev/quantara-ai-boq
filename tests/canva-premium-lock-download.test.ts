@@ -124,6 +124,9 @@ describe("VERIFY: premium item clean-output lock + trial watermark (integration,
     });
     await addBoqItemFromSource(actor, boq.databaseId, { sourceType: BoqItemSourceType.MASTER_ITEM, sourceId: premiumItem.id, itemNumber: 1, quantity: "2", overrides: { unitCost: 100, marginPercentage: 10 } });
 
+    await runBOQVerification(companyId, boq.databaseId);
+    await lockBOQ(companyId, boq.databaseId, actor.fullName, actor.userId);
+
     const documentCountBefore = await prisma.generatedDocument.count({ where: { companyId } });
 
     let pdfError: unknown;
@@ -254,5 +257,61 @@ describe("VERIFY: premium item clean-output lock + trial watermark (integration,
     const allDocxText = documentXml + footerXmls.join("");
     expect(allDocxText).toContain("Generated with Quantara");
     expect(allDocxText).toContain("Trial Version");
+  });
+
+  it("allows working drafts (CSV, HTML, DOCX QUANTITIES_ONLY) even if the unlocked BOQ contains unlicensed premium items", async () => {
+    const { companyId, clientId, actor, templateId } = await seedCompanyWithUser("draft-allow");
+    await grantUnlimitedPlanForTests(companyId);
+
+    const pkg = await prisma.industryDataPackage.create({
+      data: { key: `lock-test-pkg-${RUN_ID}-draft`, name: "Lock Test Package Draft", disciplineId, packageType: "SPECIALIST", monthlyPrice: 0 },
+    });
+    cleanupPackageIds.push(pkg.id);
+    const premiumItem = await prisma.masterItem.create({
+      data: { disciplineId, categoryId, itemCode: `LOCK-DRAFT-${RUN_ID}`, name: "Lock Test Premium Item Draft", defaultUnit: "nos", isPremium: true, status: "ACTIVE" },
+    });
+    cleanupMasterItemIds.push(premiumItem.id);
+    await prisma.industryDataPackageItem.create({ data: { packageId: pkg.id, masterItemId: premiumItem.id, sortOrder: 0 } });
+
+    const { project, boq } = await createProjectWithDefaultBoq(actor, {
+      clientId, industryEngineId: "construction", reference: `LOCK-DRAFT-${RUN_ID}`, name: "Lock Draft Test", location: "Dubai", currency: "AED", taxRate: "5", language: "English",
+    });
+    await addBoqItemFromSource(actor, boq.databaseId, { sourceType: BoqItemSourceType.MASTER_ITEM, sourceId: premiumItem.id, itemNumber: 1, quantity: "2", overrides: { unitCost: 100, marginPercentage: 10 } });
+
+    // 1. CSV INTERNAL
+    const csvResult = await generateDocument(actor, project.databaseId, { boqId: boq.databaseId, templateId, documentType: "CSV", audience: "INTERNAL", pricingMode: "WITH_PRICES" });
+    cleanupStorageKeys.push((await getGeneratedDocumentRecord(companyId, csvResult.id)).storageKey!);
+    expect(csvResult.status).toBe("COMPLETED");
+    expect(csvResult.isDraft).toBe(true);
+
+    // 2. HTML INTERNAL
+    const htmlResult = await generateDocument(actor, project.databaseId, { boqId: boq.databaseId, templateId, documentType: "HTML", audience: "INTERNAL", pricingMode: "WITH_PRICES" });
+    cleanupStorageKeys.push((await getGeneratedDocumentRecord(companyId, htmlResult.id)).storageKey!);
+    expect(htmlResult.status).toBe("COMPLETED");
+    expect(htmlResult.isDraft).toBe(true);
+
+    // 3. DOCX INTERNAL QUANTITIES_ONLY
+    const docxQoResult = await generateDocument(actor, project.databaseId, { boqId: boq.databaseId, templateId, documentType: "DOCX", audience: "INTERNAL", pricingMode: "QUANTITIES_ONLY" });
+    cleanupStorageKeys.push((await getGeneratedDocumentRecord(companyId, docxQoResult.id)).storageKey!);
+    expect(docxQoResult.status).toBe("COMPLETED");
+    expect(docxQoResult.isDraft).toBe(true);
+
+    // 4. No package granted
+    const subCount = await prisma.companyPackageSubscription.count({ where: { companyId, packageId: pkg.id, status: "ACTIVE" } });
+    expect(subCount).toBe(0);
+
+    // 5. DOCX + WITH_PRICES (from same unlocked BOQ) => LOCKED_REVISION_REQUIRED
+    let docxPricesError: unknown;
+    try {
+      await generateDocument(actor, project.databaseId, { boqId: boq.databaseId, templateId, documentType: "DOCX", audience: "INTERNAL", pricingMode: "WITH_PRICES" });
+    } catch (e) { docxPricesError = e; }
+    expect(docxPricesError).toMatchObject({ code: "LOCKED_REVISION_REQUIRED", status: 409 });
+
+    // 6. PDF (from same unlocked BOQ) => LOCKED_REVISION_REQUIRED
+    let pdfError: unknown;
+    try {
+      await generateDocument(actor, project.databaseId, { boqId: boq.databaseId, templateId, documentType: "PDF", audience: "INTERNAL", pricingMode: "WITH_PRICES" });
+    } catch (e) { pdfError = e; }
+    expect(pdfError).toMatchObject({ code: "LOCKED_REVISION_REQUIRED", status: 409 });
   });
 });

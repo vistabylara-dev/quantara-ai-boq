@@ -1412,7 +1412,7 @@ const en = {
       saasEnterpriseBody: "Enterprise annual subscriptions have published annual prices. An eligible authenticated customer may continue through checkout when the selected direct price is active, approved and synchronized.",
       saasEnterprisePricingNote: "Direct annual subscription",
       saasEnterpriseSelect: "Choose",
-      saasEnterpriseCta: "Contact Sales",
+      saasEnterpriseCta: "Choose Enterprise plan",
       saasEnterpriseCoreName: "Enterprise Core",
       saasEnterpriseCoreFeature1: "50-user included commercial allowance",
       saasEnterpriseCoreFeature2: "Unlimited active projects",

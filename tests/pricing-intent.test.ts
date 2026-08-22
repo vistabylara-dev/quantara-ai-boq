@@ -151,6 +151,7 @@ describe("SSR safety", () => {
 describe("trusted href builders", () => {
   it("builds encoded trusted hrefs for register, login and subscription", () => {
     expect(buildRegisterPricingHref("professional_monthly_aed_399")).toBe("/register?priceCode=professional_monthly_aed_399");
+      expect(buildRegisterPricingHref("enterprise_core_annual_aed_15000")).toBe("/register?priceCode=enterprise_core_annual_aed_15000");
     expect(buildLoginPricingHref("professional_monthly_aed_399")).toBe("/login?priceCode=professional_monthly_aed_399");
     expect(buildSubscriptionPricingHref("professional_monthly_aed_399")).toBe("/settings/subscription?priceCode=professional_monthly_aed_399");
   });

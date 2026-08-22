@@ -289,6 +289,31 @@ describe("public product truth", () => {
     expect(source).not.toMatch(/Durable production storage/i);
   });
 
+  it("proves Arabic sales truth includes correct enterprise prices and rejects corrupted strings", () => {
+    const { readFileSync } = require("node:fs");
+    const { join } = require("node:path");
+    const repoRoot = process.cwd();
+    const arDictionary = readFileSync(join(repoRoot, "src", "lib", "i18n", "dictionaries", "ar.ts"), "utf8");
+    const salesTruth = readFileSync(join(repoRoot, "src", "lib", "public-site", "sales-truth.ts"), "utf8");
+
+    const combined = arDictionary + " " + salesTruth;
+
+    expect(combined).toContain("Enterprise Core");
+    expect(combined).toContain("Enterprise Scale");
+    expect(combined).toContain("Enterprise Authority");
+    expect(combined).toContain("15,000");
+    expect(combined).toContain("25,000");
+    expect(combined).toContain("35,000");
+
+    const corruptedStrings = [
+      "الماسسات", "ىمك؆", "المؤطل", "الرعر", "المححد", "المجسسات", "المححدة", "سنوو", "متباشر", "التنفيد", "غاير", "المتاشرة"
+    ];
+
+    for (const str of corruptedStrings) {
+      expect(combined).not.toContain(str);
+    }
+  });
+
   it("does not publish unverified self-serve prices or conversion claims", () => {
     const source = publicWebsiteSource();
 

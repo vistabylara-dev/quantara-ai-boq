@@ -109,25 +109,10 @@ export default async function PricingPage() {
   };
 
   /**
-   * CORRECTION-1 mission 4 — Enterprise added to the public pricing journey
-   * (previously only Starter/Professional/Business were visible here, so a
-   * visitor arriving from an ad had no way to even discover Enterprise
-   * exists), but deliberately WITHOUT the specific per-tier annual AED
-   * amounts (the ones approved for Phase A / shown on the authenticated
-   * settings page): tests/public-product-truth.test.ts's "does not publish
-   * unverified self-serve prices" assertions encode this repo's existing
-   * product-truth policy that the
-   * `enterprise-feature-bundle` capability — status NOT_AVAILABLE in
-   * src/lib/public-site/product-truth.ts — must never show a specific price
-   * on the public site. That policy predates this change and is a real,
-   * intentional guardrail, not an oversight; showing exact figures here
-   * would silently violate it. Every card routes to /contact-sales rather
-   * than any self-service checkout intent, matching the public Terms
-   * (legal.terms.checkoutBody: Enterprise scope requires a separate written
-   * quotation) and the same sales-led CTA used on the authenticated
-   * /settings/subscription Enterprise section — the AUTHENTICATED settings
-   * page is still the right place to show the approved AED amounts to a
-   * signed-in company evaluating an upgrade.
+   * Enterprise Core / Scale / Authority are published annual DIRECT
+   * subscriptions. This public page only hands the exact trusted priceCode
+   * into the existing registration/login pricing-intent journey; Stripe
+   * checkout remains authenticated and is never called directly here.
    */
   const enterprisePlans: { key: string; name: string; priceCode: TrustedPublicPriceCode; price: string; features: string[] }[] = [
     {

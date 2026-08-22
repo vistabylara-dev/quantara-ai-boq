@@ -21,7 +21,7 @@ describe("ENTITLEMENTS-FREE-EXPORT: A real FREE customer must not receive a clea
 
   beforeAll(async () => {
     const company = await prisma.company.create({
-      data: { legalName: `Free Export Test Co ${RUN_ID}`, tradeName: "Free Export Test", email: `free-export-${RUN_ID}@example.com` },
+      data: { legalName: `Free Export Test Co ${RUN_ID}`, tradeName: "Free Export Test", email: `free-export-${RUN_ID}@example.com`, address: "Test Address, Dubai, UAE", defaultCurrency: "AED", taxRegistrationNumber: "100000000000001" },
     });
     companyId = company.id;
     actor = actorFor(companyId);

@@ -185,6 +185,11 @@ export async function generateDocument(actor: CurrentActor, projectIdentifier: s
   const isLocked = boqRecord.isLocked;
   const isDraft = !isLocked;
 
+  if (input.audience === DocumentAudience.CLIENT && !isDraft) {
+    const company = await prisma.company.findUniqueOrThrow({ where: { id: actor.companyId } });
+    assertCompanyProfileComplete(company);
+  }
+
   // Commercial Canva-style enforcement: require subscription for clean output
   await assertCleanOutputAuthorizedEffective(
     actor,
@@ -259,10 +264,6 @@ export async function generateDocument(actor: CurrentActor, projectIdentifier: s
     await assertMatchesLockedSnapshot(actor.companyId, boqRecord.id, boqRecord.revisionNumber, boqDto.totals.grandTotal);
   }
 
-  if (input.audience === DocumentAudience.CLIENT && !isDraft) {
-    const company = await prisma.company.findUniqueOrThrow({ where: { id: actor.companyId } });
-    assertCompanyProfileComplete(company);
-  }
 
   const company = await prisma.company.findUniqueOrThrow({ where: { id: actor.companyId } });
   const applyTrialWatermark = documentCheck.applyTrialWatermark;

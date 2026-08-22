@@ -29,7 +29,7 @@ import { generatePdf } from "@/lib/documents/generators/pdf-generator";
 import { generateDocx } from "@/lib/documents/generators/docx-generator";
 import { generateHtml } from "@/lib/documents/generators/html-generator";
 import { calculateBOQTotals } from "@/lib/calculations/boq-calculator";
-import { recordDocumentGenerated } from "@/lib/entitlements/entitlement-service";
+import { reserveTrialFinalExport, releaseTrialFinalExport, type TrialFinalExportReservation } from "@/lib/entitlements/entitlement-service";
 import { canGenerateDocumentEffective, getEffectiveEntitlements } from "@/lib/entitlements/effective-entitlement-service";
 import { assertCleanOutputAuthorized, assertCleanOutputAuthorizedEffective } from "@/lib/services/commercial-entitlement-service";
 
@@ -202,8 +202,8 @@ export async function generateDocument(actor: CurrentActor, projectIdentifier: s
   }
 
   const documentCheck = await canGenerateDocumentEffective(actor, isDraft, boqRecord.id);
+  const effective = await getEffectiveEntitlements(actor);
   if (!documentCheck.allowed) {
-    const effective = await getEffectiveEntitlements(actor);
     const isFree = effective.planType === "FREE" || effective.status === "NONE";
     const code = isFree ? "DOCUMENT_EXPORT_NOT_ALLOWED" : "TRIAL_EXPORT_LIMIT_REACHED";
     throw new AppError(code, documentCheck.reason ?? "Document generation limit reached.", 403);
@@ -323,6 +323,7 @@ export async function generateDocument(actor: CurrentActor, projectIdentifier: s
     generatedByName: actor.fullName,
   });
 
+  let trialExportReservation: TrialFinalExportReservation | null = null;
   try {
     let fileBuffer: Buffer;
     switch (input.documentType) {
@@ -351,6 +352,10 @@ export async function generateDocument(actor: CurrentActor, projectIdentifier: s
     const fileName = `${safeProjectRef}-${boqDto.revision}-${input.documentType}-${queued.id.slice(0, 8)}.${extension}`;
     const storageKey = `${actor.companyId}/${project.id}/${boqDto.revision}/${queued.id}.${extension}`;
 
+    if (!isDraft && effective.source === "real" && effective.isTrial) {
+      trialExportReservation = await reserveTrialFinalExport(actor.companyId);
+    }
+
     await getDocumentStorageAdapter().putObject({
       key: storageKey,
       body: fileBuffer,
@@ -373,10 +378,16 @@ export async function generateDocument(actor: CurrentActor, projectIdentifier: s
         trialWatermarked: applyTrialWatermark,
       },
     });
-    await recordDocumentGenerated(actor.companyId, isDraft);
     return completed;
   } catch (error) {
     console.error('Generation error:', error);
+    if (trialExportReservation) {
+      try {
+        await releaseTrialFinalExport(actor.companyId, trialExportReservation);
+      } catch (compError) {
+        console.error('Failed to release trial export reservation:', compError);
+      }
+    }
     const message = error instanceof Error ? error.message : "Document generation failed.";
     await markDocumentFailed(actor.companyId, queued.id, message.slice(0, 500));
     if (error instanceof AppError) throw error;

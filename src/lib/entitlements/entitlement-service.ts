@@ -290,6 +290,65 @@ export async function canGenerateDocument(companyId: string, isDraft: boolean): 
   return allow();
 }
 
+
+export type TrialFinalExportReservation = {
+  usageId: string;
+  subscriptionId: string;
+};
+
+export async function reserveTrialFinalExport(companyId: string): Promise<TrialFinalExportReservation | null> {
+  const entitlements = await getCompanyEntitlements(companyId);
+  if (!entitlements.isTrial || !entitlements.subscriptionId) {
+    return null;
+  }
+
+  const usage = await getOrCreateTrialUsage(companyId, entitlements.subscriptionId);
+
+  const updated = await prisma.companyTrialUsage.updateMany({
+    where: {
+      id: usage.id,
+      companyId,
+      subscriptionId: entitlements.subscriptionId,
+      documentsGenerated: { lt: TRIAL_LIMITS.maxFinalExports },
+    },
+    data: {
+      documentsGenerated: { increment: 1 },
+      lastUsedAt: new Date(),
+      firstUsedAt: usage.firstUsedAt ?? new Date(),
+    },
+  });
+
+  if (updated.count === 0) {
+    throw new AppError(
+      "TRIAL_EXPORT_LIMIT_REACHED",
+      "The 3-day Pro trial allows one final export. Upgrade to generate additional documents.",
+      403
+    );
+  }
+
+  return {
+    usageId: usage.id,
+    subscriptionId: entitlements.subscriptionId,
+  };
+}
+
+export async function releaseTrialFinalExport(
+  companyId: string,
+  reservation: TrialFinalExportReservation
+): Promise<void> {
+  await prisma.companyTrialUsage.updateMany({
+    where: {
+      id: reservation.usageId,
+      companyId,
+      subscriptionId: reservation.subscriptionId,
+      documentsGenerated: { gt: 0 },
+    },
+    data: {
+      documentsGenerated: { decrement: 1 },
+    },
+  });
+}
+
 export async function recordDocumentGenerated(companyId: string, isDraft: boolean): Promise<void> {
   if (isDraft) return;
   const entitlements = await getCompanyEntitlements(companyId);

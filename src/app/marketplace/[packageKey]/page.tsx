@@ -134,6 +134,9 @@ export default function MarketplacePackagePage(props: PageProps) {
   const Icon = libConfig?.icon;
   const displayName = libConfig?.displayName ?? pkg.name;
 
+  const monthPrice = pkg.purchase?.prices.find((candidate) => candidate.billingInterval === "MONTH");
+  const yearPrice = pkg.purchase?.prices.find((candidate) => candidate.billingInterval === "YEAR");
+
   return (
     <div className="space-y-6">
       <div className="rounded-[32px] border border-slate-800 bg-slate-950 p-8">
@@ -155,10 +158,26 @@ export default function MarketplacePackagePage(props: PageProps) {
             <p className="mt-2 text-xs text-slate-500">{t("marketplaceDetail.itemsPublished", { count: pkg.itemCount })}</p>
           </div>
           {pkg.hasAccess ? (
-            <span className="inline-flex rounded-2xl border border-emerald-900 bg-emerald-950/30 px-4 py-2 text-sm font-semibold text-emerald-300">{t("marketplaceDetail.accessGranted")}</span>
+            <div className="flex gap-4 items-center">
+              <span className="inline-flex rounded-2xl border border-emerald-900 bg-emerald-950/30 px-4 py-2 text-sm font-semibold text-emerald-300">
+                {t("marketplaceDetail.accessGranted")}
+              </span>
+              {(monthPrice || yearPrice) && (
+                <div className="flex items-center gap-4 pl-4 border-l border-slate-800">
+                  {monthPrice && (
+                    <span className="text-sm font-semibold text-slate-300">
+                      {monthPrice.currency} {(monthPrice.amountMinor / 100).toLocaleString("en-AE")}/mo
+                    </span>
+                  )}
+                  {yearPrice && (
+                    <span className="text-sm font-semibold text-slate-300">
+                      {yearPrice.currency} {(yearPrice.amountMinor / 100).toLocaleString("en-AE")}/yr
+                    </span>
+                  )}
+                </div>
+              )}
+            </div>
           ) : (() => {
-            const monthPrice = pkg.purchase?.prices.find((candidate) => candidate.billingInterval === "MONTH");
-            const yearPrice = pkg.purchase?.prices.find((candidate) => candidate.billingInterval === "YEAR");
             if (!monthPrice && !yearPrice) {
               return (
                 <span className="inline-flex flex-col items-end gap-1 text-right">

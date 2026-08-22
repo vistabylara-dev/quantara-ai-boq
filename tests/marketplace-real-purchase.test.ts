@@ -353,3 +353,44 @@ describe("MARKETPLACE-FULL-STRIPE-LINK: all 15 libraries provide BOTH MONTH and 
     expect(annual?.unavailableReason).toBe("EXISTING_SUBSCRIPTION");
   });
 });
+
+describe("MARKETPLACE-FIX-3: source contract for UI price visibility", () => {
+  it("proves the marketplace detail page renders owned and unowned prices correctly", () => {
+    const fs = require("node:fs");
+    const path = require("node:path");
+
+    const sourcePath = path.join(process.cwd(), "src", "app", "marketplace", "[packageKey]", "page.tsx");
+    const sourceCode = fs.readFileSync(sourcePath, "utf8");
+
+    // 1 & 2. derives MONTH and YEAR price from pkg.purchase?.prices
+    expect(sourceCode).toContain('const monthPrice = pkg.purchase?.prices.find((candidate) => candidate.billingInterval === "MONTH")');
+    expect(sourceCode).toContain('const yearPrice = pkg.purchase?.prices.find((candidate) => candidate.billingInterval === "YEAR")');
+
+    // split the source code into the owned branch and unowned branch based on hasAccess
+    const splitIndex = sourceCode.indexOf('{pkg.hasAccess ? (');
+    expect(splitIndex).toBeGreaterThan(-1);
+
+    const unownedIndex = sourceCode.indexOf(') : (() => {', splitIndex);
+    expect(unownedIndex).toBeGreaterThan(-1);
+
+    const ownedBranch = sourceCode.substring(splitIndex, unownedIndex);
+    const unownedBranch = sourceCode.substring(unownedIndex);
+
+    // 3. owned branch includes accessGranted, month price rendering, year price rendering
+    expect(ownedBranch).toContain('marketplaceDetail.accessGranted');
+    expect(ownedBranch).toContain('{monthPrice.currency} {(monthPrice.amountMinor / 100).toLocaleString("en-AE")}/mo');
+    expect(ownedBranch).toContain('{yearPrice.currency} {(yearPrice.amountMinor / 100).toLocaleString("en-AE")}/yr');
+
+    // 4. owned branch does NOT contain Buy Monthly, Buy Annual, checkout, or onClick
+    expect(ownedBranch).not.toContain('Buy Monthly');
+    expect(ownedBranch).not.toContain('Buy Annual');
+    expect(ownedBranch).not.toContain('checkout(');
+    expect(ownedBranch).not.toContain('onClick');
+
+    // 5. unowned branch still contains Buy Monthly, Buy Annual, checkout
+    expect(unownedBranch).toContain('Buy Monthly');
+    expect(unownedBranch).toContain('Buy Annual');
+    expect(unownedBranch).toContain('checkout(monthPrice.priceCode)');
+    expect(unownedBranch).toContain('checkout(yearPrice.priceCode)');
+  });
+});

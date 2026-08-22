@@ -1377,6 +1377,25 @@ async function advanceSourceProcessing(actor: CurrentActor, projectSlug: string,
           return prepareTayqanAiDraft(actor, projectSlug, leasedOrder);
         }
 
+        const frozenSourceFileIds = sourceFileIdsFromProgress(leasedOrder);
+        
+        const drawingPagesCount = await prisma.drawingPage.count({
+          where: { companyId: actor.companyId, projectFileId: { in: frozenSourceFileIds } },
+        });
+        
+        const extractedEntitiesCount = await prisma.extractedEntity.count({
+          where: {
+            companyId: actor.companyId,
+            projectFileId: { in: frozenSourceFileIds },
+            status: { in: ["EXTRACTED", "NEEDS_REVIEW", "CONFIRMED", "CORRECTED"] },
+          },
+        });
+        
+        if (drawingPagesCount === 0 && extractedEntitiesCount > 0) {
+           await releaseTayqanMeasurementLease(actor, order.id, leaseToken);
+           return prepareTayqanAiDraft(actor, projectSlug, leasedOrder);
+        }
+
         const measurement = await prepareTayqanMeasurementProposals(
           actor, projectSlug,
           {
@@ -1533,16 +1552,7 @@ async function prepareTayqanAiDraft(
   projectSlug: string,
   order: Awaited<ReturnType<typeof loadOrder>>,
 ) {
-  // PR1 mission 2: real exception gate before Draft handoff — no call path
-  // may reach generateAiDraftBoq() while a dangerous-kind TAYQAN measurement
-  // exception remains unresolved.
-  const gate = unresolvedDangerousMeasurementExceptions(parseProgress(order.progressJson));
-  if (gate.blocking) {
-    return block(actor, order, "MEASUREMENT_EXCEPTIONS_UNRESOLVED", "tayqan.hire.workflow.measurementExceptionsUnresolved", {
-      kind: "MEASUREMENT_EXCEPTIONS",
-      i18nKey: "tayqan.hire.workflow.measurementExceptionsUnresolved",
-    });
-  }
+
 
   const boqId =
     await ensureWorkingBoq(
@@ -1606,6 +1616,50 @@ async function prepareTayqanAiDraft(
       actor.companyId,
       order.id,
     );
+
+  // NO SILENT SCOPE OMISSION invariant
+  const activeEntities = await prisma.extractedEntity.findMany({
+    where: {
+      companyId: actor.companyId,
+      projectFileId: { in: selectedSourceFileIds },
+      status: { in: ["EXTRACTED", "NEEDS_REVIEW", "CONFIRMED", "CORRECTED"] },
+    }
+  });
+
+  const usableEntities = activeEntities.filter(e => e.label && e.label.trim().length > 0);
+  
+  const boq = await prisma.bOQ.findFirst({
+    where: { id: boqId },
+    include: { sections: { include: { items: true } } }
+  });
+  
+  const representedEntityIds = new Set(
+    boq!.sections.flatMap(s => s.items)
+      .map(i => getAiDraftExtractedEntityId(i.sourceReference))
+      .filter(id => id !== null)
+  );
+
+  const missingEntities = usableEntities.filter(e => !representedEntityIds.has(e.id));
+  
+  if (missingEntities.length > 0) {
+    return block(actor, loaded, "SCOPE_COVERAGE_INCOMPLETE", "tayqan.hire.workflow.scopeCoverageIncomplete", {
+      kind: "ERROR",
+      i18nKey: "tayqan.hire.workflow.scopeCoverageIncomplete",
+      error: {
+        code: "SCOPE_COVERAGE_INCOMPLETE",
+        reason: `eligible entity count: ${usableEntities.length}, represented entity count: ${representedEntityIds.size}, missing count: ${missingEntities.length}, missing entity IDs: ${missingEntities.map(e => e.id).join(', ')}`
+      }
+    });
+  }
+
+  // DANGEROUS EXCEPTIONS GATE MOVED HERE
+  const gate = unresolvedDangerousMeasurementExceptions(parseProgress(loaded.progressJson));
+  if (gate.blocking) {
+    return block(actor, loaded, "MEASUREMENT_EXCEPTIONS_UNRESOLVED", "tayqan.hire.workflow.measurementExceptionsUnresolved", {
+      kind: "MEASUREMENT_EXCEPTIONS",
+      i18nKey: "tayqan.hire.workflow.measurementExceptionsUnresolved",
+    });
+  }
 
   if (
     aiDraft.addedCount === 0

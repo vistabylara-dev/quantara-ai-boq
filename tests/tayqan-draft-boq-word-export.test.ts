@@ -215,9 +215,11 @@ describe("TAYQAN Draft BOQ Word export — service wiring (mission 3)", () => {
 });
 
 describe("TAYQAN Draft BOQ Word export — panel entry point (mission 4)", () => {
-  it("is visible whenever the work order has a linked BOQ, not gated on READY_FOR_ACCEPTANCE", () => {
+  it("is visible once the linked BOQ has generated AI Draft content, not gated on READY_FOR_ACCEPTANCE", () => {
     const source = read("src", "components", "tayqan", "tayqan-work-order-panel.tsx");
-    const bannerIndex = source.indexOf("{state.boqId && (");
+    const bannerIndex = source.indexOf(
+      "{state.boqId && state.aiDraft && (state.aiDraft.addedCount > 0 || state.aiDraft.alreadyPresentCount > 0) && (",
+    );
     const readyIndex = source.indexOf('state.status === "READY_FOR_ACCEPTANCE"');
     expect(bannerIndex).toBeGreaterThan(-1);
     // The export block is its own top-level condition on state.boqId, not

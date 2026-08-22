@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { apiClient, getApiErrorMessage } from "@/lib/api/client";
 import { CATALOGUE_LIBRARIES } from "@/config/libraries";
+import { MARKETPLACE_CONTENT } from "@/config/marketplace-content";
 
 type PackagePurchaseUnavailableReason =
   | "PRICE_NOT_APPROVED"
@@ -201,12 +202,23 @@ export default function MarketplacePage() {
     <div className="space-y-6">
       <div className="rounded-[32px] border border-slate-800 bg-slate-950 p-8">
         <p className="text-sm uppercase tracking-[0.28em] text-slate-500">Marketplace</p>
-        <h1 className="mt-2 text-3xl font-semibold text-white">Industry data packages</h1>
-        <p className="mt-2 max-w-2xl text-sm text-slate-400">
-          Full searchable technical libraries by discipline. Buy a package below to unlock it immediately, 
+        <h1 className="mt-2 text-3xl font-semibold text-white">{MARKETPLACE_CONTENT.intro.headline}</h1>
+        <p className="mt-3 max-w-2xl text-base text-slate-300">
+          {MARKETPLACE_CONTENT.intro.subheadline}
         </p>
+        
+        <div className="mt-6 space-y-2 text-sm text-slate-400">
+          <ul className="list-disc pl-5 space-y-1.5">
+            {MARKETPLACE_CONTENT.intro.points.map((pt, i) => <li key={i}>{pt}</li>)}
+          </ul>
+          <p className="mt-4 pt-4 font-semibold text-white">{MARKETPLACE_CONTENT.intro.closing}</p>
+          <div className="mt-4 space-y-1.5 text-slate-400">
+            {MARKETPLACE_CONTENT.intro.explanation.map((pt, i) => <p key={i}>{pt}</p>)}
+          </div>
+        </div>
+
         {(actionMessage || actionError) && (
-          <div className={`mt-4 rounded-2xl border p-3 text-xs ${actionError ? "border-rose-900 bg-rose-950/30 text-rose-300" : "border-emerald-900 bg-emerald-950/30 text-emerald-300"}`}>
+          <div className={`mt-6 rounded-2xl border p-3 text-xs ${actionError ? "border-rose-900 bg-rose-950/30 text-rose-300" : "border-emerald-900 bg-emerald-950/30 text-emerald-300"}`}>
             {actionError ?? actionMessage}
           </div>
         )}
@@ -234,9 +246,28 @@ export default function MarketplacePage() {
                   return (
                     <div key={plan.productCode} className="flex flex-col rounded-2xl border border-slate-800 bg-slate-900 p-6 text-slate-300">
                       <h3 className="text-lg font-bold text-white capitalize">{plan.name}</h3>
-                      <p className="mt-2 flex-grow text-sm text-slate-400">{plan.shortDescription}</p>
+                      <p className="mt-2 text-sm text-slate-400">{plan.shortDescription}</p>
                       
-                      <div className="mt-4 flex flex-col gap-4">
+                      <details className="group mt-4 flex-grow border-t border-slate-800 pt-4 mb-4">
+                        <summary className="cursor-pointer text-sm font-semibold text-blue-400 hover:text-blue-300">
+                          View package details
+                        </summary>
+                        <div className="mt-4 space-y-3 text-sm text-slate-400 pb-2">
+                          {(() => {
+                            const pContent = MARKETPLACE_CONTENT.plans[plan.productCode as keyof typeof MARKETPLACE_CONTENT.plans];
+                            if (!pContent) return null;
+                            return (
+                              <>
+                                <div><strong className="text-slate-300">Best for:</strong> {pContent.bestFor}</div>
+                                <div><strong className="text-slate-300">Purpose:</strong> {pContent.purpose}</div>
+                                <div><strong className="text-slate-300">Why choose:</strong> {pContent.whyChoose}</div>
+                              </>
+                            );
+                          })()}
+                        </div>
+                      </details>
+
+                      <div className="mt-auto flex flex-col gap-4">
                         {monthPrice && (
                           <div className="flex flex-col gap-3 border-t border-slate-800 pt-4">
                             <p className="text-2xl font-semibold text-white">
@@ -294,8 +325,34 @@ export default function MarketplacePage() {
                   return (
                     <div key={plan.productCode} className="flex flex-col rounded-2xl border border-purple-900/30 bg-slate-900 p-6 text-slate-300">
                       <h3 className="text-lg font-bold text-purple-400 capitalize">{plan.name}</h3>
-                      <p className="mt-2 flex-grow text-sm text-slate-400">{plan.shortDescription}</p>
-                      <div className="mt-6 border-t border-slate-800 pt-6">
+                      <p className="mt-2 text-sm text-slate-400">{plan.shortDescription}</p>
+                      
+                      <details className="group mt-4 flex-grow border-t border-slate-800 pt-4 mb-4">
+                        <summary className="cursor-pointer text-sm font-semibold text-purple-400 hover:text-purple-300">
+                          View package details
+                        </summary>
+                        <div className="mt-4 space-y-4 text-sm text-slate-400 pb-2">
+                          {(() => {
+                            const pContent = MARKETPLACE_CONTENT.enterprise[plan.productCode as keyof typeof MARKETPLACE_CONTENT.enterprise];
+                            if (!pContent) return null;
+                            return (
+                              <>
+                                <div><strong className="text-purple-300">{pContent.position}</strong></div>
+                                {pContent.bestFor && <div><strong className="text-slate-300">Best for:</strong> {pContent.bestFor}</div>}
+                                <div>
+                                  <strong className="text-slate-300">Includes:</strong>
+                                  <ul className="list-disc pl-5 mt-1 space-y-1">
+                                    {pContent.includes.map((inc, i) => <li key={i}>{inc}</li>)}
+                                  </ul>
+                                </div>
+                                <div className="italic text-slate-300 whitespace-pre-line">{pContent.keyMessage}</div>
+                              </>
+                            );
+                          })()}
+                        </div>
+                      </details>
+
+                      <div className="mt-auto border-t border-slate-800 pt-6">
                         <p className="text-2xl font-semibold text-white">
                           {price.currency} {(price.amountMinor / 100).toLocaleString("en-AE")}
                           <span className="text-sm font-normal text-slate-500">/yr</span>
@@ -307,11 +364,38 @@ export default function MarketplacePage() {
                         disabled={busyKey === price.priceCode || !price.available}
                         className="mt-6 rounded-xl border border-purple-600 bg-purple-600 px-4 py-3 text-sm font-bold text-white hover:bg-purple-500 disabled:opacity-50"
                       >
-                        {busyKey === price.priceCode ? "Redirecting..." : price.available ? "Buy enterprise" : purchaseUnavailableLabel(price.unavailableReason as any)}
+                        {busyKey === price.priceCode ? "Redirecting..." : price.available ? (MARKETPLACE_CONTENT.enterprise[plan.productCode as keyof typeof MARKETPLACE_CONTENT.enterprise]?.cta || "Buy enterprise") : purchaseUnavailableLabel(price.unavailableReason as any)}
                       </button>
                     </div>
                   );
                 })}
+            </div>
+            
+            <div className="mt-12 overflow-x-auto rounded-[24px] border border-slate-800 bg-slate-900/50">
+              <table className="w-full text-left text-sm text-slate-300">
+                <thead className="bg-slate-800/50 text-xs uppercase text-slate-400">
+                  <tr>
+                    <th className="px-6 py-4 font-semibold">Capability</th>
+                    <th className="px-6 py-4 font-semibold">Core</th>
+                    <th className="px-6 py-4 font-semibold">Scale</th>
+                    <th className="px-6 py-4 font-semibold">Authority</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-800/50">
+                  <tr><td className="px-6 py-4">Manual BOQ</td><td className="px-6 py-4">✓</td><td className="px-6 py-4">✓</td><td className="px-6 py-4">✓</td></tr>
+                  <tr><td className="px-6 py-4">Company Item Library</td><td className="px-6 py-4">✓</td><td className="px-6 py-4">✓</td><td className="px-6 py-4">✓</td></tr>
+                  <tr><td className="px-6 py-4">Manual Quantity/Rate</td><td className="px-6 py-4">✓</td><td className="px-6 py-4">✓</td><td className="px-6 py-4">✓</td></tr>
+                  <tr><td className="px-6 py-4">Professional Outputs</td><td className="px-6 py-4">✓</td><td className="px-6 py-4">✓</td><td className="px-6 py-4">✓</td></tr>
+                  <tr><td className="px-6 py-4">AI Draft BOQ</td><td className="px-6 py-4 text-slate-500">—</td><td className="px-6 py-4 text-purple-400">✓</td><td className="px-6 py-4 text-purple-400">✓</td></tr>
+                  <tr><td className="px-6 py-4">AI-Assisted Workflow</td><td className="px-6 py-4 text-slate-500">—</td><td className="px-6 py-4 text-purple-400">✓</td><td className="px-6 py-4 text-purple-400">✓</td></tr>
+                  <tr><td className="px-6 py-4">Voice-Assisted Workflow</td><td className="px-6 py-4 text-slate-500">—</td><td className="px-6 py-4 text-purple-400">✓</td><td className="px-6 py-4 text-purple-400">✓</td></tr>
+                  <tr><td className="px-6 py-4">Google Drive</td><td className="px-6 py-4 text-slate-500">—</td><td className="px-6 py-4 text-purple-400">✓</td><td className="px-6 py-4 text-purple-400">✓</td></tr>
+                  <tr><td className="px-6 py-4">Autodesk/AutoCAD</td><td className="px-6 py-4 text-slate-500">—</td><td className="px-6 py-4 text-purple-400">✓</td><td className="px-6 py-4 text-purple-400">✓</td></tr>
+                  <tr><td className="px-6 py-4">API / Company Workflows</td><td className="px-6 py-4 text-slate-500">—</td><td className="px-6 py-4">Selected</td><td className="px-6 py-4 text-purple-400">✓</td></tr>
+                  <tr><td className="px-6 py-4">Governance</td><td className="px-6 py-4">Basic</td><td className="px-6 py-4">Advanced</td><td className="px-6 py-4 text-purple-400">Full</td></tr>
+                  <tr><td className="px-6 py-4">Specialist Libraries</td><td className="px-6 py-4 text-slate-400 text-xs">Purchased separately</td><td className="px-6 py-4 text-slate-400 text-xs">Purchased separately</td><td className="px-6 py-4 text-purple-300 font-medium">Contracted entitlement</td></tr>
+                </tbody>
+              </table>
             </div>
           </section>
         </>
@@ -369,11 +453,29 @@ export default function MarketplacePage() {
                     {product.name}
                   </h3>
 
-                  <p className="mt-2 flex-grow text-sm text-slate-400">
+                  <p className="mt-2 text-sm text-slate-400">
                     {product.shortDescription}
                   </p>
+                  
+                  <details className="group mt-3 flex-grow border-t border-cyan-900/40 pt-3 mb-2">
+                    <summary className="cursor-pointer text-sm font-semibold text-cyan-400 hover:text-cyan-300">
+                      View package details
+                    </summary>
+                    <div className="mt-3 space-y-2 text-sm text-slate-400 pb-2">
+                      {(() => {
+                        const tContent = MARKETPLACE_CONTENT.tayqan[product.code as keyof typeof MARKETPLACE_CONTENT.tayqan];
+                        if (!tContent) return null;
+                        return (
+                          <>
+                            <div><strong className="text-cyan-300">{tContent.position}</strong></div>
+                            <div><strong className="text-slate-300">Best for:</strong> {tContent.bestFor}</div>
+                          </>
+                        );
+                      })()}
+                    </div>
+                  </details>
 
-                  <div className="mt-5 border-t border-slate-800 pt-4">
+                  <div className="mt-auto border-t border-slate-800 pt-4">
                     <p className="text-2xl font-semibold text-white">
                       {price.currency}{" "}
                       {(price.amountMinor / 100).toLocaleString("en-AE")}
@@ -397,7 +499,7 @@ export default function MarketplacePage() {
                     href="/projects?tayqan=assign"
                     className="mt-5 rounded-xl border border-cyan-600 bg-cyan-600 px-4 py-3 text-center text-sm font-bold text-white transition-colors hover:bg-cyan-500"
                   >
-                    Choose project & hire
+                    {MARKETPLACE_CONTENT.tayqan[product.code as keyof typeof MARKETPLACE_CONTENT.tayqan]?.cta || "Choose project & hire"}
                   </Link>
                 </div>
               );
@@ -406,7 +508,19 @@ export default function MarketplacePage() {
         </section>
       )}
 
-      <div className="grid gap-6 sm:grid-cols-2 xl:grid-cols-3">
+      <section>
+        <div className="mb-8 rounded-[32px] border border-slate-800 bg-slate-950 p-8">
+          <h2 className="text-2xl font-bold text-white">{MARKETPLACE_CONTENT.librariesIntro.headline}</h2>
+          <p className="mt-3 max-w-2xl text-base text-slate-300">{MARKETPLACE_CONTENT.librariesIntro.subheadline}</p>
+          <div className="mt-4 rounded-xl bg-blue-950/20 border border-blue-900/30 p-4">
+            <p className="text-sm text-blue-300 font-medium flex items-center gap-2">
+              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+              {MARKETPLACE_CONTENT.librariesIntro.explanation}
+            </p>
+          </div>
+        </div>
+
+        <div className="grid gap-6 sm:grid-cols-2 xl:grid-cols-3">
         {CATALOGUE_LIBRARIES.map((lib) => {
           const pkg = packages.find((p) => p.key === lib.packageCode);
           const isActive = pkg && pkg.itemCount > 0;
@@ -427,7 +541,40 @@ export default function MarketplacePage() {
                 {isActive && pkg?.isFeatured && <span className="absolute top-6 right-6 rounded-full bg-blue-900/40 border border-blue-800/50 px-2.5 py-1 text-[0.65rem] font-bold uppercase tracking-[0.2em] text-blue-300">Featured</span>}
               </div>
 
-              <p className="text-sm text-slate-400 mb-4 flex-grow">{lib.description}</p>
+              <p className="text-sm text-slate-400 mb-2">{lib.description}</p>
+
+              <details className="group mt-2 mb-4 flex-grow border-t border-slate-800/60 pt-3">
+                <summary className="cursor-pointer text-sm font-semibold text-blue-400 hover:text-blue-300">
+                  View library details
+                </summary>
+                <div className="mt-3 space-y-3 text-sm text-slate-400 pb-2">
+                  {(() => {
+                    const lContent = MARKETPLACE_CONTENT.libraries[lib.key as keyof typeof MARKETPLACE_CONTENT.libraries] as any;
+                    if (!lContent) return null;
+                    return (
+                      <>
+                        {lContent.bestFor && <div><strong className="text-slate-300">Best for:</strong> {lContent.bestFor}</div>}
+                        {lContent.usefulFor && <div><strong className="text-slate-300">Useful for:</strong> {lContent.usefulFor}</div>}
+                        {lContent.value && <div><strong className="text-slate-300">Why add this library?</strong><br/>{lContent.value}</div>}
+                        {lContent.important && <div className="rounded border border-amber-900/50 bg-amber-950/20 p-2 text-xs text-amber-200">{lContent.important}</div>}
+                        {lContent.disclaimer && <div className="rounded border border-amber-900/50 bg-amber-950/20 p-2 text-xs text-amber-200">{lContent.disclaimer}</div>}
+                        
+                        <div className="mt-4 border-t border-slate-800/60 pt-3">
+                          <strong className="text-slate-300">{MARKETPLACE_CONTENT.libraryPostPurchase.headline}</strong>
+                          <p className="mt-1 whitespace-pre-line text-xs">{MARKETPLACE_CONTENT.libraryPostPurchase.explanation}</p>
+                          <div className="mt-2 rounded bg-slate-800/40 p-2 text-xs">
+                            <strong className="text-amber-200/90 block mb-1">{MARKETPLACE_CONTENT.libraryPostPurchase.important}</strong>
+                            <strong className="text-slate-300 block mb-1">{MARKETPLACE_CONTENT.libraryPostPurchase.checklistTitle}</strong>
+                            <ul className="list-disc pl-4 grid grid-cols-2 gap-x-2">
+                              {MARKETPLACE_CONTENT.libraryPostPurchase.checklist.map((c, i) => <li key={i}>{c}</li>)}
+                            </ul>
+                          </div>
+                        </div>
+                      </>
+                    );
+                  })()}
+                </div>
+              </details>
               
               {isActive ? (() => {
                 const monthPrice = pkg.purchase?.prices.find((candidate) => candidate.billingInterval === "MONTH");
@@ -485,7 +632,7 @@ export default function MarketplacePage() {
                               className="flex-1 rounded-xl border border-slate-600 bg-slate-700 hover:bg-slate-600 transition-colors px-3 py-2.5 text-xs font-bold text-white disabled:opacity-50"
                               title={!monthPrice.available ? purchaseUnavailableLabel(monthPrice.unavailableReason as any) : undefined}
                             >
-                              {busyKey === monthPrice.priceCode ? "..." : monthPrice.available ? "Buy Monthly" : "Setup pending"}
+                              {busyKey === monthPrice.priceCode ? "..." : monthPrice.available ? ((MARKETPLACE_CONTENT.libraries[lib.key as keyof typeof MARKETPLACE_CONTENT.libraries] as any)?.cta + " (Mo)" || "Buy Monthly") : "Setup pending"}
                             </button>
                           )}
                           {yearPrice && (
@@ -496,7 +643,7 @@ export default function MarketplacePage() {
                               className="flex-1 rounded-xl border border-blue-600 bg-blue-600 hover:bg-blue-500 transition-colors px-3 py-2.5 text-xs font-bold text-white disabled:opacity-50"
                               title={!yearPrice.available ? purchaseUnavailableLabel(yearPrice.unavailableReason as any) : undefined}
                             >
-                              {busyKey === yearPrice.priceCode ? "..." : yearPrice.available ? "Buy Annual" : "Setup pending"}
+                              {busyKey === yearPrice.priceCode ? "..." : yearPrice.available ? ((MARKETPLACE_CONTENT.libraries[lib.key as keyof typeof MARKETPLACE_CONTENT.libraries] as any)?.cta + (monthPrice ? " (Yr)" : "") || "Buy Annual") : "Setup pending"}
                             </button>
                           )}
                         </div>
@@ -515,6 +662,7 @@ export default function MarketplacePage() {
           );
         })}
       </div>
+      </section>
     </div>
   );
 }

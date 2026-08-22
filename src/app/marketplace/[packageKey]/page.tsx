@@ -5,6 +5,7 @@ import Link from "next/link";
 import { apiClient, getApiErrorMessage } from "@/lib/api/client";
 import { getLibraryConfigByCode } from "@/config/libraries";
 import { useTranslations } from "@/lib/i18n/locale-provider";
+import { MARKETPLACE_CONTENT } from "@/config/marketplace-content";
 
 type PackagePurchaseUnavailableReason =
   | "PRICE_NOT_APPROVED"
@@ -62,11 +63,11 @@ export default function MarketplacePackagePage(props: PageProps) {
     try {
       const pkgData = await apiClient.get<PackageDetail>(`/api/data-packages/${params.packageKey}`, signal);
       setPkg(pkgData);
-      
+
       const endpoint = pkgData.hasAccess ? `/api/data-packages/${pkgData.id}/items` : `/api/data-packages/${pkgData.id}/preview`;
       const query = new URLSearchParams({ page: page.toString(), pageSize: "50" });
       if (search) query.set("search", search);
-      
+
       const itemsData = await apiClient.get<{ items: ItemRow[], total: number }>(`${endpoint}?${query.toString()}`, signal);
       setItems(itemsData.items);
       setTotalItems(itemsData.total);
@@ -156,6 +157,39 @@ export default function MarketplacePackagePage(props: PageProps) {
             </div>
             <p className="mt-4 max-w-2xl text-sm text-slate-400">{pkg.description}</p>
             <p className="mt-2 text-xs text-slate-500">{t("marketplaceDetail.itemsPublished", { count: pkg.itemCount })}</p>
+
+            <details className="group mt-4 max-w-2xl border-t border-slate-800/60 pt-3">
+              <summary className="cursor-pointer text-sm font-semibold text-blue-400 hover:text-blue-300">
+                View library details
+              </summary>
+              <div className="mt-4 space-y-3 text-sm text-slate-400 pb-2">
+                {(() => {
+                  const lContent = libConfig && MARKETPLACE_CONTENT.libraries[libConfig.key as keyof typeof MARKETPLACE_CONTENT.libraries] as any;
+                  if (!lContent) return null;
+                  return (
+                    <>
+                      {lContent.bestFor && <div><strong className="text-slate-300">Best for:</strong> {lContent.bestFor}</div>}
+                      {lContent.usefulFor && <div><strong className="text-slate-300">Useful for:</strong> {lContent.usefulFor}</div>}
+                      {lContent.value && <div><strong className="text-slate-300">Why add this library?</strong><br/>{lContent.value}</div>}
+                      {lContent.important && <div className="rounded border border-amber-900/50 bg-amber-950/20 p-3 text-xs text-amber-200">{lContent.important}</div>}
+                      {lContent.disclaimer && <div className="rounded border border-amber-900/50 bg-amber-950/20 p-3 text-xs text-amber-200">{lContent.disclaimer}</div>}
+
+                      <div className="mt-6 border-t border-slate-800/60 pt-4">
+                        <strong className="text-slate-300">{MARKETPLACE_CONTENT.libraryPostPurchase.headline}</strong>
+                        <p className="mt-2 whitespace-pre-line text-sm">{MARKETPLACE_CONTENT.libraryPostPurchase.explanation}</p>
+                        <div className="mt-4 rounded-xl bg-slate-800/40 p-4">
+                          <strong className="text-amber-200/90 block mb-2">{MARKETPLACE_CONTENT.libraryPostPurchase.important}</strong>
+                          <strong className="text-slate-300 block mb-2">{MARKETPLACE_CONTENT.libraryPostPurchase.checklistTitle}</strong>
+                          <ul className="list-disc pl-5 grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
+                            {MARKETPLACE_CONTENT.libraryPostPurchase.checklist.map((c, i) => <li key={i}>{c}</li>)}
+                          </ul>
+                        </div>
+                      </div>
+                    </>
+                  );
+                })()}
+              </div>
+            </details>
           </div>
           {pkg.hasAccess ? (
             <div className="flex gap-4 items-center">
@@ -208,12 +242,12 @@ export default function MarketplacePackagePage(props: PageProps) {
                         disabled={busy}
                         className="inline-flex rounded-2xl border border-slate-600 bg-slate-700 px-5 py-3 text-sm font-semibold text-white hover:bg-slate-600 disabled:opacity-50"
                       >
-                        {busy ? t("marketplaceDetail.redirecting") : "Buy Monthly"}
+                        {busy ? t("marketplaceDetail.redirecting") : ((libConfig && (MARKETPLACE_CONTENT.libraries[libConfig.key as keyof typeof MARKETPLACE_CONTENT.libraries] as any)?.cta) ? (MARKETPLACE_CONTENT.libraries[libConfig.key as keyof typeof MARKETPLACE_CONTENT.libraries] as any)?.cta + " (Mo)" : "Buy Monthly")}
                       </button>
                     )}
                   </div>
                 )}
-                
+
                 {yearPrice && (
                   <div className="inline-flex flex-col items-end gap-2 pl-4 border-l border-slate-800">
                     <span className="text-sm font-semibold text-slate-300">
@@ -233,7 +267,7 @@ export default function MarketplacePackagePage(props: PageProps) {
                         disabled={busy}
                         className="inline-flex rounded-2xl border border-slate-700 bg-blue-600 px-5 py-3 text-sm font-semibold text-white hover:bg-blue-500 disabled:opacity-50"
                       >
-                        {busy ? t("marketplaceDetail.redirecting") : "Buy Annual"}
+                        {busy ? t("marketplaceDetail.redirecting") : ((libConfig && (MARKETPLACE_CONTENT.libraries[libConfig.key as keyof typeof MARKETPLACE_CONTENT.libraries] as any)?.cta) ? (MARKETPLACE_CONTENT.libraries[libConfig.key as keyof typeof MARKETPLACE_CONTENT.libraries] as any)?.cta + (monthPrice ? " (Yr)" : "") : "Buy Annual")}
                       </button>
                     )}
                   </div>

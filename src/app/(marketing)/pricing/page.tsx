@@ -2,6 +2,7 @@ import {
   createPublicPageMetadata,
   getPublicSearchPage,
 } from "@/lib/public-site/search-registry";
+import { buildRegisterPricingHref, type TrustedPublicPriceCode } from "@/lib/commercial/pricing-intent";
 import React from "react";
 import Link from "next/link";
 import PublicJsonLd from "@/components/seo/public-json-ld";
@@ -128,10 +129,12 @@ export default async function PricingPage() {
    * page is still the right place to show the approved AED amounts to a
    * signed-in company evaluating an upgrade.
    */
-  const enterprisePlans = [
+  const enterprisePlans: { key: string; name: string; priceCode: TrustedPublicPriceCode; price: string; features: string[] }[] = [
     {
       key: "enterprise_core",
       name: t("publicContent.pricing.saasEnterpriseCoreName"),
+      priceCode: "enterprise_core_annual_aed_15000",
+      price: "AED 15,000",
       features: [
         t("publicContent.pricing.saasEnterpriseCoreFeature1"),
         t("publicContent.pricing.saasEnterpriseCoreFeature2"),
@@ -142,6 +145,8 @@ export default async function PricingPage() {
     {
       key: "enterprise_scale",
       name: t("publicContent.pricing.saasEnterpriseScaleName"),
+      priceCode: "enterprise_scale_annual_aed_25000",
+      price: "AED 25,000",
       features: [
         t("publicContent.pricing.saasEnterpriseScaleFeature1"),
         t("publicContent.pricing.saasEnterpriseScaleFeature2"),
@@ -152,6 +157,8 @@ export default async function PricingPage() {
     {
       key: "enterprise_authority",
       name: t("publicContent.pricing.saasEnterpriseAuthorityName"),
+      priceCode: "enterprise_authority_annual_aed_35000",
+      price: "AED 35,000",
       features: [
         t("publicContent.pricing.saasEnterpriseAuthorityFeature1"),
         t("publicContent.pricing.saasEnterpriseAuthorityFeature2"),
@@ -207,7 +214,8 @@ export default async function PricingPage() {
                     <h3 className="text-2xl font-bold text-white">{plan.name}</h3>
                   </div>
                   <div className="mt-2">
-                    <span className="text-lg font-semibold text-amber-200">{t("publicContent.pricing.saasEnterprisePricingNote")}</span>
+                    <span className="text-4xl font-extrabold text-white">{plan.price}</span>
+                    <span className="text-sm font-semibold text-slate-400"> /{billingLabels.perYear}</span>
                   </div>
                   <ul className="mt-6 space-y-3 text-sm leading-6 text-slate-300">
                     {plan.features.map((feature) => (
@@ -218,10 +226,10 @@ export default async function PricingPage() {
                     ))}
                   </ul>
                   <Link
-                    href="/contact-sales"
+                    href={buildRegisterPricingHref(plan.priceCode)}
                     className="mt-7 flex h-11 items-center justify-center rounded-lg bg-amber-400 px-6 text-sm font-semibold text-slate-950 hover:bg-amber-300"
                   >
-                    {t("publicContent.pricing.saasEnterpriseCta")}
+                    {t("publicContent.pricing.saasEnterpriseSelect")} {plan.name}
                   </Link>
                 </article>
               ))}

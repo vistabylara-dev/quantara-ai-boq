@@ -5,6 +5,9 @@ export const TRUSTED_PUBLIC_PRICE_CODES = [
   "professional_annual_aed_3990",
   "business_monthly_aed_899",
   "business_annual_aed_8990",
+  "enterprise_core_annual_aed_15000",
+  "enterprise_scale_annual_aed_25000",
+  "enterprise_authority_annual_aed_35000",
 ] as const;
 
 export type TrustedPublicPriceCode = (typeof TRUSTED_PUBLIC_PRICE_CODES)[number];

@@ -30,8 +30,8 @@ function createLocalStorageMock() {
 }
 
 describe("trusted public price code allowlist", () => {
-  it("accepts exactly the six approved codes", () => {
-    expect(TRUSTED_PUBLIC_PRICE_CODES).toHaveLength(6);
+  it("accepts exactly the nine approved codes", () => {
+    expect(TRUSTED_PUBLIC_PRICE_CODES).toHaveLength(9);
     for (const code of TRUSTED_PUBLIC_PRICE_CODES) {
       expect(isTrustedPublicPriceCode(code)).toBe(true);
       expect(normalizePublicPriceCode(code)).toBe(code);
@@ -42,6 +42,11 @@ describe("trusted public price code allowlist", () => {
     const rejected: unknown[] = [
       "professional_monthly_aed_400",
       "professional_monthly",
+      "enterprise_core_annual_aed_14999",
+      "enterprise_core_monthly_aed_15000",
+      "enterprise_scale_annual_aed_25001",
+      "enterprise_authority",
+      "price_enterprise_authority",
       "starter",
       "AED399",
       "price_123",

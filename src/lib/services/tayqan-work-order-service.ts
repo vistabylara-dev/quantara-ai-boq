@@ -1628,28 +1628,22 @@ async function prepareTayqanAiDraft(
 
   const usableEntities = activeEntities.filter(e => e.label && e.label.trim().length > 0);
   
-  const boq = await prisma.bOQ.findFirst({
-    where: { id: boqId },
-    include: { sections: { include: { items: true } } }
-  });
+  const boq = await getBOQRecord(actor.companyId, boqId);
   
   const representedEntityIds = new Set(
     boq!.sections.flatMap(s => s.items)
-      .map(i => getAiDraftExtractedEntityId(i.sourceReference))
+      .map(i => i.quantityProvenance?.extractedEntityId ?? getAiDraftExtractedEntityId(i.sourceReference))
       .filter(id => id !== null)
   );
 
   const missingEntities = usableEntities.filter(e => !representedEntityIds.has(e.id));
   
   if (missingEntities.length > 0) {
-    return block(actor, loaded, "SCOPE_COVERAGE_INCOMPLETE", "tayqan.hire.workflow.scopeCoverageIncomplete", {
+    return fail(actor, loaded, "SCOPE_COVERAGE_INCOMPLETE", "tayqan.hire.workflow.scopeCoverageIncomplete", {
       kind: "ERROR",
       i18nKey: "tayqan.hire.workflow.scopeCoverageIncomplete",
-      error: {
-        code: "SCOPE_COVERAGE_INCOMPLETE",
-        reason: `eligible entity count: ${usableEntities.length}, represented entity count: ${representedEntityIds.size}, missing count: ${missingEntities.length}, missing entity IDs: ${missingEntities.map(e => e.id).join(', ')}`
-      }
-    });
+      error: { code: "SCOPE_COVERAGE_INCOMPLETE" }
+    }, new AppError("SCOPE_COVERAGE_INCOMPLETE", `eligible entity count: ${usableEntities.length}, represented entity count: ${representedEntityIds.size}, missing count: ${missingEntities.length}, missing entity IDs: ${missingEntities.map(e => e.id).join(', ')}`, 500));
   }
 
   // DANGEROUS EXCEPTIONS GATE MOVED HERE

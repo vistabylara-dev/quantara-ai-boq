@@ -299,7 +299,7 @@ export function TayqanWorkOrderPanel({
 
       {error && <p className="text-sm text-rose-300">{error}</p>}
 
-      {state.boqId && state.aiDraft !== null && (state.aiDraft.addedCount > 0 || state.aiDraft.alreadyPresentCount > 0) && (
+      {state.boqId && state.aiDraft && (state.aiDraft.addedCount > 0 || state.aiDraft.alreadyPresentCount > 0) && (
         <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-4">
           <p className="text-sm font-semibold text-slate-200">{t("tayqan.hire.workflow.exportDraftBoqTitle")}</p>
           <p className="mt-1 text-xs text-slate-400">{t("tayqan.hire.workflow.exportDraftBoqNote")}</p>

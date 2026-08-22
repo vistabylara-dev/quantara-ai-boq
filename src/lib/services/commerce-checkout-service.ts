@@ -1,3 +1,4 @@
+import { ensureEnterpriseSelfCheckoutPriceReady } from "@/lib/services/enterprise-self-checkout-readiness-service";
 import { randomUUID } from "node:crypto";
 import type Stripe from "stripe";
 import type { CommerceProviderEnvironment, Prisma } from "@prisma/client";
@@ -35,7 +36,7 @@ import { isTayqanProductCode, TAYQAN_PRODUCT_FAMILY } from "@/lib/tayqan/tayqan-
 
 export const SUPPORTED_CHECKOUT_CURRENCIES = new Set(["AED"]);
 /** Deliberately MONTH/YEAR only — see the STRIPE-COMMERCIAL-7 note above. Exported so commerce-checkout-availability-service.ts applies the identical filter when reporting availability to the UI. */
-export const CHECKOUT_ELIGIBLE_INTERVALS = new Set(["MONTH", "YEAR"]);
+export const CHECKOUT_ELIGIBLE_INTERVALS = new Set(["MONTH", "YEAR", "ONE_TIME"]);
 /** Non-final CompanySoftwareSubscription statuses — a company with one of these already has a live-or-pending Stripe subscription and must use the billing portal, not start a second checkout. Only CANCELLED/EXPIRED subscriptions may be superseded by a fresh checkout. */
 export const NON_FINAL_SUBSCRIPTION_STATUSES = ["TRIAL", "ACTIVE", "PAST_DUE", "SUSPENDED"] as const;
 
@@ -180,7 +181,8 @@ async function loadEligibleCommercePrice(priceCode: string) {
   if (price.product.purchaseMode !== "DIRECT") {
     throw new CheckoutNotEligibleError("PRODUCT_NOT_DIRECT_PURCHASE", "This product requires contacting sales and cannot be checked out directly.");
   }
-  if (price.product.type !== "SUBSCRIPTION") {
+  const isEnterprise = ["enterprise_core", "enterprise_scale", "enterprise_authority"].includes(price.product.code);
+    if (price.product.type !== "SUBSCRIPTION" && !isEnterprise) {
     throw new CheckoutNotEligibleError("PRODUCT_NOT_SUBSCRIPTION", "Only subscription products can be checked out directly right now.");
   }
   if (!price.isActive) throw new CheckoutNotEligibleError("PRICE_INACTIVE", "This price is no longer active.");
@@ -621,6 +623,7 @@ export async function createCommerceCheckoutSession(
   // Global catalog validation — not company-specific, so it doesn't need the
   // per-company lock below. Never trusts client-supplied amount/currency/
   // providerPriceId; both are resolved purely from the trusted priceCode.
+  await ensureEnterpriseSelfCheckoutPriceReady(input.priceCode!);
   const price = await loadEligibleCommercePrice(input.priceCode!);
   const purchaseFamily = classifyCommerceProductFamily(price.product);
 
@@ -704,7 +707,8 @@ export async function createCommerceCheckoutSession(
        * function returns or creates anything. Never touches a session
        * lacking Quantara's own metadata — see findAppOwnedOpenCheckoutSessions.
        */
-      const appOwnedOpenSessions = await findAppOwnedOpenCheckoutSessions(stripe, stripeCustomerId, actor.companyId);
+      const isEnterprise = ["enterprise_core", "enterprise_scale", "enterprise_authority"].includes(price.product.code);
+        const appOwnedOpenSessions = await findAppOwnedOpenCheckoutSessions(stripe, stripeCustomerId, actor.companyId);
       const reusableIndex = appOwnedOpenSessions.findIndex(
         (session) => session.metadata?.quantara_price_code === price.code && Boolean(session.url),
       );
@@ -741,21 +745,24 @@ export async function createCommerceCheckoutSession(
 
       const session = await stripe.checkout.sessions.create(
         {
-          mode: "subscription",
+          mode: isEnterprise ? "payment" : "subscription",
           customer: stripeCustomerId,
           line_items: [{ price: mapping.providerPriceId as string, quantity: 1 }],
           success_url: `${baseUrl}/settings/subscription?checkout=success&session_id={CHECKOUT_SESSION_ID}`,
           cancel_url: `${baseUrl}/settings/subscription?checkout=cancelled`,
           client_reference_id: actor.companyId,
           metadata: {
+              ...(isEnterprise ? { quantara_checkout_mode: "ENTERPRISE_ONE_TIME" } : {}),
             quantara_company_id: actor.companyId,
             quantara_price_code: price.code,
             quantara_environment: liveMode ? "live" : "test",
           },
-          subscription_data: {
-            metadata: { quantara_company_id: actor.companyId, quantara_price_code: price.code },
+          ...(isEnterprise ? { payment_intent_data: { metadata: { quantara_company_id: actor.companyId, quantara_price_code: price.code, quantara_checkout_mode: "ENTERPRISE_ONE_TIME" } } } : {
+              subscription_data: {
+                metadata: { quantara_company_id: actor.companyId, quantara_price_code: price.code },
+              },
+            }),
           },
-        },
         // STRIPE-COMMERCIAL-20 — a fresh, high-entropy key per genuine new
         // Checkout Session creation attempt, generated once for this
         // invocation and reused only if Stripe's own SDK internally retries

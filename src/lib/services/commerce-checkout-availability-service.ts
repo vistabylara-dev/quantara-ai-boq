@@ -35,7 +35,7 @@ export type CheckoutUnavailableReason =
 
 export type CheckoutOptionPrice = {
   priceCode: string;
-  billingInterval: "MONTH" | "YEAR";
+  billingInterval: "MONTH" | "YEAR" | "ONE_TIME";
   amountMinor: number;
   currency: string;
   available: boolean;
@@ -68,55 +68,50 @@ export type EnterpriseAnnualPlan = {
 export type CheckoutAvailability = {
   hasExistingSubscription: boolean;
   products: CheckoutOptionProduct[];
-  
 };
 
-const ENTERPRISE_ANNUAL_PRODUCT_CODES = ["enterprise_core", "enterprise_scale", "enterprise_authority"] as const;
+const ENTERPRISE_PRODUCTS = [
+  {
+    productCode: "enterprise_core",
+    name: "Enterprise Core",
+    shortDescription: "For established contractors and consultancies needing high-volume BOQ production.",
+    prices: [
+      {
+        priceCode: "enterprise_core_one_time_aed_15000",
+        billingInterval: "ONE_TIME" as const,
+        amountMinor: 1500000,
+        currency: "AED",
+      }
+    ]
+  },
+  {
+    productCode: "enterprise_scale",
+    name: "Enterprise Scale",
+    shortDescription: "For multi-team and multi-department companies running BOQ production at scale.",
+    prices: [
+      {
+        priceCode: "enterprise_scale_one_time_aed_25000",
+        billingInterval: "ONE_TIME" as const,
+        amountMinor: 2500000,
+        currency: "AED",
+      }
+    ]
+  },
+  {
+    productCode: "enterprise_authority",
+    name: "Enterprise Authority",
+    shortDescription: "For large groups, consultancies and institutional customers needing dedicated onboarding.",
+    prices: [
+      {
+        priceCode: "enterprise_authority_one_time_aed_35000",
+        billingInterval: "ONE_TIME" as const,
+        amountMinor: 3500000,
+        currency: "AED",
+      }
+    ]
+  }
+];
 
-/**
- * item-A (Round 3 correction) — Enterprise Core/Scale/Authority are
- * `purchaseMode: "DIRECT"` (see prisma/seed-data/commerce-products.ts),
- * so they are deliberately absent from getCheckoutAvailability's DIRECT-only
- * query below — self-checkout availability must never represent a sales-led
- * product as purchasable. This is a SEPARATE, non-checkout catalogue read:
- * it exposes only the owner-approved annual amount for the settings page's
- * "Contact Sales" cards, never a Stripe price ID, and performs no
- * provider-mapping lookup at all — a LIVE mapping created for a manually
- * issued Stripe Payment Link is a fact about sales fulfillment, not about
- * self-checkout eligibility, and must never gate whether this reads.
- */
-async function getEnterpriseAnnualPlans(): Promise<EnterpriseAnnualPlan[]> {
-  const products = await prisma.commerceProduct.findMany({
-    where: { code: { in: [...ENTERPRISE_ANNUAL_PRODUCT_CODES] }, isActive: true },
-    include: {
-      prices: {
-        where: { isActive: true, reviewStatus: "APPROVED", billingInterval: "YEAR" },
-        orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-      },
-    },
-  });
-  const byCode = new Map(products.map((product) => [product.code, product]));
-
-  return ENTERPRISE_ANNUAL_PRODUCT_CODES.filter((code) => byCode.has(code)).map((code) => {
-    const product = byCode.get(code)!;
-    const price = product.prices[0];
-    return {
-      productCode: product.code,
-      name: product.name,
-      shortDescription: product.shortDescription,
-      price: price ? { priceCode: price.code, amountMinor: price.amountMinor, currency: price.currency } : null,
-    };
-  });
-}
-
-/**
- * Applies the exact same eligibility criteria as
- * commerce-checkout-service.ts's loadEligibleCommercePrice — public, active,
- * DIRECT, SUBSCRIPTION product; active, APPROVED, non-indicative,
- * positive-amount, AED, MONTH/YEAR price — plus the provider-mapping and
- * existing-subscription facts that only this authenticated endpoint can
- * safely report.
- */
 /**
  * CORRECTION-1 — every industryPackageId this company already holds a
  * non-final CompanyPackageSubscription for. Different libraries coexist
@@ -143,7 +138,6 @@ export async function getCheckoutAvailability(actor: CurrentActor): Promise<Chec
   const environment = resolveCheckoutEnvironment();
   const hasExistingSubscription = await hasNonFinalStripeSubscription(actor.companyId);
   const ownedIndustryPackageIds = await getOwnedIndustryPackageIds(actor.companyId);
-  const enterpriseProducts = await getEnterpriseAnnualPlans();
 
   const products = await prisma.commerceProduct.findMany({
     where: { isActive: true, isPublic: true, purchaseMode: "DIRECT", type: "SUBSCRIPTION" },
@@ -152,6 +146,33 @@ export async function getCheckoutAvailability(actor: CurrentActor): Promise<Chec
   });
 
   const result: CheckoutOptionProduct[] = [];
+
+  // 1. Inject canonical Enterprise one-time offers FIRST so they are available
+  for (const ent of ENTERPRISE_PRODUCTS) {
+    const prices: CheckoutOptionPrice[] = [];
+    for (const p of ent.prices) {
+      let available = true;
+      let unavailableReason: CheckoutUnavailableReason | null = null;
+      if (hasExistingSubscription) {
+        available = false;
+        unavailableReason = "EXISTING_SUBSCRIPTION";
+      }
+      prices.push({
+        priceCode: p.priceCode,
+        billingInterval: p.billingInterval,
+        amountMinor: p.amountMinor,
+        currency: p.currency,
+        available,
+        unavailableReason,
+      });
+    }
+    result.push({
+      productCode: ent.productCode,
+      name: ent.name,
+      shortDescription: ent.shortDescription,
+      prices,
+    });
+  }
 
   for (const product of products) {
     const prices: CheckoutOptionPrice[] = [];
@@ -222,3 +243,4 @@ export async function getCheckoutAvailability(actor: CurrentActor): Promise<Chec
 
   return { hasExistingSubscription, products: result };
 }
+

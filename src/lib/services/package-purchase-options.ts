@@ -31,7 +31,7 @@ import { getCheckoutAvailability, type CheckoutUnavailableReason } from "@/lib/s
 
 export type PackagePurchasePrice = {
   priceCode: string;
-  billingInterval: "MONTH" | "YEAR";
+  billingInterval: "MONTH" | "YEAR" | "ONE_TIME";
   amountMinor: number;
   currency: string;
   available: boolean;

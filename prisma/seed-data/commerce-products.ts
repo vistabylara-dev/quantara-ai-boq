@@ -85,7 +85,7 @@ const CATALOGUE_PRODUCTS: ProductSpec[] = [
     sortOrder: 10,
     prices: [
       { code: "starter_monthly_aed_149", amountMinor: 14900, billingInterval: "MONTH" },
-      { code: "starter_annual_aed_1490", amountMinor: 149000, billingInterval: "YEAR" },
+      { code: "starter_annual_aed_1490", amountMinor: 149000, billingInterval: "ONE_TIME" },
     ],
     entitlement: {
       maxUsers: 3,
@@ -108,7 +108,7 @@ const CATALOGUE_PRODUCTS: ProductSpec[] = [
     sortOrder: 20,
     prices: [
       { code: "professional_monthly_aed_399", amountMinor: 39900, billingInterval: "MONTH" },
-      { code: "professional_annual_aed_3990", amountMinor: 399000, billingInterval: "YEAR" },
+      { code: "professional_annual_aed_3990", amountMinor: 399000, billingInterval: "ONE_TIME" },
     ],
     entitlement: {
       maxUsers: 10,
@@ -132,7 +132,7 @@ const CATALOGUE_PRODUCTS: ProductSpec[] = [
     sortOrder: 30,
     prices: [
       { code: "business_monthly_aed_899", amountMinor: 89900, billingInterval: "MONTH" },
-      { code: "business_annual_aed_8990", amountMinor: 899000, billingInterval: "YEAR" },
+      { code: "business_annual_aed_8990", amountMinor: 899000, billingInterval: "ONE_TIME" },
     ],
     entitlement: {
       maxUsers: 30,
@@ -174,14 +174,14 @@ const CATALOGUE_PRODUCTS: ProductSpec[] = [
    */
   {
     code: "enterprise_core",
-    type: "SUBSCRIPTION",
+    type: "ONE_TIME",
     name: "Enterprise Core",
     shortDescription: "For established contractors and consultancies needing high-volume BOQ production.",
     description:
-      "Annual enterprise subscription: high-volume BOQ generation, API enablement subject to configured availability, company branding included as a setup service, and enterprise onboarding.",
+      "One-time enterprise purchase: high-volume BOQ generation, API enablement subject to configured availability, company branding included as a setup service, and enterprise onboarding.",
     purchaseMode: "DIRECT",
     sortOrder: 34,
-    prices: [{ code: "enterprise_core_annual_aed_15000", amountMinor: 1500000, billingInterval: "YEAR" }],
+    prices: [{ code: "enterprise_core_one_time_aed_15000", amountMinor: 1500000, billingInterval: "ONE_TIME" }],
     entitlement: {
       maxUsers: 50,
       maxWorkspaces: 20,
@@ -198,14 +198,14 @@ const CATALOGUE_PRODUCTS: ProductSpec[] = [
   },
   {
     code: "enterprise_scale",
-    type: "SUBSCRIPTION",
+    type: "ONE_TIME",
     name: "Enterprise Scale",
     shortDescription: "For multi-team and multi-department companies running BOQ production at scale.",
     description:
-      "Annual enterprise subscription: higher-volume BOQ generation, white-label setup included as an implementation service, API enablement subject to configured availability, and priority onboarding/support.",
+      "One-time enterprise purchase: higher-volume BOQ generation, white-label setup included as an implementation service, API enablement subject to configured availability, and priority onboarding/support.",
     purchaseMode: "DIRECT",
     sortOrder: 35,
-    prices: [{ code: "enterprise_scale_annual_aed_25000", amountMinor: 2500000, billingInterval: "YEAR" }],
+    prices: [{ code: "enterprise_scale_one_time_aed_25000", amountMinor: 2500000, billingInterval: "ONE_TIME" }],
     entitlement: {
       maxUsers: 100,
       maxWorkspaces: 50,
@@ -223,14 +223,14 @@ const CATALOGUE_PRODUCTS: ProductSpec[] = [
   },
   {
     code: "enterprise_authority",
-    type: "SUBSCRIPTION",
+    type: "ONE_TIME",
     name: "Enterprise Authority",
     shortDescription: "For large groups, consultancies and institutional customers needing dedicated onboarding.",
     description:
-      "Annual enterprise subscription: unlimited user and workspace commercial allowance, full white-label setup included as an implementation service, private catalogue/data onboarding and executive-priority support.",
+      "One-time enterprise purchase: unlimited user and workspace commercial allowance, full white-label setup included as an implementation service, private catalogue/data onboarding and executive-priority support.",
     purchaseMode: "DIRECT",
     sortOrder: 36,
-    prices: [{ code: "enterprise_authority_annual_aed_35000", amountMinor: 3500000, billingInterval: "YEAR" }],
+    prices: [{ code: "enterprise_authority_one_time_aed_35000", amountMinor: 3500000, billingInterval: "ONE_TIME" }],
     entitlement: {
       maxUsers: null,
       maxWorkspaces: null,
@@ -619,7 +619,7 @@ export async function seedCommerceProducts(prisma: PrismaClient): Promise<Commer
     const annualMinor = Math.round(Number(pkg.annualPrice) * 100);
     const priceSpecs: PriceSpec[] = [
       { code: `industry_${candidate.key.replace(/-/g, "_")}_monthly`, amountMinor: monthlyMinor, billingInterval: "MONTH" },
-      { code: `industry_${candidate.key.replace(/-/g, "_")}_annual`, amountMinor: annualMinor, billingInterval: "YEAR" },
+      { code: `industry_${candidate.key.replace(/-/g, "_")}_annual`, amountMinor: annualMinor, billingInterval: "ONE_TIME" },
     ];
     for (const priceSpec of priceSpecs) {
       const existingPrice = await prisma.commercePrice.findUnique({ where: { code: priceSpec.code } });
@@ -723,3 +723,5 @@ export async function seedEnterpriseCommerceProducts(prisma: PrismaClient): Prom
 
   return report;
 }
+
+

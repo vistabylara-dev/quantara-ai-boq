@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Script from "next/script";
 import { headers } from "next/headers";
 import type { ReactNode } from "react";
 import ConditionalAppShell from "@/components/layout/conditional-app-shell";
@@ -50,6 +51,19 @@ export const metadata: Metadata = {
  * both in sync. Must stay plain, dependency-free JS: it executes before any
  * bundle loads.
  */
+/**
+ * Google Tag Manager
+ * Google Tag Manager container
+ *
+ * beforeInteractive is injected by Next.js before application hydration.
+ */
+const GOOGLE_TAG_MANAGER_SCRIPT = `
+(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
+new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
+j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
+'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);
+})(window,document,'script','dataLayer','GTM-5BNVQ8MV');
+`;
 const THEME_INIT_SCRIPT = `
 (function () {
   try {
@@ -94,6 +108,18 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
     // data-theme before hydration because it depends on localStorage.
     <html lang={documentLanguage} dir={direction} suppressHydrationWarning>
       <body>
+        <Script id="google-tag-manager" strategy="beforeInteractive">
+          {GOOGLE_TAG_MANAGER_SCRIPT}
+        </Script>
+        <noscript>
+          <iframe
+            src="https://www.googletagmanager.com/ns.html?id=GTM-5BNVQ8MV"
+            height="0"
+            width="0"
+            style={{ display: "none", visibility: "hidden" }}
+            title="Google Tag Manager"
+          />
+        </noscript>
         <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
         <LocaleProvider initialLocale={locale}>
           <ConditionalAppShell>{children}</ConditionalAppShell>

@@ -30,8 +30,8 @@ function createLocalStorageMock() {
 }
 
 describe("trusted public price code allowlist", () => {
-  it("accepts exactly the six approved codes", () => {
-    expect(TRUSTED_PUBLIC_PRICE_CODES).toHaveLength(6);
+  it("accepts exactly the nine approved codes", () => {
+    expect(TRUSTED_PUBLIC_PRICE_CODES).toHaveLength(9);
     for (const code of TRUSTED_PUBLIC_PRICE_CODES) {
       expect(isTrustedPublicPriceCode(code)).toBe(true);
       expect(normalizePublicPriceCode(code)).toBe(code);
@@ -42,6 +42,11 @@ describe("trusted public price code allowlist", () => {
     const rejected: unknown[] = [
       "professional_monthly_aed_400",
       "professional_monthly",
+      "enterprise_core_annual_aed_14999",
+      "enterprise_core_monthly_aed_15000",
+      "enterprise_scale_annual_aed_25001",
+      "enterprise_authority",
+      "price_enterprise_authority",
       "starter",
       "AED399",
       "price_123",
@@ -146,6 +151,7 @@ describe("SSR safety", () => {
 describe("trusted href builders", () => {
   it("builds encoded trusted hrefs for register, login and subscription", () => {
     expect(buildRegisterPricingHref("professional_monthly_aed_399")).toBe("/register?priceCode=professional_monthly_aed_399");
+      expect(buildRegisterPricingHref("enterprise_core_annual_aed_15000")).toBe("/register?priceCode=enterprise_core_annual_aed_15000");
     expect(buildLoginPricingHref("professional_monthly_aed_399")).toBe("/login?priceCode=professional_monthly_aed_399");
     expect(buildSubscriptionPricingHref("professional_monthly_aed_399")).toBe("/settings/subscription?priceCode=professional_monthly_aed_399");
   });

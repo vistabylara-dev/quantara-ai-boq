@@ -88,7 +88,7 @@ describe("public product truth", () => {
     expect(byId.get("autodesk-dwg-analysis")?.status).toBe("CONTROLLED_ACCESS");
     expect(byId.get("autodesk-dwg-analysis")?.name).toBe("Autodesk / AutoCAD DWG analysis");
     expect(byId.get("autodesk-dwg-analysis")?.summary).toContain("traceable Quantara review candidates");
-    expect(byId.get("commercial-access")?.summary).toContain("Published Starter, Professional and Business subscriptions");
+    expect(byId.get("commercial-access")?.summary).toContain("Published Starter, Professional, Business, Enterprise Core, Enterprise Scale, and Enterprise Authority subscriptions");
     expect(byId.get("commercial-access")?.summary).toContain("eligible authenticated checkout");
     expect(byId.get("commercial-access")?.limitation).toContain("selected approved and active price");
     expect(byId.get("commercial-access")?.limitation).toContain("active synchronized provider mapping");
@@ -289,15 +289,38 @@ describe("public product truth", () => {
     expect(source).not.toMatch(/Durable production storage/i);
   });
 
+  it("proves Arabic sales truth includes correct enterprise prices and rejects corrupted strings", () => {
+    const { readFileSync } = require("node:fs");
+    const { join } = require("node:path");
+    const repoRoot = process.cwd();
+    const arDictionary = readFileSync(join(repoRoot, "src", "lib", "i18n", "dictionaries", "ar.ts"), "utf8");
+    const salesTruth = readFileSync(join(repoRoot, "src", "lib", "public-site", "sales-truth.ts"), "utf8");
+
+    const combined = arDictionary + " " + salesTruth;
+
+    expect(combined).toContain("Enterprise Core");
+    expect(combined).toContain("Enterprise Scale");
+    expect(combined).toContain("Enterprise Authority");
+    expect(combined).toContain("15,000");
+    expect(combined).toContain("25,000");
+    expect(combined).toContain("35,000");
+
+    const corruptedStrings = [
+      "الماسسات", "ىمك؆", "المؤطل", "الرعر", "المححد", "المجسسات", "المححدة", "سنوو", "متباشر", "التنفيد", "غاير", "المتاشرة"
+    ];
+
+    for (const str of corruptedStrings) {
+      expect(combined).not.toContain(str);
+    }
+  });
+
   it("does not publish unverified self-serve prices or conversion claims", () => {
     const source = publicWebsiteSource();
 
-    expect(source).not.toMatch(/AED\s*15,?000/i);
     expect(source).not.toMatch(/\bBuy Now\b/i);
     expect(source).not.toMatch(/\bSubscribe\b/i);
     expect(source).not.toMatch(/\bStarter\b[^\n]{0,100}\b1\s+project\b/i);
     expect(source).not.toMatch(/\bProfessional\b[^\n]{0,100}\b5\s+projects\b/i);
-    expect(source).not.toMatch(/\bEnterprise\b[^\n]{0,100}\b(?:AED\s*)?15,?000\b/i);
     expect(source).not.toMatch(/\bFull Source Traceability\b/i);
     expect(source).not.toMatch(/\b24\s*\/\s*7 support\b/i);
     expect(source).not.toMatch(/Request Early Access/i);
@@ -314,6 +337,22 @@ describe("public product truth", () => {
     expect(source).toContain("professional_annual_aed_3990");
     expect(source).toContain("business_monthly_aed_899");
     expect(source).toContain("business_annual_aed_8990");
+
+    // Enterprise prices
+    expect(source).toMatch(/AED\s*15,?000/i);
+    expect(source).toMatch(/AED\s*25,?000/i);
+    expect(source).toMatch(/AED\s*35,?000/i);
+    
+    // Enterprise codes
+    expect(source).toContain("enterprise_core_annual_aed_15000");
+    expect(source).toContain("enterprise_scale_annual_aed_25000");
+    expect(source).toContain("enterprise_authority_annual_aed_35000");
+
+    // Negative assertions for invented Enterprise prices
+    expect(source).not.toMatch(/AED\s*14,?999/i);
+    expect(source).not.toMatch(/AED\s*25,?001/i);
+    expect(source).not.toMatch(/AED\s*35,?001/i);
+
 
     expect(source).toContain('t("publicContent.pricing.saasStarterName")');
     expect(source).toContain('t("publicContent.pricing.saasProfessionalName")');

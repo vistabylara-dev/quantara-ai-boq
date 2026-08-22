@@ -63,11 +63,11 @@ export default function MarketplacePackagePage(props: PageProps) {
     try {
       const pkgData = await apiClient.get<PackageDetail>(`/api/data-packages/${params.packageKey}`, signal);
       setPkg(pkgData);
-      
+
       const endpoint = pkgData.hasAccess ? `/api/data-packages/${pkgData.id}/items` : `/api/data-packages/${pkgData.id}/preview`;
       const query = new URLSearchParams({ page: page.toString(), pageSize: "50" });
       if (search) query.set("search", search);
-      
+
       const itemsData = await apiClient.get<{ items: ItemRow[], total: number }>(`${endpoint}?${query.toString()}`, signal);
       setItems(itemsData.items);
       setTotalItems(itemsData.total);
@@ -157,7 +157,7 @@ export default function MarketplacePackagePage(props: PageProps) {
             </div>
             <p className="mt-4 max-w-2xl text-sm text-slate-400">{pkg.description}</p>
             <p className="mt-2 text-xs text-slate-500">{t("marketplaceDetail.itemsPublished", { count: pkg.itemCount })}</p>
-            
+
             <details className="group mt-4 max-w-2xl border-t border-slate-800/60 pt-3">
               <summary className="cursor-pointer text-sm font-semibold text-blue-400 hover:text-blue-300">
                 View library details
@@ -173,7 +173,7 @@ export default function MarketplacePackagePage(props: PageProps) {
                       {lContent.value && <div><strong className="text-slate-300">Why add this library?</strong><br/>{lContent.value}</div>}
                       {lContent.important && <div className="rounded border border-amber-900/50 bg-amber-950/20 p-3 text-xs text-amber-200">{lContent.important}</div>}
                       {lContent.disclaimer && <div className="rounded border border-amber-900/50 bg-amber-950/20 p-3 text-xs text-amber-200">{lContent.disclaimer}</div>}
-                      
+
                       <div className="mt-6 border-t border-slate-800/60 pt-4">
                         <strong className="text-slate-300">{MARKETPLACE_CONTENT.libraryPostPurchase.headline}</strong>
                         <p className="mt-2 whitespace-pre-line text-sm">{MARKETPLACE_CONTENT.libraryPostPurchase.explanation}</p>
@@ -247,7 +247,7 @@ export default function MarketplacePackagePage(props: PageProps) {
                     )}
                   </div>
                 )}
-                
+
                 {yearPrice && (
                   <div className="inline-flex flex-col items-end gap-2 pl-4 border-l border-slate-800">
                     <span className="text-sm font-semibold text-slate-300">

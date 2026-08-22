@@ -206,7 +206,7 @@ export default function MarketplacePage() {
         <p className="mt-3 max-w-2xl text-base text-slate-300">
           {MARKETPLACE_CONTENT.intro.subheadline}
         </p>
-        
+
         <div className="mt-6 space-y-2 text-sm text-slate-400">
           <ul className="list-disc pl-5 space-y-1.5">
             {MARKETPLACE_CONTENT.intro.points.map((pt, i) => <li key={i}>{pt}</li>)}
@@ -224,7 +224,7 @@ export default function MarketplacePage() {
         )}
       </div>
 
-      
+
       {checkoutAvailability && (
         <>
           <section className="mb-16">
@@ -247,7 +247,7 @@ export default function MarketplacePage() {
                     <div key={plan.productCode} className="flex flex-col rounded-2xl border border-slate-800 bg-slate-900 p-6 text-slate-300">
                       <h3 className="text-lg font-bold text-white capitalize">{plan.name}</h3>
                       <p className="mt-2 text-sm text-slate-400">{plan.shortDescription}</p>
-                      
+
                       <details className="group mt-4 flex-grow border-t border-slate-800 pt-4 mb-4">
                         <summary className="cursor-pointer text-sm font-semibold text-blue-400 hover:text-blue-300">
                           View package details
@@ -326,7 +326,7 @@ export default function MarketplacePage() {
                     <div key={plan.productCode} className="flex flex-col rounded-2xl border border-purple-900/30 bg-slate-900 p-6 text-slate-300">
                       <h3 className="text-lg font-bold text-purple-400 capitalize">{plan.name}</h3>
                       <p className="mt-2 text-sm text-slate-400">{plan.shortDescription}</p>
-                      
+
                       <details className="group mt-4 flex-grow border-t border-slate-800 pt-4 mb-4">
                         <summary className="cursor-pointer text-sm font-semibold text-purple-400 hover:text-purple-300">
                           View package details
@@ -370,7 +370,7 @@ export default function MarketplacePage() {
                   );
                 })}
             </div>
-            
+
             <div className="mt-12 overflow-x-auto rounded-[24px] border border-slate-800 bg-slate-900/50">
               <table className="w-full text-left text-sm text-slate-300">
                 <thead className="bg-slate-800/50 text-xs uppercase text-slate-400">
@@ -456,7 +456,7 @@ export default function MarketplacePage() {
                   <p className="mt-2 text-sm text-slate-400">
                     {product.shortDescription}
                   </p>
-                  
+
                   <details className="group mt-3 flex-grow border-t border-cyan-900/40 pt-3 mb-2">
                     <summary className="cursor-pointer text-sm font-semibold text-cyan-400 hover:text-cyan-300">
                       View package details
@@ -528,7 +528,7 @@ export default function MarketplacePage() {
 
           return (
             <div key={lib.key} className="flex flex-col rounded-[32px] border border-slate-800 bg-slate-900/80 hover:bg-slate-900 transition-colors p-6 text-slate-300 shadow-sm relative overflow-hidden group">
-              
+
               <div className="flex items-start justify-between gap-2 mb-4">
                 <div className="flex items-center gap-4">
                   <div className={`flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl border shadow-inner group-hover:scale-105 transition-transform ${isActive ? 'bg-slate-800 text-blue-400 border-slate-700' : 'bg-slate-900 text-slate-600 border-slate-800'}`}>
@@ -558,7 +558,7 @@ export default function MarketplacePage() {
                         {lContent.value && <div><strong className="text-slate-300">Why add this library?</strong><br/>{lContent.value}</div>}
                         {lContent.important && <div className="rounded border border-amber-900/50 bg-amber-950/20 p-2 text-xs text-amber-200">{lContent.important}</div>}
                         {lContent.disclaimer && <div className="rounded border border-amber-900/50 bg-amber-950/20 p-2 text-xs text-amber-200">{lContent.disclaimer}</div>}
-                        
+
                         <div className="mt-4 border-t border-slate-800/60 pt-3">
                           <strong className="text-slate-300">{MARKETPLACE_CONTENT.libraryPostPurchase.headline}</strong>
                           <p className="mt-1 whitespace-pre-line text-xs">{MARKETPLACE_CONTENT.libraryPostPurchase.explanation}</p>
@@ -575,7 +575,7 @@ export default function MarketplacePage() {
                   })()}
                 </div>
               </details>
-              
+
               {isActive ? (() => {
                 const monthPrice = pkg.purchase?.prices.find((candidate) => candidate.billingInterval === "MONTH");
                 const yearPrice = pkg.purchase?.prices.find((candidate) => candidate.billingInterval === "YEAR");

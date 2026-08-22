@@ -627,7 +627,9 @@ function measurementExceptionsSummary(progress: WorkProgress) {
   };
 }
 
-function toState(order: Awaited<ReturnType<typeof loadOrder>>) {
+export function toState(order: Awaited<ReturnType<typeof loadOrder>>) {
+  const progress = parseProgress(order.progressJson);
+
   return {
     id: order.id,
     status: order.status,
@@ -643,7 +645,8 @@ function toState(order: Awaited<ReturnType<typeof loadOrder>>) {
     blockerMessage: order.blockerMessage,
     blocker: blockerFromJson(order.blockerJson),
     qaWorkerRunId: order.qaWorkerRunId,
-    measurementExceptions: measurementExceptionsSummary(parseProgress(order.progressJson)),
+    measurementExceptions: measurementExceptionsSummary(progress),
+    aiDraft: progress.aiDraft ?? null,
     startedAt: order.startedAt.toISOString(),
     lastAdvancedAt: order.lastAdvancedAt.toISOString(),
     completedAt: order.completedAt?.toISOString() ?? null,
@@ -1639,11 +1642,12 @@ async function prepareTayqanAiDraft(
   const missingEntities = usableEntities.filter(e => !representedEntityIds.has(e.id));
   
   if (missingEntities.length > 0) {
+    const reason = `eligible entity count: ${usableEntities.length}, represented entity count: ${representedEntityIds.size}, missing count: ${missingEntities.length}`;
     return fail(actor, loaded, "SCOPE_COVERAGE_INCOMPLETE", "tayqan.hire.workflow.scopeCoverageIncomplete", {
       kind: "ERROR",
       i18nKey: "tayqan.hire.workflow.scopeCoverageIncomplete",
-      error: { code: "SCOPE_COVERAGE_INCOMPLETE" }
-    }, new AppError("SCOPE_COVERAGE_INCOMPLETE", `eligible entity count: ${usableEntities.length}, represented entity count: ${representedEntityIds.size}, missing count: ${missingEntities.length}, missing entity IDs: ${missingEntities.map(e => e.id).join(', ')}`, 500));
+      error: { code: "SCOPE_COVERAGE_INCOMPLETE", reason }
+    }, new AppError("SCOPE_COVERAGE_INCOMPLETE", reason, 500));
   }
 
   // DANGEROUS EXCEPTIONS GATE MOVED HERE

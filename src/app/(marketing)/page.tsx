@@ -4,6 +4,7 @@ import {
   ArrowRight,
   Calculator,
   CheckCircle2,
+  ChevronDown,
   ClipboardCheck,
   FileOutput,
   FileSearch,
@@ -34,41 +35,70 @@ import { getPublicSalesTruth } from "@/lib/public-site/sales-truth";
 
 export const metadata = createPublicPageMetadata("/");
 
-function buildFaqs(t: TranslateFn, pricingAnswer: string) {
+type HomepageFaq = {
+  question: string;
+  answer: string;
+  related?: {
+    href: string;
+    label: string;
+  };
+};
+
+function buildFaqs(t: TranslateFn): readonly HomepageFaq[] {
   return [
   {
-    question: t("publicContent.home.faq.whatQuestion"),
-    answer: t("publicContent.home.faq.whatAnswer"),
+    question: t("publicContent.home.faq.aiBoqQuestion"),
+    answer: t("publicContent.home.faq.aiBoqAnswer"),
+    related: {
+      href: "/ai-boq-software",
+      label: t("publicContent.home.faq.aiBoqLink"),
+    },
   },
   {
-    question: t("publicContent.home.faq.pdfQuestion"),
-    answer: t("publicContent.home.faq.pdfAnswer"),
+    question: t("publicContent.home.faq.uaeSoftwareQuestion"),
+    answer: t("publicContent.home.faq.uaeSoftwareAnswer"),
+    related: {
+      href: "/boq-software-uae",
+      label: t("publicContent.home.faq.uaeSoftwareLink"),
+    },
   },
   {
-    question: t("publicContent.home.faq.ocrQuestion"),
-    answer: t("publicContent.home.faq.ocrAnswer"),
+    question: t("publicContent.home.faq.projectFilesQuestion"),
+    answer: t("publicContent.home.faq.projectFilesAnswer"),
   },
   {
-    question: t("publicContent.home.faq.measureQuestion"),
-    answer: t("publicContent.home.faq.measureAnswer"),
+    question: t("publicContent.home.faq.quantitySurveyingQuestion"),
+    answer: t("publicContent.home.faq.quantitySurveyingAnswer"),
+    related: {
+      href: "/quantity-surveying-software",
+      label: t("publicContent.home.faq.quantitySurveyingLink"),
+    },
   },
   {
-    question: t("publicContent.home.faq.replaceQuestion"),
-    answer: t("publicContent.home.faq.replaceAnswer"),
+    question: t("publicContent.home.faq.estimatingDifferenceQuestion"),
+    answer: t("publicContent.home.faq.estimatingDifferenceAnswer"),
   },
   {
-    question: t("publicContent.home.faq.voiceQuestion"),
-    answer: t("publicContent.home.faq.voiceAnswer"),
+    question: t("publicContent.home.faq.pdfProjectQuestion"),
+    answer: t("publicContent.home.faq.pdfProjectAnswer"),
+    related: {
+      href: "/pdf-boq-extraction",
+      label: t("publicContent.home.faq.pdfProjectLink"),
+    },
   },
   {
-    question: t("publicContent.home.faq.driveQuestion"),
-    answer: t("publicContent.home.faq.driveAnswer"),
+    question: t("publicContent.home.faq.dwgQuestion"),
+    answer: t("publicContent.home.faq.dwgAnswer"),
   },
   {
-    question: t("publicContent.home.faq.pricingQuestion"),
-    answer: pricingAnswer,
+    question: t("publicContent.home.faq.aiQuantitySurveyorQuestion"),
+    answer: t("publicContent.home.faq.aiQuantitySurveyorAnswer"),
+    related: {
+      href: "/tayqan-ai-quantity-surveyor",
+      label: t("publicContent.home.faq.aiQuantitySurveyorLink"),
+    },
   },
-] as const;
+  ];
 }
 
 function buildWorkflowStages(t: TranslateFn, aiDraftTitle: string, aiDraftBody: string) {
@@ -123,7 +153,7 @@ export default async function HomePage() {
   ) as Record<PublicCapabilityStatus, { label: string; description: string }>;
   const productTruth = getQuantaraProductTruthForDisplay(t);
   const workflowStages = buildWorkflowStages(t, sales.aiDraftStageTitle, sales.aiDraftStageBody);
-  const faqs = buildFaqs(t, sales.pricingFaqAnswer);
+  const faqs = buildFaqs(t);
   const comparisonLinkLabel = locale === "ar"
     ? "مقارنة برامج جداول الكميات في الإمارات"
     : "Compare UAE BOQ software";
@@ -161,9 +191,12 @@ export default async function HomePage() {
           <p className="mb-5 text-sm font-bold uppercase tracking-[0.22em] text-blue-300">
             {t("publicContent.home.eyebrow")}
           </p>
-          <h1 className="mb-6 text-5xl font-extrabold tracking-tight sm:text-6xl">
-            {sales.heroTitle}
+          <h1 className="mb-6 text-4xl font-extrabold tracking-tight sm:text-6xl">
+            {t("publicContent.home.pageTitle")}
           </h1>
+          <p className="mx-auto mb-4 max-w-4xl text-xl font-semibold text-white">
+            {sales.heroTitle}
+          </p>
           <p className="mx-auto mb-5 max-w-4xl text-xl leading-relaxed text-slate-300">
             {sales.heroBody}
           </p>
@@ -385,8 +418,16 @@ export default async function HomePage() {
           <div className="space-y-4">
             {faqs.map((faq) => (
               <details key={faq.question} className="group rounded-xl border border-slate-800 bg-slate-950 p-5 open:shadow-sm">
-                <summary className="cursor-pointer list-none pe-6 font-bold marker:hidden">{faq.question}</summary>
+                <summary className="flex cursor-pointer list-none items-center justify-between gap-4 rounded-md font-bold marker:hidden focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500">
+                  <span>{faq.question}</span>
+                  <ChevronDown className="h-5 w-5 shrink-0 text-blue-300 transition-transform group-open:rotate-180" aria-hidden="true" />
+                </summary>
                 <p className="mt-4 leading-relaxed text-slate-400">{faq.answer}</p>
+                {faq.related ? (
+                  <Link href={faq.related.href} className="mt-4 inline-flex items-center text-sm font-semibold text-blue-300 hover:text-blue-200">
+                    {faq.related.label} <ArrowRight className="ms-2 h-4 w-4" aria-hidden="true" />
+                  </Link>
+                ) : null}
               </details>
             ))}
           </div>

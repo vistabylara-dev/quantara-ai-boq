@@ -4,7 +4,7 @@ import { setActorContext, withActorRequestContext } from "@/lib/auth/request-con
 import { requireCapability } from "@/lib/auth/rbac";
 import { getBOQRecord } from "@/lib/repositories/boq-repository";
 import { boqIdParamsSchema } from "@/lib/validation/boq-route-schemas";
-import { resolveBoqCommercialRequirements } from "@/lib/commercial/commercial-requirement-service";
+import { resolveBoqCommercialRequirementsEffective } from "@/lib/commercial/commercial-requirement-service";
 import { isTestCommercialSimulatorRequest, buildSimulatedAllowDecision, buildSimulatedUnlockDecision } from "@/lib/commercial/test-commercial-adapter";
 
 export const dynamic = "force-dynamic";
@@ -26,7 +26,7 @@ async function GETHandler(request: Request, context: { params: Promise<{ boqId: 
     if (simulatedOutcome === "COMMERCIAL_UNLOCK_REQUIRED") return apiSuccess(buildSimulatedUnlockDecision());
     if (simulatedOutcome === "ALLOW") return apiSuccess(buildSimulatedAllowDecision());
 
-    const decision = await resolveBoqCommercialRequirements(actor.companyId, boqId);
+    const decision = await resolveBoqCommercialRequirementsEffective(actor, boqId);
     return apiSuccess(decision);
   } catch (error) {
     return handleApiError(error);

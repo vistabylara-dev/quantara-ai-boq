@@ -24,8 +24,7 @@ import {
  *
  * WHY THIS EXISTS (the gap it closes)
  * -----------------------------------
- * Enterprise Core/Scale/Authority are `purchaseMode: "CONTACT_SALES"` and are
- * therefore, correctly, rejected by self-serve checkout
+ * LEGACY/DEPRECATED: Enterprise Core/Scale/Authority are now `purchaseMode: "DIRECT"` and MUST use normal self-serve checkout. This legacy operator sales service now intentionally fails closed for those three DIRECT products
  * (commerce-checkout-service.ts's loadEligibleCommercePrice →
  * PRODUCT_NOT_DIRECT_PURCHASE). The previously assumed fulfillment route was
  * for an operator to hand-create a Stripe Payment Link in the Stripe
@@ -64,8 +63,7 @@ import {
  *     in the existing app-owned-session invariant only; the webhook derives
  *     the company solely from StripeBillingCustomer. Stripping or forging the
  *     metadata cannot move an entitlement to another tenant.
- *  4. Self-serve `/api/commerce/checkout` is untouched and still rejects all
- *     three Enterprise products via PRODUCT_NOT_DIRECT_PURCHASE.
+ *  4. Self-serve `/api/commerce/checkout` now processes these since they are DIRECT.
  */
 
 /**
@@ -513,3 +511,4 @@ export async function createEnterpriseSalesCheckoutSession(
 
   return result;
 }
+

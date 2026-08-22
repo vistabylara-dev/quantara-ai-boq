@@ -166,7 +166,7 @@ describe("commerce-checkout-availability-service (integration, real local Postgr
   it("(A) the company's own core product price is reported unavailable (EXISTING_SUBSCRIPTION) — at most one core subscription", async () => {
     const actor = actorFor(userId, companyId, `availability-owner-${RUN_ID}@example.com`);
     const availability = await getCheckoutAvailability(actor);
-    const coreProduct = availability.products.find((p) => p.productCode === `test_availability_product_core_${RUN_ID}`);
+    const coreProduct = availability.products.find((p: any) => p.productCode === `test_availability_product_core_${RUN_ID}`);
     expect(coreProduct).toBeDefined();
     expect(coreProduct!.prices[0].available).toBe(false);
     expect(coreProduct!.prices[0].unavailableReason).toBe("EXISTING_SUBSCRIPTION");
@@ -175,7 +175,7 @@ describe("commerce-checkout-availability-service (integration, real local Postgr
   it("(D) a library the company does NOT own remains available despite the active core subscription", async () => {
     const actor = actorFor(userId, companyId, `availability-owner-${RUN_ID}@example.com`);
     const availability = await getCheckoutAvailability(actor);
-    const otherLib = availability.products.find((p) => p.productCode === `test_availability_product_other_lib_${RUN_ID}`);
+    const otherLib = availability.products.find((p: any) => p.productCode === `test_availability_product_other_lib_${RUN_ID}`);
     expect(otherLib).toBeDefined();
     expect(otherLib!.prices[0].available).toBe(true);
     expect(otherLib!.prices[0].unavailableReason).toBeNull();
@@ -184,7 +184,7 @@ describe("commerce-checkout-availability-service (integration, real local Postgr
   it("(C) a library the company already owns is reported unavailable (EXISTING_SUBSCRIPTION) — cannot buy the same library twice", async () => {
     const actor = actorFor(userId, companyId, `availability-owner-${RUN_ID}@example.com`);
     const availability = await getCheckoutAvailability(actor);
-    const ownedLib = availability.products.find((p) => p.productCode === `test_availability_product_owned_lib_${RUN_ID}`);
+    const ownedLib = availability.products.find((p: any) => p.productCode === `test_availability_product_owned_lib_${RUN_ID}`);
     expect(ownedLib).toBeDefined();
     expect(ownedLib!.prices[0].available).toBe(false);
     expect(ownedLib!.prices[0].unavailableReason).toBe("EXISTING_SUBSCRIPTION");
@@ -193,7 +193,7 @@ describe("commerce-checkout-availability-service (integration, real local Postgr
   it("item-C: a library owner/admin-granted (platform_owner_activation, not stripe) is also reported unavailable — source-independent ownership", async () => {
     const actor = actorFor(userId, companyId, `availability-owner-${RUN_ID}@example.com`);
     const availability = await getCheckoutAvailability(actor);
-    const ownerGrantedLib = availability.products.find((p) => p.productCode === `test_availability_product_owner_granted_lib_${RUN_ID}`);
+    const ownerGrantedLib = availability.products.find((p: any) => p.productCode === `test_availability_product_owner_granted_lib_${RUN_ID}`);
     expect(ownerGrantedLib).toBeDefined();
     expect(ownerGrantedLib!.prices[0].available).toBe(false);
     expect(ownerGrantedLib!.prices[0].unavailableReason).toBe("EXISTING_SUBSCRIPTION");
@@ -202,7 +202,7 @@ describe("commerce-checkout-availability-service (integration, real local Postgr
   it("item-A: a sales-led (CONTACT_SALES) product is absent entirely from checkout availability, never merely marked unavailable", async () => {
     const actor = actorFor(userId, companyId, `availability-owner-${RUN_ID}@example.com`);
     const availability = await getCheckoutAvailability(actor);
-    const contactSales = availability.products.find((p) => p.productCode === `test_availability_contact_sales_${RUN_ID}`);
+    const contactSales = availability.products.find((p: any) => p.productCode === `test_availability_contact_sales_${RUN_ID}`);
     expect(contactSales).toBeUndefined();
   });
 
@@ -210,8 +210,8 @@ describe("commerce-checkout-availability-service (integration, real local Postgr
     await seedEnterpriseCommerceProducts(prisma);
     for (const code of ["enterprise_core", "enterprise_scale", "enterprise_authority"]) {
       const stub = await prisma.commerceProduct.findUniqueOrThrow({ where: { code }, include: { prices: true } });
-      expect(stub.purchaseMode).toBe("CONTACT_SALES");
-      const annualPrice = stub.prices.find((p) => p.billingInterval === "YEAR" && p.isActive);
+      expect(stub.purchaseMode).toBe("DIRECT");
+      const annualPrice = stub.prices.find((p: any) => p.billingInterval === "YEAR" && p.isActive);
       expect(annualPrice).toBeDefined();
       // reviewedByUserId set alongside reviewStatus so this reads as a
       // genuinely governed approval — commerce-product-service.test.ts
@@ -224,10 +224,10 @@ describe("commerce-checkout-availability-service (integration, real local Postgr
     const availability = await getCheckoutAvailability(actor);
 
     for (const code of ["enterprise_core", "enterprise_scale", "enterprise_authority"]) {
-      const plan = availability.enterpriseProducts.find((p) => p.productCode === code);
+      const plan = availability.products.find((p: any) => p.productCode === code);
       expect(plan).toBeDefined();
-      expect(plan!.price).not.toBeNull();
-      expect(plan!.price!.currency).toBe("AED");
+      expect(plan!.prices).not.toBeNull();
+      expect(plan!.prices[0].currency).toBe("AED");
       expect((plan as unknown as { available?: unknown }).available).toBeUndefined();
     }
   });
@@ -235,7 +235,7 @@ describe("commerce-checkout-availability-service (integration, real local Postgr
   it("(G) TAYQAN Monthly is never marked unavailable due to an active core software subscription", async () => {
     const actor = actorFor(userId, companyId, `availability-owner-${RUN_ID}@example.com`);
     const availability = await getCheckoutAvailability(actor);
-    const tayqan = availability.products.find((p) => p.productCode === "tayqan_monthly");
+    const tayqan = availability.products.find((p: any) => p.productCode === "tayqan_monthly");
     // If tayqan_monthly isn't APPROVED/SYNCED in this database yet, it's
     // reported unavailable for a setup reason, not EXISTING_SUBSCRIPTION —
     // either is consistent with "not blocked by the company's core

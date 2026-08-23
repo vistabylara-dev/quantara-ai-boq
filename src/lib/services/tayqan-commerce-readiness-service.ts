@@ -276,21 +276,27 @@ async function listAllStripeProducts(stripe: Stripe): Promise<Stripe.Product[]> 
 }
 
 async function listAllStripePrices(stripe: Stripe): Promise<Stripe.Price[]> {
-  const prices: Stripe.Price[] = [];
-  let startingAfter: string | undefined;
+  const pricesById = new Map<string, Stripe.Price>();
 
-  for (;;) {
-    const page = await callStripe("prices.list", () => stripe.prices.list({
-      limit: 100,
-      ...(startingAfter ? { starting_after: startingAfter } : {}),
-    }));
-    prices.push(...page.data);
-    if (!page.has_more) return prices;
-    if (page.data.length === 0) {
-      throw new AppError("STRIPE_PRICE_LIST_INVALID", "Stripe returned an invalid Price page.", 502);
+  for (const active of [true, false] as const) {
+    let startingAfter: string | undefined;
+
+    for (;;) {
+      const page = await callStripe("prices.list", () => stripe.prices.list({
+        active,
+        limit: 100,
+        ...(startingAfter ? { starting_after: startingAfter } : {}),
+      }));
+      for (const price of page.data) pricesById.set(price.id, price);
+      if (!page.has_more) break;
+      if (page.data.length === 0) {
+        throw new AppError("STRIPE_PRICE_LIST_INVALID", "Stripe returned an invalid Price page.", 502);
+      }
+      startingAfter = page.data[page.data.length - 1].id;
     }
-    startingAfter = page.data[page.data.length - 1].id;
   }
+
+  return [...pricesById.values()];
 }
 
 function matchingProducts(products: Stripe.Product[], productCode: string): Stripe.Product[] {

@@ -64,6 +64,7 @@ function fakeLiveStripe() {
     params: Stripe.PriceCreateParams;
     options?: Stripe.RequestOptions;
   }> = [];
+  const priceListCalls: Stripe.PriceListParams[] = [];
 
   function addProduct(input: {
     id?: string;
@@ -160,6 +161,13 @@ function fakeLiveStripe() {
       amountMinor: 100 + index,
       interval: "ONE_TIME",
     });
+    addPrice({
+      code: `unrelated_inactive_price_${fakeId}_${index}`,
+      productId: product.id,
+      amountMinor: 200 + index,
+      interval: "ONE_TIME",
+      active: false,
+    });
   }
 
   function page<T extends { id: string }>(items: T[], startingAfter?: string) {
@@ -198,7 +206,14 @@ function fakeLiveStripe() {
       },
     },
     prices: {
-      list: async (params: Stripe.PriceListParams) => page(prices, params.starting_after),
+      list: async (params: Stripe.PriceListParams) => {
+        priceListCalls.push({ ...params });
+        const active = params.active ?? true;
+        return page(
+          prices.filter((price) => price.active === active),
+          params.starting_after,
+        );
+      },
       retrieve: async (id: string) => {
         const price = prices.find((item) => item.id === id);
         if (!price) throw new Error("FAKE_STRIPE_PRICE_NOT_FOUND");
@@ -226,6 +241,7 @@ function fakeLiveStripe() {
     prices,
     productCreateCalls,
     priceCreateCalls,
+    priceListCalls,
     addProduct,
     addPrice,
     productFor(code: string) {
@@ -248,6 +264,15 @@ function fakeLiveStripe() {
 }
 
 type FakeLiveStripe = ReturnType<typeof fakeLiveStripe>;
+
+function expectFullyPaginatedPriceRecovery(fake: FakeLiveStripe): void {
+  for (const active of [true, false]) {
+    expect(fake.priceListCalls.some((call) => call.active === active)).toBe(true);
+    expect(fake.priceListCalls.some((call) => (
+      call.active === active && Boolean(call.starting_after)
+    ))).toBe(true);
+  }
+}
 
 describe("TAYQAN customer self-checkout and owner-readiness route contracts", () => {
   it("keeps POST /api/tayqan/checkout as customer self-checkout with no PLATFORM_OWNER gate", () => {
@@ -697,8 +722,10 @@ describe("TAYQAN commerce readiness (integration, real isolated local Postgres, 
       productId: priceDuplicate.productFor("tayqan_day")?.id as string,
       amountMinor: 29_900,
       interval: "ONE_TIME",
+      active: false,
     });
     await expectFailsClosed(priceDuplicate, "TAYQAN_STRIPE_PRICE_AMBIGUOUS");
+    expectFullyPaginatedPriceRecovery(priceDuplicate);
   });
 
   it("10. adopts one exact existing Stripe Product and Price per TAYQAN plan", async () => {
@@ -709,6 +736,7 @@ describe("TAYQAN commerce readiness (integration, real isolated local Postgres, 
 
     expect(fake.productCreateCalls).toHaveLength(0);
     expect(fake.priceCreateCalls).toHaveLength(0);
+    expectFullyPaginatedPriceRecovery(fake);
     expect(report.items.every((item) => item.stripeProduct === "ADOPTED")).toBe(true);
     expect(report.items.every((item) => item.stripePrice === "ADOPTED")).toBe(true);
     for (const plan of TAYQAN_HIRE_PLANS) {
@@ -749,10 +777,14 @@ describe("TAYQAN commerce readiness (integration, real isolated local Postgres, 
     const fake = fakeLiveStripe();
     await runReadiness(fake);
 
-    for (const code of ["tayqan_day_299", "tayqan_week_999"]) {
+    for (const { code, amountMinor } of [
+      { code: "tayqan_day_299", amountMinor: 29_900 },
+      { code: "tayqan_week_999", amountMinor: 99_900 },
+    ]) {
       const call = fake.priceCreateCalls.find(
         (item) => item.params.metadata?.quantara_price_code === code,
       );
+      expect(call?.params).toMatchObject({ unit_amount: amountMinor, currency: "aed" });
       expect(call?.params.recurring).toBeUndefined();
       expect(fake.priceFor(code)).toMatchObject({ type: "one_time", recurring: null });
     }
@@ -765,6 +797,7 @@ describe("TAYQAN commerce readiness (integration, real isolated local Postgres, 
     const call = fake.priceCreateCalls.find(
       (item) => item.params.metadata?.quantara_price_code === "tayqan_monthly_2499",
     );
+    expect(call?.params).toMatchObject({ unit_amount: 249_900, currency: "aed" });
     expect(call?.params.recurring).toEqual({ interval: "month" });
     expect(fake.priceFor("tayqan_monthly_2499")).toMatchObject({
       type: "recurring",
@@ -940,6 +973,25 @@ describe("TAYQAN commerce readiness (integration, real isolated local Postgres, 
     addCanonicalStripeObjects(fake);
     fake.replaceProduct("tayqan_day", { active: false });
     await expectFailsClosed(fake, "TAYQAN_STRIPE_PRODUCT_DRIFT");
+  });
+
+  it("fails closed when only the inactive Price scan finds a canonical metadata candidate", async () => {
+    const fake = fakeLiveStripe();
+    addCanonicalStripeObjects(fake);
+    fake.replacePrice("tayqan_day_299", { active: false });
+
+    await expectFailsClosed(fake, "TAYQAN_STRIPE_PRICE_DRIFT");
+
+    expectFullyPaginatedPriceRecovery(fake);
+    expect(fake.priceCreateCalls).toHaveLength(0);
+    expect(await prisma.commerceProviderMapping.count({
+      where: {
+        provider: "STRIPE",
+        environment: "LIVE",
+        providerObjectType: "PRICE",
+        commercePriceId: priceByCode("tayqan_day_299").id,
+      },
+    })).toBe(0);
   });
 
   it("fails closed when a Stripe Price belongs to the wrong Product", async () => {

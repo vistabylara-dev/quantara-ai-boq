@@ -3,15 +3,40 @@ import { resolveCheckoutEnvironment } from "./commerce-checkout-service";
 import { resolveCommercialStripeClient } from "./commerce-checkout-service";
 import type Stripe from "stripe";
 import { findProductMapping, findPriceMapping } from "@/lib/repositories/commerce-provider-mapping-repository";
+import { seedEnterpriseCommerceProducts } from "../../../prisma/seed-data/commerce-products";
 
 const ENTERPRISE_PRICE_SPECS = {
   enterprise_core_one_time_aed_15000: { productCode: "enterprise_core", amountMinor: 1_500_000 },
   enterprise_scale_one_time_aed_25000: { productCode: "enterprise_scale", amountMinor: 2_500_000 },
   enterprise_authority_one_time_aed_35000: { productCode: "enterprise_authority", amountMinor: 3_500_000 },
 } as const;
+const ENTERPRISE_CATALOGUE_LOCK_KEY = "enterprise_one_time_catalogue";
 
 function isEnterpriseSelfCheckoutPriceCode(code: string): boolean {
   return Object.prototype.hasOwnProperty.call(ENTERPRISE_PRICE_SPECS, code);
+}
+
+function assertCanonicalEnterpriseProduct(product: {
+  code: string;
+  type: string;
+  purchaseMode: string;
+  isActive: boolean;
+  isPublic: boolean;
+  industryPackageId: string | null;
+}): void {
+  const isAllowlistedProduct = Object.values(ENTERPRISE_PRICE_SPECS).some(
+    (spec) => spec.productCode === product.code,
+  );
+  if (
+    !isAllowlistedProduct ||
+    product.type !== "ONE_TIME" ||
+    product.purchaseMode !== "DIRECT" ||
+    !product.isActive ||
+    !product.isPublic ||
+    product.industryPackageId !== null
+  ) {
+    throw new Error("Financial or product parameters are not valid for Enterprise self-checkout.");
+  }
 }
 
 function assertCanonicalEnterprisePrice(price: {
@@ -20,9 +45,18 @@ function assertCanonicalEnterprisePrice(price: {
   currency: string;
   billingInterval: string;
   isFromPrice: boolean;
-  product: { code: string; type: string; purchaseMode: string };
+  isActive: boolean;
+  product: {
+    code: string;
+    type: string;
+    purchaseMode: string;
+    isActive: boolean;
+    isPublic: boolean;
+    industryPackageId: string | null;
+  };
 }): void {
   const spec = ENTERPRISE_PRICE_SPECS[price.code as keyof typeof ENTERPRISE_PRICE_SPECS];
+  assertCanonicalEnterpriseProduct(price.product);
   if (
     !spec ||
     price.product.code !== spec.productCode ||
@@ -30,8 +64,7 @@ function assertCanonicalEnterprisePrice(price: {
     price.currency !== "AED" ||
     price.billingInterval !== "ONE_TIME" ||
     price.isFromPrice ||
-    price.product.type !== "ONE_TIME" ||
-    price.product.purchaseMode !== "DIRECT"
+    !price.isActive
   ) {
     throw new Error("Financial or product parameters are not valid for Enterprise self-checkout.");
   }
@@ -131,16 +164,53 @@ export async function ensureEnterpriseSelfCheckoutPriceReady(priceCode: string, 
   }
 
   await prisma.$transaction(async (tx) => {
-    await tx.$executeRaw`SELECT pg_advisory_xact_lock(1144, hashtext(${priceCode}))`;
+    // The target-only seed creates all three fixed Enterprise rows. One shared
+    // lock prevents simultaneous cold Core/Scale/Authority requests from
+    // racing on the same unique product and price codes.
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(1144, hashtext(${ENTERPRISE_CATALOGUE_LOCK_KEY}))`;
 
-    const price = await tx.commercePrice.findUnique({ where: { code: priceCode }, include: { product: true } });
-    if (!price) throw new Error("Enterprise self-checkout price is not configured.");
-    const product = price.product;
+    let price = await tx.commercePrice.findUnique({ where: { code: priceCode }, include: { product: true } });
+    if (!price) {
+      // The existing three-tier seed is an upsert. Validate every existing
+      // allowlisted row first so it can never archive or rewrite stored drift
+      // while initializing a different missing Enterprise tier.
+      const existingPrices = await tx.commercePrice.findMany({
+        where: { code: { in: Object.keys(ENTERPRISE_PRICE_SPECS) } },
+        include: { product: true },
+      });
+      const existingProducts = await tx.commerceProduct.findMany({
+        where: {
+          code: { in: Object.values(ENTERPRISE_PRICE_SPECS).map((spec) => spec.productCode) },
+        },
+      });
+      for (const existingProduct of existingProducts) {
+        assertCanonicalEnterpriseProduct(existingProduct);
+      }
+      for (const existingPrice of existingPrices) {
+        assertCanonicalEnterprisePrice(existingPrice);
+      }
+      await seedEnterpriseCommerceProducts(tx);
+      price = await tx.commercePrice.findUnique({ where: { code: priceCode }, include: { product: true } });
+    }
+    if (!price) throw new Error("Enterprise self-checkout price could not be initialized.");
 
     assertCanonicalEnterprisePrice(price);
-    if (price.reviewStatus !== "APPROVED") {
-      throw new Error("Enterprise self-checkout price requires owner or admin approval.");
+    if (price.reviewStatus === "REQUIRES_REVIEW") {
+      price = await tx.commercePrice.update({
+        where: { id: price.id },
+        data: {
+          reviewStatus: "APPROVED",
+          reviewedAt: new Date(),
+          reviewedByUserId: null,
+          reviewNote: "System-approved fixed Enterprise one-time catalogue price",
+        },
+        include: { product: true },
+      });
     }
+    if (price.reviewStatus !== "APPROVED") {
+      throw new Error("Enterprise self-checkout price is not in a system-approvable review state.");
+    }
+    const product = price.product;
 
     let productMapping = await findProductMapping("STRIPE", environment, product.id, tx);
     if (!productMapping || !productMapping.providerActive || productMapping.synchronizationStatus !== "SYNCED") {

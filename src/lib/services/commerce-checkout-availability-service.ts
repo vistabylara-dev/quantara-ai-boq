@@ -55,9 +55,27 @@ export type CheckoutAvailability = {
 };
 
 const ENTERPRISE_PRODUCTS = [
-  { productCode: "enterprise_core", priceCode: "enterprise_core_one_time_aed_15000", amountMinor: 1_500_000 },
-  { productCode: "enterprise_scale", priceCode: "enterprise_scale_one_time_aed_25000", amountMinor: 2_500_000 },
-  { productCode: "enterprise_authority", priceCode: "enterprise_authority_one_time_aed_35000", amountMinor: 3_500_000 },
+  {
+    productCode: "enterprise_core",
+    priceCode: "enterprise_core_one_time_aed_15000",
+    amountMinor: 1_500_000,
+    name: "Enterprise Core",
+    shortDescription: "For established contractors and consultancies needing high-volume BOQ production.",
+  },
+  {
+    productCode: "enterprise_scale",
+    priceCode: "enterprise_scale_one_time_aed_25000",
+    amountMinor: 2_500_000,
+    name: "Enterprise Scale",
+    shortDescription: "For multi-team and multi-department companies running BOQ production at scale.",
+  },
+  {
+    productCode: "enterprise_authority",
+    priceCode: "enterprise_authority_one_time_aed_35000",
+    amountMinor: 3_500_000,
+    name: "Enterprise Authority",
+    shortDescription: "For large groups, consultancies and institutional customers needing dedicated onboarding.",
+  },
 ] as const;
 
 /**
@@ -95,44 +113,58 @@ export async function getCheckoutAvailability(actor: CurrentActor): Promise<Chec
   const enterpriseRows = await prisma.commerceProduct.findMany({
     where: {
       code: { in: ENTERPRISE_PRODUCTS.map((item) => item.productCode) },
-      isActive: true,
-      isPublic: true,
-      purchaseMode: "DIRECT",
-      type: "ONE_TIME",
     },
-    include: { prices: { where: { isActive: true } } },
   });
   const enterpriseByCode = new Map(enterpriseRows.map((product) => [product.code, product]));
+  const enterprisePrices = await prisma.commercePrice.findMany({
+    where: { code: { in: ENTERPRISE_PRODUCTS.map((item) => item.priceCode) } },
+    include: { product: true },
+  });
+  const enterprisePriceByCode = new Map(enterprisePrices.map((price) => [price.code, price]));
 
   const result: CheckoutOptionProduct[] = [];
 
-  // Enterprise offers come from governed catalogue rows, never hardcoded UI facts.
+  // These three fixed business-approved offers are safe to project before
+  // initialization. POST checkout performs the locked target-only bootstrap;
+  // GET remains read-only and never calls Stripe or a seed helper.
   for (const spec of ENTERPRISE_PRODUCTS) {
     const product = enterpriseByCode.get(spec.productCode);
-    const price = product?.prices.find((candidate) => candidate.code === spec.priceCode);
-    if (!product || !price) continue;
-
-    const canonical =
-      price.amountMinor === spec.amountMinor &&
-      price.currency === "AED" &&
-      price.billingInterval === "ONE_TIME" &&
-      !price.isFromPrice;
-    let available = canonical && price.reviewStatus === "APPROVED";
+    const price = enterprisePriceByCode.get(spec.priceCode);
+    const productHasDrift = Boolean(
+      product &&
+        (product.type !== "ONE_TIME" ||
+          product.purchaseMode !== "DIRECT" ||
+          !product.isActive ||
+          !product.isPublic ||
+          product.industryPackageId !== null),
+    );
+    const priceHasDrift = Boolean(
+      price &&
+        (price.product.code !== spec.productCode ||
+          price.amountMinor !== spec.amountMinor ||
+          price.currency !== "AED" ||
+          price.billingInterval !== "ONE_TIME" ||
+          price.isFromPrice ||
+          !price.isActive),
+    );
+    const reviewStateCanBecomeReady =
+      !price || price.reviewStatus === "REQUIRES_REVIEW" || price.reviewStatus === "APPROVED";
+    let available = !productHasDrift && !priceHasDrift && reviewStateCanBecomeReady;
     let unavailableReason: CheckoutUnavailableReason | null = available ? null : "PRICE_NOT_APPROVED";
-    if (available && hasExistingSubscription) {
+    if (hasExistingSubscription) {
       available = false;
       unavailableReason = "EXISTING_SUBSCRIPTION";
     }
 
     result.push({
-      productCode: product.code,
-      name: product.name,
-      shortDescription: product.shortDescription,
+      productCode: spec.productCode,
+      name: spec.name,
+      shortDescription: spec.shortDescription,
       prices: [{
-        priceCode: price.code,
+        priceCode: spec.priceCode,
         billingInterval: "ONE_TIME",
-        amountMinor: price.amountMinor,
-        currency: price.currency,
+        amountMinor: spec.amountMinor,
+        currency: "AED",
         available,
         unavailableReason,
       }],

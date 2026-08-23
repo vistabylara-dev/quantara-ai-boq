@@ -1,5 +1,10 @@
 import type { PrismaClient } from "@prisma/client";
 
+type CommerceCatalogueSeedClient = Pick<
+  PrismaClient,
+  "commerceProduct" | "commercePrice" | "entitlementTemplate"
+>;
+
 /**
  * STRIPE-1B — idempotent seed for the internal commerce catalogue
  * (CommerceProduct + CommercePrice + EntitlementTemplate). Mirrors the
@@ -462,7 +467,7 @@ const INDUSTRY_ACCESS_CANDIDATES: { key: string; name: string; sortOrder: number
   { key: "uae-authority-regulatory-library", name: "UAE Authority & Regulatory Library", sortOrder: 234 },
 ];
 
-async function seedCatalogueProduct(prisma: PrismaClient, spec: ProductSpec, report: CommerceSeedReport): Promise<void> {
+async function seedCatalogueProduct(prisma: CommerceCatalogueSeedClient, spec: ProductSpec, report: CommerceSeedReport): Promise<void> {
   const existing = await prisma.commerceProduct.findUnique({ where: { code: spec.code } });
   const productData = {
     type: spec.type,
@@ -557,7 +562,7 @@ const LEGACY_ENTERPRISE_ANNUAL_PRICE_CODES = [
   "enterprise_authority_annual_aed_35000",
 ] as const;
 
-async function archiveLegacyEnterpriseAnnualPrices(prisma: PrismaClient, report: CommerceSeedReport): Promise<void> {
+async function archiveLegacyEnterpriseAnnualPrices(prisma: Pick<PrismaClient, "commercePrice">, report: CommerceSeedReport): Promise<void> {
   const archived = await prisma.commercePrice.updateMany({
     where: {
       code: { in: [...LEGACY_ENTERPRISE_ANNUAL_PRICE_CODES] },
@@ -696,12 +701,12 @@ export async function seedCommerceProducts(prisma: PrismaClient): Promise<Commer
  * future catalogue product are never read or written by this function.
  * Idempotent — safe to run more than once against production.
  *
- * New/changed prices still default to reviewStatus: REQUIRES_REVIEW; owner/
- * admin approval via PATCH /api/admin/commerce/prices/[priceId]/approval
- * (see src/lib/services/commerce-price-approval-service.ts) remains the
- * required next step before these three prices can be synced to LIVE Stripe.
+ * New/changed prices still default to reviewStatus: REQUIRES_REVIEW. The
+ * generic owner/admin approval path remains unchanged; the exact three fixed
+ * one-time codes have one narrow exception in Enterprise checkout readiness,
+ * which validates every canonical field before recording system approval.
  */
-export async function seedEnterpriseCommerceProducts(prisma: PrismaClient): Promise<CommerceSeedReport> {
+export async function seedEnterpriseCommerceProducts(prisma: CommerceCatalogueSeedClient): Promise<CommerceSeedReport> {
   const report: CommerceSeedReport = {
     productsInserted: 0,
     productsUpdated: 0,

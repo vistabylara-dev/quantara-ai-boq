@@ -68,6 +68,10 @@ function isEnterpriseOneTimePrice(price: {
   );
 }
 
+function isEnterpriseOneTimePriceCode(priceCode: string): boolean {
+  return Object.prototype.hasOwnProperty.call(ENTERPRISE_ONE_TIME_PRICE_SPECS, priceCode);
+}
+
 export type CheckoutPriceRejectionReason =
   | "PRICE_NOT_FOUND"
   | "PRODUCT_INACTIVE"
@@ -677,10 +681,13 @@ export async function createCommerceCheckoutSession(
   // Global catalog validation — not company-specific, so it doesn't need the
   // per-company lock below. Never trusts client-supplied amount/currency/
   // providerPriceId; both are resolved purely from the trusted priceCode.
-  const price = await loadEligibleCommercePrice(input.priceCode!);
-  // Eligibility and governed approval are checked before readiness performs
-  // any Stripe or provider-mapping write.
-  await ensureEnterpriseSelfCheckoutPriceReady(price.code, stripe);
+  const requestedPriceCode = input.priceCode!;
+  if (isEnterpriseOneTimePriceCode(requestedPriceCode)) {
+    await ensureEnterpriseSelfCheckoutPriceReady(requestedPriceCode, stripe);
+  }
+  // The governed eligibility load remains unchanged and re-validates the
+  // stored row after exact Enterprise cold-start readiness has completed.
+  const price = await loadEligibleCommercePrice(requestedPriceCode);
   const purchaseFamily = classifyCommerceProductFamily(price.product);
   const isEnterprise = isEnterpriseOneTimePrice(price);
 

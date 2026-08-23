@@ -40,29 +40,38 @@ const LEGACY_CORE_ANNUAL_PRICE_CODE = "enterprise_core_annual_aed_15000";
 
 let customerCounter = 0;
 let sessionCounter = 0;
-
-function readinessStripeClient() {
-  return {
-    products: {
-      list: vi.fn(async () => ({ data: [], has_more: false })),
-      create: vi.fn(async (params: { metadata: Record<string, string> }) => ({
-        id: `prod_test_enterprise_${params.metadata.quantara_product_code}_${RUN_ID}`,
-        metadata: params.metadata,
-      })),
-    },
-    prices: {
-      list: vi.fn(async () => ({ data: [], has_more: false })),
-      create: vi.fn(async (params: { metadata: Record<string, string>; product: string; unit_amount: number; currency: string }) => ({
-        id: `price_test_enterprise_${params.metadata.quantara_price_code}_${RUN_ID}`,
-        type: "one_time",
-        ...params,
-      })),
-    },
-  } as any;
-}
+let providerObjectCounter = 0;
 
 function checkoutStripeClient(options: { completedSessions?: Stripe.Checkout.Session[] } = {}) {
+  const providerProducts: Stripe.Product[] = [];
+  const providerPrices: Stripe.Price[] = [];
   return {
+    products: {
+      list: vi.fn(async () => ({ data: providerProducts, has_more: false })),
+      create: vi.fn(async (params: { name: string; description?: string; active: boolean; metadata: Record<string, string> }) => {
+        const product = {
+          id: `prod_test_enterprise_${params.metadata.quantara_product_code}_${RUN_ID}_${++providerObjectCounter}`,
+          object: "product",
+          ...params,
+        } as unknown as Stripe.Product;
+        providerProducts.push(product);
+        return product;
+      }),
+    },
+    prices: {
+      list: vi.fn(async () => ({ data: providerPrices, has_more: false })),
+      create: vi.fn(async (params: { metadata: Record<string, string>; product: string; unit_amount: number; currency: string }) => {
+        const price = {
+          id: `price_test_enterprise_${params.metadata.quantara_price_code}_${RUN_ID}_${++providerObjectCounter}`,
+          object: "price",
+          active: true,
+          type: "one_time",
+          ...params,
+        } as unknown as Stripe.Price;
+        providerPrices.push(price);
+        return price;
+      }),
+    },
     customers: {
       create: vi.fn(async () => ({ id: `cus_enterprise_checkout_${RUN_ID}_${++customerCounter}` })),
     },
@@ -138,8 +147,59 @@ describe("Enterprise one-time Stripe checkout", () => {
   const providerPriceIds = new Map<string, string>();
   const originalMode = process.env.STRIPE_MODE;
   const originalBaseUrl = process.env.APP_BASE_URL;
-  let readinessStripe: ReturnType<typeof readinessStripeClient>;
-  let approverUserId: string;
+  const originalPlatformOwnerEmail = process.env.PLATFORM_OWNER_EMAIL;
+
+  async function resetEnterpriseCatalogue(): Promise<void> {
+    await prisma.commercePrice.deleteMany({
+      where: { code: { in: ENTERPRISE.map((item) => item.priceCode) } },
+    });
+    await prisma.commerceProduct.deleteMany({
+      where: { code: { in: ENTERPRISE.map((item) => item.productCode) } },
+    });
+  }
+
+  async function enterpriseCatalogueState() {
+    const [productCount, priceCount, mappings] = await Promise.all([
+      prisma.commerceProduct.count({ where: { code: { in: ENTERPRISE.map((item) => item.productCode) } } }),
+      prisma.commercePrice.count({ where: { code: { in: ENTERPRISE.map((item) => item.priceCode) } } }),
+      prisma.commerceProviderMapping.findMany({
+        select: {
+          commerceProduct: { select: { code: true } },
+          commercePrice: { select: { code: true } },
+        },
+      }),
+    ]);
+    const mappingCount = mappings.filter(
+      (mapping) =>
+        ENTERPRISE.some((item) => item.productCode === mapping.commerceProduct.code) ||
+        ENTERPRISE.some((item) => item.priceCode === mapping.commercePrice?.code),
+    ).length;
+    return { productCount, priceCount, mappingCount };
+  }
+
+  async function refreshProviderPriceIds(): Promise<void> {
+    providerPriceIds.clear();
+    for (const item of ENTERPRISE) {
+      const price = await prisma.commercePrice.findUniqueOrThrow({ where: { code: item.priceCode } });
+      const mapping = await prisma.commerceProviderMapping.findFirstOrThrow({
+        where: {
+          provider: "STRIPE",
+          environment: "TEST",
+          commercePriceId: price.id,
+          providerObjectType: "PRICE",
+        },
+      });
+      providerPriceIds.set(item.priceCode, mapping.providerPriceId!);
+    }
+  }
+
+  async function prepareAllEnterpriseMappingsWithoutManualApproval(): Promise<void> {
+    const stripe = checkoutStripeClient();
+    for (const item of ENTERPRISE) {
+      await ensureEnterpriseSelfCheckoutPriceReady(item.priceCode, stripe);
+    }
+    await refreshProviderPriceIds();
+  }
 
   async function createActor(label: string): Promise<CurrentActor> {
     const company = await prisma.company.create({
@@ -175,27 +235,8 @@ describe("Enterprise one-time Stripe checkout", () => {
     requireIsolatedLocalTestDatabase();
     process.env.STRIPE_MODE = "test";
     process.env.APP_BASE_URL = "http://localhost:3000";
-
-    await seedEnterpriseCommerceProducts(prisma);
-    await prisma.commerceProviderMapping.deleteMany({
-      where: { commerceProduct: { code: { in: ENTERPRISE.map((item) => item.productCode) } }, environment: "TEST" },
-    });
-    const approver = await createActor("price-approver");
-    approverUserId = approver.userId;
-    await prisma.commercePrice.updateMany({
-      where: { code: { in: ENTERPRISE.map((item) => item.priceCode) } },
-      data: { reviewStatus: "APPROVED", reviewedByUserId: approver.userId, reviewedAt: new Date() },
-    });
-
-    readinessStripe = readinessStripeClient();
-    for (const item of ENTERPRISE) {
-      await ensureEnterpriseSelfCheckoutPriceReady(item.priceCode, readinessStripe);
-      const price = await prisma.commercePrice.findUniqueOrThrow({ where: { code: item.priceCode } });
-      const mapping = await prisma.commerceProviderMapping.findFirstOrThrow({
-        where: { provider: "STRIPE", environment: "TEST", commercePriceId: price.id, providerObjectType: "PRICE" },
-      });
-      providerPriceIds.set(item.priceCode, mapping.providerPriceId!);
-    }
+    delete process.env.PLATFORM_OWNER_EMAIL;
+    await resetEnterpriseCatalogue();
   });
 
   afterAll(async () => {
@@ -212,6 +253,8 @@ describe("Enterprise one-time Stripe checkout", () => {
         ],
       },
     });
+    await resetEnterpriseCatalogue();
+    await seedEnterpriseCommerceProducts(prisma);
     await prisma.commercePrice.updateMany({
       where: { code: { in: [...ENTERPRISE.map((item) => item.priceCode), ...RECURRING.flatMap((item) => [item.monthlyCode, item.annualCode])] } },
       data: { reviewStatus: "REQUIRES_REVIEW", reviewNote: null, reviewedByUserId: null, reviewedAt: null },
@@ -222,10 +265,126 @@ describe("Enterprise one-time Stripe checkout", () => {
     else process.env.STRIPE_MODE = originalMode;
     if (originalBaseUrl === undefined) delete process.env.APP_BASE_URL;
     else process.env.APP_BASE_URL = originalBaseUrl;
+    if (originalPlatformOwnerEmail === undefined) delete process.env.PLATFORM_OWNER_EMAIL;
+    else process.env.PLATFORM_OWNER_EMAIL = originalPlatformOwnerEmail;
     await prisma.$disconnect();
   });
 
-  it("keeps the three exact AED packages one-time and creates non-recurring Stripe Prices", async () => {
+  it.each(ENTERPRISE)("allows an ordinary customer to checkout $productCode from zero Enterprise catalogue state", async (item) => {
+    await resetEnterpriseCatalogue();
+    expect(await enterpriseCatalogueState()).toEqual({ productCount: 0, priceCount: 0, mappingCount: 0 });
+
+    const actor = await createActor(`cold-start-${item.productCode}`);
+    const storedActor = await prisma.user.findUniqueOrThrow({
+      where: { id: actor.userId },
+      select: { role: true, platformRole: true },
+    });
+    expect(storedActor).toEqual({ role: "COMPANY_OWNER", platformRole: null });
+    expect(process.env.PLATFORM_OWNER_EMAIL).toBeUndefined();
+
+    const availability = await getCheckoutAvailability(actor);
+    const enterpriseOffers = availability.products.filter((product) =>
+      ENTERPRISE.some((candidate) => candidate.productCode === product.productCode),
+    );
+    expect(enterpriseOffers).toHaveLength(3);
+    expect(enterpriseOffers.map((product) => product.productCode)).toEqual(
+      ENTERPRISE.map((candidate) => candidate.productCode),
+    );
+    for (const offer of enterpriseOffers) {
+      const expected = ENTERPRISE.find((candidate) => candidate.productCode === offer.productCode)!;
+      expect(offer.prices).toEqual([{
+        priceCode: expected.priceCode,
+        billingInterval: "ONE_TIME",
+        amountMinor: expected.amountMinor,
+        currency: "AED",
+        available: true,
+        unavailableReason: null,
+      }]);
+    }
+    expect(await enterpriseCatalogueState()).toEqual({ productCount: 0, priceCount: 0, mappingCount: 0 });
+
+    const stripe = checkoutStripeClient();
+    const result = await createCommerceCheckoutSession(actor, { priceCode: item.priceCode }, stripe);
+    expect(result.checkoutUrl).toMatch(/^https:\/\/checkout\.stripe\.com\/test\//);
+
+    const storedPrice = await prisma.commercePrice.findUniqueOrThrow({
+      where: { code: item.priceCode },
+      include: { product: true },
+    });
+    expect(storedPrice).toMatchObject({
+      amountMinor: item.amountMinor,
+      currency: "AED",
+      billingInterval: "ONE_TIME",
+      isFromPrice: false,
+      isActive: true,
+      reviewStatus: "APPROVED",
+      reviewedByUserId: null,
+      reviewNote: "System-approved fixed Enterprise one-time catalogue price",
+      product: {
+        code: item.productCode,
+        type: "ONE_TIME",
+        purchaseMode: "DIRECT",
+        isActive: true,
+        isPublic: true,
+        industryPackageId: null,
+      },
+    });
+    expect(storedPrice.reviewedAt).toBeInstanceOf(Date);
+    expect(await enterpriseCatalogueState()).toMatchObject({ productCount: 3, priceCount: 3, mappingCount: 2 });
+
+    const untouchedPrices = await prisma.commercePrice.findMany({
+      where: { code: { in: ENTERPRISE.filter((candidate) => candidate.priceCode !== item.priceCode).map((candidate) => candidate.priceCode) } },
+    });
+    expect(untouchedPrices).toHaveLength(2);
+    expect(untouchedPrices.every((price) => price.reviewStatus === "REQUIRES_REVIEW")).toBe(true);
+
+    const priceMapping = await prisma.commerceProviderMapping.findFirstOrThrow({
+      where: {
+        provider: "STRIPE",
+        environment: "TEST",
+        commercePriceId: storedPrice.id,
+        providerObjectType: "PRICE",
+      },
+    });
+    expect(priceMapping).toMatchObject({
+      providerActive: true,
+      synchronizationStatus: "SYNCED",
+    });
+    expect(priceMapping.providerPriceId).toContain(item.priceCode);
+
+    expect(stripe.products.create).toHaveBeenCalledTimes(1);
+    expect(stripe.prices.create).toHaveBeenCalledTimes(1);
+    const priceCreateParams = stripe.prices.create.mock.calls[0][0];
+    expect(priceCreateParams).toMatchObject({
+      product: expect.stringContaining(item.productCode),
+      unit_amount: item.amountMinor,
+      currency: "aed",
+    });
+    expect(priceCreateParams).not.toHaveProperty("recurring");
+
+    expect(stripe.checkout.sessions.create).toHaveBeenCalledTimes(1);
+    const checkoutParams = stripe.checkout.sessions.create.mock.calls[0][0];
+    expect(checkoutParams).toMatchObject({
+      mode: "payment",
+      customer: expect.stringContaining("cus_enterprise_checkout"),
+      line_items: [{ price: priceMapping.providerPriceId, quantity: 1 }],
+      payment_intent_data: {
+        metadata: {
+          quantara_company_id: actor.companyId,
+          quantara_price_code: item.priceCode,
+          quantara_checkout_mode: "ENTERPRISE_ONE_TIME",
+        },
+      },
+    });
+    expect(checkoutParams).not.toHaveProperty("subscription_data");
+    expect(checkoutParams).not.toHaveProperty("payment_method_types");
+
+    if (item.productCode === "enterprise_authority") {
+      await prepareAllEnterpriseMappingsWithoutManualApproval();
+    }
+  });
+
+  it("keeps the three exact AED packages one-time with synced non-recurring Stripe Price mappings", async () => {
     for (const item of ENTERPRISE) {
       const product = await prisma.commerceProduct.findUniqueOrThrow({
         where: { code: item.productCode },
@@ -236,20 +395,6 @@ describe("Enterprise one-time Stripe checkout", () => {
       expect(product.purchaseMode).toBe("DIRECT");
       expect(price).toMatchObject({ amountMinor: item.amountMinor, currency: "AED", billingInterval: "ONE_TIME", isActive: true });
       expect(providerPriceIds.get(item.priceCode)).toContain(item.priceCode);
-    }
-
-    expect(readinessStripe.prices.create).toHaveBeenCalledTimes(3);
-    const priceCreateCalls = readinessStripe.prices.create.mock.calls as Array<[
-      { metadata: Record<string, string>; product: string; unit_amount: number; currency: string },
-    ]>;
-    for (const item of ENTERPRISE) {
-      const [params] = priceCreateCalls.find(
-        ([candidate]) => candidate.metadata.quantara_price_code === item.priceCode,
-      )!;
-      expect(params.currency).toBe("aed");
-      expect(params.unit_amount).toBe(item.amountMinor);
-      expect(params.product).toContain(item.productCode);
-      expect(params).not.toHaveProperty("recurring");
     }
   });
 
@@ -273,26 +418,99 @@ describe("Enterprise one-time Stripe checkout", () => {
     expect(legacyPrice.validUntil).toBeInstanceOf(Date);
   });
 
-  it("rejects an unapproved Enterprise price before performing Stripe readiness writes", async () => {
+  it("fails closed on Enterprise amount drift without approval, Stripe Price creation, or Checkout", async () => {
     const item = ENTERPRISE[0];
-    await prisma.commercePrice.update({
+    const driftedPrice = await prisma.commercePrice.update({
       where: { code: item.priceCode },
-      data: { reviewStatus: "REQUIRES_REVIEW", reviewedByUserId: null, reviewedAt: null },
+      data: {
+        amountMinor: 1_499_999,
+        reviewStatus: "REQUIRES_REVIEW",
+        reviewedByUserId: null,
+        reviewedAt: null,
+        reviewNote: null,
+      },
     });
-    const actor = await createActor("unapproved-price");
+    await prisma.commerceProviderMapping.deleteMany({ where: { commercePriceId: driftedPrice.id } });
+    const actor = await createActor("amount-drift");
     const stripe = checkoutStripeClient();
 
     try {
-      await expect(createCommerceCheckoutSession(actor, { priceCode: item.priceCode }, stripe)).rejects.toMatchObject({
-        code: "CHECKOUT_PRICE_NOT_ELIGIBLE",
-        reason: "PRICE_NOT_APPROVED",
+      const availability = await getCheckoutAvailability(actor);
+      expect(availability.products.find((product) => product.productCode === item.productCode)?.prices[0]).toMatchObject({
+        amountMinor: item.amountMinor,
+        available: false,
+        unavailableReason: "PRICE_NOT_APPROVED",
       });
+      await expect(createCommerceCheckoutSession(actor, { priceCode: item.priceCode }, stripe)).rejects.toThrow(
+        /Financial or product parameters are not valid/,
+      );
+      expect(await prisma.commercePrice.findUniqueOrThrow({ where: { code: item.priceCode } })).toMatchObject({
+        amountMinor: 1_499_999,
+        reviewStatus: "REQUIRES_REVIEW",
+        reviewedAt: null,
+        reviewedByUserId: null,
+        reviewNote: null,
+      });
+      expect(stripe.products.create).not.toHaveBeenCalled();
+      expect(stripe.prices.create).not.toHaveBeenCalled();
+      expect(stripe.customers.create).not.toHaveBeenCalled();
       expect(stripe.checkout.sessions.create).not.toHaveBeenCalled();
+      expect(await prisma.commerceProviderMapping.count({ where: { commercePriceId: driftedPrice.id } })).toBe(0);
     } finally {
       await prisma.commercePrice.update({
         where: { code: item.priceCode },
-        data: { reviewStatus: "APPROVED", reviewedByUserId: approverUserId, reviewedAt: new Date() },
+        data: { amountMinor: item.amountMinor, reviewStatus: "REQUIRES_REVIEW" },
       });
+      await ensureEnterpriseSelfCheckoutPriceReady(item.priceCode, checkoutStripeClient());
+      await refreshProviderPriceIds();
+    }
+  });
+
+  it("fails closed on Enterprise billing-interval drift without approval, Stripe Price creation, or Checkout", async () => {
+    const item = ENTERPRISE[1];
+    const driftedPrice = await prisma.commercePrice.update({
+      where: { code: item.priceCode },
+      data: {
+        billingInterval: "YEAR",
+        reviewStatus: "REQUIRES_REVIEW",
+        reviewedByUserId: null,
+        reviewedAt: null,
+        reviewNote: null,
+      },
+    });
+    await prisma.commerceProviderMapping.deleteMany({ where: { commercePriceId: driftedPrice.id } });
+    const actor = await createActor("interval-drift");
+    const stripe = checkoutStripeClient();
+
+    try {
+      const availability = await getCheckoutAvailability(actor);
+      expect(availability.products.find((product) => product.productCode === item.productCode)?.prices[0]).toMatchObject({
+        billingInterval: "ONE_TIME",
+        available: false,
+        unavailableReason: "PRICE_NOT_APPROVED",
+      });
+      await expect(createCommerceCheckoutSession(actor, { priceCode: item.priceCode }, stripe)).rejects.toThrow(
+        /Financial or product parameters are not valid/,
+      );
+      expect(await prisma.commercePrice.findUniqueOrThrow({ where: { code: item.priceCode } })).toMatchObject({
+        billingInterval: "YEAR",
+        reviewStatus: "REQUIRES_REVIEW",
+        reviewedAt: null,
+        reviewedByUserId: null,
+        reviewNote: null,
+      });
+      expect(stripe.products.create).not.toHaveBeenCalled();
+      expect(stripe.prices.create).not.toHaveBeenCalled();
+      expect(stripe.customers.create).not.toHaveBeenCalled();
+      expect(stripe.checkout.sessions.create).not.toHaveBeenCalled();
+      expect(await prisma.commerceProviderMapping.count({ where: { commercePriceId: driftedPrice.id } })).toBe(0);
+    } finally {
+      await prisma.commercePrice.update({
+        where: { code: item.priceCode },
+        data: { billingInterval: "ONE_TIME", reviewStatus: "REQUIRES_REVIEW" },
+      });
+      await ensureEnterpriseSelfCheckoutPriceReady(item.priceCode, checkoutStripeClient());
+      await refreshProviderPriceIds();
     }
   });
 

@@ -23,6 +23,7 @@ import {
   readPendingPricingIntent,
   storePendingPricingIntent,
 } from "@/lib/commercial/pricing-intent";
+import { resetDashboardLeadSession } from "@/lib/marketing/lead-capture-client";
 
 function LoginForm() {
   const router = useRouter();
@@ -51,6 +52,7 @@ function LoginForm() {
         email: email.trim(),
         password,
       });
+      resetDashboardLeadSession();
 
       const queryPriceCode = normalizePublicPriceCode(searchParams.get("priceCode"));
       if (queryPriceCode) storePendingPricingIntent(queryPriceCode);

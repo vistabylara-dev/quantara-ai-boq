@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { apiClient } from "@/lib/api/client";
+import { resetDashboardLeadSession } from "@/lib/marketing/lead-capture-client";
 
 type SessionUser = {
   fullName: string;
@@ -38,6 +39,7 @@ export default function UserMenu() {
     setIsSigningOut(true);
     try {
       await apiClient.post("/api/auth/logout");
+      resetDashboardLeadSession();
     } finally {
       router.push("/login");
       router.refresh();

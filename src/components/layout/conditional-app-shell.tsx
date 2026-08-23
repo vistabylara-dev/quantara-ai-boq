@@ -7,8 +7,10 @@ import { PUBLIC_WEBSITE_PATHS } from "@/lib/public-site/public-route-paths";
 import HelpFeedbackBubble from "@/components/support/help-feedback-bubble";
 import { TayqanGlobalCompanion } from "@/components/tayqan/tayqan-global-companion";
 import { OnboardingProvider } from "@/components/onboarding/onboarding-provider";
+import { isDashboardLeadCaptureEligiblePath } from "@/lib/marketing/lead-capture-client";
 
 const AppShell = dynamic(() => import("./app-shell"));
+const LeadCapturePopup = dynamic(() => import("@/components/marketing/lead-capture-popup"));
 
 const PUBLIC_UTILITY_ROUTES = [
   "/register",
@@ -65,6 +67,9 @@ export default function ConditionalAppShell({
         currentRoute={currentRoute}
       />
       <TayqanGlobalCompanion />
+      {isDashboardLeadCaptureEligiblePath(currentRoute) ? (
+        <LeadCapturePopup mode="dashboard" />
+      ) : null}
     </OnboardingProvider>
   );
 }

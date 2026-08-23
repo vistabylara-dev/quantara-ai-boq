@@ -15,6 +15,11 @@ import {
 import { seedCommerceProducts } from "../prisma/seed-data/commerce-products";
 
 const RUN_ID = `${Date.now()}-${process.pid}-livesync`;
+const ENTERPRISE_ONE_TIME_PRICES = [
+  { productCode: "enterprise_core", priceCode: "enterprise_core_one_time_aed_15000", amountMinor: 1_500_000 },
+  { productCode: "enterprise_scale", priceCode: "enterprise_scale_one_time_aed_25000", amountMinor: 2_500_000 },
+  { productCode: "enterprise_authority", priceCode: "enterprise_authority_one_time_aed_35000", amountMinor: 3_500_000 },
+] as const;
 
 function ownerActor(userId: string, companyId: string): PlatformActor {
   return { userId, companyId, platformRole: PlatformRole.PLATFORM_OWNER, fullName: "Live Sync Test Owner", email: `livesync-owner-${RUN_ID}@example.com` };
@@ -178,20 +183,13 @@ describe("stripe-live-sync-service (integration, real local Postgres, mocked Str
     });
     await prisma.commerceProduct.deleteMany({ where: { code: { contains: RUN_ID } } });
 
-    // item-A (Round 3 correction) tests above approve the REAL, shared,
-    // never-deleted enterprise_core/scale/authority annual prices and
-    // create LIVE CommerceProviderMapping rows for enterprise_core —
-    // mirroring commerce-checkout-service.test.ts's own cleanup convention
-    // for the shared seeded tayqan_monthly product ("must never be deleted
-    // — it's the real seeded product, not test fixture data"). Reset both
-    // BEFORE deleting ownerUserId below — reviewedByUserId's FK is
-    // onDelete: SetNull, so deleting the user first would silently leave
-    // these rows APPROVED with a null reviewer, corrupting the governance
-    // invariant commerce-product-service.test.ts's byte-for-byte guard test
-    // checks on these same three anchor rows.
+    // Tests above approve the REAL, shared, never-deleted Enterprise one-time
+    // prices. Reset their governance state before deleting ownerUserId below
+    // — reviewedByUserId's FK is onDelete: SetNull, so deleting the user
+    // first would silently leave these rows APPROVED with a null reviewer.
     await prisma.commercePrice.updateMany({
-      where: { code: { in: ["enterprise_core_annual_aed_15000", "enterprise_scale_annual_aed_25000", "enterprise_authority_annual_aed_35000"] } },
-      data: { reviewStatus: "REQUIRES_REVIEW", reviewedByUserId: null, reviewedAt: null },
+      where: { code: { in: ENTERPRISE_ONE_TIME_PRICES.map((spec) => spec.priceCode) } },
+      data: { reviewStatus: "REQUIRES_REVIEW", reviewNote: null, reviewedByUserId: null, reviewedAt: null },
     });
 
     await prisma.commerceSyncRun.deleteMany({ where: { initiatedByUserId: { in: [ownerUserId, adminUserId] } } });
@@ -256,51 +254,51 @@ describe("stripe-live-sync-service (integration, real local Postgres, mocked Str
     }
   });
 
-  it("item-A: enterprise_core/scale/authority ARE eligible for LIVE sync despite purchaseMode: CONTACT_SALES — the narrow, exact-code allowlist", async () => {
-    // These are the real seeded Enterprise products (not RUN_ID-suffixed
-    // test fixtures) — seedCommerceProducts is idempotent, so re-running it
-    // here guarantees purchaseMode reflects the current seed spec
-    // (CONTACT_SALES) regardless of which test file ran first.
+  it("keeps Enterprise one-time prices outside the protected generic LIVE subscription sync", async () => {
     await seedCommerceProducts(prisma);
-    for (const code of ["enterprise_core", "enterprise_scale", "enterprise_authority"]) {
-      const stub = await prisma.commerceProduct.findUniqueOrThrow({ where: { code } });
+    for (const spec of ENTERPRISE_ONE_TIME_PRICES) {
+      const stub = await prisma.commerceProduct.findUniqueOrThrow({ where: { code: spec.productCode } });
       expect(stub.purchaseMode).toBe("DIRECT");
+      expect(stub.type).toBe("ONE_TIME");
       const product = await getCommerceProduct(stub.id);
-      const annualPrice = product.prices.find((p) => p.billingInterval === "YEAR");
-      expect(annualPrice).toBeDefined();
-      // Approve it — a test-database-only direct write (reviewedByUserId
-      // set so this reads as a genuinely governed approval, consistent
-      // with commerce-product-service.test.ts's byte-for-byte guard test
-      // on these same three anchor rows) — so eligibility here reflects
-      // only the purchaseMode exception, not an incidental PRICE_NOT_APPROVED.
-      await prisma.commercePrice.update({ where: { id: annualPrice!.id }, data: { reviewStatus: "APPROVED", reviewedByUserId: ownerUserId } });
+      const oneTimePrice = product.prices.find((p) => p.code === spec.priceCode && p.isActive);
+      expect(oneTimePrice).toMatchObject({ amountMinor: spec.amountMinor, currency: "AED", billingInterval: "ONE_TIME" });
+      // Approval isolates the generic-sync product-type boundary from the
+      // independent governed-review boundary.
+      await prisma.commercePrice.update({ where: { id: oneTimePrice!.id }, data: { reviewStatus: "APPROVED", reviewedByUserId: ownerUserId, reviewedAt: new Date() } });
       const reApproved = await getCommerceProduct(stub.id);
-      const reApprovedPrice = reApproved.prices.find((p) => p.id === annualPrice!.id)!;
-      expect(classifyLiveCheckoutEligibility(reApproved, reApprovedPrice)).toEqual({ eligible: true });
+      const reApprovedPrice = reApproved.prices.find((p) => p.id === oneTimePrice!.id)!;
+      expect(classifyLiveCheckoutEligibility(reApproved, reApprovedPrice)).toEqual({
+        eligible: false,
+        reason: "PRODUCT_NOT_SUBSCRIPTION",
+      });
     }
   });
 
-  it("item-A: buildLiveSyncPlan plans enterprise_core/scale/authority for CREATE/REACTIVATE once approved — never BLOCKED by purchaseMode — while Starter/Professional/Business/library sync stays governed by the unchanged DIRECT-only rule", async () => {
+  it("plans Enterprise one-time prices as BLOCKED while recurring DIRECT products retain the generic LIVE-sync rules", async () => {
     await seedCommerceProducts(prisma);
-    for (const code of ["enterprise_core", "enterprise_scale", "enterprise_authority"]) {
-      const stub = await prisma.commerceProduct.findUniqueOrThrow({ where: { code } });
+    for (const spec of ENTERPRISE_ONE_TIME_PRICES) {
+      const stub = await prisma.commerceProduct.findUniqueOrThrow({ where: { code: spec.productCode } });
       expect(stub.purchaseMode).toBe("DIRECT");
+      expect(stub.type).toBe("ONE_TIME");
       const product = await getCommerceProduct(stub.id);
-      const annualPrice = product.prices.find((p) => p.billingInterval === "YEAR")!;
-      await prisma.commercePrice.update({ where: { id: annualPrice.id }, data: { reviewStatus: "APPROVED", reviewedByUserId: ownerUserId } });
+      const oneTimePrice = product.prices.find((p) => p.code === spec.priceCode && p.isActive)!;
+      await prisma.commercePrice.update({ where: { id: oneTimePrice.id }, data: { reviewStatus: "APPROVED", reviewedByUserId: ownerUserId, reviewedAt: new Date() } });
     }
 
     const plan = await buildLiveSyncPlan();
-    for (const code of ["enterprise_core", "enterprise_scale", "enterprise_authority"]) {
-      const entry = plan.prices.find((p) => p.productCode === code);
-      expect(entry).toBeDefined();
-      expect(["CREATE", "REACTIVATE", "UNCHANGED"]).toContain(entry!.action);
-      expect(entry!.action).not.toBe("BLOCKED");
+    for (const spec of ENTERPRISE_ONE_TIME_PRICES) {
+      const priceEntry = plan.prices.find((p) => p.code === spec.priceCode);
+      expect(priceEntry).toMatchObject({
+        productCode: spec.productCode,
+        action: "BLOCKED",
+        blockedReason: "PRODUCT_NOT_SUBSCRIPTION",
+      });
+      expect(plan.products.find((p) => p.code === spec.productCode)?.action).toBe("UNCHANGED");
     }
 
-    // Starter — real seeded DIRECT product — must be entirely unaffected by
-    // this narrow, exact-code exception: still governed by the plain
-    // purchaseMode === DIRECT rule, exactly as before this change.
+    // Starter remains a real DIRECT subscription governed by the unchanged
+    // generic live-sync eligibility rules.
     const starter = await prisma.commerceProduct.findUniqueOrThrow({ where: { code: "starter" } });
     const starterFull = await getCommerceProduct(starter.id);
     const starterMonthly = starterFull.prices.find((p) => p.code === "starter_monthly_aed_149");
@@ -308,21 +306,27 @@ describe("stripe-live-sync-service (integration, real local Postgres, mocked Str
     expect(starterFull.purchaseMode).toBe("DIRECT");
   });
 
-  it("item-A: synchronizeLiveCommerceCatalogue actually creates a LIVE Stripe Price mapping for enterprise_core — for a later manually issued sales-led Payment Link", async () => {
+  it("generic LIVE synchronization never creates an Enterprise one-time Stripe mapping", async () => {
     await seedCommerceProducts(prisma);
-    const stub = await prisma.commerceProduct.findUniqueOrThrow({ where: { code: "enterprise_core" } });
+    const spec = ENTERPRISE_ONE_TIME_PRICES[0];
+    const stub = await prisma.commerceProduct.findUniqueOrThrow({ where: { code: spec.productCode } });
     const product = await getCommerceProduct(stub.id);
-    const annualPrice = product.prices.find((p) => p.billingInterval === "YEAR")!;
-    await prisma.commercePrice.update({ where: { id: annualPrice.id }, data: { reviewStatus: "APPROVED", reviewedByUserId: ownerUserId } });
+    const oneTimePrice = product.prices.find((p) => p.code === spec.priceCode && p.isActive)!;
+    await prisma.commercePrice.update({ where: { id: oneTimePrice.id }, data: { reviewStatus: "APPROVED", reviewedByUserId: ownerUserId, reviewedAt: new Date() } });
 
     const plan = await buildLiveSyncPlan();
+    expect(plan.prices.find((p) => p.code === spec.priceCode)).toMatchObject({
+      action: "BLOCKED",
+      blockedReason: "PRODUCT_NOT_SUBSCRIPTION",
+    });
     const stripe = mockStripeClient();
     await synchronizeLiveCommerceCatalogue(ownerActor(ownerUserId, ownerCompanyId), { catalogueFingerprint: plan.catalogueFingerprint, confirm: true }, { method: "POST", path: "/test" }, stripe);
 
-    const mapping = await findPriceMapping("STRIPE", "LIVE", annualPrice.id);
-    expect(mapping).not.toBeNull();
-    expect(mapping?.providerActive).toBe(true);
-    expect(mapping?.synchronizationStatus).toBe("SYNCED");
+    expect(await findProductMapping("STRIPE", "LIVE", product.id)).toBeNull();
+    expect(await findPriceMapping("STRIPE", "LIVE", oneTimePrice.id)).toBeNull();
+    expect(
+      stripe.prices.create.mock.calls.some(([params]: [any]) => params.metadata?.quantara_price_code === spec.priceCode),
+    ).toBe(false);
   });
 
   it("never reuses a TEST-environment mapping as if it were a LIVE one", async () => {

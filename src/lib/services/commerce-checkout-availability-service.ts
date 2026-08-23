@@ -35,7 +35,7 @@ export type CheckoutUnavailableReason =
 
 export type CheckoutOptionPrice = {
   priceCode: string;
-  billingInterval: "MONTH" | "YEAR";
+  billingInterval: "MONTH" | "YEAR" | "ONE_TIME";
   amountMinor: number;
   currency: string;
   available: boolean;
@@ -49,74 +49,35 @@ export type CheckoutOptionProduct = {
   prices: CheckoutOptionPrice[];
 };
 
-/**
- * item-A (Round 3 correction) — the settings/subscription/page.tsx Enterprise
- * cards' non-checkout data source. Deliberately NOT a
- * CheckoutOptionProduct/CheckoutOptionPrice — it carries no `available`/
- * `unavailableReason` fields, because "available for self-checkout" is not a
- * concept that applies to a sales-led product. `price` is null only if the
- * product has no APPROVED annual price yet (still pending owner/admin
- * approval) — the UI already renders "Pricing unavailable" for that case.
- */
-export type EnterpriseAnnualPlan = {
-  productCode: string;
-  name: string;
-  shortDescription: string;
-  price: { priceCode: string; amountMinor: number; currency: string } | null;
-};
-
 export type CheckoutAvailability = {
   hasExistingSubscription: boolean;
   products: CheckoutOptionProduct[];
-  
 };
 
-const ENTERPRISE_ANNUAL_PRODUCT_CODES = ["enterprise_core", "enterprise_scale", "enterprise_authority"] as const;
+const ENTERPRISE_PRODUCTS = [
+  {
+    productCode: "enterprise_core",
+    priceCode: "enterprise_core_one_time_aed_15000",
+    amountMinor: 1_500_000,
+    name: "Enterprise Core",
+    shortDescription: "For established contractors and consultancies needing high-volume BOQ production.",
+  },
+  {
+    productCode: "enterprise_scale",
+    priceCode: "enterprise_scale_one_time_aed_25000",
+    amountMinor: 2_500_000,
+    name: "Enterprise Scale",
+    shortDescription: "For multi-team and multi-department companies running BOQ production at scale.",
+  },
+  {
+    productCode: "enterprise_authority",
+    priceCode: "enterprise_authority_one_time_aed_35000",
+    amountMinor: 3_500_000,
+    name: "Enterprise Authority",
+    shortDescription: "For large groups, consultancies and institutional customers needing dedicated onboarding.",
+  },
+] as const;
 
-/**
- * item-A (Round 3 correction) — Enterprise Core/Scale/Authority are
- * `purchaseMode: "DIRECT"` (see prisma/seed-data/commerce-products.ts),
- * so they are deliberately absent from getCheckoutAvailability's DIRECT-only
- * query below — self-checkout availability must never represent a sales-led
- * product as purchasable. This is a SEPARATE, non-checkout catalogue read:
- * it exposes only the owner-approved annual amount for the settings page's
- * "Contact Sales" cards, never a Stripe price ID, and performs no
- * provider-mapping lookup at all — a LIVE mapping created for a manually
- * issued Stripe Payment Link is a fact about sales fulfillment, not about
- * self-checkout eligibility, and must never gate whether this reads.
- */
-async function getEnterpriseAnnualPlans(): Promise<EnterpriseAnnualPlan[]> {
-  const products = await prisma.commerceProduct.findMany({
-    where: { code: { in: [...ENTERPRISE_ANNUAL_PRODUCT_CODES] }, isActive: true },
-    include: {
-      prices: {
-        where: { isActive: true, reviewStatus: "APPROVED", billingInterval: "YEAR" },
-        orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-      },
-    },
-  });
-  const byCode = new Map(products.map((product) => [product.code, product]));
-
-  return ENTERPRISE_ANNUAL_PRODUCT_CODES.filter((code) => byCode.has(code)).map((code) => {
-    const product = byCode.get(code)!;
-    const price = product.prices[0];
-    return {
-      productCode: product.code,
-      name: product.name,
-      shortDescription: product.shortDescription,
-      price: price ? { priceCode: price.code, amountMinor: price.amountMinor, currency: price.currency } : null,
-    };
-  });
-}
-
-/**
- * Applies the exact same eligibility criteria as
- * commerce-checkout-service.ts's loadEligibleCommercePrice — public, active,
- * DIRECT, SUBSCRIPTION product; active, APPROVED, non-indicative,
- * positive-amount, AED, MONTH/YEAR price — plus the provider-mapping and
- * existing-subscription facts that only this authenticated endpoint can
- * safely report.
- */
 /**
  * CORRECTION-1 — every industryPackageId this company already holds a
  * non-final CompanyPackageSubscription for. Different libraries coexist
@@ -143,15 +104,72 @@ export async function getCheckoutAvailability(actor: CurrentActor): Promise<Chec
   const environment = resolveCheckoutEnvironment();
   const hasExistingSubscription = await hasNonFinalStripeSubscription(actor.companyId);
   const ownedIndustryPackageIds = await getOwnedIndustryPackageIds(actor.companyId);
-  const enterpriseProducts = await getEnterpriseAnnualPlans();
 
   const products = await prisma.commerceProduct.findMany({
     where: { isActive: true, isPublic: true, purchaseMode: "DIRECT", type: "SUBSCRIPTION" },
     include: { prices: { where: { isActive: true } } },
     orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
   });
+  const enterpriseRows = await prisma.commerceProduct.findMany({
+    where: {
+      code: { in: ENTERPRISE_PRODUCTS.map((item) => item.productCode) },
+    },
+  });
+  const enterpriseByCode = new Map(enterpriseRows.map((product) => [product.code, product]));
+  const enterprisePrices = await prisma.commercePrice.findMany({
+    where: { code: { in: ENTERPRISE_PRODUCTS.map((item) => item.priceCode) } },
+    include: { product: true },
+  });
+  const enterprisePriceByCode = new Map(enterprisePrices.map((price) => [price.code, price]));
 
   const result: CheckoutOptionProduct[] = [];
+
+  // These three fixed business-approved offers are safe to project before
+  // initialization. POST checkout performs the locked target-only bootstrap;
+  // GET remains read-only and never calls Stripe or a seed helper.
+  for (const spec of ENTERPRISE_PRODUCTS) {
+    const product = enterpriseByCode.get(spec.productCode);
+    const price = enterprisePriceByCode.get(spec.priceCode);
+    const productHasDrift = Boolean(
+      product &&
+        (product.type !== "ONE_TIME" ||
+          product.purchaseMode !== "DIRECT" ||
+          !product.isActive ||
+          !product.isPublic ||
+          product.industryPackageId !== null),
+    );
+    const priceHasDrift = Boolean(
+      price &&
+        (price.product.code !== spec.productCode ||
+          price.amountMinor !== spec.amountMinor ||
+          price.currency !== "AED" ||
+          price.billingInterval !== "ONE_TIME" ||
+          price.isFromPrice ||
+          !price.isActive),
+    );
+    const reviewStateCanBecomeReady =
+      !price || price.reviewStatus === "REQUIRES_REVIEW" || price.reviewStatus === "APPROVED";
+    let available = !productHasDrift && !priceHasDrift && reviewStateCanBecomeReady;
+    let unavailableReason: CheckoutUnavailableReason | null = available ? null : "PRICE_NOT_APPROVED";
+    if (hasExistingSubscription) {
+      available = false;
+      unavailableReason = "EXISTING_SUBSCRIPTION";
+    }
+
+    result.push({
+      productCode: spec.productCode,
+      name: spec.name,
+      shortDescription: spec.shortDescription,
+      prices: [{
+        priceCode: spec.priceCode,
+        billingInterval: "ONE_TIME",
+        amountMinor: spec.amountMinor,
+        currency: "AED",
+        available,
+        unavailableReason,
+      }],
+    });
+  }
 
   for (const product of products) {
     const prices: CheckoutOptionPrice[] = [];

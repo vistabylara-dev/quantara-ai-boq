@@ -76,18 +76,18 @@ export const COMMERCE_LINKED_SOFTWARE_PLANS: readonly CommerceLinkedPlanSpec[] =
     maxProjects: null,
   },
   /**
-   * Enterprise Core/Scale/Authority are annual-prepaid-only (see
-   * prisma/seed-data/commerce-products.ts) — monthlyPriceAed is 0 for all
-   * three because no monthly price exists for them, not because they're
-   * free. `enterprise_installation` (the pre-existing one-time,
-   * CONTACT_SALES professional-services product) deliberately has no entry
-   * here and must never resolve via findCommerceLinkedPlanSpec.
+   * Enterprise Core/Scale/Authority are permanent one-time purchases (see
+   * prisma/seed-data/commerce-products.ts). monthlyPriceAed remains 0 because
+   * no recurring monthly price exists; annualPriceAed preserves each tier's
+   * established catalogue amount for the existing SoftwarePlan record shape.
+   * `enterprise_installation`, the separate CONTACT_SALES professional-
+   * services product, deliberately has no mapping here.
    */
   {
     softwarePlanKey: "commerce_enterprise_core",
     commerceProductCode: "enterprise_core",
     name: "Enterprise Core",
-    description: "Commerce-purchased Enterprise Core subscription (AED 15,000/yr). Synced from the enterprise_core CommerceProduct entitlement template.",
+    description: "Commerce-purchased Enterprise Core one-time package. Synced from the enterprise_core CommerceProduct entitlement template.",
     planType: PlanType.ENTERPRISE,
     monthlyPriceAed: 0,
     annualPriceAed: 15000,
@@ -98,7 +98,7 @@ export const COMMERCE_LINKED_SOFTWARE_PLANS: readonly CommerceLinkedPlanSpec[] =
     softwarePlanKey: "commerce_enterprise_scale",
     commerceProductCode: "enterprise_scale",
     name: "Enterprise Scale",
-    description: "Commerce-purchased Enterprise Scale subscription (AED 25,000/yr). Synced from the enterprise_scale CommerceProduct entitlement template.",
+    description: "Commerce-purchased Enterprise Scale one-time package. Synced from the enterprise_scale CommerceProduct entitlement template.",
     planType: PlanType.ENTERPRISE,
     monthlyPriceAed: 0,
     annualPriceAed: 25000,
@@ -109,7 +109,7 @@ export const COMMERCE_LINKED_SOFTWARE_PLANS: readonly CommerceLinkedPlanSpec[] =
     softwarePlanKey: "commerce_enterprise_authority",
     commerceProductCode: "enterprise_authority",
     name: "Enterprise Authority",
-    description: "Commerce-purchased Enterprise Authority subscription (AED 35,000/yr). Synced from the enterprise_authority CommerceProduct entitlement template.",
+    description: "Commerce-purchased Enterprise Authority one-time package. Synced from the enterprise_authority CommerceProduct entitlement template.",
     planType: PlanType.ENTERPRISE,
     monthlyPriceAed: 0,
     annualPriceAed: 35000,

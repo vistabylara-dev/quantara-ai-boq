@@ -320,7 +320,7 @@ export default function MarketplacePage() {
                   return order[a.productCode] - order[b.productCode];
                 })
                 .map(plan => {
-                  const price = plan.prices.find(p => p.billingInterval === "YEAR") || plan.prices[0];
+                  const price = plan.prices.find(p => p.billingInterval === "ONE_TIME") || plan.prices[0];
                   if (!price) return null;
                   return (
                     <div key={plan.productCode} className="flex flex-col rounded-2xl border border-purple-900/30 bg-slate-900 p-6 text-slate-300">
@@ -355,8 +355,8 @@ export default function MarketplacePage() {
                       <div className="mt-auto border-t border-slate-800 pt-6">
                         <p className="text-2xl font-semibold text-white">
                           {price.currency} {(price.amountMinor / 100).toLocaleString("en-AE")}
-                          <span className="text-sm font-normal text-slate-500">/yr</span>
                         </p>
+                        <p className="text-sm font-normal text-slate-400 mt-1">One-time payment</p>
                       </div>
                       <button
                         type="button"

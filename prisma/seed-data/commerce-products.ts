@@ -1,5 +1,10 @@
 import type { PrismaClient } from "@prisma/client";
 
+type CommerceCatalogueSeedClient = Pick<
+  PrismaClient,
+  "commerceProduct" | "commercePrice" | "entitlementTemplate"
+>;
+
 /**
  * STRIPE-1B — idempotent seed for the internal commerce catalogue
  * (CommerceProduct + CommercePrice + EntitlementTemplate). Mirrors the
@@ -149,39 +154,25 @@ const CATALOGUE_PRODUCTS: ProductSpec[] = [
     },
   },
   /**
-   * Enterprise Core/Scale/Authority — annual-prepaid-only SaaS subscriptions
-   * (a single YEAR price each, deliberately no MONTH price: unlike
-   * starter/professional/business, these are not offered on a monthly
-   * cadence). Distinct from the pre-existing `enterprise_installation`
-   * below, which is a one-time, CONTACT_SALES professional-services
-   * engagement with no SoftwarePlan mapping — these three ARE real
-   * `type: "SUBSCRIPTION"` products with real annual CommercePrice rows,
-   * mapped to commerce_enterprise_core/scale/authority in
-   * src/lib/entitlements/commerce-plan-mapping.ts, but are deliberately
-   * `purchaseMode: "DIRECT"` — Enterprise is direct-checkout
-   * (see legal.terms.checkoutBody: Enterprise scope requires a separate
-   * written quotation/agreement). This keeps them rejected by
-   * loadEligibleCommercePrice/PRODUCT_NOT_DIRECT_PURCHASE in
-   * commerce-checkout-service.ts and absent from getCheckoutAvailability's
-   * DIRECT-only query in commerce-checkout-availability-service.ts, while
-   * still allowing a narrow, exact-code LIVE-only sync exception
-   * (SALES_LED_LIVE_SYNC_PRODUCT_CODES in stripe-live-sync-service.ts) so an
-   * approved price can be created/mapped in live Stripe for a manually
-   * issued Stripe Payment Link. The 15 paid Industry Libraries are
-   * deliberately NOT included in any of these — that catalogue stays a
-   * separate purchase on every tier, same as starter/professional/business
-   * above.
+   * Enterprise Core/Scale/Authority are permanent SaaS entitlements sold as
+   * one-time purchases. Each tier has one exact AED price and no recurring
+   * MONTH/YEAR price. They remain distinct from `enterprise_installation`,
+   * the pre-existing CONTACT_SALES professional-services engagement with no
+   * SoftwarePlan mapping. These three DIRECT products map to
+   * commerce_enterprise_core/scale/authority and are fulfilled only by the
+   * verified Enterprise Checkout webhook path. Industry Libraries remain
+   * separate purchases on every software tier.
    */
   {
     code: "enterprise_core",
-    type: "SUBSCRIPTION",
+    type: "ONE_TIME",
     name: "Enterprise Core",
     shortDescription: "For established contractors and consultancies needing high-volume BOQ production.",
     description:
-      "Annual enterprise subscription: high-volume BOQ generation, API enablement subject to configured availability, company branding included as a setup service, and enterprise onboarding.",
+      "One-time enterprise purchase: high-volume BOQ generation, API enablement subject to configured availability, company branding included as a setup service, and enterprise onboarding.",
     purchaseMode: "DIRECT",
     sortOrder: 34,
-    prices: [{ code: "enterprise_core_annual_aed_15000", amountMinor: 1500000, billingInterval: "YEAR" }],
+    prices: [{ code: "enterprise_core_one_time_aed_15000", amountMinor: 1500000, billingInterval: "ONE_TIME" }],
     entitlement: {
       maxUsers: 50,
       maxWorkspaces: 20,
@@ -198,14 +189,14 @@ const CATALOGUE_PRODUCTS: ProductSpec[] = [
   },
   {
     code: "enterprise_scale",
-    type: "SUBSCRIPTION",
+    type: "ONE_TIME",
     name: "Enterprise Scale",
     shortDescription: "For multi-team and multi-department companies running BOQ production at scale.",
     description:
-      "Annual enterprise subscription: higher-volume BOQ generation, white-label setup included as an implementation service, API enablement subject to configured availability, and priority onboarding/support.",
+      "One-time enterprise purchase: higher-volume BOQ generation, white-label setup included as an implementation service, API enablement subject to configured availability, and priority onboarding/support.",
     purchaseMode: "DIRECT",
     sortOrder: 35,
-    prices: [{ code: "enterprise_scale_annual_aed_25000", amountMinor: 2500000, billingInterval: "YEAR" }],
+    prices: [{ code: "enterprise_scale_one_time_aed_25000", amountMinor: 2500000, billingInterval: "ONE_TIME" }],
     entitlement: {
       maxUsers: 100,
       maxWorkspaces: 50,
@@ -223,14 +214,14 @@ const CATALOGUE_PRODUCTS: ProductSpec[] = [
   },
   {
     code: "enterprise_authority",
-    type: "SUBSCRIPTION",
+    type: "ONE_TIME",
     name: "Enterprise Authority",
     shortDescription: "For large groups, consultancies and institutional customers needing dedicated onboarding.",
     description:
-      "Annual enterprise subscription: unlimited user and workspace commercial allowance, full white-label setup included as an implementation service, private catalogue/data onboarding and executive-priority support.",
+      "One-time enterprise purchase: unlimited user and workspace commercial allowance, full white-label setup included as an implementation service, private catalogue/data onboarding and executive-priority support.",
     purchaseMode: "DIRECT",
     sortOrder: 36,
-    prices: [{ code: "enterprise_authority_annual_aed_35000", amountMinor: 3500000, billingInterval: "YEAR" }],
+    prices: [{ code: "enterprise_authority_one_time_aed_35000", amountMinor: 3500000, billingInterval: "ONE_TIME" }],
     entitlement: {
       maxUsers: null,
       maxWorkspaces: null,
@@ -476,7 +467,7 @@ const INDUSTRY_ACCESS_CANDIDATES: { key: string; name: string; sortOrder: number
   { key: "uae-authority-regulatory-library", name: "UAE Authority & Regulatory Library", sortOrder: 234 },
 ];
 
-async function seedCatalogueProduct(prisma: PrismaClient, spec: ProductSpec, report: CommerceSeedReport): Promise<void> {
+async function seedCatalogueProduct(prisma: CommerceCatalogueSeedClient, spec: ProductSpec, report: CommerceSeedReport): Promise<void> {
   const existing = await prisma.commerceProduct.findUnique({ where: { code: spec.code } });
   const productData = {
     type: spec.type,
@@ -492,6 +483,7 @@ async function seedCatalogueProduct(prisma: PrismaClient, spec: ProductSpec, rep
   let productId: string;
   if (existing) {
     const changed =
+      existing.type !== productData.type ||
       existing.name !== productData.name ||
       existing.shortDescription !== productData.shortDescription ||
       existing.description !== productData.description ||
@@ -561,6 +553,24 @@ async function seedCatalogueProduct(prisma: PrismaClient, spec: ProductSpec, rep
     await prisma.entitlementTemplate.create({ data: { productId, ...templateData } });
     report.templatesInserted += 1;
   }
+}
+
+const ENTERPRISE_PRODUCT_CODES = ["enterprise_core", "enterprise_scale", "enterprise_authority"] as const;
+const LEGACY_ENTERPRISE_ANNUAL_PRICE_CODES = [
+  "enterprise_core_annual_aed_15000",
+  "enterprise_scale_annual_aed_25000",
+  "enterprise_authority_annual_aed_35000",
+] as const;
+
+async function archiveLegacyEnterpriseAnnualPrices(prisma: Pick<PrismaClient, "commercePrice">, report: CommerceSeedReport): Promise<void> {
+  const archived = await prisma.commercePrice.updateMany({
+    where: {
+      code: { in: [...LEGACY_ENTERPRISE_ANNUAL_PRICE_CODES] },
+      isActive: true,
+    },
+    data: { isActive: false, validUntil: new Date() },
+  });
+  report.pricesArchived += archived.count;
 }
 
 export async function seedCommerceProducts(prisma: PrismaClient): Promise<CommerceSeedReport> {
@@ -673,10 +683,10 @@ export async function seedCommerceProducts(prisma: PrismaClient): Promise<Commer
     report.industryProductsCreated.push(candidate.key);
   }
 
+  await archiveLegacyEnterpriseAnnualPrices(prisma, report);
+
   return report;
 }
-
-const ENTERPRISE_PRODUCT_CODES = ["enterprise_core", "enterprise_scale", "enterprise_authority"] as const;
 
 /**
  * CORRECTION-1 mission 5 — target-only production activation for the three
@@ -691,12 +701,12 @@ const ENTERPRISE_PRODUCT_CODES = ["enterprise_core", "enterprise_scale", "enterp
  * future catalogue product are never read or written by this function.
  * Idempotent — safe to run more than once against production.
  *
- * New/changed prices still default to reviewStatus: REQUIRES_REVIEW; owner/
- * admin approval via PATCH /api/admin/commerce/prices/[priceId]/approval
- * (see src/lib/services/commerce-price-approval-service.ts) remains the
- * required next step before these three prices can be synced to LIVE Stripe.
+ * New/changed prices still default to reviewStatus: REQUIRES_REVIEW. The
+ * generic owner/admin approval path remains unchanged; the exact three fixed
+ * one-time codes have one narrow exception in Enterprise checkout readiness,
+ * which validates every canonical field before recording system approval.
  */
-export async function seedEnterpriseCommerceProducts(prisma: PrismaClient): Promise<CommerceSeedReport> {
+export async function seedEnterpriseCommerceProducts(prisma: CommerceCatalogueSeedClient): Promise<CommerceSeedReport> {
   const report: CommerceSeedReport = {
     productsInserted: 0,
     productsUpdated: 0,
@@ -720,6 +730,7 @@ export async function seedEnterpriseCommerceProducts(prisma: PrismaClient): Prom
   for (const spec of specs) {
     await seedCatalogueProduct(prisma, spec, report);
   }
+  await archiveLegacyEnterpriseAnnualPrices(prisma, report);
 
   return report;
 }

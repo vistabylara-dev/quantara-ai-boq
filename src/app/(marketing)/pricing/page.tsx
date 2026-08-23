@@ -409,7 +409,7 @@ export default async function PricingPage() {
               {enterprisePlans.map((plan) => {
                 const detail = MARKETPLACE_CONTENT.enterprise[plan.key];
                 return (
-                <article key={plan.key} className="flex flex-col rounded-3xl border border-amber-400/20 bg-slate-950 p-7">
+                <article key={plan.key} data-lead-package-interest={plan.name} className="flex flex-col rounded-3xl border border-amber-400/20 bg-slate-950 p-7">
                   <div className="mb-5">
                     <h3 className="text-2xl font-bold text-white">{plan.name}</h3>
                     <p className="mt-2 text-sm font-semibold leading-6 text-amber-200" dir="auto">{detail.position}</p>
@@ -497,6 +497,7 @@ export default async function PricingPage() {
                 return (
                   <article
                     key={plan.plan}
+                    data-lead-package-interest={`TAYQAN ${copy.title}`}
                     className={`rounded-3xl border bg-slate-950 p-7 ${
                       plan.plan === "WEEK" ? "border-cyan-500/70 shadow-lg shadow-cyan-950/20" : "border-slate-800"
                     }`}
@@ -563,7 +564,7 @@ export default async function PricingPage() {
                 const Icon = library.icon;
 
                 return (
-                  <article key={library.key} className="flex flex-col rounded-3xl border border-emerald-400/15 bg-slate-950 p-6">
+                  <article key={library.key} data-lead-package-interest={`${library.displayName} Industry Library`} className="flex flex-col rounded-3xl border border-emerald-400/15 bg-slate-950 p-6">
                     <div className="flex items-start gap-4">
                       <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-emerald-400/20 bg-emerald-400/10 text-emerald-300" aria-hidden="true">
                         <Icon className="h-5 w-5" />

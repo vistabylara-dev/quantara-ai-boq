@@ -77,6 +77,7 @@ export default function PricingPlans({ plans, labels }: PricingPlansProps) {
           return (
             <div
               key={plan.key}
+              data-lead-package-interest={`Quantara ${plan.name}`}
               className={`rounded-3xl p-8 ring-1 ${
                 plan.recommended
                   ? "bg-white ring-2 ring-blue-600 shadow-xl dark:bg-slate-900"

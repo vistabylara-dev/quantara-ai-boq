@@ -1,5 +1,6 @@
 import PublicFooter from "@/components/layout/public-footer";
 import PublicHeader from "@/components/layout/public-header";
+import LeadCapturePopup from "@/components/marketing/lead-capture-popup";
 import PublicJsonLd from "@/components/seo/public-json-ld";
 import { buildPublicEntityGraph } from "@/lib/public-site/schema";
 
@@ -16,6 +17,7 @@ export default function MarketingLayout({
       <PublicHeader />
       <main id="main-content" className="flex-1 bg-[#030508]">{children}</main>
       <PublicFooter />
+      <LeadCapturePopup mode="public" />
     </div>
   );
 }

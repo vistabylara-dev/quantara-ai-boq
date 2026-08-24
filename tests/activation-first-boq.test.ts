@@ -62,4 +62,16 @@ describe("first-value activation journey", () => {
         .toBeGreaterThan(exportSurface.indexOf("apiClient.post"));
     }
   });
+
+  it("does not strand an account when verification delivery fails", () => {
+    const registerPage = source("src/app/(marketing)/register/page.tsx");
+    const resendRoute = source("src/app/api/auth/resend-verification/route.ts");
+    const authService = source("src/lib/services/auth-service.ts");
+
+    expect(registerPage).toContain("emailDeliveryStatus");
+    expect(registerPage).toContain("/api/auth/resend-verification");
+    expect(resendRoute).toContain("resendEmailLimiter");
+    expect(authService).toContain("resendEmailVerification");
+    expect(authService).toContain("emailVerificationToken.deleteMany");
+  });
 });

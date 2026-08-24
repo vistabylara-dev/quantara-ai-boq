@@ -11,13 +11,14 @@ import { createCompany } from "@/lib/repositories/company-repository";
 import { findUserByEmail, findUserById } from "@/lib/repositories/user-repository";
 import type { registerSchema, loginSchema } from "@/lib/validation/auth-schemas";
 import type { z } from "zod";
+import type { SendEmailStatus } from "@/lib/email/email-provider";
 
 /**
  * Never throws — a delivery failure must never block registration or leak
  * through the generic forgot-password response. Never logs `input` (which
  * carries the raw token inside the URL), only the safe provider result.
  */
-async function sendAuthEmail(input: { to: string; subject: string; html: string; text: string }): Promise<void> {
+async function sendAuthEmail(input: { to: string; subject: string; html: string; text: string }): Promise<SendEmailStatus> {
   const result = await getEmailProvider().sendEmail(input);
   if (result.status === "FAILED") {
     console.error("[auth-email] delivery failed", {
@@ -25,6 +26,7 @@ async function sendAuthEmail(input: { to: string; subject: string; html: string;
       errorMessage: result.errorMessage,
     });
   }
+  return result.status;
 }
 
 const EMAIL_VERIFICATION_TTL_MS = 24 * 60 * 60 * 1000;
@@ -84,18 +86,18 @@ export async function registerCompanyOwner(input: RegisterInput) {
     return { user: createdUser };
   });
 
-  await issueEmailVerificationToken(user.id, user.email, input.priceCode);
+  const emailDeliveryStatus = await issueEmailVerificationToken(user.id, user.email, input.priceCode);
 
-
-  return { userId: user.id, companyId: user.companyId, email: user.email };
+  return { userId: user.id, companyId: user.companyId, email: user.email, emailDeliveryStatus };
 }
 
 export async function issueEmailVerificationToken(
   userId: string,
   email: string,
   priceCode?: string,
-): Promise<void> {
+): Promise<SendEmailStatus> {
   const rawToken = generateRawToken();
+  await prisma.emailVerificationToken.deleteMany({ where: { userId, usedAt: null } });
   await prisma.emailVerificationToken.create({
     data: {
       userId,
@@ -108,7 +110,20 @@ export async function issueEmailVerificationToken(
   if (priceCode) verificationUrl.searchParams.set("priceCode", priceCode);
   const url = verificationUrl.toString();
   const { subject, html, text } = buildVerificationEmail(url);
-  await sendAuthEmail({ to: email, subject, html, text });
+  return sendAuthEmail({ to: email, subject, html, text });
+}
+
+export async function resendEmailVerification(input: LoginInput & { priceCode?: string }) {
+  const user = await findUserByEmail(input.email);
+  if (!user || !(await verifyPassword(input.password, user.passwordHash))) {
+    throw new AppError("INVALID_CREDENTIALS", "The email or password is incorrect.", 401);
+  }
+  if (user.emailVerifiedAt) {
+    throw new AppError("EMAIL_ALREADY_VERIFIED", "This email address is already verified.", 409);
+  }
+
+  const emailDeliveryStatus = await issueEmailVerificationToken(user.id, user.email, input.priceCode);
+  return { emailDeliveryStatus };
 }
 
 export async function verifyEmail(rawToken: string): Promise<void> {

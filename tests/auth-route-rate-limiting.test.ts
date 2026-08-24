@@ -15,6 +15,7 @@ const {
   resetPassword,
   verifyEmail,
   loginPlatformActor,
+  resendEmailVerification,
 } = vi.hoisted(() => ({
   loginWithPassword: vi.fn().mockResolvedValue(undefined),
   registerCompanyOwner: vi.fn().mockResolvedValue({ userId: "u1", companyId: "c1" }),
@@ -22,6 +23,7 @@ const {
   resetPassword: vi.fn().mockResolvedValue(undefined),
   verifyEmail: vi.fn().mockResolvedValue(undefined),
   loginPlatformActor: vi.fn().mockResolvedValue(undefined),
+  resendEmailVerification: vi.fn().mockResolvedValue({ emailDeliveryStatus: "SENT" }),
 }));
 
 vi.mock("@/lib/services/auth-service", () => ({
@@ -31,6 +33,7 @@ vi.mock("@/lib/services/auth-service", () => ({
   resetPassword,
   verifyEmail,
   loginPlatformActor,
+  resendEmailVerification,
 }));
 
 import { POST as loginPOST } from "@/app/api/auth/login/route";
@@ -39,6 +42,7 @@ import { POST as registerPOST } from "@/app/api/auth/register/route";
 import { POST as forgotPasswordPOST } from "@/app/api/auth/forgot-password/route";
 import { POST as resetPasswordPOST } from "@/app/api/auth/reset-password/route";
 import { POST as verifyEmailPOST } from "@/app/api/auth/verify-email/route";
+import { POST as resendVerificationPOST } from "@/app/api/auth/resend-verification/route";
 
 function jsonRequest(url: string, payload: unknown, ip: string) {
   return new Request(url, {
@@ -60,6 +64,7 @@ describe("auth route rate limiting", () => {
     resetPassword.mockClear();
     verifyEmail.mockClear();
     loginPlatformActor.mockClear();
+    resendEmailVerification.mockClear();
   });
 
   describe("POST /api/auth/login (IP: 10/5min, email: 5/15min — the tighter email limit trips first for a fixed email+IP pair)", () => {
@@ -202,6 +207,17 @@ describe("auth route rate limiting", () => {
       const otherIp = "10.0.5.2";
       const different = await verifyEmailPOST(jsonRequest("http://localhost/api/auth/verify-email", { token: "tok-other" }, otherIp));
       expect(await status(different)).toBe(200);
+    });
+  });
+
+  describe("POST /api/auth/resend-verification (IP: 5/10min, email: 3/10min)", () => {
+    it("allows three attempts for one address and blocks the fourth", async () => {
+      const ip = "10.0.6.1";
+      const payload = { email: `resend-${Date.now()}@example.com`, password: "Password123" };
+      for (let i = 0; i < 3; i += 1) {
+        expect((await resendVerificationPOST(jsonRequest("http://localhost/api/auth/resend-verification", payload, ip))).status).toBe(200);
+      }
+      expect((await resendVerificationPOST(jsonRequest("http://localhost/api/auth/resend-verification", payload, ip))).status).toBe(429);
     });
   });
 });

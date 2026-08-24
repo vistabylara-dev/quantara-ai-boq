@@ -1477,7 +1477,14 @@ async function advanceSourceProcessing(actor: CurrentActor, projectSlug: string,
         await persistConversationStatus(actor.companyId, order.intakeSessionId, "tayqan.hire.workflow.measurementComplete", { count: measurement.measuredSubjectCount });
         measuredOrder = await loadOrder(actor.companyId, order.id);
       } catch (error) {
-        await releaseTayqanMeasurementLease(actor, order.id, leaseToken);
+        // Lease cleanup is best-effort here. Never let a secondary cleanup
+        // failure replace the original provider/persistence error that tells
+        // the customer and operators which phase actually failed.
+        try {
+          await releaseTayqanMeasurementLease(actor, order.id, leaseToken);
+        } catch (releaseError) {
+          console.error("[TAYQAN-WORK-ORDER] measurement lease release failed", releaseError);
+        }
         if (isTerminalTayqanMeasurementError(error)) {
           return fail(
             actor,
@@ -1492,7 +1499,13 @@ async function advanceSourceProcessing(actor: CurrentActor, projectSlug: string,
             error,
           );
         }
-        throw error;
+        if (error instanceof AppError) throw error;
+        console.error("[TAYQAN-WORK-ORDER] measurement orchestration failed", error);
+        throw new AppError(
+          "TAYQAN_MEASUREMENT_WORK_ORDER_PERSISTENCE_FAILED",
+          "TAYQAN completed or resumed measurement work but could not preserve the work-order result. Retry this same assignment; completed source and measurement evidence remains preserved.",
+          503,
+        );
       }
     }
 

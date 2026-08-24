@@ -29,6 +29,10 @@ const inputClass =
 const labelClass = "block text-xs font-medium text-[#536078] dark:text-[#8CA0BE]";
 
 const EMPTY_METADATA: DrawingMetadataInput = {};
+// Keep comfortably below Vercel's buffered request-body ceiling. Small files
+// are more reliable through the single-request route; large drawings retain
+// the direct-to-Blob path so they never pass through function memory.
+const SERVER_BUFFERED_UPLOAD_MAX_BYTES = 3 * 1024 * 1024;
 
 function formatLabel(value: string): string {
   return value.replace(/_/g, " ").toLowerCase().replace(/\b\w/g, (letter) => letter.toUpperCase());
@@ -155,6 +159,26 @@ export default function ProjectDrawingsPage(props: { params: Promise<{ projectId
     setUploadStage("preparing");
     setUploadProgress(0);
     try {
+      if (stagedFile.size <= SERVER_BUFFERED_UPLOAD_MAX_BYTES) {
+        setUploadStage("uploading");
+        const response = await uploadDrawingViaLegacyRoute(
+          `/api/projects/${encodeURIComponent(params.projectId)}/drawings`,
+          stagedFile,
+          metadata,
+          setUploadProgress,
+        );
+        const body = response.body as { ok?: boolean; error?: { message?: string } } | null;
+        if (response.status < 200 || response.status >= 300 || !body?.ok) {
+          throw new Error(body?.error?.message ?? "The upload could not be completed.");
+        }
+        setStagedFile(null);
+        setUploadStage(null);
+        setUploadProgress(null);
+        setMetadata(EMPTY_METADATA);
+        await load();
+        return;
+      }
+
       const authorization = await apiClient.post<AuthorizeUploadResponse | { directUploadUnsupported: true }>(
         `/api/projects/${encodeURIComponent(params.projectId)}/drawings/upload-authorization`,
         {

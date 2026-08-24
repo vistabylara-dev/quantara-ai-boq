@@ -151,6 +151,15 @@ describe("Drawing upload & intake pipeline (integration, real local Postgres)", 
   });
 
   describe("upload validation", () => {
+    it("rejects a renamed non-PDF on the server-buffered upload path", async () => {
+      await expect(uploadProjectDrawing(ownerActorA, projectAId, {
+        originalName: "renamed.pdf",
+        mimeType: "application/pdf",
+        buffer: Buffer.from("not a pdf"),
+        metadata: {},
+      })).rejects.toMatchObject({ code: "UNSAFE_FILE_CONTENT" });
+    });
+
     it("rejects an unsupported extension", async () => {
       await expect(
         uploadProjectDrawing(ownerActorA, projectAId, { originalName: "virus.exe", mimeType: "application/octet-stream", buffer: Buffer.from("x"), metadata: {} }),

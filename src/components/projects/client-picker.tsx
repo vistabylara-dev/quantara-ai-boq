@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { Client, ClientListResult } from "@/types/client";
 import { apiClient } from "@/lib/api/client";
 import ClientForm from "@/components/clients/client-form";
@@ -16,26 +16,37 @@ export default function ClientPicker({ selectedClient, onSelect }: ClientPickerP
   const [search, setSearch] = useState("");
   const [results, setResults] = useState<Client[]>([]);
   const [isOpen, setIsOpen] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [loadError, setLoadError] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
   const [isQuickCreating, setIsQuickCreating] = useState(false);
   const [quickCreateError, setQuickCreateError] = useState<string | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
+  const loadClients = useCallback(async (searchValue: string, signal?: AbortSignal) => {
+    setIsLoading(true);
+    setLoadError(false);
+    try {
+      const query = searchValue.trim() ? `?search=${encodeURIComponent(searchValue.trim())}` : "";
+      const result = await apiClient.get<ClientListResult>(`/api/clients${query}`, signal);
+      setResults(result.items);
+    } catch (error) {
+      if (error instanceof DOMException && error.name === "AbortError") return;
+      setLoadError(true);
+    } finally {
+      if (!signal?.aborted) setIsLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     if (!isOpen) return;
     const controller = new AbortController();
-    const timeout = setTimeout(() => {
-      const query = search.trim() ? `?search=${encodeURIComponent(search.trim())}` : "";
-      apiClient
-        .get<ClientListResult>(`/api/clients${query}`, controller.signal)
-        .then((result) => setResults(result.items))
-        .catch(() => undefined);
-    }, 200);
+    const timeout = setTimeout(() => void loadClients(search, controller.signal), 200);
     return () => {
       clearTimeout(timeout);
       controller.abort();
     };
-  }, [search, isOpen]);
+  }, [search, isOpen, loadClients]);
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -58,6 +69,7 @@ export default function ClientPicker({ selectedClient, onSelect }: ClientPickerP
     setQuickCreateError(null);
     try {
       const client = await apiClient.post<Client>("/api/clients", { name: quickCreateName });
+      setResults((current) => [client, ...current.filter((item) => item.id !== client.id)]);
       onSelect(client);
       setSearch("");
       setIsOpen(false);
@@ -92,10 +104,25 @@ export default function ClientPicker({ selectedClient, onSelect }: ClientPickerP
             className="w-full rounded-xl border border-slate-800 bg-slate-900 px-3 py-2 text-sm text-white outline-none focus:border-blue-500"
           />
           <div className="mt-2 max-h-56 overflow-y-auto">
-            {results.length === 0 && (
+            {isLoading && (
+              <p className="px-2 py-3 text-sm text-slate-500">{t("clients.list.loadingTitle")}</p>
+            )}
+            {!isLoading && loadError && (
+              <div className="px-2 py-3 text-sm text-rose-300" role="alert">
+                <p>{t("clients.list.unavailableTitle")}</p>
+                <button
+                  type="button"
+                  onClick={() => void loadClients(search)}
+                  className="mt-2 rounded-xl border border-rose-800 px-3 py-1.5 text-xs font-semibold text-rose-200 hover:bg-rose-950"
+                >
+                  {t("clients.list.tryAgain")}
+                </button>
+              </div>
+            )}
+            {!isLoading && !loadError && results.length === 0 && (
               <p className="px-2 py-3 text-sm text-slate-500">{t("projects.clientPicker.noMatches")}</p>
             )}
-            {results.map((client) => (
+            {!loadError && results.map((client) => (
               <button
                 key={client.id}
                 type="button"
@@ -146,6 +173,7 @@ export default function ClientPicker({ selectedClient, onSelect }: ClientPickerP
               submitLabel={t("projects.clientPicker.createAndSelect")}
               onCancel={() => setIsCreating(false)}
               onCreated={(client) => {
+                setResults((current) => [client, ...current.filter((item) => item.id !== client.id)]);
                 onSelect(client);
                 setIsCreating(false);
               }}

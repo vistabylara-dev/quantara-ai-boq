@@ -155,8 +155,13 @@ describe("Phase 7: commercial entitlements + industry data platform (integration
       await expect(startTrial(actor(companyId))).rejects.toMatchObject({ code: "TRIAL_TERMS_NOT_ACCEPTED" });
 
       await acceptTrialTerms(actor(companyId));
+      await prisma.softwarePlan.updateMany({ where: { planType: PlanType.TRIAL }, data: { isActive: false } });
       const result = await startTrial(actor(companyId));
       expect(result.subscriptionId).toBeTruthy();
+
+      const repairedTrialPlan = await prisma.softwarePlan.findUniqueOrThrow({ where: { key: "trial-pro" } });
+      expect(repairedTrialPlan.planType).toBe(PlanType.TRIAL);
+      expect(repairedTrialPlan.isActive).toBe(true);
 
       const optionalProfile = await prisma.company.findUniqueOrThrow({ where: { id: companyId } });
       expect(optionalProfile.address).toBeNull();

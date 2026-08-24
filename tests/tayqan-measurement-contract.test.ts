@@ -1009,6 +1009,9 @@ describe("TAYQAN senior work-order governance wiring", () => {
     expect(workOrder).toContain("exceptionRegisterRunId");
     expect(workOrder).toMatch(/prisma\.\$transaction\(async \(tx\)[\s\S]*tx\.tayqanWorkOrder\.updateMany[\s\S]*TAYQAN_MEASUREMENT_EXCEPTION_REGISTER[\s\S]*TAYQAN_MEASUREMENT_COMPLETE[\s\S]*maxWait: 10_000, timeout: 30_000/);
     expect(workOrder).toContain("measurement completion status update failed after durable commit");
+    expect(workOrder).toContain('"measurement-checkpoint-commit"');
+    expect(workOrder).toContain('"measurement-checkpoint-reload"');
+    expect(workOrder).toContain("tx.tayqanWorkEvent.createMany");
     expect(workOrder).toContain("TAYQAN_AI_DRAFT_LEASE_CODE");
     expect(workOrder).toContain("advanceTayqanAiDraftWithLease");
   });

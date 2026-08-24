@@ -365,6 +365,39 @@ export async function acceptTrialTerms(actor: CurrentActor): Promise<void> {
 
 export type StartTrialResult = { subscriptionId: string; trialExpiresAt: string };
 
+async function ensureTrialSoftwarePlan() {
+  return prisma.softwarePlan.upsert({
+    where: { key: "trial-pro" },
+    update: {
+      name: "Pro Trial",
+      description: "3-day Pro trial: one project, one completed BOQ, five premium items, one export.",
+      planType: PlanType.TRIAL,
+      monthlyPrice: 0,
+      annualPrice: 0,
+      maxUsers: 3,
+      maxProjects: 1,
+      maxActiveBoqs: 1,
+      maxDocumentsPerMonth: 1,
+      featuresJson: { bulkExport: false, apiAccess: false, premiumMasterData: "trial-allowance" },
+      isActive: true,
+    },
+    create: {
+      key: "trial-pro",
+      name: "Pro Trial",
+      description: "3-day Pro trial: one project, one completed BOQ, five premium items, one export.",
+      planType: PlanType.TRIAL,
+      monthlyPrice: 0,
+      annualPrice: 0,
+      maxUsers: 3,
+      maxProjects: 1,
+      maxActiveBoqs: 1,
+      maxDocumentsPerMonth: 1,
+      featuresJson: { bulkExport: false, apiAccess: false, premiumMasterData: "trial-allowance" },
+      isActive: true,
+    },
+  });
+}
+
 /**
  * Trial starts only after verified email, a completed company profile, and
  * accepted trial terms (spec section 2). Mobile verification is not yet
@@ -393,8 +426,7 @@ export async function startTrial(actor: CurrentActor): Promise<StartTrialResult>
     throw new AppError("TRIAL_ALREADY_USED", "This company has already used its Pro trial.", 409);
   }
 
-  const trialPlan = await prisma.softwarePlan.findFirst({ where: { planType: PlanType.TRIAL, isActive: true } });
-  if (!trialPlan) throw new NotFoundError("No trial plan is configured.");
+  const trialPlan = await ensureTrialSoftwarePlan();
 
   const now = new Date();
   const trialExpiresAt = new Date(now.getTime() + TRIAL_LIMITS.durationDays * 24 * 60 * 60 * 1000);

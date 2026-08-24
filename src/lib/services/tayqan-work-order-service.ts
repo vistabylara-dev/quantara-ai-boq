@@ -1499,13 +1499,10 @@ async function advanceSourceProcessing(actor: CurrentActor, projectSlug: string,
             error,
           );
         }
-        if (error instanceof AppError) throw error;
-        console.error("[TAYQAN-WORK-ORDER] measurement orchestration failed", error);
-        throw new AppError(
-          "TAYQAN_MEASUREMENT_WORK_ORDER_PERSISTENCE_FAILED",
-          "TAYQAN completed or resumed measurement work but could not preserve the work-order result. Retry this same assignment; completed source and measurement evidence remains preserved.",
-          503,
-        );
+        // Preserve the service contract: transient provider/network errors
+        // propagate unchanged and the RUNNING order remains resumable. The
+        // HTTP route converts unknown errors into a customer-safe diagnostic.
+        throw error;
       }
     }
 

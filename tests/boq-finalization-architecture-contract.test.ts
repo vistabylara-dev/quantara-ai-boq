@@ -38,6 +38,7 @@ describe("BOQ finalization architecture contract", () => {
   });
 
   it("keeps Documents on the shared gate and proposals free of draft evidence", () => {
+    const documentsPage = read("src/app/projects/[projectId]/documents/page.tsx");
     const readiness = read("src/lib/workflow/document-readiness-state.ts");
     const generation = read("src/lib/services/document-generation-service.ts");
     const proposalService = read("src/lib/services/client-proposal-service.ts");
@@ -46,5 +47,7 @@ describe("BOQ finalization architecture contract", () => {
     expect(readiness).toContain('finalization.lockReason === "ESTIMATE_INTEGRITY_REQUIRED"');
     expect(generation).toContain("if (unresolvedCriticalCount > 0)");
     expect(proposalService).toContain("assertProposalDocumentEligible(doc)");
+    expect(documentsPage).toContain("verificationReadyForGeneration");
+    expect(documentsPage).toContain('readiness.state === "DRAFT_READY_TO_LOCK" || readiness.state === "DRAFT_INTEGRITY_REQUIRED"');
   });
 });

@@ -141,7 +141,8 @@ export default function ProjectDocumentsPage(props: PageProps) {
   const isLockedRevision = Boolean(selectedBoq?.isLocked) || selectedBoq?.status === "locked" || selectedBoq?.status === "approved";
   const requiresLock = FINAL_ONLY_TYPES.has(selectedType) && !isLockedRevision;
   const blockedByCriticals = Boolean(verification && verification.unresolvedCritical > 0);
-  const canGenerate = Boolean(selectedBoqId && selectedTemplateId && !requiresLock && !blockedByCriticals && !isGenerating);
+  const verificationReadyForGeneration = isLockedRevision || (verification !== null && verification.unresolvedCritical === 0);
+  const canGenerate = Boolean(selectedBoqId && selectedTemplateId && !requiresLock && verificationReadyForGeneration && !blockedByCriticals && !isGenerating);
 
   const readiness = useMemo(
     () => computeDocumentReadiness({ selectedBoq, isLockedRevision, verification, isGenerating }),
@@ -483,7 +484,7 @@ export default function ProjectDocumentsPage(props: PageProps) {
             >
               <p className="font-semibold uppercase tracking-[0.18em]">{readiness.state.replace(/_/g, " ")}</p>
               <p className="mt-2 text-slate-300">{readiness.why}</p>
-              {FINAL_ONLY_TYPES.has(selectedType) && readiness.state !== "LOCKED_READY" && readiness.state !== "GENERATING" && (
+              {FINAL_ONLY_TYPES.has(selectedType) && (readiness.state === "DRAFT_READY_TO_LOCK" || readiness.state === "DRAFT_INTEGRITY_REQUIRED") && (
                 <p className="mt-2 text-slate-400">
                   Draft export in CSV or HTML remains available now — switch Format above.
                 </p>

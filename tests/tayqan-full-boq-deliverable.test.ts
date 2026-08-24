@@ -269,7 +269,10 @@ describe("TAYQAN Full-BOQ rescue regression", () => {
     );
 
     expect(nonTerminalBranch).toContain(
-      "await extractionJobQueue.enqueue({",
+      "source-job-recovery:${engineType}",
+    );
+    expect(nonTerminalBranch).toContain(
+      "() => extractionJobQueue.enqueue({",
     );
     expect(nonTerminalBranch).toContain(
       "projectFileId: file.id,",

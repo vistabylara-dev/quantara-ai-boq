@@ -1389,13 +1389,22 @@ async function advanceSourceDiscovery(
 }
 
 async function advanceSourceProcessing(actor: CurrentActor, projectSlug: string, order: Awaited<ReturnType<typeof loadOrder>>) {
-  await import("@/lib/jobs/register-handlers");
+  await runTayqanWorkOrderPhase(
+    order.id,
+    "source-handler-registration",
+    "TAYQAN_SOURCE_HANDLER_REGISTRATION_FAILED",
+    "TAYQAN could not initialize the protected source-processing handlers. Retry the same assignment; uploaded sources and completed evidence remain preserved.",
+    () => import("@/lib/jobs/register-handlers"),
+  );
   const {
     requirements,
     conflicts,
-  } = await sourceRequirements(
-    actor,
-    order,
+  } = await runTayqanWorkOrderPhase(
+    order.id,
+    "source-requirements",
+    "TAYQAN_SOURCE_REQUIREMENTS_FAILED",
+    "TAYQAN could not reload the governed source requirements. Retry the same assignment; uploaded sources and completed evidence remain preserved.",
+    () => sourceRequirements(actor, order),
   );
 
   if (conflicts.length > 0) {
@@ -1419,10 +1428,16 @@ async function advanceSourceProcessing(actor: CurrentActor, projectSlug: string,
 
   for (const { file, engines } of requirements) {
     for (const engineType of engines) {
-      const latest = await prisma.extractionJob.findFirst({
-        where: { companyId: actor.companyId, projectFileId: file.id, engineType },
-        orderBy: { createdAt: "desc" },
-      });
+      const latest = await runTayqanWorkOrderPhase(
+        order.id,
+        `source-job-status:${engineType}`,
+        "TAYQAN_SOURCE_JOB_STATUS_FAILED",
+        "TAYQAN could not reload a protected source-processing task. Retry the same assignment; completed source evidence remains preserved.",
+        () => prisma.extractionJob.findFirst({
+          where: { companyId: actor.companyId, projectFileId: file.id, engineType },
+          orderBy: { createdAt: "desc" },
+        }),
+      );
       if (latest) {
         if (latest.status === ExtractionJobStatus.COMPLETED || latest.status === ExtractionJobStatus.NEEDS_REVIEW) continue;
         if (latest.status === ExtractionJobStatus.QUEUED || latest.status === ExtractionJobStatus.RUNNING) {
@@ -1432,13 +1447,19 @@ async function advanceSourceProcessing(actor: CurrentActor, projectSlug: string,
           // recovers a genuinely stale RUNNING job. Existing live RUNNING
           // jobs remain untouched and duplicate processing is prevented by
           // the queue's conditional claim.
-          await extractionJobQueue.enqueue({
-            companyId: actor.companyId,
-            projectId: order.projectId,
-            projectFileId: file.id,
-            engineType,
-            createdByUserId: actor.userId,
-          });
+          await runTayqanWorkOrderPhase(
+            order.id,
+            `source-job-recovery:${engineType}`,
+            "TAYQAN_SOURCE_JOB_RECOVERY_FAILED",
+            "TAYQAN could not safely resume a source-processing task. Retry the same assignment; completed source evidence remains preserved.",
+            () => extractionJobQueue.enqueue({
+              companyId: actor.companyId,
+              projectId: order.projectId,
+              projectFileId: file.id,
+              engineType,
+              createdByUserId: actor.userId,
+            }),
+          );
           pending += 1;
           continue;
         }
@@ -1458,26 +1479,59 @@ async function advanceSourceProcessing(actor: CurrentActor, projectSlug: string,
         }
       }
 
-      const job = await extractionJobQueue.enqueue({
-        companyId: actor.companyId,
-        projectId: order.projectId,
-        projectFileId: file.id,
-        engineType,
-        createdByUserId: actor.userId,
-      });
+      const job = await runTayqanWorkOrderPhase(
+        order.id,
+        `source-job-enqueue:${engineType}`,
+        "TAYQAN_SOURCE_JOB_ENQUEUE_FAILED",
+        "TAYQAN could not safely start a required source-processing task. Retry the same assignment; uploaded sources remain preserved.",
+        () => extractionJobQueue.enqueue({
+          companyId: actor.companyId,
+          projectId: order.projectId,
+          projectFileId: file.id,
+          engineType,
+          createdByUserId: actor.userId,
+        }),
+      );
       queued += 1;
       if (job.status === ExtractionJobStatus.QUEUED || job.status === ExtractionJobStatus.RUNNING) pending += 1;
     }
   }
 
   if (pending > 0) {
-    await updateOrder(actor, order.id, { status: TayqanWorkStatus.RUNNING, lastAdvancedAt: new Date() }, "SOURCE_PROCESSING_WAITING", { pending, queued });
+    await runTayqanWorkOrderPhase(
+      order.id,
+      "source-processing-wait-commit",
+      "TAYQAN_SOURCE_WAIT_PERSISTENCE_FAILED",
+      "TAYQAN could not preserve the source-processing wait state. Retry the same assignment; completed source evidence remains preserved.",
+      () => prisma.$transaction(async (tx) => {
+        const updated = await tx.tayqanWorkOrder.update({
+          where: { id: order.id },
+          data: { status: TayqanWorkStatus.RUNNING, lastAdvancedAt: new Date() },
+        });
+        await tx.tayqanWorkEvent.create({
+          data: {
+            companyId: actor.companyId,
+            workOrderId: order.id,
+            stage: updated.stage,
+            eventType: "SOURCE_PROCESSING_WAITING",
+            payloadJson: jsonObject({ pending, queued }),
+          },
+        });
+      }),
+    );
     try {
       await persistConversationStatus(actor.companyId, order.intakeSessionId, "tayqan.hire.workflow.sourceProcessing", { count: pending });
     } catch (statusError) {
       console.error("[TAYQAN-WORK-ORDER] source-processing status update failed after durable work-order update", statusError);
     }
-    return toState(await loadOrder(actor.companyId, order.id));
+    const waitingOrder = await runTayqanWorkOrderPhase(
+      order.id,
+      "source-processing-wait-reload",
+      "TAYQAN_SOURCE_WAIT_RELOAD_FAILED",
+      "TAYQAN preserved the source-processing wait state but could not reload it. Retry the same assignment; completed source evidence remains preserved.",
+      () => loadOrder(actor.companyId, order.id),
+    );
+    return toState(waitingOrder);
   }
 
   if (usesDraftFirstWorkflow(order)) {

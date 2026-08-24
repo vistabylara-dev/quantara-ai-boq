@@ -13,7 +13,7 @@ import {
   Mail,
   ShieldCheck,
 } from "lucide-react";
-import { apiClient, getApiErrorMessage } from "@/lib/api/client";
+import { ApiClientError, apiClient, getApiErrorMessage } from "@/lib/api/client";
 import { useTranslations } from "@/lib/i18n/locale-provider";
 import { LanguageSwitcher } from "@/components/layout/language-switcher";
 import {
@@ -36,6 +36,9 @@ function LoginForm() {
   const [capsLockOn, setCapsLockOn] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [needsVerification, setNeedsVerification] = useState(false);
+  const [isResending, setIsResending] = useState(false);
+  const [resendMessage, setResendMessage] = useState<string | null>(null);
 
   const handlePasswordKeyState = (event: KeyboardEvent<HTMLInputElement>) => {
     setCapsLockOn(event.getModifierState("CapsLock"));
@@ -47,6 +50,8 @@ function LoginForm() {
 
     setIsSubmitting(true);
     setError(null);
+    setNeedsVerification(false);
+    setResendMessage(null);
 
     try {
       await apiClient.post("/api/auth/login", {
@@ -71,9 +76,30 @@ function LoginForm() {
       }
       router.refresh();
     } catch (submitError) {
+      setNeedsVerification(submitError instanceof ApiClientError && submitError.code === "EMAIL_NOT_VERIFIED");
       setError(getApiErrorMessage(submitError));
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const resendVerification = async () => {
+    if (isResending) return;
+    setIsResending(true);
+    setResendMessage(null);
+    try {
+      const queryPriceCode = normalizePublicPriceCode(searchParams.get("priceCode"));
+      const pendingPriceCode = queryPriceCode ?? readPendingPricingIntent();
+      const result = await apiClient.post<{ emailDeliveryStatus: "SENT" | "DEVELOPMENT_CAPTURED" | "FAILED" }>("/api/auth/resend-verification", {
+        email: email.trim(),
+        password,
+        priceCode: pendingPriceCode ?? undefined,
+      });
+      setResendMessage(result.emailDeliveryStatus === "FAILED" ? t("auth.login.resendFailed") : t("auth.login.resendSent"));
+    } catch (resendError) {
+      setResendMessage(getApiErrorMessage(resendError));
+    } finally {
+      setIsResending(false);
     }
   };
 
@@ -262,6 +288,15 @@ function LoginForm() {
                     className="rounded-2xl border border-rose-400/20 bg-rose-400/[0.08] px-4 py-3.5"
                   >
                     <p className="text-sm leading-6 text-rose-200">{error}</p>
+                    {needsVerification && (
+                      <div className="mt-3 border-t border-rose-300/15 pt-3">
+                        <p className="text-sm leading-6 text-slate-300">{t("auth.login.resendHelp")}</p>
+                        <button type="button" disabled={isResending} onClick={() => void resendVerification()} className="mt-3 rounded-xl border border-sky-400/40 bg-sky-400/10 px-3 py-2 text-sm font-semibold text-sky-200 transition hover:bg-sky-400/15 disabled:opacity-60">
+                          {isResending ? t("auth.login.resending") : t("auth.login.resendVerification")}
+                        </button>
+                        {resendMessage && <p className="mt-2 text-xs leading-5 text-slate-300" role="status">{resendMessage}</p>}
+                      </div>
+                    )}
                   </div>
                 )}
 

@@ -217,8 +217,7 @@ export async function generateDocument(actor: CurrentActor, projectIdentifier: s
   // apply to it. Every other FINAL_ONLY_TYPES case (including WITH_PRICES
   // DOCX) is unchanged.
   const isQuantitiesOnlyDraftDocx = input.documentType === GeneratedDocumentType.DOCX && input.pricingMode === "QUANTITIES_ONLY";
-  const requiresLockedFinalization = FINAL_ONLY_TYPES.includes(input.documentType) && !isQuantitiesOnlyDraftDocx;
-  if (requiresLockedFinalization && isDraft) {
+  if (FINAL_ONLY_TYPES.includes(input.documentType) && isDraft && !isQuantitiesOnlyDraftDocx) {
     throw new AppError(
       "LOCKED_REVISION_REQUIRED",
       `${input.documentType} generation requires a locked BOQ revision. Lock this revision first, or generate a CSV or HTML draft instead.`,
@@ -252,10 +251,7 @@ export async function generateDocument(actor: CurrentActor, projectIdentifier: s
     unresolvedCriticalCount = verification.summary.unresolvedCritical;
     boqRecord = await getBOQRecord(actor.companyId, boqRecord.id);
   }
-  // Review artifacts may carry unresolved exceptions so professionals can
-  // correct them outside the app. They remain marked as drafts and cannot be
-  // used as proposal evidence. Clean/final output still fails closed.
-  if (unresolvedCriticalCount > 0 && (requiresLockedFinalization || isLocked)) {
+  if (unresolvedCriticalCount > 0) {
     throw new AppError(
       "CRITICAL_VERIFICATION_EXCEPTIONS",
       `Generation is blocked: ${unresolvedCriticalCount} unresolved critical verification exception(s) remain on this BOQ.`,

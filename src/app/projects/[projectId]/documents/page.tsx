@@ -141,8 +141,7 @@ export default function ProjectDocumentsPage(props: PageProps) {
   const isLockedRevision = Boolean(selectedBoq?.isLocked) || selectedBoq?.status === "locked" || selectedBoq?.status === "approved";
   const requiresLock = FINAL_ONLY_TYPES.has(selectedType) && !isLockedRevision;
   const blockedByCriticals = Boolean(verification && verification.unresolvedCritical > 0);
-  const isDraftReviewFormat = !FINAL_ONLY_TYPES.has(selectedType);
-  const canGenerate = Boolean(selectedBoqId && selectedTemplateId && !requiresLock && (isDraftReviewFormat || !blockedByCriticals) && !isGenerating);
+  const canGenerate = Boolean(selectedBoqId && selectedTemplateId && !requiresLock && !blockedByCriticals && !isGenerating);
 
   const readiness = useMemo(
     () => computeDocumentReadiness({ selectedBoq, isLockedRevision, verification, isGenerating }),

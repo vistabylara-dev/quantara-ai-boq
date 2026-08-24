@@ -44,8 +44,7 @@ describe("BOQ finalization architecture contract", () => {
 
     expect(readiness).toContain("input.selectedBoq.finalization");
     expect(readiness).toContain('finalization.lockReason === "ESTIMATE_INTEGRITY_REQUIRED"');
-    expect(generation).toContain("requiresLockedFinalization");
-    expect(generation).toContain("unresolvedCriticalCount > 0 && (requiresLockedFinalization || isLocked)");
+    expect(generation).toContain("if (unresolvedCriticalCount > 0)");
     expect(proposalService).toContain("assertProposalDocumentEligible(doc)");
   });
 });

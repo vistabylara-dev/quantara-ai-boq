@@ -140,21 +140,28 @@ describe("Phase 7: commercial entitlements + industry data platform (integration
   }, 30_000);
 
   describe("trial lifecycle", () => {
-    it("blocks starting a trial before email verification, then before profile completion, then before terms acceptance", async () => {
+    it("requires verified email and company identity but keeps address, country, and tax registration optional", async () => {
       const { companyId } = await seedCompanyWithUser("trial-gate", { emailVerified: false, completeProfile: false });
       cleanupCompanyIds.push(companyId);
 
       await expect(startTrial(actor(companyId))).rejects.toMatchObject({ code: "EMAIL_NOT_VERIFIED" });
 
       await prisma.user.update({ where: { id: userIdByCompany.get(companyId)! }, data: { emailVerifiedAt: new Date() } });
+      const company = await prisma.company.findUniqueOrThrow({ where: { id: companyId } });
+      await prisma.company.update({ where: { id: companyId }, data: { legalName: "" } });
       await expect(startTrial(actor(companyId))).rejects.toMatchObject({ code: "COMPANY_PROFILE_INCOMPLETE" });
 
-      await prisma.company.update({ where: { id: companyId }, data: { address: "Dubai, UAE", country: "UAE", taxRegistrationNumber: "100000000000099" } });
+      await prisma.company.update({ where: { id: companyId }, data: { legalName: company.legalName } });
       await expect(startTrial(actor(companyId))).rejects.toMatchObject({ code: "TRIAL_TERMS_NOT_ACCEPTED" });
 
       await acceptTrialTerms(actor(companyId));
       const result = await startTrial(actor(companyId));
       expect(result.subscriptionId).toBeTruthy();
+
+      const optionalProfile = await prisma.company.findUniqueOrThrow({ where: { id: companyId } });
+      expect(optionalProfile.address).toBeNull();
+      expect(optionalProfile.country).toBeNull();
+      expect(optionalProfile.taxRegistrationNumber).toBeNull();
 
       await expect(startTrial(actor(companyId))).rejects.toMatchObject({ code: "TRIAL_ALREADY_USED" });
     });

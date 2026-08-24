@@ -354,8 +354,8 @@ export async function hasIndustryPackage(companyId: string, packageKeyOrId: stri
   return companyHasPackageAccess(companyId, packageKeyOrId);
 }
 
-function isCompanyProfileComplete(company: { legalName: string; email: string; address: string | null; country: string | null; taxRegistrationNumber: string | null }): boolean {
-  return Boolean(company.legalName.trim() && company.email.trim() && company.address?.trim() && company.country?.trim() && company.taxRegistrationNumber?.trim());
+function isCompanyProfileComplete(company: { legalName: string; email: string }): boolean {
+  return Boolean(company.legalName.trim() && company.email.trim());
 }
 
 export async function acceptTrialTerms(actor: CurrentActor): Promise<void> {
@@ -384,7 +384,7 @@ export async function startTrial(actor: CurrentActor): Promise<StartTrialResult>
     throw new AppError("EMAIL_NOT_VERIFIED", "Verify your email before starting the Pro trial.", 403);
   }
   if (!isCompanyProfileComplete(company)) {
-    throw new AppError("COMPANY_PROFILE_INCOMPLETE", "Complete your company profile (legal name, email, address, country, tax registration) before starting the Pro trial.", 403);
+    throw new AppError("COMPANY_PROFILE_INCOMPLETE", "Add your company legal name and email before starting the Pro trial.", 403);
   }
   if (!company.trialTermsAcceptedAt) {
     throw new AppError("TRIAL_TERMS_NOT_ACCEPTED", "Accept the trial terms before starting the Pro trial.", 403);

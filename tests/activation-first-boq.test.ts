@@ -46,9 +46,14 @@ describe("first-value activation journey", () => {
 
   it("offers one-action client creation inside the project picker", () => {
     const clientPicker = source("src/components/projects/client-picker.tsx");
+    const clientRepository = source("src/lib/repositories/client-repository.ts");
 
     expect(clientPicker).toContain('apiClient.post<Client>("/api/clients", { name: quickCreateName })');
     expect(clientPicker).toContain("projects.clientPicker.quickCreate");
+    expect(clientPicker).toContain("setResults((current) => [client, ...current.filter");
+    expect(clientPicker).toContain("loadError");
+    expect(clientPicker).toContain("loadClients(search)");
+    expect(clientRepository).toContain('orderBy: [{ updatedAt: "desc" }, { id: "asc" }]');
   });
 
   it("records first export only after successful BOQ document generation", () => {

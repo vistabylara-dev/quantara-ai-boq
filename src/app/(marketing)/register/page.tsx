@@ -14,6 +14,7 @@ import {
   storePendingPricingIntent,
   type TrustedPublicPriceCode,
 } from "@/lib/commercial/pricing-intent";
+import { trackConversionEvent } from "@/lib/marketing/conversion-events";
 
 function AccessOptionsFieldset({
   selectedOption,
@@ -132,12 +133,21 @@ function RegisterForm() {
 
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
+    if (isSubmitting) return;
     setIsSubmitting(true);
     setError(null);
+    trackConversionEvent("registration_started", {
+      selected_option: selectedPackage,
+      selected_plan_code: pendingPriceCode,
+    });
     try {
       await apiClient.post("/api/auth/register", { 
         companyName, fullName, email, password,
         role, country, primaryIndustry, intendedUse: intendedUse || selectedPackage, approximateVolume, consent
+      });
+      trackConversionEvent("registration_completed", {
+        selected_option: selectedPackage,
+        selected_plan_code: pendingPriceCode,
       });
       setRegistered(true);
     } catch (submitError: any) {

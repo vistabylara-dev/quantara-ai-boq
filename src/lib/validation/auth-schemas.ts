@@ -37,6 +37,10 @@ export const verifyEmailSchema = z
   })
   .strict();
 
+export const resendVerificationSchema = loginSchema.extend({
+  priceCode: z.enum(TRUSTED_PUBLIC_PRICE_CODES).optional(),
+}).strict();
+
 export const forgotPasswordSchema = z
   .object({
     email: z.string().trim().email("A valid email address is required.").max(255),

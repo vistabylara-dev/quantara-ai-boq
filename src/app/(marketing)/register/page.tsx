@@ -113,6 +113,9 @@ function RegisterForm() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [registered, setRegistered] = useState(false);
+  const [emailDeliveryFailed, setEmailDeliveryFailed] = useState(false);
+  const [isResending, setIsResending] = useState(false);
+  const [resendMessage, setResendMessage] = useState<string | null>(null);
   const successHeadingRef = useRef<HTMLHeadingElement>(null);
 
   useEffect(() => {
@@ -136,17 +139,20 @@ function RegisterForm() {
     if (isSubmitting) return;
     setIsSubmitting(true);
     setError(null);
+    setEmailDeliveryFailed(false);
+    setResendMessage(null);
     trackConversionEvent("registration_started", {
       selected_option: selectedPackage,
       selected_plan_code: pendingPriceCode,
     });
     try {
-      await apiClient.post("/api/auth/register", { 
+      const result = await apiClient.post<{ emailDeliveryStatus: "SENT" | "DEVELOPMENT_CAPTURED" | "FAILED" }>("/api/auth/register", {
         companyName, fullName, email, password,
         role, country, primaryIndustry, intendedUse: intendedUse || selectedPackage, approximateVolume,
         priceCode: pendingPriceCode ?? undefined,
         consent
       });
+      setEmailDeliveryFailed(result.emailDeliveryStatus === "FAILED");
       trackConversionEvent("registration_completed", {
         selected_option: selectedPackage,
         selected_plan_code: pendingPriceCode,
@@ -155,11 +161,32 @@ function RegisterForm() {
     } catch (submitError: any) {
       if (submitError?.code === "EMAIL_ALREADY_REGISTERED") {
         setError(t("errors.emailAlreadyRegistered"));
+        setEmailDeliveryFailed(true);
       } else {
         setError(locale === "ar" ? t("errors.generic") : getApiErrorMessage(submitError));
       }
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const resendVerification = async () => {
+    if (isResending) return;
+    setIsResending(true);
+    setResendMessage(null);
+    try {
+      const result = await apiClient.post<{ emailDeliveryStatus: "SENT" | "DEVELOPMENT_CAPTURED" | "FAILED" }>("/api/auth/resend-verification", {
+        email,
+        password,
+        priceCode: pendingPriceCode ?? undefined,
+      });
+      const failed = result.emailDeliveryStatus === "FAILED";
+      setEmailDeliveryFailed(failed);
+      setResendMessage(failed ? t("publicContent.accountSetup.deliveryFailed") : t("publicContent.accountSetup.resent"));
+    } catch (resendError) {
+      setResendMessage(getApiErrorMessage(resendError));
+    } finally {
+      setIsResending(false);
     }
   };
 
@@ -171,6 +198,15 @@ function RegisterForm() {
           <p className="mt-3 text-sm text-slate-400">
             {t("publicContent.accountSetup.success")}
           </p>
+          {emailDeliveryFailed && (
+            <div className="mt-4 rounded-2xl border border-amber-700/60 bg-amber-950/30 p-4">
+              <p className="text-sm text-amber-200">{t("publicContent.accountSetup.deliveryFailed")}</p>
+              <button type="button" disabled={isResending} onClick={() => void resendVerification()} className="mt-3 rounded-xl border border-amber-600 px-3 py-2 text-sm font-semibold text-amber-100 disabled:opacity-60">
+                {isResending ? t("publicContent.accountSetup.resending") : t("publicContent.accountSetup.resend")}
+              </button>
+              {resendMessage && <p className="mt-2 text-xs text-slate-300">{resendMessage}</p>}
+            </div>
+          )}
           <Link
             href={signInHref}
             className="mt-6 inline-flex rounded-2xl border border-slate-700 bg-slate-900 px-4 py-2 text-sm font-semibold text-slate-200 hover:bg-slate-800"
@@ -308,6 +344,15 @@ function RegisterForm() {
             </div>
 
             {error && <p role="alert" className="text-sm text-rose-300">{error}</p>}
+            {emailDeliveryFailed && (
+              <div className="rounded-2xl border border-amber-700/60 bg-amber-950/30 p-4">
+                <p className="text-sm text-amber-200">{t("publicContent.accountSetup.deliveryFailed")}</p>
+                <button type="button" disabled={isResending} onClick={() => void resendVerification()} className="mt-3 rounded-xl border border-amber-600 px-3 py-2 text-sm font-semibold text-amber-100 disabled:opacity-60">
+                  {isResending ? t("publicContent.accountSetup.resending") : t("publicContent.accountSetup.resend")}
+                </button>
+                {resendMessage && <p className="mt-2 text-xs text-slate-300">{resendMessage}</p>}
+              </div>
+            )}
 
             <div className="pt-2">
               <button

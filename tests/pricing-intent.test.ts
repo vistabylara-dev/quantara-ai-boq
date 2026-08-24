@@ -215,7 +215,7 @@ describe("registration page pricing-intent source contract", () => {
     expect(source).toContain('normalizePublicPriceCode(searchParams.get("priceCode"))');
     expect(source).toContain("buildLoginPricingHref(pendingPriceCode)");
 
-    const registerCallMatch = source.match(/apiClient\.post\("\/api\/auth\/register",\s*\{([^}]*)\}/s);
+    const registerCallMatch = source.match(/apiClient\.post(?:<[^;]+?>)?\("\/api\/auth\/register",\s*\{([^}]*)\}/s);
     expect(registerCallMatch).not.toBeNull();
     expect(registerCallMatch?.[1]).toContain("priceCode: pendingPriceCode ?? undefined");
   });

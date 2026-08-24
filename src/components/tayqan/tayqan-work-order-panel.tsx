@@ -6,6 +6,7 @@ import { apiClient, getApiErrorMessage } from "@/lib/api/client";
 import { useTranslations } from "@/lib/i18n/locale-provider";
 import type { TranslationKey } from "@/lib/i18n/translate";
 import { TAYQAN_WORK_STAGE_ORDER } from "@/lib/tayqan/tayqan-workflow-contract";
+import { trackFirstConversionEvent } from "@/lib/marketing/conversion-events";
 
 export type TayqanMeasurementExceptionState = {
   key: string;
@@ -261,6 +262,10 @@ export function TayqanWorkOrderPanel({
         `/api/projects/${encodeURIComponent(projectId)}/documents/generate`,
         { boqId: state.boqId, templateId: template.id, documentType: "DOCX", audience: "CLIENT", pricingMode: "QUANTITIES_ONLY" },
       );
+      trackFirstConversionEvent("first_export_generated", {
+        format: "docx",
+        source: "tayqan_draft_boq",
+      });
       setExportedDocumentId(generated.id);
     } catch (err) {
       setExportError(getApiErrorMessage(err));

@@ -9,6 +9,7 @@ import { CommercialUnlockPanel } from "@/components/commercial/commercial-unlock
 import type { CommercialAccessDecision } from "@/lib/commercial/commercial-types";
 import { GuideTip } from "@/components/guidance/guide-tip";
 import { useLocale } from "@/lib/i18n/locale-provider";
+import { trackFirstConversionEvent } from "@/lib/marketing/conversion-events";
 
 type DocumentTemplateSummary = {
   id: string;
@@ -101,6 +102,10 @@ export default function DocumentPreviewPage(props: PageProps) {
         templateId: selectedTemplateId,
         documentType: "PDF",
         audience: selectedAudience,
+      });
+      trackFirstConversionEvent("first_export_generated", {
+        format: "pdf",
+        source: "document_preview",
       });
       setGeneratedOk(true);
     } catch (error) {

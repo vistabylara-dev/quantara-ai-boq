@@ -50,4 +50,16 @@ describe("first-value activation journey", () => {
     expect(clientPicker).toContain('apiClient.post<Client>("/api/clients", { name: quickCreateName })');
     expect(clientPicker).toContain("projects.clientPicker.quickCreate");
   });
+
+  it("records first export only after successful BOQ document generation", () => {
+    const documentsPage = source("src/app/projects/[projectId]/documents/page.tsx");
+    const previewPage = source("src/app/projects/[projectId]/documents/preview/page.tsx");
+    const tayqanPanel = source("src/components/tayqan/tayqan-work-order-panel.tsx");
+
+    for (const exportSurface of [documentsPage, previewPage, tayqanPanel]) {
+      expect(exportSurface).toContain('trackFirstConversionEvent("first_export_generated"');
+      expect(exportSurface.indexOf('trackFirstConversionEvent("first_export_generated"'))
+        .toBeGreaterThan(exportSurface.indexOf("apiClient.post"));
+    }
+  });
 });

@@ -397,6 +397,8 @@ function sourceFileIdsFromProgress(
 
 const TAYQAN_MEASUREMENT_LEASE_CODE = "TAYQAN_MEASUREMENT_RUNNING";
 const TAYQAN_MEASUREMENT_LEASE_STALE_MS = 15 * 60 * 1_000;
+const TAYQAN_AI_DRAFT_LEASE_CODE = "TAYQAN_AI_DRAFT_RUNNING";
+const TAYQAN_AI_DRAFT_LEASE_STALE_MS = 15 * 60 * 1_000;
 const TAYQAN_EXCEPTION_EVENT_BATCH_SIZE = 25;
 
 async function claimTayqanMeasurementLease(
@@ -430,6 +432,63 @@ async function releaseTayqanMeasurementLease(actor: CurrentActor, orderId: strin
   await prisma.tayqanWorkOrder.updateMany({
     where: { id: orderId, companyId: actor.companyId, blockerCode: TAYQAN_MEASUREMENT_LEASE_CODE, blockerMessage: leaseToken },
     data: { blockerCode: null, blockerMessage: null, blockerJson: Prisma.DbNull, lastAdvancedAt: new Date() },
+  });
+}
+
+async function claimTayqanAiDraftLease(
+  actor: CurrentActor,
+  order: Awaited<ReturnType<typeof loadOrder>>,
+): Promise<string | null> {
+  const leaseToken = `tayqan-ai-draft:${randomUUID()}`;
+  const now = new Date();
+  const staleBefore = new Date(now.getTime() - TAYQAN_AI_DRAFT_LEASE_STALE_MS);
+  const claimed = await prisma.$transaction(async (tx) => {
+    const result = await tx.tayqanWorkOrder.updateMany({
+      where: {
+        id: order.id,
+        companyId: actor.companyId,
+        status: TayqanWorkStatus.RUNNING,
+        OR: [
+          { blockerCode: null },
+          { blockerCode: TAYQAN_AI_DRAFT_LEASE_CODE, lastAdvancedAt: { lt: staleBefore } },
+        ],
+      },
+      data: {
+        blockerCode: TAYQAN_AI_DRAFT_LEASE_CODE,
+        blockerMessage: leaseToken,
+        blockerJson: Prisma.DbNull,
+        lastAdvancedAt: now,
+      },
+    });
+    if (result.count !== 1) return false;
+    await tx.tayqanWorkEvent.create({
+      data: {
+        companyId: actor.companyId,
+        workOrderId: order.id,
+        stage: order.stage,
+        eventType: "TAYQAN_AI_DRAFT_LEASE_ACQUIRED",
+        payloadJson: jsonObject({ staleAfterMinutes: TAYQAN_AI_DRAFT_LEASE_STALE_MS / 60_000 }),
+      },
+    });
+    return true;
+  });
+  return claimed ? leaseToken : null;
+}
+
+async function releaseTayqanAiDraftLease(actor: CurrentActor, orderId: string, leaseToken: string) {
+  await prisma.tayqanWorkOrder.updateMany({
+    where: {
+      id: orderId,
+      companyId: actor.companyId,
+      blockerCode: TAYQAN_AI_DRAFT_LEASE_CODE,
+      blockerMessage: leaseToken,
+    },
+    data: {
+      blockerCode: null,
+      blockerMessage: null,
+      blockerJson: Prisma.DbNull,
+      lastAdvancedAt: new Date(),
+    },
   });
 }
 
@@ -1390,7 +1449,7 @@ async function advanceSourceProcessing(actor: CurrentActor, projectSlug: string,
         const leasedProgress = parseProgress(leasedOrder.progressJson);
         if (leasedProgress.tayqanMeasurement?.version === TAYQAN_MEASUREMENT_VERSION) {
           await releaseTayqanMeasurementLease(actor, order.id, leaseToken);
-          return prepareTayqanAiDraft(actor, projectSlug, leasedOrder);
+          return advanceTayqanAiDraftWithLease(actor, projectSlug, leasedOrder);
         }
 
         const frozenSourceFileIds = sourceFileIdsFromProgress(leasedOrder);
@@ -1409,7 +1468,7 @@ async function advanceSourceProcessing(actor: CurrentActor, projectSlug: string,
         
         if (drawingPagesCount === 0 && extractedEntitiesCount > 0) {
            await releaseTayqanMeasurementLease(actor, order.id, leaseToken);
-           return prepareTayqanAiDraft(actor, projectSlug, leasedOrder);
+           return advanceTayqanAiDraftWithLease(actor, projectSlug, leasedOrder);
         }
 
         const measurement = await prepareTayqanMeasurementProposals(
@@ -1506,7 +1565,7 @@ async function advanceSourceProcessing(actor: CurrentActor, projectSlug: string,
       }
     }
 
-    return prepareTayqanAiDraft(actor, projectSlug, measuredOrder);
+    return advanceTayqanAiDraftWithLease(actor, projectSlug, measuredOrder);
   }
 
   const next = await moveStage(actor, order, TayqanWorkStage.EVIDENCE_REVIEW, "SOURCE_PROCESSING_COMPLETE");
@@ -1611,64 +1670,45 @@ async function prepareTayqanAiDraft(
   projectSlug: string,
   order: Awaited<ReturnType<typeof loadOrder>>,
 ) {
-
-
-  const boqId =
-    await ensureWorkingBoq(
-      actor,
-      projectSlug,
-      order,
-    );
-
   const selectedSourceFileIds =
     sourceFileIdsFromProgress(order);
-
-  const result =
-    await generateAiDraftBoq(
-      actor,
-      projectSlug,
-      {
-        targetBoqId: boqId,
-        projectFileIds: selectedSourceFileIds,
-        quantityMode: "TAYQAN_MEASUREMENT_PROPOSAL",
-      },
-    );
-
   const progress =
     parseProgress(order.progressJson);
 
-  const aiDraft: NonNullable<
-    WorkProgress["aiDraft"]
-  > = {
-    boqId: result.boqId,
-    addedCount: result.addedCount,
-    skippedCount: result.skippedCount,
-    alreadyPresentCount:
-      result.alreadyPresentCount,
-    unreviewedAddedCount:
-      result.unreviewedAddedCount,
-    reviewedAddedCount:
-      result.reviewedAddedCount,
-  };
+  let boqId = order.boqId;
+  let aiDraft = progress.aiDraft ?? null;
 
-  await updateOrder(
-    actor,
-    order.id,
-    {
-      boqId,
-      progressJson: jsonObject({
-        ...progress,
-        aiDraft,
-      }),
-      lastAdvancedAt: new Date(),
-    },
-    "AI_DRAFT_BOQ_GENERATED",
-    {
-      ...aiDraft,
-      selectedSourceCount:
-        selectedSourceFileIds.length,
-    },
-  );
+  // Resume a durable draft checkpoint after a disconnect instead of
+  // regenerating or reimporting the same extracted entities.
+  if (!aiDraft || !boqId || aiDraft.boqId !== boqId) {
+    boqId = await ensureWorkingBoq(actor, projectSlug, order);
+    const result = await generateAiDraftBoq(actor, projectSlug, {
+      targetBoqId: boqId,
+      projectFileIds: selectedSourceFileIds,
+      quantityMode: "TAYQAN_MEASUREMENT_PROPOSAL",
+    });
+
+    aiDraft = {
+      boqId: result.boqId,
+      addedCount: result.addedCount,
+      skippedCount: result.skippedCount,
+      alreadyPresentCount: result.alreadyPresentCount,
+      unreviewedAddedCount: result.unreviewedAddedCount,
+      reviewedAddedCount: result.reviewedAddedCount,
+    };
+
+    await updateOrder(
+      actor,
+      order.id,
+      {
+        boqId,
+        progressJson: jsonObject({ ...progress, aiDraft }),
+        lastAdvancedAt: new Date(),
+      },
+      "AI_DRAFT_BOQ_GENERATED",
+      { ...aiDraft, selectedSourceCount: selectedSourceFileIds.length },
+    );
+  }
 
   const loaded =
     await loadOrder(
@@ -1688,9 +1728,16 @@ async function prepareTayqanAiDraft(
   const usableEntities = activeEntities.filter(e => e.label && e.label.trim().length > 0);
   
   const boq = await getBOQRecord(actor.companyId, boqId);
+  if (!boq) {
+    throw new AppError(
+      "TAYQAN_AI_DRAFT_BOQ_NOT_FOUND",
+      "TAYQAN could not reload the generated review BOQ. Retry this same assignment; completed evidence remains preserved.",
+      503,
+    );
+  }
   
   const representedEntityIds = new Set(
-    boq!.sections.flatMap(s => s.items)
+    boq.sections.flatMap(s => s.items)
       .map(i => i.quantityProvenance?.extractedEntityId ?? getAiDraftExtractedEntityId(i.sourceReference))
       .filter(id => id !== null)
   );
@@ -1758,6 +1805,33 @@ async function prepareTayqanAiDraft(
         ),
     },
   );
+}
+
+async function advanceTayqanAiDraftWithLease(
+  actor: CurrentActor,
+  projectSlug: string,
+  order: Awaited<ReturnType<typeof loadOrder>>,
+) {
+  const leaseToken = await claimTayqanAiDraftLease(actor, order);
+  if (!leaseToken) return toState(await loadOrder(actor.companyId, order.id));
+
+  try {
+    const leasedOrder = await loadOrder(actor.companyId, order.id);
+    return await prepareTayqanAiDraft(actor, projectSlug, leasedOrder);
+  } catch (error) {
+    try {
+      await releaseTayqanAiDraftLease(actor, order.id, leaseToken);
+    } catch (releaseError) {
+      console.error("[TAYQAN-WORK-ORDER] AI draft lease release failed", releaseError);
+    }
+    if (error instanceof AppError) throw error;
+    console.error("[TAYQAN-WORK-ORDER] AI draft handoff failed", error);
+    throw new AppError(
+      "TAYQAN_AI_DRAFT_HANDOFF_FAILED",
+      "TAYQAN prepared the review BOQ but could not complete its work-order handoff. Retry this same assignment; the generated BOQ and completed evidence remain preserved.",
+      503,
+    );
+  }
 }
 
 async function advanceAiDraftProfessionalReview(
@@ -2425,7 +2499,7 @@ export async function advanceTayqanWorkOrder(actor: CurrentActor, projectIdentif
         && !parseProgress(order.progressJson)
           .aiDraft
       ) {
-        return prepareTayqanAiDraft(
+        return advanceTayqanAiDraftWithLease(
           actor,
           project.slug,
           order,

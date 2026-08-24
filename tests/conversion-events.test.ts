@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { trackConversionEvent } from "../src/lib/marketing/conversion-events";
+import { trackConversionEvent, trackFirstConversionEvent } from "../src/lib/marketing/conversion-events";
 
 describe("conversion events", () => {
   afterEach(() => {
@@ -29,5 +29,21 @@ describe("conversion events", () => {
   it("does nothing during server rendering", () => {
     vi.stubGlobal("window", undefined);
     expect(() => trackConversionEvent("registration_started")).not.toThrow();
+  });
+
+  it("records a first-value event once without sending product identifiers", () => {
+    const dataLayer: unknown[] = [];
+    const storage = new Map<string, string>();
+    vi.stubGlobal("window", {
+      dataLayer,
+      localStorage: {
+        getItem: (key: string) => storage.get(key) ?? null,
+        setItem: (key: string, value: string) => storage.set(key, value),
+      },
+    });
+
+    expect(trackFirstConversionEvent("first_export_generated", { format: "pdf", source: "project_documents" })).toBe(true);
+    expect(trackFirstConversionEvent("first_export_generated", { format: "docx", source: "tayqan_draft_boq" })).toBe(false);
+    expect(dataLayer).toEqual([{ event: "first_export_generated", format: "pdf", source: "project_documents" }]);
   });
 });

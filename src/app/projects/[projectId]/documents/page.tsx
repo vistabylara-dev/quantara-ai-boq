@@ -11,6 +11,7 @@ import { GuideTip } from "@/components/guidance/guide-tip";
 import { CommercialUnlockPanel } from "@/components/commercial/commercial-unlock-panel";
 import type { CommercialAccessDecision } from "@/lib/commercial/commercial-types";
 import { useTranslations } from "@/lib/i18n/locale-provider";
+import { trackFirstConversionEvent } from "@/lib/marketing/conversion-events";
 
 type DocumentTemplateSummary = {
   id: string;
@@ -212,6 +213,10 @@ export default function ProjectDocumentsPage(props: PageProps) {
         templateId: overrides?.templateId ?? selectedTemplateId,
         documentType: type,
         audience: overrides?.audience ?? selectedAudience,
+      });
+      trackFirstConversionEvent("first_export_generated", {
+        format: type.toLowerCase(),
+        source: "project_documents",
       });
       await refreshHistory();
     } catch (error) {

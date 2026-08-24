@@ -1007,6 +1007,8 @@ describe("TAYQAN senior work-order governance wiring", () => {
     expect(workOrder).toContain("heartbeatTayqanMeasurementLease");
     expect(workOrder).toContain("TAYQAN_MEASUREMENT_EXCEPTION_REGISTER");
     expect(workOrder).toContain("exceptionRegisterRunId");
+    expect(workOrder).toContain("TAYQAN_AI_DRAFT_LEASE_CODE");
+    expect(workOrder).toContain("advanceTayqanAiDraftWithLease");
   });
 
   it("serializes automatic work-order advancement so expensive Senior QS calls cannot overlap", () => {
@@ -1084,4 +1086,3 @@ describe("TAYQAN senior work-order governance wiring", () => {
   });
 
 });
-

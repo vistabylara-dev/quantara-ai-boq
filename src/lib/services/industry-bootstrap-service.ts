@@ -22,7 +22,13 @@ export type IndustryBootstrapResult = {
   totalIndustryEngines: number;
 };
 
-export async function bootstrapIndustryEngines(): Promise<IndustryBootstrapResult> {
+type AuthoritativeIndustryResult = {
+  industriesCreated: number;
+  industriesUpdated: number;
+  industryIds: string[];
+};
+
+async function upsertAuthoritativeIndustryEngines(): Promise<AuthoritativeIndustryResult> {
   let industriesCreated = 0;
   let industriesUpdated = 0;
   const industryIds: string[] = [];
@@ -50,6 +56,29 @@ export async function bootstrapIndustryEngines(): Promise<IndustryBootstrapResul
     else industriesCreated += 1;
     industryIds.push(industry.id);
   }
+
+  return { industriesCreated, industriesUpdated, industryIds };
+}
+
+/**
+ * Repairs only the current company when it has no industry links at all. Existing enabled or
+ * disabled configuration is authoritative and is never changed. This makes the authenticated
+ * industry-list boundary safe for companies created while production reference data was empty.
+ */
+export async function ensureCompanyIndustryEngines(companyId: string): Promise<boolean> {
+  const existingLinks = await prisma.companyIndustryEngine.count({ where: { companyId } });
+  if (existingLinks > 0) return false;
+
+  const { industryIds } = await upsertAuthoritativeIndustryEngines();
+  await prisma.companyIndustryEngine.createMany({
+    data: industryIds.map((industryEngineId) => ({ companyId, industryEngineId, enabled: true })),
+    skipDuplicates: true,
+  });
+  return true;
+}
+
+export async function bootstrapIndustryEngines(): Promise<IndustryBootstrapResult> {
+  const { industriesCreated, industriesUpdated, industryIds } = await upsertAuthoritativeIndustryEngines();
 
   // Backfill only companies with zero enabled links — never touch a company that has
   // deliberately disabled industries (enabled: false rows still count as "has links").

@@ -558,7 +558,15 @@ export async function finalizeDrawingUpload(actor: CurrentActor, projectId: stri
 
   const checksum = await computeStreamedChecksum(storage, session.storageKey);
   const duplicate = await findDuplicateByChecksum(actor.companyId, canonicalProjectId, checksum);
-  const pageCount = session.extension === "pdf" ? await extractPdfPageCount(await storage.getObject(session.storageKey)).catch(() => null) : null;
+
+  // Direct uploads must finalize on the request's critical path. Pulling the
+  // complete Blob back into a Vercel Function and booting pdf-parse here can
+  // outlive the function timeout even for a small, valid drawing, leaving the
+  // browser permanently stuck on “Finalizing…”. Page count is optional
+  // enrichment (never a security or acceptance gate) and is populated by the
+  // existing preprocessing/page-rendering workflow after the ProjectFile is
+  // safely persisted.
+  const pageCount = null;
 
   const { discipline, drawingType, issueDate, sheetNumber, preparedBy, checkedBy, approvedBy, notes, drawingNumber, title, revision, scale } = input.metadata;
 

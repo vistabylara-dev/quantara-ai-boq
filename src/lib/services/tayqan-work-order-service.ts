@@ -1505,19 +1505,15 @@ async function advanceSourceProcessing(actor: CurrentActor, projectSlug: string,
           { length: Math.ceil(measurement.exceptions.length / TAYQAN_EXCEPTION_EVENT_BATCH_SIZE) },
           (_, index) => measurement.exceptions.slice(index * TAYQAN_EXCEPTION_EVENT_BATCH_SIZE, (index + 1) * TAYQAN_EXCEPTION_EVENT_BATCH_SIZE),
         );
-        for (let index = 0; index < exceptionBatches.length; index += 1) {
-          const batch = exceptionBatches[index]!;
-          await appendWorkEvent(actor.companyId, order.id, leasedOrder.stage, "TAYQAN_MEASUREMENT_EXCEPTION_REGISTER", {
-            version: TAYQAN_MEASUREMENT_VERSION, registerRunId: leaseToken, batchIndex: index + 1, batchCount: exceptionBatches.length, totalExceptionCount: measurement.exceptions.length,
-            exceptions: batch.map((exception) => ({ kind: exception.kind, message: exception.message, pageIds: exception.pageIds, relatedEntityId: exception.relatedEntityId })),
-          });
-        }
         const completionPayload = {
           version: TAYQAN_MEASUREMENT_VERSION, measuredSubjectCount: measurement.measuredSubjectCount, createdCalculationCount: measurement.createdCalculationCount,
           reusedCalculationCount: measurement.reusedCalculationCount, exceptionCount: measurement.exceptionCount,
           exceptionKinds: [...new Set(measurement.exceptions.map((exception) => exception.kind))], seniorReview: measurement.seniorReview,
           exceptionRegisterRunId: leaseToken, exceptionRegisterBatchCount: exceptionBatches.length,
         };
+        // Lock frame: the durable measurement checkpoint and every audit event
+        // are one commit. A timeout or disconnect can no longer leave partial
+        // exception events behind while the work order still looks unfinished.
         await prisma.$transaction(async (tx) => {
           const completed = await tx.tayqanWorkOrder.updateMany({
             where: { id: order.id, companyId: actor.companyId, blockerCode: TAYQAN_MEASUREMENT_LEASE_CODE, blockerMessage: leaseToken },
@@ -1531,9 +1527,41 @@ async function advanceSourceProcessing(actor: CurrentActor, projectSlug: string,
             },
           });
           if (completed.count !== 1) throw new ConflictError("TAYQAN_MEASUREMENT_LEASE_LOST", "TAYQAN measurement execution ownership changed before completion; competing results were not committed to the work order.");
+          for (let index = 0; index < exceptionBatches.length; index += 1) {
+            const batch = exceptionBatches[index]!;
+            await tx.tayqanWorkEvent.create({
+              data: {
+                companyId: actor.companyId,
+                workOrderId: order.id,
+                stage: leasedOrder.stage,
+                eventType: "TAYQAN_MEASUREMENT_EXCEPTION_REGISTER",
+                payloadJson: jsonObject({
+                  version: TAYQAN_MEASUREMENT_VERSION,
+                  registerRunId: leaseToken,
+                  batchIndex: index + 1,
+                  batchCount: exceptionBatches.length,
+                  totalExceptionCount: measurement.exceptions.length,
+                  exceptions: batch.map((exception) => ({
+                    kind: exception.kind,
+                    message: exception.message,
+                    pageIds: exception.pageIds,
+                    relatedEntityId: exception.relatedEntityId,
+                  })),
+                }),
+              },
+            });
+          }
           await tx.tayqanWorkEvent.create({ data: { companyId: actor.companyId, workOrderId: order.id, stage: leasedOrder.stage, eventType: "TAYQAN_MEASUREMENT_COMPLETE", payloadJson: jsonObject(completionPayload) } });
-        });
-        await persistConversationStatus(actor.companyId, order.intakeSessionId, "tayqan.hire.workflow.measurementComplete", { count: measurement.measuredSubjectCount });
+        }, { maxWait: 10_000, timeout: 30_000 });
+
+        // Conversation copy is helpful UI telemetry, not engineering state.
+        // Once the atomic checkpoint commits, a secondary message-write fault
+        // must never make a completed paid assignment look failed or rerun it.
+        try {
+          await persistConversationStatus(actor.companyId, order.intakeSessionId, "tayqan.hire.workflow.measurementComplete", { count: measurement.measuredSubjectCount });
+        } catch (statusError) {
+          console.error("[TAYQAN-WORK-ORDER] measurement completion status update failed after durable commit", statusError);
+        }
         measuredOrder = await loadOrder(actor.companyId, order.id);
       } catch (error) {
         // Lease cleanup is best-effort here. Never let a secondary cleanup

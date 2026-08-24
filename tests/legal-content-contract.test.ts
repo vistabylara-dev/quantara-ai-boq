@@ -86,4 +86,29 @@ describe("substantive legal page contracts", () => {
     expect(html).toContain(`<h1 class="mb-4 text-4xl font-bold text-slate-900 dark:text-white">${ar.legal.privacy.title}</h1>`);
     expect(html).not.toMatch(/legal\.[A-Za-z0-9.]+/);
   });
+
+  it("defaults analytics and advertising consent to denied and offers a bilingual choice", () => {
+    const rootLayout = readFileSync(join(repoRoot, "src", "app", "layout.tsx"), "utf8");
+    const marketingLayout = readFileSync(
+      join(repoRoot, "src", "app", "(marketing)", "layout.tsx"),
+      "utf8",
+    );
+    const banner = readFileSync(
+      join(repoRoot, "src", "components", "legal", "analytics-consent-banner.tsx"),
+      "utf8",
+    );
+
+    expect(rootLayout.indexOf("GOOGLE_CONSENT_DEFAULT_SCRIPT")).toBeLessThan(
+      rootLayout.indexOf("GOOGLE_TAG_MANAGER_SCRIPT"),
+    );
+    expect(rootLayout).toContain("analytics_storage: storedConsent === 'granted' ? 'granted' : 'denied'");
+    expect(rootLayout).toContain("ad_storage: 'denied'");
+    expect(rootLayout).not.toContain("googletagmanager.com/ns.html");
+    expect(marketingLayout).toContain("<AnalyticsConsentBanner />");
+    expect(banner).toContain('ANALYTICS_CONSENT_KEY = "quantara-analytics-consent"');
+    expect(banner).toContain("Essential only");
+    expect(banner).toContain("Allow analytics");
+    expect(banner).toContain("الأساسي فقط");
+    expect(banner).toContain("السماح بالتحليلات");
+  });
 });

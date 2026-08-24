@@ -236,6 +236,7 @@ const policies: Record<LegalPolicyId, LegalPolicyConfig> = {
             ["legal.cookies.driveName", "legal.cookies.drivePurpose", "legal.cookies.driveDuration"],
             ["legal.cookies.proposalName", "legal.cookies.proposalPurpose", "legal.cookies.proposalDuration"],
             ["legal.cookies.themeName", "legal.cookies.themePurpose", "legal.cookies.themeDuration"],
+            ["legal.cookies.analyticsConsentName", "legal.cookies.analyticsConsentPurpose", "legal.cookies.analyticsConsentDuration"],
             ["legal.cookies.checkoutName", "legal.cookies.checkoutPurpose", "legal.cookies.checkoutDuration"],
           ],
         },

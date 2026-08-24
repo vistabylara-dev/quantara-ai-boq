@@ -18,7 +18,8 @@ const publicPart1 = [homepage, features, pricing, salesTruth, llms].join("\n");
 
 describe("public sales truth part 1", () => {
   it("leads with the current outcome and surfaces AI Draft BOQ plus TAYQAN", () => {
-    expect(salesTruth).toContain("From Project Files to a Reviewable BOQ — Faster");
+    expect(salesTruth).toContain("Deliver a Professional BOQ — With AI Speed and Full Engineer Control");
+    expect(salesTruth).toContain("complete every item with direct engineer control");
     expect(salesTruth).toContain("AI Draft BOQ");
     expect(salesTruth).toContain("TAYQAN — AI Quantity Surveyor");
     expect(homepage).toContain("sales.heroTitle");

@@ -1,16 +1,18 @@
 # Quantara
 
-> Quantara is AI-assisted BOQ measurement and quantity calculation software for construction professionals. It brings supported project sources, reviewable extraction, AI Draft BOQ, guided measurement, deterministic quantity calculations, validation and professional BOQ outputs into one controlled workflow.
+> Quantara is hybrid AI-assisted and engineer-controlled BOQ software for construction professionals. Teams can use AI where supported, directly create or complete every BOQ item where professional input is needed, calculate quantities with visible formulas, manage rates and revisions, and deliver professional outputs from one controlled workflow.
 
 ## What Quantara does
 
-Quantara helps construction professionals move from supported project evidence toward a reviewable BOQ. Supported workflows include text-based PDF table-row extraction, structured XLSX/CSV import, reviewed extracted information, guided BOQ measurement, visible deterministic engineering calculations, voice-assisted measurement and BOQ editing, controlled Google Drive import, supported Autodesk / AutoCAD DWG analysis, a company library of reusable BOQ items, secure token-gated client proposal links, BOQ validation and professional document outputs.
+Quantara helps construction professionals complete and deliver a professional BOQ today. Supported workflows include complete BOQ creation and direct editing, text-based PDF table-row extraction, structured XLSX/CSV import, reviewed extracted information, guided BOQ measurement, visible deterministic engineering calculations, controlled rates and quantities, voice-assisted measurement and BOQ editing, controlled Google Drive import, supported Autodesk / AutoCAD DWG analysis, specialist industry libraries, a company library of reusable BOQ items, secure token-gated client proposal links, BOQ validation and professional document outputs.
+
+AI is an accelerator rather than a requirement for completion. When a drawing, scan, description or dimension needs professional interpretation, an authorized user can directly create, measure, correct, price and review the required BOQ item in the same project. Current automation boundaries do not prevent the team from completing the BOQ.
 
 AI Draft BOQ can assemble usable extracted evidence into an editable draft before every extraction issue has been individually resolved. Supported source and quantity provenance is preserved where available. Missing quantity or unit information remains visible for professional completion instead of being invented, and commercial rates are not silently fabricated. AI Draft BOQ is a draft workflow and is not automatic professional approval.
 
 Public content and capability statements were reviewed on 20 August 2026. Runtime availability and provider-dependent features must still be confirmed for the applicable account, configuration and entitlement.
 
-Current supported source workflows store extractable text from text-based PDFs, create review candidates only from supported detected table rows, and import structured XLSX or CSV files. Plain PDF paragraph text is not converted into BOQ candidates. Image-only pages can be detected but require manual transcription. Google Drive import requires an authorized controlled-access connection. BOQ documents can use supported PDF, XLSX, CSV, DOCX and HTML flows; technical-report generation is limited to DOCX in supported configured environments, and durable production storage must be confirmed for the active deployment.
+Current supported source workflows store extractable text from text-based PDFs, create review candidates only from supported detected table rows, and import structured XLSX or CSV files. Plain PDF paragraph text is not converted into BOQ candidates. Image-only pages can be detected but require professional transcription. Google Drive import requires an authorized controlled-access connection. BOQ documents can use supported PDF, XLSX, CSV, DOCX and HTML flows; technical-report generation is limited to DOCX in supported configured environments, and durable production storage must be confirmed for the active deployment.
 
 ## TAYQAN - AI Quantity Surveyor / Digital QS
 
@@ -36,7 +38,7 @@ A user chooses a public plan, creates or signs in to an account, and continues t
 
 ## Important capability boundaries
 
-Quantara does not currently perform OCR text extraction from scanned or image-only PDFs. Image-only pages can be detected, but their content requires manual transcription.
+Quantara does not currently perform OCR text extraction from scanned or image-only PDFs. Image-only pages can be detected, but their content requires professional transcription.
 
 Quantara does not make a blanket claim of fully unattended computer-vision takeoff from arbitrary drawing geometry. This limitation does not apply to the available guided BOQ measurement, deterministic quantity calculation, or supported Autodesk / AutoCAD DWG analysis workflows.
 

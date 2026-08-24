@@ -3,14 +3,14 @@ import type { Locale } from "@/lib/i18n/config";
 const FEATURE_SALES = {
   en: {
     eyebrow: "Quantara capabilities",
-    title: "Everything you need to move from project information to a professional BOQ",
+    title: "Everything your team needs to complete and deliver a professional BOQ",
     intro:
-      "Bring project sources, AI-assisted BOQ preparation, guided measurement, calculations, revisions, integrations and professional outputs into one controlled construction workflow.",
+      "Combine AI-assisted preparation with complete engineer-controlled BOQ creation, guided measurement, visible calculations, rates, revisions, industry libraries and professional outputs in one controlled construction workflow.",
     featureCountLabel: "Core workflow capabilities",
-    integrationCountLabel: "Integration pages",
+    integrationCountLabel: "Documented integration workflows",
     integrationTitle: "Connect Quantara to the construction tools your team already uses",
     integrationBody:
-      "Explore Quantara integration pages across BIM, CAD, common data environments, cloud storage, construction management, structural engineering and estimating platforms.",
+      "Explore documented workflows across BIM, CAD, common data environments, cloud storage, construction management, structural engineering and estimating platforms. Each page identifies whether the connection is active, controlled access, file-based or planned.",
     integrationCta: "Explore all integrations",
     groups: [
       {
@@ -18,7 +18,7 @@ const FEATURE_SALES = {
         body: "Keep project evidence organized before it becomes commercial BOQ data.",
         features: [
           ["Project-first workspaces", "Keep project files, BOQ records, revisions and outputs together inside a dedicated workspace."],
-          ["Manual project uploads", "Bring supported PDF and project documents directly into the project workflow."],
+          ["Direct project uploads", "Bring supported PDF and project documents directly into the project workflow."],
           ["Structured XLSX and CSV imports", "Import structured schedules and BOQ data for review and controlled use."],
           ["Hybrid-source projects", "Combine documents, spreadsheets, connected applications and professional input in one project."],
           ["Source normalization", "Turn varied project information into consistent, reviewable BOQ records."],
@@ -29,9 +29,10 @@ const FEATURE_SALES = {
       },
       {
         title: "AI-assisted BOQ work",
-        body: "Use AI to move the work forward while professional control remains visible.",
+        body: "Use AI to accelerate supported work, then complete every remaining BOQ requirement under professional control.",
         features: [
-          ["AI Draft BOQ", "Create an editable BOQ draft from usable project evidence while unresolved details remain visible."],
+          ["AI Draft BOQ", "Create an editable BOQ from usable project evidence while unresolved details remain visible for completion."],
+          ["Complete BOQ creation", "Create sections and items, control quantities, units, descriptions and rates, and complete the BOQ even when AI extraction is not suitable."],
           ["Voice instructions", "Use spoken instructions to support BOQ and measurement workflows."],
           ["Typed instructions", "Use text instructions to guide structured BOQ work and updates."],
           ["Structured AI proposals", "Review AI-proposed changes before they become governed project data."],
@@ -55,7 +56,7 @@ const FEATURE_SALES = {
         title: "Connected project ecosystem",
         body: "Bring external construction and project information into the Quantara workflow.",
         features: [
-          ["Construction software integrations", "Discover Quantara integration workflows across 43 construction, BIM, CAD, CDE, storage, structural and estimating applications."],
+          ["Construction software workflows", "Discover 43 documented construction, BIM, CAD, CDE, storage, structural and estimating workflows with an explicit connection status on each page."],
           ["Google Drive project sources", "Bring selected project files from Google Drive into the project workflow."],
           ["Autodesk and AutoCAD workflows", "Use Autodesk-connected project and DWG information within a review-led Quantara workflow."],
           ["Catalogue and industry packages", "Use governed project, company and industry data where it fits the project workflow."],
@@ -75,9 +76,9 @@ const FEATURE_SALES = {
         ],
       },
     ],
-    controlTitle: "Professional control remains part of the workflow",
+    controlTitle: "Professional control is what makes the workflow complete",
     controlBody:
-      "Quantara accelerates structured BOQ work, but project information, measurements, rates and issued outputs still require the responsible construction professional's review.",
+      "AI is an accelerator, not a blocker. Your team retains direct control to create, measure, calculate, price, correct and review the BOQ whenever professional input is needed, then generate the required output from the same controlled record.",
     ctaTitle: "Ready to put the full Quantara workflow to work?",
     ctaBody:
       "Create your account, review pricing, or explore TAYQAN when you want Digital QS capacity to carry the work forward with you.",
@@ -87,14 +88,14 @@ const FEATURE_SALES = {
   },
   ar: {
     eyebrow: "قدرات Quantara",
-    title: "كل ما تحتاجه للانتقال من معلومات المشروع إلى BOQ مهني",
+    title: "كل ما يحتاجه فريقك لإكمال وتسليم BOQ مهني",
     intro:
-      "اجمع مصادر المشروع، وإعداد BOQ بمساعدة الذكاء الاصطناعي، والقياس الموجّه، والحسابات، والمراجعات، والتكاملات والمخرجات المهنية ضمن سير عمل إنشائي واحد ومنضبط.",
+      "اجمع الإعداد بمساعدة الذكاء الاصطناعي مع إنشاء BOQ متكامل بتحكم هندسي، والقياس الموجّه، والحسابات الواضحة، والأسعار، والمراجعات، ومكتبات القطاعات والمخرجات المهنية ضمن سير عمل واحد.",
     featureCountLabel: "قدرات سير العمل الأساسية",
-    integrationCountLabel: "صفحات التكامل",
+    integrationCountLabel: "سير عمل تكامل موثق",
     integrationTitle: "اربط Quantara بأدوات البناء والمشاريع التي يستخدمها فريقك",
     integrationBody:
-      "استكشف صفحات تكامل Quantara مع منصات BIM وCAD وبيئات البيانات المشتركة والتخزين السحابي وإدارة الإنشاءات والهندسة الإنشائية والتقدير.",
+      "استكشف سير العمل الموثق مع منصات BIM وCAD وبيئات البيانات المشتركة والتخزين السحابي وإدارة الإنشاءات والهندسة والتقدير. وتوضح كل صفحة ما إذا كان الاتصال فعالاً أو خاضعاً للتحكم أو قائماً على الملفات أو مخططاً له.",
     integrationCta: "استكشف جميع التكاملات",
     groups: [
       {
@@ -113,9 +114,10 @@ const FEATURE_SALES = {
       },
       {
         title: "عمل BOQ بمساعدة الذكاء الاصطناعي",
-        body: "استخدم الذكاء الاصطناعي لدفع العمل إلى الأمام مع إبقاء التحكم المهني واضحاً.",
+        body: "استخدم الذكاء الاصطناعي لتسريع العمل المدعوم، ثم استكمل كل متطلبات BOQ المتبقية تحت التحكم المهني.",
         features: [
-          ["AI Draft BOQ", "أنشئ مسودة BOQ قابلة للتحرير من أدلة المشروع القابلة للاستخدام مع إبقاء التفاصيل غير المحسومة ظاهرة."],
+          ["AI Draft BOQ", "أنشئ BOQ قابلاً للتحرير من معلومات المشروع القابلة للاستخدام مع إبقاء التفاصيل غير المحسومة ظاهرة للاستكمال."],
+          ["إنشاء BOQ متكامل", "أنشئ الأقسام والبنود وتحكم بالكميات والوحدات والأوصاف والأسعار وأكمل BOQ حتى عندما لا يكون الاستخراج بالذكاء الاصطناعي مناسباً."],
           ["الأوامر الصوتية", "استخدم التعليمات الصوتية لدعم سير عمل BOQ والقياس."],
           ["الأوامر النصية", "استخدم التعليمات المكتوبة لتوجيه عمل BOQ المنظم وتحديثاته."],
           ["مقترحات AI المنظمة", "راجع التغييرات المقترحة بالذكاء الاصطناعي قبل أن تصبح بيانات مشروع خاضعة للضوابط."],
@@ -139,7 +141,7 @@ const FEATURE_SALES = {
         title: "منظومة المشروع المتصلة",
         body: "اجلب معلومات البناء والمشروع الخارجية إلى سير عمل Quantara.",
         features: [
-          ["تكاملات برامج البناء", "استكشف تكامل Quantara مع 43 تطبيقاً للبناء وBIM وCAD وCDE والتخزين والهندسة والتقدير."],
+          ["سير عمل برامج البناء", "استكشف 43 سير عمل موثقاً للبناء وBIM وCAD وCDE والتخزين والهندسة والتقدير، مع حالة اتصال واضحة في كل صفحة."],
           ["مصادر Google Drive", "اجلب ملفات المشروع المحددة من Google Drive إلى سير عمل المشروع."],
           ["سير عمل Autodesk وAutoCAD", "استخدم معلومات Autodesk وDWG داخل سير عمل Quantara الخاضع للمراجعة."],
           ["الكتالوج وحزم القطاعات", "استخدم بيانات المشروع والشركة والقطاع المنظمة عندما تناسب سير عمل المشروع."],
@@ -159,9 +161,9 @@ const FEATURE_SALES = {
         ],
       },
     ],
-    controlTitle: "يبقى التحكم المهني جزءاً من سير العمل",
+    controlTitle: "التحكم المهني هو ما يجعل سير العمل مكتملاً",
     controlBody:
-      "تسرّع Quantara عمل BOQ المنظم، لكن معلومات المشروع والقياسات والأسعار والمخرجات الصادرة تظل بحاجة إلى مراجعة المهني المسؤول.",
+      "الذكاء الاصطناعي أداة لتسريع العمل وليس عائقاً. يحتفظ فريقك بالتحكم المباشر لإنشاء BOQ وقياسه وحسابه وتسعيره وتصحيحه ومراجعته كلما لزم المدخل المهني، ثم إنشاء المخرج المطلوب من السجل المنضبط نفسه.",
     ctaTitle: "هل أنت مستعد لاستخدام سير عمل Quantara الكامل؟",
     ctaBody:
       "أنشئ حسابك، وراجع الأسعار، أو استكشف TAYQAN عندما تريد قدرة مسّاح كميات رقمي تساعدك في دفع العمل إلى الأمام.",

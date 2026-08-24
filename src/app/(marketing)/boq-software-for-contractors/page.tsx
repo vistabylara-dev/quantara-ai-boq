@@ -10,7 +10,7 @@ export default function Page() {
     breadcrumbLabel: "BOQ Software for Contractors",
     title: "BOQ Software for Contractors Managing Complex Project Information",
     audienceDescription: "For general contractors and subcontractors evaluating structured BOQ and project-source workflows.",
-    directAnswer: "Quantara helps contractors organize supported tender sources, reviewed BOQ records and distinct project revisions within an authorized workspace.",
+    directAnswer: "Quantara gives contractors a complete BOQ workspace: use AI-assisted preparation for supported files, create or finish every item with direct engineer control, manage quantities and rates, track revisions and deliver reviewed outputs.",
     challenges: [
   {
     "title": "Fragmented Tender Documents",
@@ -21,7 +21,7 @@ export default function Page() {
     "description": "Managing multiple subcontractor packages and checking for scope overlaps or omissions can become difficult across separate files."
   }
 ],
-    workflowDescription: "Quantara captures supported information from text-based tender PDFs and spreadsheets for review, then organizes confirmed descriptions, units and quantities in BOQ sections. Contractors must still reconcile scope, assumptions, exclusions and pricing.",
+    workflowDescription: "Quantara captures supported information from text-based tender PDFs and spreadsheets for review. Contractors can then directly add or correct descriptions, measurements, quantities and rates, complete every BOQ section, reconcile scope and generate reviewed outputs.",
     workflowExample: "A general contractor receives a text-based PDF and spreadsheet tender package. Supported information is captured for review, reconciled by the estimating team and organized into BOQ trade sections before subcontractor issue.",
     typicalCategories: [
   "Preliminaries",
@@ -50,9 +50,9 @@ export default function Page() {
   "CSV Exports"
 ],
     limitations: [
-  "Quantara does not currently perform automated visual quantity takeoff or drawing measurement.",
-  "BIM and CAD integrations are not currently available.",
-  "Quantara does not provide pre-built cost databases or universal category structures."
+  "Automated visual quantity takeoff is not universal; engineers retain direct control to enter and calculate measurements in the BOQ workflow.",
+  "CAD and BIM files can remain source evidence while supported integration workflows depend on file type and configuration.",
+  "Teams control their own categories, rates, assumptions and final professional approval."
 ],
     faqs: [
   {
@@ -61,7 +61,7 @@ export default function Page() {
   },
   {
     "question": "Does Quantara measure quantities from drawings?",
-    "answer": "No, automatic drawing measurement and visual quantity takeoff are not currently available."
+    "answer": "Quantara supports guided measurement workflows with visible formulas and direct engineer control. The responsible professional verifies and completes quantities before issue."
   },
   {
     "question": "How are assumptions and exclusions handled?",
@@ -73,7 +73,7 @@ export default function Page() {
   },
   {
     "question": "Does it support scanned tender documents?",
-    "answer": "Scanned tender documents can be uploaded and are automatically detected and flagged as requiring OCR. OCR text extraction is not currently available, so scanned content currently requires manual transcription and professional review."
+    "answer": "Scanned tender documents can be uploaded and are automatically detected and flagged as requiring OCR. OCR text extraction is not currently available, so scanned content requires professional transcription and review."
   },
   {
     "question": "Is there a pre-built category structure?",

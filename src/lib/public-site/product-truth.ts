@@ -55,10 +55,10 @@ export const PUBLIC_CAPABILITY_STATUS_DESCRIPTIONS: Record<PublicCapabilityStatu
 };
 
 export const QUANTARA_ENTITY_DEFINITION =
-  "Quantara is AI-assisted BOQ measurement and quantity calculation software for construction professionals.";
+  "Quantara is hybrid AI-assisted and engineer-controlled BOQ software for construction professionals to create, measure, calculate, review and deliver professional bills of quantities.";
 
 export const QUANTARA_WORKFLOW_TRUTH =
-  "Quantara brings project sources, reviewable extraction, guided measurement, deterministic quantity calculations and professional BOQ workflows together in one controlled platform. Review source-linked or professionally entered dimensions, see the engineering equation and calculated quantity, and confirm the result into your BOQ workflow.";
+  "Quantara combines AI-assisted preparation with complete engineer-controlled BOQ creation in one platform. Teams can use supported project extraction, directly enter or correct items and dimensions, review visible quantity formulas, control rates and revisions, and generate professional BOQ outputs without waiting for every source to be automated.";
 
 export const PROFESSIONAL_REVIEW_NOTICE =
   "Project information, extracted data, measurements, calculations, rates and outputs require review by the responsible construction professional before tender, procurement, contractual or construction use.";

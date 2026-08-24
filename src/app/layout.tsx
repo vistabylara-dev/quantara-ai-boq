@@ -15,6 +15,20 @@ import "./globals.css";
 
 const GOOGLE_TAG_MANAGER_ID = "GTM-5BNVQ8MV";
 
+const GOOGLE_CONSENT_DEFAULT_SCRIPT = `
+window.dataLayer = window.dataLayer || [];
+window.gtag = function(){window.dataLayer.push(arguments);};
+var storedConsent = null;
+try { storedConsent = window.localStorage.getItem('quantara-analytics-consent'); } catch (e) {}
+window.gtag('consent', 'default', {
+  analytics_storage: storedConsent === 'granted' ? 'granted' : 'denied',
+  ad_storage: 'denied',
+  ad_user_data: 'denied',
+  ad_personalization: 'denied',
+  wait_for_update: 500
+});
+`;
+
 const GOOGLE_TAG_MANAGER_SCRIPT = `
 (function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
 new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
@@ -27,16 +41,16 @@ export const metadata: Metadata = {
   metadataBase: new URL("https://quantara.vistabylara.com"),
   title: {
     template: "%s | Quantara",
-    default: "Quantara: AI BOQ and Construction Estimating Platform",
+    default: "Quantara AI BOQ: Create and Deliver Professional BOQs",
   },
-  description: "Create structured BOQs, organize project items, manage templates and pricing data, and generate professional construction documents with Quantara.",
-  keywords: ["BOQ", "Construction Estimating", "Quantity Surveying", "Project Extraction", "Construction Intelligence"],
-  authors: [{ name: "Quantara", url: "https://quantara.vistabylara.com" }],
-  creator: "Quantara",
-  publisher: "Quantara",
+  description: "Create and deliver professional BOQs with AI-assisted preparation, full engineer control, guided measurement, visible calculations, rates, revisions and outputs.",
+  keywords: ["AI BOQ software", "BOQ software UAE", "Bill of Quantities", "Construction Estimating", "Quantity Surveying", "Professional BOQ Creation", "Quantity Calculation"],
+  authors: [{ name: "Vista By Lara", url: "https://www.vistabylara.com" }],
+  creator: "Vista By Lara",
+  publisher: "Vista By Lara",
   openGraph: {
-    title: "Quantara: AI BOQ and Construction Estimating Platform",
-    description: "Create structured BOQs, organize project items, manage templates and pricing data, and generate professional construction documents with Quantara.",
+    title: "Quantara AI BOQ: Create and Deliver Professional BOQs",
+    description: "Use AI where supported and full engineer-controlled workflows everywhere else to create, calculate, review and deliver professional BOQs.",
     url: "https://quantara.vistabylara.com",
     siteName: "Quantara",
     locale: "en_AE",
@@ -44,8 +58,8 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: "Quantara: AI BOQ and Construction Estimating Platform",
-    description: "Create structured BOQs, organize project items, manage templates and pricing data, and generate professional construction documents with Quantara.",
+    title: "Quantara AI BOQ: Create and Deliver Professional BOQs",
+    description: "Use AI-assisted preparation and full professional controls to create, calculate, review and deliver professional BOQs.",
   },
   alternates: {
     canonical: "/",
@@ -104,18 +118,10 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
     // data-theme before hydration because it depends on localStorage.
     <html lang={documentLanguage} dir={direction} suppressHydrationWarning>
       <head>
+        <script dangerouslySetInnerHTML={{ __html: GOOGLE_CONSENT_DEFAULT_SCRIPT }} />
         <script dangerouslySetInnerHTML={{ __html: GOOGLE_TAG_MANAGER_SCRIPT }} />
       </head>
       <body>
-        <noscript>
-          <iframe
-            src={`https://www.googletagmanager.com/ns.html?id=${GOOGLE_TAG_MANAGER_ID}`}
-            height="0"
-            width="0"
-            style={{ display: "none", visibility: "hidden" }}
-            title="Google Tag Manager"
-          />
-        </noscript>
         <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
         <LocaleProvider initialLocale={locale}>
           <ConditionalAppShell>{children}</ConditionalAppShell>

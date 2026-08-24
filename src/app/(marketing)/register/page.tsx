@@ -143,7 +143,9 @@ function RegisterForm() {
     try {
       await apiClient.post("/api/auth/register", { 
         companyName, fullName, email, password,
-        role, country, primaryIndustry, intendedUse: intendedUse || selectedPackage, approximateVolume, consent
+        role, country, primaryIndustry, intendedUse: intendedUse || selectedPackage, approximateVolume,
+        priceCode: pendingPriceCode ?? undefined,
+        consent
       });
       trackConversionEvent("registration_completed", {
         selected_option: selectedPackage,

@@ -130,7 +130,12 @@ const en = {
     },
     verifyEmail: {
       title: "Verify your email",
-      instructions: "Check your inbox for a verification link.",
+      instructions: "Open the verification link sent to your business email. If the link did not verify automatically, enter the token from that email below.",
+      tokenPlaceholder: "Verification token",
+      submit: "Verify email",
+      verifying: "Verifying...",
+      success: "Your email is verified. Sign in to open your workspace and continue with your selected plan.",
+      goToSignIn: "Continue to sign in",
     },
   },
   dashboard: {
@@ -349,6 +354,9 @@ const en = {
       createNewClient: "Create new client",
       createClientTitle: "Create client",
       createAndSelect: "Create and select",
+      quickCreate: "Create and select “{name}”",
+      quickCreating: "Creating client...",
+      quickCreateError: "The client could not be created. Use the full client form or try again.",
     },
   },
   clients: {

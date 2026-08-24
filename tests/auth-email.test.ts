@@ -145,6 +145,7 @@ describe("authentication emails (integration, real local Postgres)", () => {
         fullName: "Register Owner",
         email: REGISTER_EMAIL,
         password: "Password123",
+        priceCode: "professional_annual_aed_3990",
       });
       registeredCompanyId = result.companyId;
 
@@ -156,6 +157,8 @@ describe("authentication emails (integration, real local Postgres)", () => {
       expect(call.html).toContain(appBaseUrl());
       expect(call.text).toContain(appBaseUrl());
       expect(call.html).toContain("/verify-email?token=");
+      expect(call.html).toContain("priceCode=professional_annual_aed_3990");
+      expect(call.text).toContain("priceCode=professional_annual_aed_3990");
 
 
     });

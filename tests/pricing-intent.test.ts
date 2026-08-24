@@ -209,7 +209,7 @@ describe("login page pricing-intent source contract", () => {
 });
 
 describe("registration page pricing-intent source contract", () => {
-  it("keeps priceCode out of the register API body and only changes the sign-in link", () => {
+  it("passes the normalized trusted priceCode through registration and preserves it in the sign-in link", () => {
     const source = readFileSync(join(repoRoot, "src", "app", "(marketing)", "register", "page.tsx"), "utf8");
 
     expect(source).toContain('normalizePublicPriceCode(searchParams.get("priceCode"))');
@@ -217,7 +217,7 @@ describe("registration page pricing-intent source contract", () => {
 
     const registerCallMatch = source.match(/apiClient\.post\("\/api\/auth\/register",\s*\{([^}]*)\}/s);
     expect(registerCallMatch).not.toBeNull();
-    expect(registerCallMatch?.[1]).not.toMatch(/priceCode/);
+    expect(registerCallMatch?.[1]).toContain("priceCode: pendingPriceCode ?? undefined");
   });
 });
 

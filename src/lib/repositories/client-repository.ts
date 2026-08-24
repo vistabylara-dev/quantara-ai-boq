@@ -53,7 +53,7 @@ export async function listClients(companyId: string, filters: ClientListFilters 
   const [items, total] = await prisma.$transaction([
     prisma.client.findMany({
       where,
-      orderBy: { name: "asc" },
+      orderBy: [{ updatedAt: "desc" }, { id: "asc" }],
       skip: (page - 1) * pageSize,
       take: pageSize,
     }),

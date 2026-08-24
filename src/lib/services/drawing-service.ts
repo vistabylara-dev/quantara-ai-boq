@@ -221,6 +221,9 @@ export async function uploadProjectDrawing(actor: CurrentActor, projectId: strin
   const canonicalProjectId = project.id;
 
   const { extension, safeFileName } = validateDrawingUpload(input.originalName, input.mimeType, input.buffer.byteLength);
+  if (extension === "pdf" && !input.buffer.subarray(0, PDF_SIGNATURE.byteLength).equals(PDF_SIGNATURE)) {
+    throw new AppError("UNSAFE_FILE_CONTENT", "The uploaded file does not have a valid PDF signature.", 400);
+  }
   const checksum = computeChecksum(input.buffer);
   const [duplicate, pageCount] = await Promise.all([
     findDuplicateByChecksum(actor.companyId, canonicalProjectId, checksum),

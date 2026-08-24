@@ -1008,6 +1008,12 @@ describe("TAYQAN senior work-order governance wiring", () => {
     expect(workOrder).toContain('"TAYQAN_MEASUREMENT_LEASE_PERSISTENCE_FAILED"');
     expect(workOrder).toMatch(/claimTayqanMeasurementLease[\s\S]*prisma\.\$transaction\(async \(tx\)[\s\S]*TAYQAN_MEASUREMENT_LEASE_ACQUIRED/);
     expect(workOrder).toContain("heartbeatTayqanMeasurementLease");
+    expect(workOrder).toContain('"source-handler-registration"');
+    expect(workOrder).toContain('"source-requirements"');
+    expect(workOrder).toContain('"TAYQAN_SOURCE_JOB_RECOVERY_FAILED"');
+    expect(workOrder).toContain('"source-processing-wait-commit"');
+    expect(workOrder).toContain('"source-processing-wait-reload"');
+    expect(workOrder).toMatch(/source-processing-wait-commit[\s\S]*prisma\.\$transaction\(async \(tx\)[\s\S]*SOURCE_PROCESSING_WAITING/);
     expect(workOrder).toContain("TAYQAN_MEASUREMENT_EXCEPTION_REGISTER");
     expect(workOrder).toContain("exceptionRegisterRunId");
     expect(workOrder).toMatch(/prisma\.\$transaction\(async \(tx\)[\s\S]*tx\.tayqanWorkOrder\.updateMany[\s\S]*TAYQAN_MEASUREMENT_EXCEPTION_REGISTER[\s\S]*TAYQAN_MEASUREMENT_COMPLETE[\s\S]*maxWait: 10_000, timeout: 30_000/);

@@ -408,16 +408,27 @@ async function claimTayqanMeasurementLease(
   const leaseToken = `tayqan-measurement:${randomUUID()}`;
   const now = new Date();
   const staleBefore = new Date(now.getTime() - TAYQAN_MEASUREMENT_LEASE_STALE_MS);
-  const claimed = await prisma.tayqanWorkOrder.updateMany({
-    where: {
-      id: order.id, companyId: actor.companyId, status: TayqanWorkStatus.RUNNING, stage: TayqanWorkStage.SOURCE_PROCESSING,
-      OR: [{ blockerCode: null }, { blockerCode: TAYQAN_MEASUREMENT_LEASE_CODE, lastAdvancedAt: { lt: staleBefore } }],
-    },
-    data: { blockerCode: TAYQAN_MEASUREMENT_LEASE_CODE, blockerMessage: leaseToken, blockerJson: Prisma.DbNull, lastAdvancedAt: now },
+  const claimed = await prisma.$transaction(async (tx) => {
+    const result = await tx.tayqanWorkOrder.updateMany({
+      where: {
+        id: order.id, companyId: actor.companyId, status: TayqanWorkStatus.RUNNING, stage: TayqanWorkStage.SOURCE_PROCESSING,
+        OR: [{ blockerCode: null }, { blockerCode: TAYQAN_MEASUREMENT_LEASE_CODE, lastAdvancedAt: { lt: staleBefore } }],
+      },
+      data: { blockerCode: TAYQAN_MEASUREMENT_LEASE_CODE, blockerMessage: leaseToken, blockerJson: Prisma.DbNull, lastAdvancedAt: now },
+    });
+    if (result.count !== 1) return false;
+    await tx.tayqanWorkEvent.create({
+      data: {
+        companyId: actor.companyId,
+        workOrderId: order.id,
+        stage: order.stage,
+        eventType: "TAYQAN_MEASUREMENT_LEASE_ACQUIRED",
+        payloadJson: jsonObject({ staleAfterMinutes: TAYQAN_MEASUREMENT_LEASE_STALE_MS / 60_000 }),
+      },
+    });
+    return true;
   });
-  if (claimed.count !== 1) return null;
-  await appendWorkEvent(actor.companyId, order.id, order.stage, "TAYQAN_MEASUREMENT_LEASE_ACQUIRED", { staleAfterMinutes: TAYQAN_MEASUREMENT_LEASE_STALE_MS / 60_000 });
-  return leaseToken;
+  return claimed ? leaseToken : null;
 }
 
 async function heartbeatTayqanMeasurementLease(actor: CurrentActor, orderId: string, leaseToken: string) {
@@ -1461,7 +1472,11 @@ async function advanceSourceProcessing(actor: CurrentActor, projectSlug: string,
 
   if (pending > 0) {
     await updateOrder(actor, order.id, { status: TayqanWorkStatus.RUNNING, lastAdvancedAt: new Date() }, "SOURCE_PROCESSING_WAITING", { pending, queued });
-    await persistConversationStatus(actor.companyId, order.intakeSessionId, "tayqan.hire.workflow.sourceProcessing", { count: pending });
+    try {
+      await persistConversationStatus(actor.companyId, order.intakeSessionId, "tayqan.hire.workflow.sourceProcessing", { count: pending });
+    } catch (statusError) {
+      console.error("[TAYQAN-WORK-ORDER] source-processing status update failed after durable work-order update", statusError);
+    }
     return toState(await loadOrder(actor.companyId, order.id));
   }
 
@@ -1470,7 +1485,13 @@ async function advanceSourceProcessing(actor: CurrentActor, projectSlug: string,
     const progress = parseProgress(order.progressJson);
 
     if (progress.tayqanMeasurement?.version !== TAYQAN_MEASUREMENT_VERSION) {
-      const leaseToken = await claimTayqanMeasurementLease(actor, order);
+      const leaseToken = await runTayqanWorkOrderPhase(
+        order.id,
+        "measurement-lease-acquisition",
+        "TAYQAN_MEASUREMENT_LEASE_PERSISTENCE_FAILED",
+        "TAYQAN could not safely acquire this assignment's measurement execution lease. Retry the same assignment; completed source and BOQ evidence remains preserved.",
+        () => claimTayqanMeasurementLease(actor, order),
+      );
       if (!leaseToken) return toState(await loadOrder(actor.companyId, order.id));
 
       try {

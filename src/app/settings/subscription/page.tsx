@@ -517,7 +517,7 @@ function SubscriptionSettingsContent() {
                 <p className="text-xs font-semibold uppercase tracking-[0.22em] text-cyan-300">Try Quantara Professional</p>
                 <h2 className="mt-3 text-xl font-semibold text-white">Start your 3-day Pro trial</h2>
                 <p className="mt-2 text-sm leading-6 text-slate-400">
-                  Trial rules stay exactly as configured. A verified email, completed company profile and accepted trial terms are still required.
+                  A verified email, company legal name and email, and accepted trial terms are required. Address, country and tax registration remain optional.
                 </p>
                 <div className="mt-5 flex flex-col gap-3 sm:flex-row xl:flex-col">
                   <button

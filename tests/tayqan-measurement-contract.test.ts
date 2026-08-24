@@ -1004,6 +1004,9 @@ describe("TAYQAN senior work-order governance wiring", () => {
     expect(workOrder).toContain("seniorReview: measurement.seniorReview");
     expect(workOrder).toContain("exceptions: measurementExceptions");
     expect(workOrder).toContain("TAYQAN_MEASUREMENT_LEASE_CODE");
+    expect(workOrder).toContain('"measurement-lease-acquisition"');
+    expect(workOrder).toContain('"TAYQAN_MEASUREMENT_LEASE_PERSISTENCE_FAILED"');
+    expect(workOrder).toMatch(/claimTayqanMeasurementLease[\s\S]*prisma\.\$transaction\(async \(tx\)[\s\S]*TAYQAN_MEASUREMENT_LEASE_ACQUIRED/);
     expect(workOrder).toContain("heartbeatTayqanMeasurementLease");
     expect(workOrder).toContain("TAYQAN_MEASUREMENT_EXCEPTION_REGISTER");
     expect(workOrder).toContain("exceptionRegisterRunId");

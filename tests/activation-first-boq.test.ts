@@ -37,11 +37,13 @@ describe("first-value activation journey", () => {
 
   it("opens the automatically created BOQ immediately after project creation", () => {
     const newProjectPage = source("src/app/projects/new/page.tsx");
+    const industriesRoute = source("src/app/api/industries/route.ts");
 
     expect(newProjectPage).toContain('emitOnboardingActionComplete("PROJECT_CREATED"');
     expect(newProjectPage).toContain('emitOnboardingActionComplete("BOQ_PREPARED"');
     expect(newProjectPage).toContain("/boq`");
     expect(newProjectPage).not.toContain("router.push(`/projects/${result.project.id}`)");
+    expect(industriesRoute).toContain("ensureCompanyIndustryEngines(actor.companyId)");
   });
 
   it("offers one-action client creation inside the project picker", () => {

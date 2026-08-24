@@ -19,7 +19,8 @@ describe("TAYQAN advance route runtime contract", () => {
 
   it("surfaces unknown orchestration failures safely without changing the service error contract", () => {
     expect(source).toContain('if (!(error instanceof AppError))');
-    expect(source).toContain('"TAYQAN_MEASUREMENT_WORK_ORDER_PERSISTENCE_FAILED"');
+    expect(source).toContain('"TAYQAN_WORK_ORDER_UNEXPECTED_FAILURE"');
+    expect(source).not.toContain('"TAYQAN_MEASUREMENT_WORK_ORDER_PERSISTENCE_FAILED"');
     expect(source).toContain("return handleApiError(error)");
   });
 });

@@ -198,4 +198,32 @@ describe("TAYQAN Full-BOQ rescue regression", () => {
       "FINALIZING_REVIEW_DRAFT",
     );
   });
+
+  it("restarts terminal source jobs only from the explicit retry action", () => {
+    const service = read(
+      "src/lib/services/tayqan-work-order-service.ts",
+    );
+
+    const retryHelper = functionBody(
+      service,
+      "retryFailedSourceJobs",
+    );
+    const answerBlocker = functionBody(
+      service,
+      "answerTayqanWorkOrderBlocker",
+    );
+
+    expect(retryHelper).toContain(
+      "latest?.status !== ExtractionJobStatus.FAILED && latest?.status !== ExtractionJobStatus.CANCELLED",
+    );
+    expect(retryHelper).toContain(
+      "await extractionJobQueue.enqueue({",
+    );
+    expect(answerBlocker).toContain(
+      'input.action === "RETRY" && order.blockerCode === "SOURCE_JOB_FAILED"',
+    );
+    expect(answerBlocker).toContain(
+      "await retryFailedSourceJobs(actor, order);",
+    );
+  });
 });

@@ -145,7 +145,7 @@ describe("TAYQAN Full-BOQ rescue regression", () => {
     );
 
     expect(bypassBlock).toContain(
-      "return prepareTayqanAiDraft(actor, projectSlug, leasedOrder);",
+      "return advanceTayqanAiDraftWithLease(actor, projectSlug, leasedOrder);",
     );
 
     const draft =
@@ -172,6 +172,22 @@ describe("TAYQAN Full-BOQ rescue regression", () => {
 
     expect(draft).toContain(
       "await getBOQRecord(actor.companyId, boqId)",
+    );
+
+    expect(draft).toContain(
+      "if (!aiDraft || !boqId || aiDraft.boqId !== boqId)",
+    );
+
+    expect(service).toContain(
+      'const TAYQAN_AI_DRAFT_LEASE_CODE = "TAYQAN_AI_DRAFT_RUNNING"',
+    );
+
+    expect(service).toContain(
+      "claimTayqanAiDraftLease",
+    );
+
+    expect(service).toContain(
+      '"TAYQAN_AI_DRAFT_HANDOFF_FAILED"',
     );
 
     expect(draft).toContain(

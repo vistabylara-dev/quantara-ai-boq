@@ -522,15 +522,37 @@ export default function ProjectProposalsPage(props: PageProps) {
                     <div className="mt-2 space-y-2">
                       {draftBoqs.map((boq) => (
                         <div key={boq.id} className="flex items-center justify-between rounded-2xl border border-amber-900/60 bg-amber-950/20 px-4 py-3 text-sm">
-                          <span className="text-amber-200">{t("proposals.revisionDraftLockAction", { revision: boq.revision })}</span>
-                          <button
-                            type="button"
-                            onClick={() => void lockAndContinue(boq.id)}
-                            disabled={lockingBoqId === boq.id}
-                            className="rounded-xl border border-amber-700 bg-amber-900/40 px-3 py-1.5 text-xs font-semibold text-amber-200 hover:bg-amber-900/70 disabled:opacity-50"
-                          >
-                            {lockingBoqId === boq.id ? t("proposals.locking") : t("proposals.lockAndContinue")}
-                          </button>
+                          <div>
+                            <span className="text-amber-200">{t("proposals.revisionDraftLockAction", { revision: boq.revision })}</span>
+                            {!boq.finalization?.lockEligible && (
+                              <p className="mt-1 text-xs text-amber-300/80">
+                                {boq.finalization?.lockReason === "VERIFICATION_STALE" || boq.finalization?.lockReason === "VERIFICATION_REQUIRED"
+                                  ? "Re-run verification for this revision before locking."
+                                  : boq.finalization?.lockReason === "UNRESOLVED_CRITICAL_EXCEPTIONS"
+                                    ? `${boq.finalization.unresolvedCritical} critical verification issue(s) must be resolved first.`
+                                    : boq.finalization?.lockReason === "ESTIMATE_INTEGRITY_REQUIRED"
+                                      ? `${boq.finalization.unconfirmedItemCount} item(s) still need confirmed quantity and rate evidence.`
+                                      : "This revision is not eligible to lock."}
+                              </p>
+                            )}
+                          </div>
+                          {boq.finalization?.lockEligible ? (
+                            <button
+                              type="button"
+                              onClick={() => void lockAndContinue(boq.id)}
+                              disabled={lockingBoqId === boq.id}
+                              className="rounded-xl border border-amber-700 bg-amber-900/40 px-3 py-1.5 text-xs font-semibold text-amber-200 hover:bg-amber-900/70 disabled:opacity-50"
+                            >
+                              {lockingBoqId === boq.id ? t("proposals.locking") : t("proposals.lockAndContinue")}
+                            </button>
+                          ) : (
+                            <Link
+                              href={`/projects/${params.projectId}/verification`}
+                              className="rounded-xl border border-slate-700 bg-slate-900 px-3 py-1.5 text-xs font-semibold text-slate-200 hover:bg-slate-800"
+                            >
+                              Review verification
+                            </Link>
+                          )}
                         </div>
                       ))}
                     </div>

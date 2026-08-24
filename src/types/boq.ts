@@ -97,4 +97,11 @@ export type BOQ = {
   lockedAt?: string;
   lockedByUserId?: string;
   approvedBy?: string;
+  finalization?: {
+    lockEligible: boolean;
+    lockReason: "BOQ_LOCKED" | "VERIFICATION_REQUIRED" | "VERIFICATION_STALE" | "UNRESOLVED_CRITICAL_EXCEPTIONS" | "ESTIMATE_INTEGRITY_REQUIRED" | null;
+    freshlyVerified: boolean;
+    unresolvedCritical: number;
+    unconfirmedItemCount: number;
+  };
 };

@@ -11,6 +11,7 @@ import { prisma } from "@/lib/db/prisma";
 import { AppError, ConflictError, NotFoundError } from "@/lib/errors/app-error";
 import { assertBOQCanBeLocked, assertBOQEditable } from "@/lib/domain/boq-guards";
 import { calculateBOQItem, calculateBOQTotals } from "@/lib/calculations/boq-calculator";
+import { evaluateBOQFinalizationGate } from "@/lib/boq/finalization-gate";
 import { createAuditLog } from "@/lib/repositories/audit-repository";
 import { getProjectRecord } from "@/lib/repositories/project-repository";
 import type { BOQ, BOQItem, BOQItemPricingMetadata, BOQSection } from "@/types/boq";
@@ -74,6 +75,21 @@ export function toBOQDTO(
 ): BOQ & { databaseId: string; taxRate: number; version: number; revisionNumber: number } {
   const items = boq.sections.flatMap((section) => section.items);
   const totals = calculateBOQTotals(items, boq.discountPercentage, boq.taxRate);
+  const unresolvedCritical = (boq.verificationExceptions ?? []).filter(
+    (exception) => !exception.resolved && exception.severity === VerificationSeverity.CRITICAL,
+  ).length;
+  const finalization = evaluateBOQFinalizationGate({
+    isLocked: boq.isLocked,
+    version: boq.version,
+    verifiedVersion: boq.verifiedVersion,
+    verifiedAt: boq.verifiedAt,
+    unresolvedCritical,
+    items: items.map((item) => ({
+      status: item.status,
+      quantityConfirmed: Boolean(item.quantityProvenance?.confirmedAt) && item.quantityProvenance?.sourceType !== "LEGACY_UNVERIFIED",
+      rateConfirmed: Boolean(item.rateProvenance?.confirmedAt) && item.rateProvenance?.sourceType !== "LEGACY_UNVERIFIED",
+    })),
+  });
 
   return {
     id: boq.id,
@@ -162,6 +178,7 @@ export function toBOQDTO(
     lockedAt: boq.lockedAt?.toISOString(),
     lockedByUserId: boq.lockedByUserId ?? undefined,
     approvedBy: boq.approvedByName ?? undefined,
+    finalization,
   };
 }
 

@@ -3,6 +3,7 @@ import { prisma } from "@/lib/db/prisma";
 import { ConflictError, NotFoundError } from "@/lib/errors/app-error";
 import { getBOQRecord, toBOQDTO } from "@/lib/repositories/boq-repository";
 import { createAuditLog } from "@/lib/repositories/audit-repository";
+import { evaluateBOQFinalizationGate } from "@/lib/boq/finalization-gate";
 import {
   DEFAULT_VERIFICATION_CONFIG,
   runVerification,
@@ -65,15 +66,19 @@ function verificationPayload(boq: Awaited<ReturnType<typeof getBOQRecord>>) {
     (exception) => !exception.resolved && exception.severity === VerificationSeverity.WARNING,
   ).length;
   const resolved = boq.verificationExceptions.filter((exception) => exception.resolved).length;
-  const freshlyVerified = boq.verifiedAt !== null && boq.verifiedVersion === boq.version;
-  const lockBlocked = unresolvedCritical > 0 || !freshlyVerified;
-  const lockReason = boq.isLocked
-    ? "BOQ_LOCKED"
-    : unresolvedCritical > 0
-      ? "UNRESOLVED_CRITICAL_EXCEPTIONS"
-      : !freshlyVerified
-        ? "VERIFICATION_REQUIRED"
-        : null;
+  const items = boq.sections.flatMap((section) => section.items);
+  const gate = evaluateBOQFinalizationGate({
+    isLocked: boq.isLocked,
+    version: boq.version,
+    verifiedVersion: boq.verifiedVersion,
+    verifiedAt: boq.verifiedAt,
+    unresolvedCritical,
+    items: items.map((item) => ({
+      status: item.status,
+      quantityConfirmed: Boolean(item.quantityProvenance?.confirmedAt) && item.quantityProvenance?.sourceType !== "LEGACY_UNVERIFIED",
+      rateConfirmed: Boolean(item.rateProvenance?.confirmedAt) && item.rateProvenance?.sourceType !== "LEGACY_UNVERIFIED",
+    })),
+  });
 
   return {
     boq: toBOQDTO(boq),
@@ -82,11 +87,12 @@ function verificationPayload(boq: Awaited<ReturnType<typeof getBOQRecord>>) {
       unresolvedCritical,
       unresolvedWarning,
       resolved,
-      lockBlocked,
-      lockEligible: !lockBlocked && !boq.isLocked,
-      freshlyVerified,
+      lockBlocked: !gate.lockEligible,
+      lockEligible: gate.lockEligible,
+      freshlyVerified: gate.freshlyVerified,
       isLocked: boq.isLocked,
-      lockReason,
+      lockReason: gate.lockReason,
+      unconfirmedItemCount: gate.unconfirmedItemCount,
     },
   };
 }

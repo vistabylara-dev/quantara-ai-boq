@@ -1,7 +1,8 @@
 import { getCurrentActor } from "@/lib/auth/current-actor";
 import { setActorContext, withActorRequestContext } from "@/lib/auth/request-context";
 import { requireCapability } from "@/lib/auth/rbac";
-import { apiSuccess, handleApiError, parseJsonBody } from "@/lib/http/api-response";
+import { apiFailure, apiSuccess, handleApiError, parseJsonBody } from "@/lib/http/api-response";
+import { AppError } from "@/lib/errors/app-error";
 import { advanceTayqanWorkOrder } from "@/lib/services/tayqan-work-order-service";
 import { projectIdParamsSchema } from "@/lib/validation/boq-route-schemas";
 import { tayqanWorkOrderAdvanceSchema } from "@/lib/validation/tayqan-schema";
@@ -28,6 +29,14 @@ async function POSTHandler(request: Request, context: RouteContext) {
     const input = await parseJsonBody(request, tayqanWorkOrderAdvanceSchema);
     return apiSuccess(await advanceTayqanWorkOrder(actor, projectId, input.workOrderId));
   } catch (error) {
+    if (!(error instanceof AppError)) {
+      console.error("[TAYQAN-WORK-ORDER] measurement orchestration failed", error);
+      return apiFailure(
+        "TAYQAN_MEASUREMENT_WORK_ORDER_PERSISTENCE_FAILED",
+        "TAYQAN completed or resumed measurement work but could not preserve the work-order result. Retry this same assignment; completed source and measurement evidence remains preserved.",
+        503,
+      );
+    }
     return handleApiError(error);
   }
 }

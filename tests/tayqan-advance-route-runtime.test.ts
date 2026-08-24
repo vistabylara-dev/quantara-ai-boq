@@ -16,4 +16,10 @@ describe("TAYQAN advance route runtime contract", () => {
     expect(source).toContain("export const maxDuration = 300;");
     expect(source).toContain("advanceTayqanWorkOrder(actor, projectId, input.workOrderId)");
   });
+
+  it("surfaces unknown orchestration failures safely without changing the service error contract", () => {
+    expect(source).toContain('if (!(error instanceof AppError))');
+    expect(source).toContain('"TAYQAN_MEASUREMENT_WORK_ORDER_PERSISTENCE_FAILED"');
+    expect(source).toContain("return handleApiError(error)");
+  });
 });

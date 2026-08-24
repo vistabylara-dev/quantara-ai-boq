@@ -232,6 +232,7 @@ describe("Direct-to-Blob drawing upload (integration, real local Postgres, fake 
       expect(first.alreadyFinalized).toBe(false);
       expect(first.drawing.fileSize).toBe(body.byteLength);
       expect(first.drawing.checksum).toMatch(/^[0-9a-f]{64}$/);
+      expect(first.drawing.pageCount).toBeNull();
 
       const countAfterFirst = await prisma.projectFile.count({ where: { id: first.drawing.id } });
       expect(countAfterFirst).toBe(1);

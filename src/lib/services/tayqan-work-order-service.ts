@@ -903,6 +903,35 @@ function isTerminalTayqanMeasurementError(error: unknown): error is AppError {
   return error instanceof AppError && TAYQAN_TERMINAL_MEASUREMENT_ERROR_CODES.has(error.code);
 }
 
+async function runTayqanWorkOrderPhase<T>(
+  orderId: string,
+  phase: string,
+  code: string,
+  customerMessage: string,
+  execute: () => Promise<T>,
+): Promise<T> {
+  const startedAt = Date.now();
+  console.info("[TAYQAN-WORK-ORDER] phase started", { orderId, phase });
+  try {
+    const result = await execute();
+    console.info("[TAYQAN-WORK-ORDER] phase completed", {
+      orderId,
+      phase,
+      durationMs: Date.now() - startedAt,
+    });
+    return result;
+  } catch (error) {
+    console.error("[TAYQAN-WORK-ORDER] phase failed", {
+      orderId,
+      phase,
+      durationMs: Date.now() - startedAt,
+      error,
+    });
+    if (error instanceof AppError) throw error;
+    throw new AppError(code, customerMessage, 503);
+  }
+}
+
 /**
  * TAYQAN AUDIT FIX 3 — the terminal counterpart to block(): transitions the
  * work order to FAILED, a real TAYQAN_TERMINAL_WORK_STATUSES member that,
@@ -1514,7 +1543,12 @@ async function advanceSourceProcessing(actor: CurrentActor, projectSlug: string,
         // Lock frame: the durable measurement checkpoint and every audit event
         // are one commit. A timeout or disconnect can no longer leave partial
         // exception events behind while the work order still looks unfinished.
-        await prisma.$transaction(async (tx) => {
+        await runTayqanWorkOrderPhase(
+          order.id,
+          "measurement-checkpoint-commit",
+          "TAYQAN_MEASUREMENT_CHECKPOINT_PERSISTENCE_FAILED",
+          "TAYQAN completed the measurement pass but could not preserve its work-order checkpoint. Retry this same assignment; completed measurements and BOQ evidence remain preserved.",
+          () => prisma.$transaction(async (tx) => {
           const completed = await tx.tayqanWorkOrder.updateMany({
             where: { id: order.id, companyId: actor.companyId, blockerCode: TAYQAN_MEASUREMENT_LEASE_CODE, blockerMessage: leaseToken },
             data: {
@@ -1527,10 +1561,7 @@ async function advanceSourceProcessing(actor: CurrentActor, projectSlug: string,
             },
           });
           if (completed.count !== 1) throw new ConflictError("TAYQAN_MEASUREMENT_LEASE_LOST", "TAYQAN measurement execution ownership changed before completion; competing results were not committed to the work order.");
-          for (let index = 0; index < exceptionBatches.length; index += 1) {
-            const batch = exceptionBatches[index]!;
-            await tx.tayqanWorkEvent.create({
-              data: {
+          const exceptionEvents = exceptionBatches.map((batch, index) => ({
                 companyId: actor.companyId,
                 workOrderId: order.id,
                 stage: leasedOrder.stage,
@@ -1548,11 +1579,21 @@ async function advanceSourceProcessing(actor: CurrentActor, projectSlug: string,
                     relatedEntityId: exception.relatedEntityId,
                   })),
                 }),
+          }));
+          await tx.tayqanWorkEvent.createMany({
+            data: [
+              ...exceptionEvents,
+              {
+                companyId: actor.companyId,
+                workOrderId: order.id,
+                stage: leasedOrder.stage,
+                eventType: "TAYQAN_MEASUREMENT_COMPLETE",
+                payloadJson: jsonObject(completionPayload),
               },
-            });
-          }
-          await tx.tayqanWorkEvent.create({ data: { companyId: actor.companyId, workOrderId: order.id, stage: leasedOrder.stage, eventType: "TAYQAN_MEASUREMENT_COMPLETE", payloadJson: jsonObject(completionPayload) } });
-        }, { maxWait: 10_000, timeout: 30_000 });
+            ],
+          });
+        }, { maxWait: 10_000, timeout: 30_000 }),
+        );
 
         // Conversation copy is helpful UI telemetry, not engineering state.
         // Once the atomic checkpoint commits, a secondary message-write fault
@@ -1562,7 +1603,13 @@ async function advanceSourceProcessing(actor: CurrentActor, projectSlug: string,
         } catch (statusError) {
           console.error("[TAYQAN-WORK-ORDER] measurement completion status update failed after durable commit", statusError);
         }
-        measuredOrder = await loadOrder(actor.companyId, order.id);
+        measuredOrder = await runTayqanWorkOrderPhase(
+          order.id,
+          "measurement-checkpoint-reload",
+          "TAYQAN_MEASUREMENT_CHECKPOINT_RELOAD_FAILED",
+          "TAYQAN preserved the measurement checkpoint but could not reload the assignment state. Retry this same assignment; completed measurements and BOQ evidence remain preserved.",
+          () => loadOrder(actor.companyId, order.id),
+        );
       } catch (error) {
         // Lease cleanup is best-effort here. Never let a secondary cleanup
         // failure replace the original provider/persistence error that tells

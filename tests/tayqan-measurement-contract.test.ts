@@ -764,6 +764,39 @@ describe("TAYQAN senior OpenAI orchestration — mocked, zero network", () => {
     );
   });
 
+  it("surfaces an incomplete structured response as a safe retryable TAYQAN error", async () => {
+    const fakeFetch = (async () => new Response(JSON.stringify({
+      id: "resp_incomplete",
+      status: "incomplete",
+      incomplete_details: { reason: "max_output_tokens" },
+    }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    })) as typeof fetch;
+
+    const reasoner = createOpenAITayqanMeasurementReasoner({
+      apiKey: "test-key",
+      model: "gpt-5.6",
+    }, fakeFetch);
+
+    await expect(reasoner({
+      bundle: {
+        project: { id: "project-1", slug: "project-1", name: "Test", reference: "Q-001" },
+        governingContext: null,
+        sourceFileIds: ["aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"],
+        pages: [page({})],
+        existingEntities: [],
+        existingBoqItems: [],
+        rooms: [],
+      },
+      loadPageImageDataUrl: async () => null,
+    })).rejects.toMatchObject({
+      code: "TAYQAN_MEASUREMENT_AI_RESPONSE_INCOMPLETE",
+      status: 503,
+      message: expect.stringContaining("max_output_tokens"),
+    });
+  });
+
   it("sends GPT-5.6 original-detail images without storing drawing-analysis responses", async () => {
     const requests: Record<string, unknown>[] = [];
     const fakeFetch = (async (_url: string | URL | Request, init?: RequestInit) => {

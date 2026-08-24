@@ -64,7 +64,11 @@ function extractOutputText(response: Record<string, unknown>): string {
     return response.output_text;
   }
   if (!Array.isArray(response.output)) {
-    throw new Error("OpenAI TAYQAN measurement response did not contain structured output.");
+    throw new AppError(
+      "TAYQAN_MEASUREMENT_AI_RESPONSE_INVALID",
+      "TAYQAN's AI provider returned no structured measurement output. Retry this same assignment; completed work remains preserved.",
+      503,
+    );
   }
   for (const output of response.output) {
     const outputRecord = record(output);
@@ -72,14 +76,22 @@ function extractOutputText(response: Record<string, unknown>): string {
     for (const content of outputRecord.content) {
       const contentRecord = record(content);
       if (contentRecord?.type === "refusal") {
-        throw new Error("OpenAI refused the bounded TAYQAN measurement request.");
+        throw new AppError(
+          "TAYQAN_MEASUREMENT_AI_REFUSED",
+          "TAYQAN's AI provider refused the bounded measurement request. Retry the same assignment or review the source content if the refusal continues.",
+          503,
+        );
       }
       if (contentRecord?.type === "output_text" && typeof contentRecord.text === "string") {
         return contentRecord.text;
       }
     }
   }
-  throw new Error("OpenAI TAYQAN measurement response did not contain structured output text.");
+  throw new AppError(
+    "TAYQAN_MEASUREMENT_AI_RESPONSE_INVALID",
+    "TAYQAN's AI provider returned a response without structured measurement text. Retry this same assignment; completed work remains preserved.",
+    503,
+  );
 }
 
 const measurementPlanJsonSchema = {
@@ -534,14 +546,26 @@ async function requestStructuredJson(
 
       const raw = await response.json() as Record<string, unknown>;
       if (raw.status === "incomplete") {
-        throw new Error("OpenAI TAYQAN response was incomplete.");
+        const incompleteDetails = record(raw.incomplete_details);
+        const reason = typeof incompleteDetails?.reason === "string"
+          ? incompleteDetails.reason.slice(0, 80)
+          : "unspecified";
+        throw new AppError(
+          "TAYQAN_MEASUREMENT_AI_RESPONSE_INCOMPLETE",
+          `TAYQAN's AI provider returned an incomplete measurement response (${reason}). Retry this same assignment; completed work remains preserved.`,
+          503,
+        );
       }
       let decoded: unknown;
       try {
         decoded = JSON.parse(extractOutputText(raw));
       } catch (error) {
         if (error instanceof SyntaxError) {
-          throw new Error("OpenAI TAYQAN reasoner returned invalid structured JSON.");
+          throw new AppError(
+            "TAYQAN_MEASUREMENT_AI_RESPONSE_INVALID",
+            "TAYQAN's AI provider returned invalid structured measurement data. Retry this same assignment; completed work remains preserved.",
+            503,
+          );
         }
         throw error;
       }
@@ -554,7 +578,23 @@ async function requestStructuredJson(
       const normalizedError = error instanceof Error ? error : new Error(String(error));
       if (normalizedError instanceof NonRetryableOpenAIError) throw normalizedError;
       lastError = normalizedError;
-      if (attempt + 1 >= REQUEST_RETRY_COUNT) throw normalizedError;
+      if (attempt + 1 >= REQUEST_RETRY_COUNT) {
+        if (normalizedError.name === "AbortError") {
+          throw new AppError(
+            "TAYQAN_MEASUREMENT_AI_TIMEOUT",
+            "TAYQAN's AI measurement request reached its controlled time limit. Retry this same assignment; completed work remains preserved.",
+            503,
+          );
+        }
+        if (normalizedError instanceof TypeError) {
+          throw new AppError(
+            "TAYQAN_MEASUREMENT_AI_UNAVAILABLE",
+            "TAYQAN could not reach the configured AI provider. Retry this same assignment; completed work remains preserved.",
+            503,
+          );
+        }
+        throw normalizedError;
+      }
       await sleep(700 * (attempt + 1));
     } finally {
       clearTimeout(timeout);

@@ -1327,6 +1327,19 @@ async function advanceSourceProcessing(actor: CurrentActor, projectSlug: string,
       if (latest) {
         if (latest.status === ExtractionJobStatus.COMPLETED || latest.status === ExtractionJobStatus.NEEDS_REVIEW) continue;
         if (latest.status === ExtractionJobStatus.QUEUED || latest.status === ExtractionJobStatus.RUNNING) {
+          // Re-enter the queue's idempotent request-scoped recovery path.
+          // A QUEUED job may have lost its original after() callback when a
+          // serverless invocation ended, while enqueue() also atomically
+          // recovers a genuinely stale RUNNING job. Existing live RUNNING
+          // jobs remain untouched and duplicate processing is prevented by
+          // the queue's conditional claim.
+          await extractionJobQueue.enqueue({
+            companyId: actor.companyId,
+            projectId: order.projectId,
+            projectFileId: file.id,
+            engineType,
+            createdByUserId: actor.userId,
+          });
           pending += 1;
           continue;
         }

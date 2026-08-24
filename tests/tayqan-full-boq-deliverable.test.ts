@@ -226,4 +226,43 @@ describe("TAYQAN Full-BOQ rescue regression", () => {
       "await retryFailedSourceJobs(actor, order);",
     );
   });
+
+  it("re-enters idempotent queue recovery for non-terminal source jobs", () => {
+    const service = read(
+      "src/lib/services/tayqan-work-order-service.ts",
+    );
+
+    const sourceProcessing = functionBody(
+      service,
+      "advanceSourceProcessing",
+    );
+    const nonTerminalBranchStart = sourceProcessing.indexOf(
+      "latest.status === ExtractionJobStatus.QUEUED || latest.status === ExtractionJobStatus.RUNNING",
+    );
+    const needsInputBranchStart = sourceProcessing.indexOf(
+      "latest.status === ExtractionJobStatus.NEEDS_INPUT",
+      nonTerminalBranchStart,
+    );
+
+    expect(nonTerminalBranchStart).toBeGreaterThan(-1);
+    expect(needsInputBranchStart).toBeGreaterThan(nonTerminalBranchStart);
+
+    const nonTerminalBranch = sourceProcessing.slice(
+      nonTerminalBranchStart,
+      needsInputBranchStart,
+    );
+
+    expect(nonTerminalBranch).toContain(
+      "await extractionJobQueue.enqueue({",
+    );
+    expect(nonTerminalBranch).toContain(
+      "projectFileId: file.id,",
+    );
+    expect(nonTerminalBranch).toContain(
+      "engineType,",
+    );
+    expect(nonTerminalBranch).toContain(
+      "pending += 1;",
+    );
+  });
 });

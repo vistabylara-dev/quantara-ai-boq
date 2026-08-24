@@ -1,4 +1,5 @@
 import { ExtractedEntityType } from "@prisma/client";
+import { AppError } from "@/lib/errors/app-error";
 import {
   listSupportedCalculationTypes,
 } from "@/lib/calculations/required-dimensions-registry";
@@ -39,7 +40,18 @@ type OpenAITayqanMeasurementConfig = {
   useSeniorProMode?: boolean;
 };
 
-class NonRetryableOpenAIError extends Error {}
+class NonRetryableOpenAIError extends AppError {
+  constructor(status: number, requestId: string | null) {
+    const providerReference = requestId
+      ? ` Provider request: ${requestId}.`
+      : "";
+    super(
+      "TAYQAN_MEASUREMENT_AI_REQUEST_REJECTED",
+      `TAYQAN's AI measurement request was rejected by the configured provider (HTTP ${status}).${providerReference} Verify model access and request compatibility, then retry this same assignment.`,
+      503,
+    );
+  }
+}
 
 function record(value: unknown): Record<string, unknown> | null {
   return value !== null && typeof value === "object" && !Array.isArray(value)
@@ -514,7 +526,10 @@ async function requestStructuredJson(
           await sleep(700 * (attempt + 1));
           continue;
         }
-        throw new NonRetryableOpenAIError(message);
+        throw new NonRetryableOpenAIError(
+          response.status,
+          response.headers.get("x-request-id"),
+        );
       }
 
       const raw = await response.json() as Record<string, unknown>;

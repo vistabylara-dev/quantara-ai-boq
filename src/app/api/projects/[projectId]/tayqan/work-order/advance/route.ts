@@ -32,8 +32,8 @@ async function POSTHandler(request: Request, context: RouteContext) {
     if (!(error instanceof AppError)) {
       console.error("[TAYQAN-WORK-ORDER] measurement orchestration failed", error);
       return apiFailure(
-        "TAYQAN_MEASUREMENT_WORK_ORDER_PERSISTENCE_FAILED",
-        "TAYQAN completed or resumed measurement work but could not preserve the work-order result. Retry this same assignment; completed source and measurement evidence remains preserved.",
+        "TAYQAN_WORK_ORDER_UNEXPECTED_FAILURE",
+        "TAYQAN could not complete this advance pass. Retry the same assignment; completed source, measurement and BOQ evidence remains preserved.",
         503,
       );
     }

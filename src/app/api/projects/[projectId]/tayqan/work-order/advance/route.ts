@@ -8,6 +8,14 @@ import { tayqanWorkOrderAdvanceSchema } from "@/lib/validation/tayqan-schema";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
+/**
+ * One advance pass can recover source jobs and run the governed senior-QS
+ * measurement/draft pipeline. Keep the request alive long enough for the
+ * existing 60-second extraction handlers and the AI review pass to persist a
+ * durable result instead of abandoning a RUNNING lease at the platform's
+ * default function limit.
+ */
+export const maxDuration = 300;
 
 type RouteContext = { params: Promise<{ projectId: string }> };
 

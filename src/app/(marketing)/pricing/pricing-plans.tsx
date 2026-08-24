@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { CheckCircle2 } from "lucide-react";
 import { buildRegisterPricingHref, normalizePublicPriceCode, storePendingPricingIntent } from "@/lib/commercial/pricing-intent";
+import { trackConversionEvent } from "@/lib/marketing/conversion-events";
 
 type BillingCycle = "monthly" | "annual";
 
@@ -111,6 +112,11 @@ export default function PricingPlans({ plans, labels }: PricingPlansProps) {
                 data-price-code={cycle.priceCode}
                 onClick={() => {
                   if (trustedPriceCode) storePendingPricingIntent(trustedPriceCode);
+                  trackConversionEvent("pricing_plan_selected", {
+                    plan: plan.key,
+                    billing_cycle: billingCycle,
+                    selected_plan_code: trustedPriceCode,
+                  });
                 }}
                 className={`mt-8 block rounded-md px-3 py-2 text-center text-sm font-semibold leading-6 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 ${
                   plan.recommended

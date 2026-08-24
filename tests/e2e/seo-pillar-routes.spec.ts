@@ -108,10 +108,10 @@ test.describe("Quantara public website final audit", () => {
       await page.getByRole("button", { name: "Open menu" }).click();
       await page
         .getByRole("dialog", { name: "Mobile Navigation" })
-        .getByRole("link", { name: "Start Account Setup", exact: true })
+        .getByRole("link", { name: "Create Your Account", exact: true })
         .click();
     } else {
-      await page.getByRole("banner").getByRole("link", { name: "Start Account Setup", exact: true }).click();
+      await page.getByRole("banner").getByRole("link", { name: "Create Your Account", exact: true }).click();
     }
     await expect(page).toHaveURL(/\/register$/);
 

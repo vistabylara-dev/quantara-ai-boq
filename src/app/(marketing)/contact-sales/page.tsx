@@ -6,6 +6,7 @@ import { siteConfig } from "@/config/site";
 import PublicBreadcrumb from "@/components/ui/public-breadcrumb";
 import { apiClient } from "@/lib/api/client";
 import { useTranslations } from "@/lib/i18n/locale-provider";
+import { trackConversionEvent } from "@/lib/marketing/conversion-events";
 
 export default function ContactSalesPage() {
   const t = useTranslations();
@@ -47,6 +48,10 @@ export default function ContactSalesPage() {
         website: "",
       });
 
+      trackConversionEvent("sales_lead_submitted", {
+        preferred_contact_method: formData.preferredContactMethod,
+        company_type: formData.companyType,
+      });
       setStatus("success");
     } catch {
       setStatus("error");

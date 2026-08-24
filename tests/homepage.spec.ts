@@ -20,7 +20,7 @@ test.describe('Homepage Shell Verification', () => {
     }
     
     // Check account setup
-    const accountSetupBtn = await banners.locator('a:has-text("Start Account Setup")').first();
+    const accountSetupBtn = await banners.locator('a:has-text("Create Your Account")').first();
     await expect(accountSetupBtn).toBeVisible();
   });
 });

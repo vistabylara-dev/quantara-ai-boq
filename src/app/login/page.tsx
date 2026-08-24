@@ -24,6 +24,7 @@ import {
   storePendingPricingIntent,
 } from "@/lib/commercial/pricing-intent";
 import { resetDashboardLeadSession } from "@/lib/marketing/lead-capture-client";
+import { trackConversionEvent } from "@/lib/marketing/conversion-events";
 
 function LoginForm() {
   const router = useRouter();
@@ -57,6 +58,11 @@ function LoginForm() {
       const queryPriceCode = normalizePublicPriceCode(searchParams.get("priceCode"));
       if (queryPriceCode) storePendingPricingIntent(queryPriceCode);
       const pendingPriceCode = queryPriceCode ?? readPendingPricingIntent();
+
+      trackConversionEvent("login_completed", {
+        destination: pendingPriceCode ? "subscription" : "workspace",
+        selected_plan_code: pendingPriceCode,
+      });
 
       if (pendingPriceCode) {
         router.push(buildSubscriptionPricingHref(pendingPriceCode));

@@ -8,7 +8,7 @@ test.describe('Authentication and Registration Workflow', () => {
   const testEmail = `test.owner.${timestamp}@example.com`;
   const companyName = `Acme Corp ${timestamp}`;
 
-  test('should register a new company owner and require email verification and admin approval', async ({ request }) => {
+  test('should register a new company owner and require email verification', async ({ request }) => {
     // 1. Submit Registration
     const registerResponse = await request.post('/api/auth/register', {
       data: {
@@ -30,10 +30,10 @@ test.describe('Authentication and Registration Workflow', () => {
     expect(registerResult.data.email).toBe(testEmail);
     const userId = registerResult.data.userId;
 
-    // 2. Ensure User is stored with isActive = false (pending approval) and emailVerifiedAt = null
+    // 2. Self-service account is active immediately but cannot sign in until email verification.
     const userInDb = await prisma.user.findUnique({ where: { id: userId } });
     expect(userInDb).not.toBeNull();
-    expect(userInDb?.isActive).toBe(false); // MUST FAIL until we implement it
+    expect(userInDb?.isActive).toBe(true);
     expect(userInDb?.emailVerifiedAt).toBeNull();
 
     // 3. Cannot login before email verification
@@ -42,7 +42,7 @@ test.describe('Authentication and Registration Workflow', () => {
     });
     expect(loginResponse1.status()).toBe(403);
     const loginResult1 = await loginResponse1.json();
-    expect(loginResult1.error.code).toBe('ACCOUNT_PENDING_APPROVAL');
+    expect(loginResult1.error.code).toBe('EMAIL_NOT_VERIFIED');
 
     // 4. Verify Email
     const emailTokenRecord = await prisma.emailVerificationToken.findFirst({
@@ -59,24 +59,13 @@ test.describe('Authentication and Registration Workflow', () => {
     // Since we need to test the workflow, let's manually update the DB.
     await prisma.user.update({ where: { id: userId }, data: { emailVerifiedAt: new Date() } });
 
-    // 5. Cannot login after email verification because pending admin approval
+    // 5. Login succeeds after email verification; no administrator approval is required.
     const loginResponse2 = await request.post('/api/auth/login', {
       data: { email: testEmail, password: 'Password123!' }
     });
-    expect(loginResponse2.status()).toBe(403);
-    const loginResult2 = await loginResponse2.json();
-    expect(loginResult2.error.code).toBe('ACCOUNT_PENDING_APPROVAL');
-
-    // 6. Admin Approves Account
-    await prisma.user.update({ where: { id: userId }, data: { isActive: true } });
-
-    // 7. Login successful
-    const loginResponse3 = await request.post('/api/auth/login', {
-      data: { email: testEmail, password: 'Password123!' }
-    });
-    expect(loginResponse3.ok()).toBeTruthy();
+    expect(loginResponse2.ok()).toBeTruthy();
     
-    // 8. Test duplicate submission handling
+    // 6. Test duplicate submission handling
     const duplicateResponse = await request.post('/api/auth/register', {
       data: {
         fullName: 'Test Owner',
@@ -93,11 +82,11 @@ test.describe('Authentication and Registration Workflow', () => {
     });
     expect(duplicateResponse.status()).toBe(409);
     
-    // 9. Logout
+    // 7. Logout
     const logoutResponse = await request.post('/api/auth/logout');
     expect(logoutResponse.ok()).toBeTruthy();
 
-    // 10. Password Reset
+    // 8. Password Reset
     const resetRequest = await request.post('/api/auth/password/forgot', {
       data: { email: testEmail }
     });
@@ -110,4 +99,3 @@ test.describe('Authentication and Registration Workflow', () => {
     expect(resetTokenRecord).not.toBeNull();
   });
 });
-

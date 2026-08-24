@@ -1080,7 +1080,7 @@ const en = {
   },
   publicContent: {
     cta: {
-      startAccountSetup: "Start Account Setup",
+      startAccountSetup: "Create Your Account",
     },
     features: {
       truthNote: "Statuses describe the current public product truth. Controlled access does not mean every account has the feature enabled. Limited capabilities should be read together with their stated boundary.",
@@ -1436,14 +1436,14 @@ const en = {
       saasEnterpriseAuthorityFeature4: "Full white-label setup included as implementation service",
     },
     accountSetup: {
-      metaTitle: "Start Quantara Account Setup",
-      metaDescription: "Create a company account pending email verification and administrator approval.",
-      title: "Start Account Setup",
-      intro: "Submitting this form creates a company account pending email verification and administrator approval. It does not begin a paid subscription or automatic billing.",
-      success: "Your account setup was received. Follow the verification instructions sent to your business email. Account access remains pending administrator approval. If no email arrives, contact support before attempting to register again.",
-      submitPrefix: "Start Account Setup - {option}",
-      choiceHeading: "Choose How You Want to Start",
-      choiceHelp: "This selection records a preference only. It does not create a purchase, subscription, invoice, trial or product entitlement. Availability and any future commercial terms are confirmed separately in writing.",
+      metaTitle: "Create Your Quantara Account",
+      metaDescription: "Create your Quantara company account, verify your email and start your BOQ workflow.",
+      title: "Create Your Quantara Account",
+      intro: "Create your company workspace, verify your business email, then sign in to start your BOQ or continue with your selected plan. Registration does not start automatic billing.",
+      success: "Your account is ready for email verification. Open the verification link sent to your business email, then sign in to start your BOQ or continue with your selected plan. If it does not arrive, contact support before registering again.",
+      submitPrefix: "Create Account - {option}",
+      choiceHeading: "Your Fastest Path to a BOQ",
+      choiceHelp: "Create your account now for the supported Quantara workflow. If you selected a published software plan, that choice is saved so you can continue after email verification and sign-in. No payment is taken on this page.",
       checkEmail: "Check your email",
       backToSignIn: "Back to sign in",
       fullName: "Full name",
@@ -1458,8 +1458,8 @@ const en = {
       passwordHelp: "At least 8 characters, with a letter and a number.",
       consentPrefix: "I consent to the collection of my information in accordance with the",
       privacyPolicy: "Privacy Policy",
-      submitting: "Submitting Request...",
-      dataNotice: "We use this information to review your request and contact you. Do not submit confidential project documents through this form.",
+      submitting: "Creating Account...",
+      dataNotice: "We use this information to create and secure your company account. Do not submit confidential project documents through this form.",
       existingAccount: "Already have an account?",
       signIn: "Sign in",
       roles: {
@@ -1475,7 +1475,7 @@ const en = {
       },
     },
     shared: {
-      accountAccessBoundary: "Account access is subject to email verification and administrator approval.",
+      accountAccessBoundary: "Account access requires business-email verification.",
       technicalReportBoundary: "Technical report generation is currently limited to DOCX; other technical-report formats are not supported.",
     },
     contactSales: {

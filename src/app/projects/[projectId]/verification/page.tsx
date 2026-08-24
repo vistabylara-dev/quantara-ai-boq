@@ -35,6 +35,9 @@ type VerificationSummary = {
   resolved: number;
   lockBlocked: boolean;
   lockEligible: boolean;
+  freshlyVerified: boolean;
+  lockReason: string | null;
+  unconfirmedItemCount: number;
 };
 
 type VerificationData = {
@@ -296,7 +299,14 @@ export default function ProjectVerificationPage(props: PageProps) {
             </article>
           ))}
 
-          {verification && exceptions.length === 0 && (
+          {verification && exceptions.length === 0 && !summary?.freshlyVerified && (
+            <div className="rounded-[28px] border border-amber-800 bg-amber-950/30 p-8 text-center">
+              <p className="font-semibold text-amber-100">Verification is out of date</p>
+              <p className="mt-2 text-sm text-amber-200/80">This BOQ changed after its last verification. Re-run verification before relying on the exception count or attempting to lock it.</p>
+            </div>
+          )}
+
+          {verification && exceptions.length === 0 && summary?.freshlyVerified && (
             <div className="rounded-[28px] border border-slate-800 bg-slate-950 p-8 text-center text-slate-400">
               No verification exceptions were found for this BOQ revision.
             </div>
@@ -364,9 +374,13 @@ export default function ProjectVerificationPage(props: PageProps) {
                   <p className="mt-2 text-slate-400">
                     {isRevisionReadOnly
                       ? "This revision is already read-only; lock eligibility no longer applies."
-                      : summary.lockBlocked
-                        ? "Resolve all critical exceptions before locking this BOQ."
-                        : "No unresolved critical exceptions block this revision."}
+                      : summary.lockReason === "VERIFICATION_STALE" || summary.lockReason === "VERIFICATION_REQUIRED"
+                        ? "Run verification on the current BOQ version before locking."
+                        : summary.lockReason === "ESTIMATE_INTEGRITY_REQUIRED"
+                          ? `${summary.unconfirmedItemCount} item(s) still need confirmed quantity and rate evidence before locking.`
+                          : summary.lockBlocked
+                            ? "Resolve all critical exceptions before locking this BOQ."
+                            : "No unresolved critical exceptions block this revision."}
                   </p>
                 </div>
               </div>

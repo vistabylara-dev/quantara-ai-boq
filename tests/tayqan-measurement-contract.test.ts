@@ -839,7 +839,7 @@ describe("TAYQAN senior OpenAI orchestration — mocked, zero network", () => {
     expect(image?.detail).toBe("original");
   });
 
-  it("runs measurement, independent xhigh cluster check, then max/pro global reconciliation", async () => {
+  it("runs measurement and an independent xhigh senior check without a redundant one-cluster global pass", async () => {
     const subject = wallSubject();
     const proposalKey = tayqanMeasurementProposalKey(subject);
     const requests: Record<string, unknown>[] = [];
@@ -852,17 +852,6 @@ describe("TAYQAN senior OpenAI orchestration — mocked, zero network", () => {
           exceptionKind: null,
           severity: "LOW",
           message: "Cluster evidence supports the proposed deterministic inputs.",
-          pageIds: [PAGE_PLAN, PAGE_SECTION, PAGE_SCHEDULE],
-        }],
-        findings: [],
-      },
-      {
-        decisions: [{
-          proposalKey,
-          decision: "ACCEPT",
-          exceptionKind: null,
-          severity: "LOW",
-          message: "Global reconciliation found no duplicate or conflicting scope.",
           pageIds: [PAGE_PLAN, PAGE_SECTION, PAGE_SCHEDULE],
         }],
         findings: [],
@@ -905,24 +894,22 @@ describe("TAYQAN senior OpenAI orchestration — mocked, zero network", () => {
       loadPageImageDataUrl: async () => "data:image/png;base64,AAAA",
     });
 
-    expect(requests).toHaveLength(3);
+    expect(requests).toHaveLength(2);
     expect(requests[0]?.reasoning).toEqual({ effort: "high" });
     expect(requests[1]?.reasoning).toEqual({ effort: "xhigh" });
-    expect(requests[2]?.reasoning).toEqual({ effort: "max", mode: "pro" });
     expect(requests.every((request) => request.store === false)).toBe(true);
     expect(result.plan.subjects).toHaveLength(1);
-    expect(result.seniorReview.globalReviewApplied).toBe(true);
+    expect(result.seniorReview.globalReviewApplied).toBe(false);
     expect(result.seniorReview.acceptedSubjectCount).toBe(1);
-    expect(result.responseIds).toHaveLength(3);
+    expect(result.responseIds).toHaveLength(2);
   });
 
-  it("PR2 gap 1: a table/schedule entity (no drawingPageId, different projectFileId than any cluster page) reaches the cluster measurement prompt and the global reconciliation prompt — not just the bundle object", async () => {
+  it("PR2 gap 1: a table/schedule entity reaches the one-cluster measurement prompt without requiring a redundant global pass", async () => {
     const subject = wallSubject();
     const proposalKey = tayqanMeasurementProposalKey(subject);
     const requests: Record<string, unknown>[] = [];
     const payloads = [
       { subjects: [subject], exceptions: [] },
-      { decisions: [{ proposalKey, decision: "ACCEPT", exceptionKind: null, severity: "LOW", message: "ok", pageIds: [PAGE_PLAN, PAGE_SECTION, PAGE_SCHEDULE] }], findings: [] },
       { decisions: [{ proposalKey, decision: "ACCEPT", exceptionKind: null, severity: "LOW", message: "ok", pageIds: [PAGE_PLAN, PAGE_SECTION, PAGE_SCHEDULE] }], findings: [] },
     ];
     let call = 0;
@@ -981,11 +968,101 @@ describe("TAYQAN senior OpenAI orchestration — mocked, zero network", () => {
     // The existing-BOQ reconciliation context reaches the same cluster prompt.
     expect(clusterRequestText).toContain("Existing footing concrete");
 
-    // Global reconciliation request (requests[2]): scheduleEvidence and
-    // existingBoqItems both reach compactProjectContext too.
-    const globalRequestText = JSON.stringify(requests[2]);
-    expect(globalRequestText).toContain("Rebar bending schedule row B12");
-    expect(globalRequestText).toContain("Existing footing concrete");
+    expect(requests).toHaveLength(2);
+  });
+
+  it("does not retry a provider call after it has consumed its controlled timeout", async () => {
+    let calls = 0;
+    const fakeFetch = (async () => {
+      calls += 1;
+      throw new DOMException("timed out", "AbortError");
+    }) as typeof fetch;
+    const reasoner = createOpenAITayqanMeasurementReasoner({
+      apiKey: "test-key",
+      model: "gpt-5.6",
+    }, fakeFetch);
+
+    await expect(reasoner({
+      bundle: {
+        project: { id: "project-1", slug: "project-1", name: "Test", reference: "Q-001" },
+        governingContext: null,
+        sourceFileIds: ["aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"],
+        pages: [page({})],
+        existingEntities: [],
+        existingBoqItems: [],
+        rooms: [],
+      },
+      loadPageImageDataUrl: async () => null,
+    })).rejects.toMatchObject({
+      code: "TAYQAN_MEASUREMENT_AI_TIMEOUT",
+      status: 503,
+    });
+    expect(calls).toBe(1);
+  });
+
+  it("retains max/pro global reconciliation when more than one evidence cluster exists", async () => {
+    const subject = wallSubject();
+    const proposalKey = tayqanMeasurementProposalKey(subject);
+    const requests: Record<string, unknown>[] = [];
+    const fakeFetch = (async (_url: string | URL | Request, init?: RequestInit) => {
+      const request = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      requests.push(request);
+      const format = (request.text as { format?: { name?: string } })?.format;
+      const requestText = JSON.stringify(request);
+      if (format?.name === "tayqan_measurement_plan") {
+        return responseJson(
+          `resp-${requests.length}`,
+          requestText.includes("ARCHITECTURAL:1")
+            ? { subjects: [subject], exceptions: [] }
+            : { subjects: [], exceptions: [] },
+        );
+      }
+      return responseJson(`resp-${requests.length}`, {
+        decisions: [{
+          proposalKey,
+          decision: "ACCEPT",
+          exceptionKind: null,
+          severity: "LOW",
+          message: "Independent review accepted the evidence-backed proposal.",
+          pageIds: [PAGE_PLAN, PAGE_SECTION, PAGE_SCHEDULE],
+        }],
+        findings: [],
+      });
+    }) as typeof fetch;
+    const reasoner = createOpenAITayqanMeasurementReasoner({
+      apiKey: "test-key",
+      model: "gpt-5.6",
+      useSeniorProMode: true,
+    }, fakeFetch);
+
+    const result = await reasoner({
+      bundle: {
+        project: { id: "project-1", slug: "project-1", name: "Test", reference: "Q-001" },
+        governingContext: null,
+        sourceFileIds: ["aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"],
+        pages: [
+          ...bundlePages(),
+          page({
+            id: "55555555-5555-4555-8555-555555555555",
+            pageNumber: 4,
+            drawingNumber: "M-101",
+            drawingTitle: "Mechanical Plan",
+            discipline: "Mechanical",
+            role: "PLAN",
+          }),
+        ],
+        existingEntities: [],
+        existingBoqItems: [],
+        rooms: [],
+      },
+      loadPageImageDataUrl: async () => null,
+    });
+
+    expect(result.seniorReview.clusterReviewCount).toBe(1);
+    expect(result.seniorReview.globalReviewApplied).toBe(true);
+    expect(requests.some((request) => (
+      request.reasoning as { effort?: string; mode?: string }
+    )?.effort === "max")).toBe(true);
   });
 });
 

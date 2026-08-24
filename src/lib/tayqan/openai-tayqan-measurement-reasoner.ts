@@ -577,15 +577,20 @@ async function requestStructuredJson(
     } catch (error) {
       const normalizedError = error instanceof Error ? error : new Error(String(error));
       if (normalizedError instanceof NonRetryableOpenAIError) throw normalizedError;
+      // A provider timeout has already consumed the complete bounded request
+      // window. Retrying it inside the same Vercel invocation can only push
+      // the durable work-order checkpoint beyond the route budget and leave
+      // the protected lease looking permanently RUNNING. Let the work-order
+      // retry/resume contract own the next attempt instead.
+      if (normalizedError.name === "AbortError") {
+        throw new AppError(
+          "TAYQAN_MEASUREMENT_AI_TIMEOUT",
+          "TAYQAN's AI measurement request reached its controlled time limit. Retry this same assignment; completed work remains preserved.",
+          503,
+        );
+      }
       lastError = normalizedError;
       if (attempt + 1 >= REQUEST_RETRY_COUNT) {
-        if (normalizedError.name === "AbortError") {
-          throw new AppError(
-            "TAYQAN_MEASUREMENT_AI_TIMEOUT",
-            "TAYQAN's AI measurement request reached its controlled time limit. Retry this same assignment; completed work remains preserved.",
-            503,
-          );
-        }
         if (normalizedError instanceof TypeError) {
           throw new AppError(
             "TAYQAN_MEASUREMENT_AI_UNAVAILABLE",
@@ -856,7 +861,13 @@ export function createOpenAITayqanMeasurementReasoner(
     let globalRejectedCount = 0;
     let globalFindingCount = 0;
 
-    if (mergedPlan.subjects.length > 0) {
+    // A single cluster has already received an independent senior-QS check,
+    // and its context already includes the bounded project-wide schedule and
+    // existing-BOQ evidence. Running the cross-cluster reconciliation again
+    // is redundant when there is no second cluster to reconcile and can push
+    // the protected pass beyond the 300-second route budget. Multi-cluster
+    // projects retain the global reconciliation unchanged.
+    if (mergedPlan.subjects.length > 0 && clusters.length > 1) {
       const projectContext = compactProjectContext(input.bundle);
       const allProposalIndex = compactProposalIndex(mergedPlan, input.bundle);
       const preGlobalExceptions = mergedPlan.exceptions;

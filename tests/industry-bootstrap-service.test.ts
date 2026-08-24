@@ -1,6 +1,9 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { prisma } from "../src/lib/db/prisma";
-import { bootstrapIndustryEngines } from "../src/lib/services/industry-bootstrap-service";
+import {
+  bootstrapIndustryEngines,
+  ensureCompanyIndustryEngines,
+} from "../src/lib/services/industry-bootstrap-service";
 import { demoIndustries } from "../src/config/industries";
 
 /**
@@ -96,5 +99,17 @@ describe("industry-bootstrap-service (integration, real local Postgres)", () => 
     await bootstrapIndustryEngines();
     const second = await prisma.companyIndustryEngine.count({ where: { companyId: targetCompanyId } });
     expect(second).toBe(first);
+  });
+
+  it("repairs only the requested zero-link company at the authenticated list boundary", async () => {
+    const targetCompanyId = await createZeroLinkCompany("on-demand-target");
+    const unrelatedCompanyId = await createZeroLinkCompany("on-demand-unrelated");
+
+    expect(await ensureCompanyIndustryEngines(targetCompanyId)).toBe(true);
+    expect(await prisma.companyIndustryEngine.count({ where: { companyId: targetCompanyId } }))
+      .toBe(demoIndustries.length);
+    expect(await prisma.companyIndustryEngine.count({ where: { companyId: unrelatedCompanyId } }))
+      .toBe(0);
+    expect(await ensureCompanyIndustryEngines(targetCompanyId)).toBe(false);
   });
 });

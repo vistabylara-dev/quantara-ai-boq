@@ -1490,6 +1490,39 @@ async function advanceSourceProcessing(actor: CurrentActor, projectSlug: string,
   return advanceEvidenceReview(actor, projectSlug, next);
 }
 
+async function retryFailedSourceJobs(
+  actor: CurrentActor,
+  order: Awaited<ReturnType<typeof loadOrder>>,
+) {
+  await import("@/lib/jobs/register-handlers");
+  const { requirements } = await sourceRequirements(actor, order);
+  let restarted = 0;
+
+  for (const { file, engines } of requirements) {
+    for (const engineType of engines) {
+      const latest = await prisma.extractionJob.findFirst({
+        where: { companyId: actor.companyId, projectFileId: file.id, engineType },
+        orderBy: { createdAt: "desc" },
+      });
+
+      if (latest?.status !== ExtractionJobStatus.FAILED && latest?.status !== ExtractionJobStatus.CANCELLED) {
+        continue;
+      }
+
+      await extractionJobQueue.enqueue({
+        companyId: actor.companyId,
+        projectId: order.projectId,
+        projectFileId: file.id,
+        engineType,
+        createdByUserId: actor.userId,
+      });
+      restarted += 1;
+    }
+  }
+
+  return restarted;
+}
+
 function entityBlocker(entity: {
   id: string;
   label: string;
@@ -2560,6 +2593,8 @@ export async function answerTayqanWorkOrderBlocker(
       answerType: input.qaAnswerType ?? "EXPLAINED_WITH_NOTE",
       note: input.note?.trim() || "Answered through the TAYQAN paid work-order conversation.",
     });
+  } else if (input.action === "RETRY" && order.blockerCode === "SOURCE_JOB_FAILED") {
+    await retryFailedSourceJobs(actor, order);
   } else if (input.action !== "RETRY") {
     throw new AppError("TAYQAN_WORK_ACTION_INVALID", "Unsupported TAYQAN work-order action.", 400);
   }

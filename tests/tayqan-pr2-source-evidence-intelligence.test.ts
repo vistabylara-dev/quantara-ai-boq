@@ -239,4 +239,42 @@ describe("PR2 gaps 2 & 3: measurement service DB integration (real local Postgre
     // not branch on exception.kind), this result flows into that same,
     // already-proven gate without any further wiring.
   });
+
+  it("keeps the paid workflow alive when an AI proposal fails deterministic measurement validation", async () => {
+    await ensureFixtures();
+    const { file, page } = await createFileWithPage(`invalid-plan-${RUN_ID}.pdf`, `INVALID-${RUN_ID}`, "R01");
+    const invalidSubject = {
+      existingEntityId: null,
+      primaryPageId: page.id,
+      evidencePageIds: [page.id],
+      entityType: ExtractedEntityType.WALL_FINISH,
+      label: "Wall finish",
+      workPackage: "Architectural finishes",
+      location: "Level 01",
+      measurementMethod: "AREA",
+      methodSelectionRationale: "The finish is normally measured by area.",
+      methodConfidence: 80,
+      // Deliberately incompatible with AREA: the deterministic contract must
+      // reject this proposal without crashing the whole work order.
+      calculationType: "COUNT",
+      inputs: [{ key: "count", value: 1, unit: "nr", derivation: "SCHEDULE_VALUE", evidencePageIds: [page.id], evidenceRoomIds: [], evidenceNote: "Test evidence.", confidence: 80 }],
+      supportingChecks: [],
+      rationale: "Deliberately invalid contract fixture.",
+      sourceSummary: "Controlled test page.",
+      confidence: 80,
+    };
+
+    const outcome = await prepareTayqanMeasurementProposals(
+      await actor(), projectId,
+      { projectId, sourceFileIds: [file.id] },
+      { reasoner: stubReasoner({ plan: { subjects: [invalidSubject as never], exceptions: [] } }) },
+    );
+
+    expect(outcome.measuredSubjectCount).toBe(0);
+    expect(outcome.exceptions).toContainEqual(expect.objectContaining({
+      kind: "METHOD_SELECTION_UNCERTAIN",
+      pageIds: [page.id],
+      relatedEntityId: null,
+    }));
+  });
 });

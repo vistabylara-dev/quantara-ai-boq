@@ -387,6 +387,21 @@ describe("client proposal + email delivery (integration, real local Postgres)", 
       ).rejects.toMatchObject({ code: "CRITICAL_VERIFICATION_EXCEPTIONS" });
     });
 
+    it("rejects draft review documents even after their BOQ is locked", async () => {
+      const { project, boq, documentId } = await fixture("draft-document");
+      await prisma.generatedDocument.update({ where: { id: documentId }, data: { isDraft: true } });
+
+      await expect(
+        createProposalForProject(actor(companyAId), project.databaseId, {
+          sourceType: "BOQ_REVISION",
+          boqId: boq.id,
+          recipientEmail: "client@example.com",
+          recipientName: "Client",
+          documentIds: [documentId],
+        }),
+      ).rejects.toMatchObject({ code: "DRAFT_DOCUMENT_NOT_PROPOSAL_READY" });
+    });
+
     it("rejects a document belonging to a different company (tenant isolation on attachments)", async () => {
       const { project, boq } = await fixture("cross-tenant-doc");
       const otherDoc = await prisma.generatedDocument.create({

@@ -36,4 +36,15 @@ describe("BOQ finalization architecture contract", () => {
     expect(verificationPage).toContain("exceptions.length === 0 && !summary?.freshlyVerified");
     expect(verificationPage).toContain("exceptions.length === 0 && summary?.freshlyVerified");
   });
+
+  it("keeps Documents on the shared gate and proposals free of draft evidence", () => {
+    const readiness = read("src/lib/workflow/document-readiness-state.ts");
+    const generation = read("src/lib/services/document-generation-service.ts");
+    const proposalService = read("src/lib/services/client-proposal-service.ts");
+
+    expect(readiness).toContain("input.selectedBoq.finalization");
+    expect(readiness).toContain('finalization.lockReason === "ESTIMATE_INTEGRITY_REQUIRED"');
+    expect(generation).toContain("if (unresolvedCriticalCount > 0)");
+    expect(proposalService).toContain("assertProposalDocumentEligible(doc)");
+  });
 });

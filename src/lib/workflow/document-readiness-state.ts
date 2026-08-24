@@ -12,6 +12,7 @@ export type DocumentReadinessState =
   | "NO_BOQ"
   | "DRAFT_UNVALIDATED"
   | "DRAFT_HAS_CRITICALS"
+  | "DRAFT_INTEGRITY_REQUIRED"
   | "DRAFT_READY_TO_LOCK"
   | "LOCKED_READY"
   | "GENERATING";
@@ -36,17 +37,6 @@ export function computeDocumentReadiness(input: DocumentReadinessInput): Documen
   if (input.isGenerating) {
     return { state: "GENERATING", why: "Generating the document now.", nextActionLabel: null };
   }
-  // Checked even when locked: the lock endpoint requires zero criticals at the
-  // moment it locks, so this should be unreachable in practice — but if
-  // verification data on hand ever disagrees, generation eligibility must
-  // reflect that instead of unconditionally trusting the lock flag alone.
-  if (input.verification !== null && input.verification.unresolvedCritical > 0) {
-    return {
-      state: "DRAFT_HAS_CRITICALS",
-      why: `Final output cannot be finalized because ${input.verification.unresolvedCritical} critical validation issue(s) remain.`,
-      nextActionLabel: "Review validation issues",
-    };
-  }
   if (input.isLockedRevision) {
     return {
       state: "LOCKED_READY",
@@ -54,7 +44,33 @@ export function computeDocumentReadiness(input: DocumentReadinessInput): Documen
       nextActionLabel: "Generate document",
     };
   }
-  if (input.verification === null) {
+  const finalization = input.selectedBoq.finalization;
+  if (!finalization || finalization.lockReason === "VERIFICATION_REQUIRED" || finalization.lockReason === "VERIFICATION_STALE") {
+    return {
+      state: "DRAFT_UNVALIDATED",
+      why: "Verification is missing or out of date for this revision. Re-run it before finalization.",
+      nextActionLabel: "Run validation",
+    };
+  }
+  // Checked even when locked: the lock endpoint requires zero criticals at the
+  // moment it locks, so this should be unreachable in practice — but if
+  // verification data on hand ever disagrees, generation eligibility must
+  // reflect that instead of unconditionally trusting the lock flag alone.
+  if (finalization.lockReason === "UNRESOLVED_CRITICAL_EXCEPTIONS" || (input.verification !== null && input.verification.unresolvedCritical > 0)) {
+    return {
+      state: "DRAFT_HAS_CRITICALS",
+      why: `Final output cannot be finalized because ${Math.max(finalization.unresolvedCritical, input.verification?.unresolvedCritical ?? 0)} critical validation issue(s) remain.`,
+      nextActionLabel: "Review validation issues",
+    };
+  }
+  if (finalization.lockReason === "ESTIMATE_INTEGRITY_REQUIRED") {
+    return {
+      state: "DRAFT_INTEGRITY_REQUIRED",
+      why: `${finalization.unconfirmedItemCount} item(s) still need confirmed quantity and rate evidence before finalization.`,
+      nextActionLabel: "Review BOQ evidence",
+    };
+  }
+  if (input.verification === null || !finalization.lockEligible) {
     return {
       state: "DRAFT_UNVALIDATED",
       why: "Validation status is currently unavailable for this revision. Status unavailable does not mean zero issues.",

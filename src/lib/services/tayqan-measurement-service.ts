@@ -504,28 +504,38 @@ export async function prepareTayqanMeasurementProposals(
     }] as const),
   );
 
-  // PR2 gap 3: a genuine revision-mix condition (TayqanRevisionConflictError)
-  // is caught per-subject and recorded as a structured, gating
-  // REVISION_CONFLICT exception instead of aborting the whole pass — every
-  // other thrown error here still aborts everything, unchanged. See
-  // assertNoRevisionMix's doc comment for why only this one error type is
-  // singled out.
+  // A reasoner proposal is still untrusted until it passes the deterministic
+  // calculator/evidence contract below. One invalid proposal must never crash
+  // the entire paid work order or hide behind a generic HTTP 500. Preserve the
+  // dedicated revision-conflict signal, and convert every other rejected
+  // proposal into a visible, dangerous measurement exception. The work order
+  // can therefore continue to the review document, but BOQ acceptance remains
+  // blocked until a professional resolves the invalid proposal.
   const evaluated: EvaluatedTayqanMeasurement[] = [];
-  const revisionConflictExceptions: TayqanMeasurementException[] = [];
+  const validationExceptions: TayqanMeasurementException[] = [];
   for (const subject of result.plan.subjects) {
     try {
       evaluated.push(evaluateTayqanMeasurementSubject(subject, { allowedEntityIds, roomsById, pagesById }));
     } catch (error) {
       if (error instanceof TayqanRevisionConflictError) {
-        revisionConflictExceptions.push(error.exception);
+        validationExceptions.push(error.exception);
         continue;
       }
-      throw error;
+      validationExceptions.push({
+        kind: "METHOD_SELECTION_UNCERTAIN",
+        message: "TAYQAN rejected an AI measurement proposal because it did not pass the deterministic measurement and evidence checks. Review the proposed scope and measurement method before acceptance.",
+        pageIds: [...new Set(subject.evidencePageIds)],
+        relatedEntityId: subject.existingEntityId,
+      });
+      console.error(
+        "[TAYQAN-MEASUREMENT] Rejected invalid reasoner subject",
+        error instanceof Error ? error.message : error,
+      );
     }
   }
   const exceptions = mergeTayqanMeasurementPlans([
     { subjects: [], exceptions: result.plan.exceptions },
-    { subjects: [], exceptions: revisionConflictExceptions },
+    { subjects: [], exceptions: validationExceptions },
   ]).exceptions;
 
   let createdEntityCount = 0;

@@ -84,13 +84,17 @@ export async function registerCompanyOwner(input: RegisterInput) {
     return { user: createdUser };
   });
 
-  await issueEmailVerificationToken(user.id, user.email);
+  await issueEmailVerificationToken(user.id, user.email, input.priceCode);
 
 
   return { userId: user.id, companyId: user.companyId, email: user.email };
 }
 
-export async function issueEmailVerificationToken(userId: string, email: string): Promise<void> {
+export async function issueEmailVerificationToken(
+  userId: string,
+  email: string,
+  priceCode?: string,
+): Promise<void> {
   const rawToken = generateRawToken();
   await prisma.emailVerificationToken.create({
     data: {
@@ -99,7 +103,10 @@ export async function issueEmailVerificationToken(userId: string, email: string)
       expiresAt: new Date(Date.now() + EMAIL_VERIFICATION_TTL_MS),
     },
   });
-  const url = `${appBaseUrl()}/verify-email?token=${rawToken}`;
+  const verificationUrl = new URL("/verify-email", appBaseUrl());
+  verificationUrl.searchParams.set("token", rawToken);
+  if (priceCode) verificationUrl.searchParams.set("priceCode", priceCode);
+  const url = verificationUrl.toString();
   const { subject, html, text } = buildVerificationEmail(url);
   await sendAuthEmail({ to: email, subject, html, text });
 }

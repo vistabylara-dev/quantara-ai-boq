@@ -8,6 +8,8 @@ import { projectSchema, projectSchemaType } from "@/lib/validation/project-schem
 import { ApiClientError, apiClient, getApiErrorMessage } from "@/lib/api/client";
 import ClientPicker from "@/components/projects/client-picker";
 import type { Client } from "@/types/client";
+import { emitOnboardingActionComplete } from "@/lib/onboarding/onboarding-state";
+import { trackConversionEvent } from "@/lib/marketing/conversion-events";
 
 type IndustryOption = {
   id: string;
@@ -101,7 +103,11 @@ export default function NewProjectPage() {
         taxRate: data.taxRate,
         language: data.language,
       });
-      router.push(`/projects/${result.project.id}`);
+      emitOnboardingActionComplete("PROJECT_CREATED", { projectId: result.project.id });
+      emitOnboardingActionComplete("BOQ_PREPARED", { projectId: result.project.id });
+      trackConversionEvent("first_project_created", { industry: data.industryEngineId });
+      trackConversionEvent("first_boq_created", { source: "project_creation" });
+      router.push(`/projects/${encodeURIComponent(result.project.id)}/boq`);
     } catch (submitError) {
       setFormError(getApiErrorMessage(submitError));
       if (submitError instanceof ApiClientError && submitError.code === "PROJECT_REFERENCE_EXISTS") {

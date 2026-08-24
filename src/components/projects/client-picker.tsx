@@ -17,6 +17,8 @@ export default function ClientPicker({ selectedClient, onSelect }: ClientPickerP
   const [results, setResults] = useState<Client[]>([]);
   const [isOpen, setIsOpen] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
+  const [isQuickCreating, setIsQuickCreating] = useState(false);
+  const [quickCreateError, setQuickCreateError] = useState<string | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -44,6 +46,27 @@ export default function ClientPicker({ selectedClient, onSelect }: ClientPickerP
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
+
+  const quickCreateName = search.trim();
+  const hasExactMatch = results.some(
+    (client) => client.name.trim().toLocaleLowerCase() === quickCreateName.toLocaleLowerCase(),
+  );
+
+  const quickCreateClient = async () => {
+    if (!quickCreateName || isQuickCreating) return;
+    setIsQuickCreating(true);
+    setQuickCreateError(null);
+    try {
+      const client = await apiClient.post<Client>("/api/clients", { name: quickCreateName });
+      onSelect(client);
+      setSearch("");
+      setIsOpen(false);
+    } catch {
+      setQuickCreateError(t("projects.clientPicker.quickCreateError"));
+    } finally {
+      setIsQuickCreating(false);
+    }
+  };
 
   return (
     <div className="relative" ref={containerRef}>
@@ -88,6 +111,19 @@ export default function ClientPicker({ selectedClient, onSelect }: ClientPickerP
               </button>
             ))}
           </div>
+          {quickCreateName && !hasExactMatch && (
+            <button
+              type="button"
+              disabled={isQuickCreating}
+              onClick={() => void quickCreateClient()}
+              className="mt-2 w-full rounded-xl bg-blue-600 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-500 disabled:opacity-60"
+            >
+              {isQuickCreating
+                ? t("projects.clientPicker.quickCreating")
+                : t("projects.clientPicker.quickCreate", { name: quickCreateName })}
+            </button>
+          )}
+          {quickCreateError && <p role="alert" className="mt-2 px-2 text-xs text-rose-300">{quickCreateError}</p>}
           <button
             type="button"
             onClick={() => {

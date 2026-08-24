@@ -2,7 +2,10 @@ export type ConversionEventName =
   | "pricing_plan_selected"
   | "registration_started"
   | "registration_completed"
+  | "email_verified"
   | "login_completed"
+  | "first_project_created"
+  | "first_boq_created"
   | "sales_lead_submitted";
 
 type ConversionEventParameters = Record<string, string | number | boolean | null | undefined>;

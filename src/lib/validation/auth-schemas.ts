@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { TRUSTED_PUBLIC_PRICE_CODES } from "@/lib/commercial/pricing-intent";
 
 export const passwordSchema = z
   .string()
@@ -18,6 +19,7 @@ export const registerSchema = z
     primaryIndustry: z.string().optional(),
     intendedUse: z.string().optional(),
     approximateVolume: z.string().optional(),
+    priceCode: z.enum(TRUSTED_PUBLIC_PRICE_CODES).optional(),
     consent: z.boolean().optional(),
   })
   .strict();

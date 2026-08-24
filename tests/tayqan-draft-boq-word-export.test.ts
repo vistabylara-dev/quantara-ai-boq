@@ -106,6 +106,7 @@ const baseInput: Omit<BuildDocumentDataInput, "audience"> = {
   templateName: "Corporate Technical",
   documentType: "DOCX",
   generatedByName: "Test Runner",
+  generatedAt: new Date("2026-01-01T00:00:00.000Z"),
   isDraft: true,
 };
 

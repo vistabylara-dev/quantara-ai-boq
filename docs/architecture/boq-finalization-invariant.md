@@ -21,6 +21,9 @@ The gate must reject:
 4. Verification UI must never call a stale empty exception list clean.
 5. The lock API must re-run verification immediately before `lockBOQ`.
 6. `lockBOQ` remains the final transactional authority and must independently reject invalid item data, stale verification, critical exceptions, and incomplete estimate provenance.
+7. Documents readiness must consume the BOQ's shared finalization result; a clean exception count alone is insufficient.
+8. Draft CSV/HTML and quantities-only review DOCX may contain unresolved review items, but must remain marked as drafts.
+9. Client proposals must reject every generated document whose `isDraft` flag is true, even if the BOQ is later locked.
 
 ## Change control
 

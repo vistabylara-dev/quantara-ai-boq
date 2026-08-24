@@ -1,4 +1,4 @@
-import { DocumentAudience, GeneratedDocumentStatus, TechnicalReportStatus } from "@prisma/client";
+import { TechnicalReportStatus } from "@prisma/client";
 import type { CurrentActor } from "@/lib/auth/current-actor";
 import { requireCapability } from "@/lib/auth/rbac";
 import { AppError, NotFoundError } from "@/lib/errors/app-error";
@@ -10,6 +10,7 @@ import { appBaseUrl } from "@/lib/auth/dev-mailer";
 import { hashPassword } from "@/lib/auth/password";
 import { DEFAULT_VALIDITY_DAYS } from "@/lib/documents/build-document-data";
 import type { ClientProposalSettings } from "@/lib/proposals/proposal-settings";
+import { assertProposalDocumentEligible } from "@/lib/proposals/proposal-document-eligibility";
 import { canCreateProposal, recordProposalCreated } from "@/lib/entitlements/entitlement-service";
 import {
   createProposal,
@@ -109,12 +110,7 @@ async function createBoqProposal(actor: CurrentActor, project: ProjectRecord, in
     if (doc.projectId !== project.id || doc.boqId !== boqRecord.id) {
       throw new AppError("GENERATED_DOCUMENT_SOURCE_MISMATCH", "Selected documents must belong to this project revision.", 400);
     }
-    if (doc.audience !== DocumentAudience.CLIENT) {
-      throw new AppError("DOCUMENT_NOT_CLIENT_FACING", "Only client-facing documents can be attached to a proposal.", 400);
-    }
-    if (doc.status !== GeneratedDocumentStatus.COMPLETED) {
-      throw new AppError("DOCUMENT_NOT_READY", "Selected documents must finish generating before they can be attached.", 400);
-    }
+    assertProposalDocumentEligible(doc);
   }
 
   const client = await prisma.client.findFirst({ where: { id: project.clientId, companyId: actor.companyId } });

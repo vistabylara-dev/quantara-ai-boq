@@ -47,6 +47,9 @@ type GeneratedDocumentView = {
 type VerificationSummary = {
   unresolvedCritical: number;
   unresolvedWarning: number;
+  freshlyVerified: boolean;
+  lockReason: string | null;
+  unconfirmedItemCount: number;
 };
 
 const DOCUMENT_TYPES = ["CSV", "XLSX", "PDF", "DOCX", "HTML"] as const;
@@ -138,7 +141,8 @@ export default function ProjectDocumentsPage(props: PageProps) {
   const isLockedRevision = Boolean(selectedBoq?.isLocked) || selectedBoq?.status === "locked" || selectedBoq?.status === "approved";
   const requiresLock = FINAL_ONLY_TYPES.has(selectedType) && !isLockedRevision;
   const blockedByCriticals = Boolean(verification && verification.unresolvedCritical > 0);
-  const canGenerate = Boolean(selectedBoqId && selectedTemplateId && !requiresLock && !blockedByCriticals && !isGenerating);
+  const isDraftReviewFormat = !FINAL_ONLY_TYPES.has(selectedType);
+  const canGenerate = Boolean(selectedBoqId && selectedTemplateId && !requiresLock && (isDraftReviewFormat || !blockedByCriticals) && !isGenerating);
 
   const readiness = useMemo(
     () => computeDocumentReadiness({ selectedBoq, isLockedRevision, verification, isGenerating }),
@@ -473,7 +477,7 @@ export default function ProjectDocumentsPage(props: PageProps) {
               className={`mt-4 rounded-2xl border p-4 text-xs ${
                 readiness.state === "LOCKED_READY"
                   ? "border-emerald-900 bg-emerald-950/30 text-emerald-300"
-                  : readiness.state === "DRAFT_HAS_CRITICALS"
+                  : readiness.state === "DRAFT_HAS_CRITICALS" || readiness.state === "DRAFT_INTEGRITY_REQUIRED"
                     ? "border-rose-900 bg-rose-950/30 text-rose-300"
                     : "border-amber-900 bg-amber-950/30 text-amber-300"
               }`}
@@ -503,6 +507,15 @@ export default function ProjectDocumentsPage(props: PageProps) {
                 className="mt-4 inline-flex w-full items-center justify-center rounded-2xl border border-slate-700 bg-slate-900 px-4 py-3 text-sm font-semibold text-slate-200 hover:bg-slate-800"
               >
                 {readiness.nextActionLabel}
+              </Link>
+            )}
+
+            {readiness.state === "DRAFT_INTEGRITY_REQUIRED" && (
+              <Link
+                href={`/projects/${params.projectId}/boq`}
+                className="mt-4 inline-flex w-full items-center justify-center rounded-2xl border border-slate-700 bg-slate-900 px-4 py-3 text-sm font-semibold text-slate-200 hover:bg-slate-800"
+              >
+                Review BOQ evidence
               </Link>
             )}
 

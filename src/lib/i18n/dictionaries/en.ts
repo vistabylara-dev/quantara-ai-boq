@@ -105,6 +105,11 @@ const en = {
       featureReviewed: "Review-controlled project data",
       featureMeasurement: "Guided measurement and visible calculations",
       featureOutputs: "Professional project and BOQ outputs",
+      resendHelp: "Didn’t receive the verification email? Send a new link using the email and password entered above.",
+      resendVerification: "Resend verification email",
+      resending: "Sending again...",
+      resendSent: "A new verification email was sent. Check your inbox and spam folder.",
+      resendFailed: "We could not confirm email delivery. Please retry shortly or contact support.",
     },
     register: {
       title: "Create your Quantara account",

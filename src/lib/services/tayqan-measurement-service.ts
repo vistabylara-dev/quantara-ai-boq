@@ -428,6 +428,21 @@ async function resolveOrCreateMeasurementEntity(
   return { entity, created: true };
 }
 
+async function runTayqanMeasurementPhase<T>(
+  phase: string,
+  code: string,
+  customerMessage: string,
+  execute: () => Promise<T>,
+): Promise<T> {
+  try {
+    return await execute();
+  } catch (error) {
+    if (error instanceof AppError) throw error;
+    console.error(`[TAYQAN-MEASUREMENT] ${phase} failed`, error);
+    throw new AppError(code, customerMessage, 503);
+  }
+}
+
 export async function prepareTayqanMeasurementProposals(
   actor: CurrentActor,
   projectIdentifier: string,
@@ -435,10 +450,11 @@ export async function prepareTayqanMeasurementProposals(
   options: PrepareTayqanMeasurementsOptions = {},
 ): Promise<PrepareTayqanMeasurementsResult> {
   requireCapability(actor, "boq:edit");
-  const { bundle, imageStorageKeyByPageId } = await buildEvidenceBundle(
-    actor,
-    projectIdentifier,
-    input,
+  const { bundle, imageStorageKeyByPageId } = await runTayqanMeasurementPhase(
+    "evidence preparation",
+    "TAYQAN_MEASUREMENT_EVIDENCE_PREPARATION_FAILED",
+    "TAYQAN could not prepare the processed source evidence for measurement. Retry this same assignment; completed work remains preserved.",
+    () => buildEvidenceBundle(actor, projectIdentifier, input),
   );
 
   const env = options.env ?? process.env;
@@ -466,23 +482,28 @@ export async function prepareTayqanMeasurementProposals(
     });
   })();
 
-  const result = await reasoner({
-    bundle,
-    onProgress: options.onProgress,
-    loadPageImageDataUrl: async (pageId) => {
-      const key = imageStorageKeyByPageId.get(pageId);
-      if (!key) return null;
-      const buffer = await getStorageAdapter().getObject(key);
-      if (buffer.byteLength > MAX_PAGE_IMAGE_BYTES) {
-        throw new AppError(
-          "TAYQAN_MEASUREMENT_PAGE_TOO_LARGE",
-          "A rendered drawing page is too large for bounded AI measurement analysis. Re-render the page at the standard processing resolution instead of sending an unbounded image.",
-          409,
-        );
-      }
-      return `data:image/png;base64,${buffer.toString("base64")}`;
-    },
-  });
+  const result = await runTayqanMeasurementPhase(
+    "AI reasoning",
+    "TAYQAN_MEASUREMENT_AI_EXECUTION_FAILED",
+    "TAYQAN could not complete the bounded AI measurement pass. Retry this same assignment; completed work remains preserved.",
+    () => reasoner({
+      bundle,
+      onProgress: options.onProgress,
+      loadPageImageDataUrl: async (pageId) => {
+        const key = imageStorageKeyByPageId.get(pageId);
+        if (!key) return null;
+        const buffer = await getStorageAdapter().getObject(key);
+        if (buffer.byteLength > MAX_PAGE_IMAGE_BYTES) {
+          throw new AppError(
+            "TAYQAN_MEASUREMENT_PAGE_TOO_LARGE",
+            "A rendered drawing page is too large for bounded AI measurement analysis. Re-render the page at the standard processing resolution instead of sending an unbounded image.",
+            409,
+          );
+        }
+        return `data:image/png;base64,${buffer.toString("base64")}`;
+      },
+    }),
+  );
 
   const allowedEntityIds = new Set(bundle.existingEntities.map((entity) => entity.id));
   const roomsById = new Map(
@@ -546,7 +567,11 @@ export async function prepareTayqanMeasurementProposals(
   for (const measurement of evaluated) {
     const fingerprint = fingerprintMeasurement(measurement);
 
-    const persisted = await prisma.$transaction(async (tx) => {
+    const persisted = await runTayqanMeasurementPhase(
+      "measurement persistence",
+      "TAYQAN_MEASUREMENT_PERSISTENCE_FAILED",
+      "TAYQAN could not preserve a validated measurement proposal. Retry this same assignment; completed work remains preserved.",
+      () => prisma.$transaction(async (tx) => {
       const { entity, created } = await resolveOrCreateMeasurementEntity(
         tx,
         actor,
@@ -627,10 +652,11 @@ export async function prepareTayqanMeasurementProposals(
       }
 
       return { entityCreated: created, calculationCreated };
-    }, {
-      maxWait: 10_000,
-      timeout: 20_000,
-    });
+      }, {
+        maxWait: 10_000,
+        timeout: 20_000,
+      }),
+    );
 
     if (persisted.entityCreated) createdEntityCount += 1;
     else reusedEntityCount += 1;
@@ -638,7 +664,11 @@ export async function prepareTayqanMeasurementProposals(
     else reusedCalculationCount += 1;
   }
 
-  await createAuditLog(actor.companyId, {
+  await runTayqanMeasurementPhase(
+    "completion audit persistence",
+    "TAYQAN_MEASUREMENT_AUDIT_PERSISTENCE_FAILED",
+    "TAYQAN completed the measurement pass but could not preserve its completion record. Retry this same assignment; completed work remains preserved.",
+    () => createAuditLog(actor.companyId, {
     entityType: "Project",
     entityId: bundle.project.id,
     action: "TAYQAN_MEASUREMENT_PASS_COMPLETED",
@@ -668,7 +698,8 @@ export async function prepareTayqanMeasurementProposals(
       governingContext: bundle.governingContext,
       professionallyConfirmed: false,
     },
-  });
+    }),
+  );
 
   return {
     measuredSubjectCount: evaluated.length,

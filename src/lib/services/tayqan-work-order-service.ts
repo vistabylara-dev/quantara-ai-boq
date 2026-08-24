@@ -1389,13 +1389,18 @@ async function advanceSourceDiscovery(
 }
 
 async function advanceSourceProcessing(actor: CurrentActor, projectSlug: string, order: Awaited<ReturnType<typeof loadOrder>>) {
-  await runTayqanWorkOrderPhase(
-    order.id,
-    "source-handler-registration",
-    "TAYQAN_SOURCE_HANDLER_REGISTRATION_FAILED",
-    "TAYQAN could not initialize the protected source-processing handlers. Retry the same assignment; uploaded sources and completed evidence remain preserved.",
-    () => import("@/lib/jobs/register-handlers"),
-  );
+  let handlersRegistered = false;
+  const ensureSourceHandlersRegistered = async () => {
+    if (handlersRegistered) return;
+    await runTayqanWorkOrderPhase(
+      order.id,
+      "source-handler-registration",
+      "TAYQAN_SOURCE_HANDLER_REGISTRATION_FAILED",
+      "TAYQAN could not initialize the protected source-processing handlers. Retry the same assignment; uploaded sources and completed evidence remain preserved.",
+      () => import("@/lib/jobs/register-handlers"),
+    );
+    handlersRegistered = true;
+  };
   const {
     requirements,
     conflicts,
@@ -1447,6 +1452,7 @@ async function advanceSourceProcessing(actor: CurrentActor, projectSlug: string,
           // recovers a genuinely stale RUNNING job. Existing live RUNNING
           // jobs remain untouched and duplicate processing is prevented by
           // the queue's conditional claim.
+          await ensureSourceHandlersRegistered();
           await runTayqanWorkOrderPhase(
             order.id,
             `source-job-recovery:${engineType}`,
@@ -1479,6 +1485,7 @@ async function advanceSourceProcessing(actor: CurrentActor, projectSlug: string,
         }
       }
 
+      await ensureSourceHandlersRegistered();
       const job = await runTayqanWorkOrderPhase(
         order.id,
         `source-job-enqueue:${engineType}`,

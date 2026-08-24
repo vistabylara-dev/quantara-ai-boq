@@ -1009,6 +1009,8 @@ describe("TAYQAN senior work-order governance wiring", () => {
     expect(workOrder).toMatch(/claimTayqanMeasurementLease[\s\S]*prisma\.\$transaction\(async \(tx\)[\s\S]*TAYQAN_MEASUREMENT_LEASE_ACQUIRED/);
     expect(workOrder).toContain("heartbeatTayqanMeasurementLease");
     expect(workOrder).toContain('"source-handler-registration"');
+    expect(workOrder).toContain("if (handlersRegistered) return;");
+    expect(workOrder).toContain("await ensureSourceHandlersRegistered();");
     expect(workOrder).toContain('"source-requirements"');
     expect(workOrder).toContain('"TAYQAN_SOURCE_JOB_RECOVERY_FAILED"');
     expect(workOrder).toContain('"source-processing-wait-commit"');

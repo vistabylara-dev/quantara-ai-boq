@@ -272,6 +272,9 @@ describe("TAYQAN Full-BOQ rescue regression", () => {
       "source-job-recovery:${engineType}",
     );
     expect(nonTerminalBranch).toContain(
+      "await ensureSourceHandlersRegistered();",
+    );
+    expect(nonTerminalBranch).toContain(
       "() => extractionJobQueue.enqueue({",
     );
     expect(nonTerminalBranch).toContain(

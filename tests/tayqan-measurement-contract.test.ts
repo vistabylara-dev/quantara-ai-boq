@@ -723,6 +723,47 @@ describe("TAYQAN senior OpenAI orchestration — mocked, zero network", () => {
     ];
   }
 
+  it("surfaces a safe retryable provider status and request reference", async () => {
+    const fakeFetch = (async () => new Response(
+      JSON.stringify({ error: { message: "must never reach the customer" } }),
+      {
+        status: 400,
+        headers: {
+          "Content-Type": "application/json",
+          "x-request-id": "req_tayqan_diagnostic",
+        },
+      },
+    )) as typeof fetch;
+
+    const reasoner = createOpenAITayqanMeasurementReasoner({
+      apiKey: "test-key",
+      model: "gpt-5.6",
+    }, fakeFetch);
+
+    const input = {
+      bundle: {
+        project: { id: "project-1", slug: "project-1", name: "Test", reference: "Q-001" },
+        governingContext: null,
+        sourceFileIds: ["aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"],
+        pages: [page({})],
+        existingEntities: [],
+        existingBoqItems: [],
+        rooms: [],
+      },
+      loadPageImageDataUrl: async () => null,
+    };
+
+    await expect(reasoner(input)).rejects.toMatchObject({
+      code: "TAYQAN_MEASUREMENT_AI_REQUEST_REJECTED",
+      status: 503,
+      message: expect.stringContaining("HTTP 400"),
+    });
+
+    await expect(reasoner(input)).rejects.toThrow(
+      "Provider request: req_tayqan_diagnostic",
+    );
+  });
+
   it("sends GPT-5.6 original-detail images without storing drawing-analysis responses", async () => {
     const requests: Record<string, unknown>[] = [];
     const fakeFetch = (async (_url: string | URL | Request, init?: RequestInit) => {

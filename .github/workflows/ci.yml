@@ -65,7 +65,7 @@ jobs:
         run: npx playwright install --with-deps chromium
 
       - name: Verify first-project onboarding in Chromium
-        run: npx playwright test tests/e2e/onboarding-first-project.spec.ts --project=chromium
+        run: npx playwright test tests/e2e/onboarding-first-project.spec.ts --project=chromium --project="Mobile Chrome"
 
       - name: Build Next.js
         run: npm run build

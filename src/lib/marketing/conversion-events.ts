@@ -11,6 +11,18 @@ export type ConversionEventName =
 
 type ConversionEventParameters = Record<string, string | number | boolean | null | undefined>;
 
+const CONVERSION_EVENT_PARAMETER_ALLOWLIST: Record<ConversionEventName, readonly string[]> = {
+  pricing_plan_selected: ["plan", "billing_cycle", "selected_plan_code"],
+  registration_started: ["selected_option", "selected_plan_code"],
+  registration_completed: ["selected_option", "selected_plan_code"],
+  email_verified: ["selected_plan_code"],
+  login_completed: ["destination", "selected_plan_code"],
+  first_project_created: ["industry"],
+  first_boq_created: ["source"],
+  first_export_generated: ["format", "source"],
+  sales_lead_submitted: ["preferred_contact_method", "company_type"],
+};
+
 declare global {
   interface Window {
     dataLayer: unknown[];
@@ -28,11 +40,14 @@ export function trackConversionEvent(
 ): void {
   if (typeof window === "undefined") return;
 
+  const allowedParameters = new Set(CONVERSION_EVENT_PARAMETER_ALLOWLIST[event]);
   window.dataLayer = window.dataLayer ?? [];
   window.dataLayer.push({
     event,
     ...Object.fromEntries(
-      Object.entries(parameters).filter(([, value]) => value !== undefined),
+      Object.entries(parameters).filter(
+        ([key, value]) => allowedParameters.has(key) && value !== undefined,
+      ),
     ),
   });
 }

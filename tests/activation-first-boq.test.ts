@@ -31,7 +31,7 @@ describe("first-value activation journey", () => {
 
     expect(verifyPage).toContain("normalizePublicPriceCode");
     expect(verifyPage).toContain("buildLoginPricingHref");
-    expect(verifyPage).toContain('trackConversionEvent("email_verified"');
+    expect(verifyPage).toContain('trackFirstConversionEvent("email_verified"');
     expect(english).not.toContain("development console link");
   });
 
@@ -41,6 +41,8 @@ describe("first-value activation journey", () => {
 
     expect(newProjectPage).toContain('emitOnboardingActionComplete("PROJECT_CREATED"');
     expect(newProjectPage).toContain('emitOnboardingActionComplete("BOQ_PREPARED"');
+    expect(newProjectPage).toContain('trackFirstConversionEvent("first_project_created"');
+    expect(newProjectPage).toContain('trackFirstConversionEvent("first_boq_created"');
     expect(newProjectPage).toContain("/boq`");
     expect(newProjectPage).not.toContain("router.push(`/projects/${result.project.id}`)");
     expect(industriesRoute).toContain("ensureCompanyIndustryEngines(actor.companyId)");

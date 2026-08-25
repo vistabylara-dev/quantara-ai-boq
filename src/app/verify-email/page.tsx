@@ -10,7 +10,7 @@ import {
   normalizePublicPriceCode,
   storePendingPricingIntent,
 } from "@/lib/commercial/pricing-intent";
-import { trackConversionEvent } from "@/lib/marketing/conversion-events";
+import { trackFirstConversionEvent } from "@/lib/marketing/conversion-events";
 
 function VerifyEmailForm() {
   const searchParams = useSearchParams();
@@ -27,7 +27,7 @@ function VerifyEmailForm() {
       await apiClient.post("/api/auth/verify-email", { token: value.trim() });
       const priceCode = normalizePublicPriceCode(searchParams.get("priceCode"));
       if (priceCode) storePendingPricingIntent(priceCode);
-      trackConversionEvent("email_verified", {
+      trackFirstConversionEvent("email_verified", {
         selected_plan_code: priceCode,
       });
       setStatus("success");

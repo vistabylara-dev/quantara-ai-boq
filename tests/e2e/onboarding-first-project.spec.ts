@@ -162,6 +162,8 @@ test.describe("first-project onboarding route", () => {
     );
     await page.goto("/projects/new", { waitUntil: "domcontentloaded" });
 
+    await expect(page.getByRole("dialog", { name: "Find the Right Quantara Package" })).toHaveCount(0);
+
     await page.getByLabel("Project name").fill("Self Service Project");
     await page.getByLabel("Project reference").fill("SELF-SERVICE-001");
     await page.getByRole("button", { name: "Select or create a client" }).click();

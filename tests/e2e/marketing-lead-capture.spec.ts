@@ -77,8 +77,12 @@ async function mockLeadApis(
   page: Page,
   session: unknown,
   capture?: (request: Request) => Promise<void>,
+  leadResponses: Array<{ status: number; body: string }> = [
+    { status: 201, body: envelope({ received: true }) },
+  ],
 ) {
   let sessionRequestCount = 0;
+  let leadRequestCount = 0;
 
   await page.route("**/api/**", async (route) => {
     const request = route.request();
@@ -86,10 +90,12 @@ async function mockLeadApis(
 
     if (pathname === "/api/marketing/leads" && request.method() === "POST") {
       await capture?.(request);
+      const response = leadResponses[Math.min(leadRequestCount, leadResponses.length - 1)];
+      leadRequestCount += 1;
       await route.fulfill({
-        status: 201,
+        status: response.status,
         contentType: "application/json",
-        body: envelope({ received: true }),
+        body: response.body,
       });
       return;
     }
@@ -122,6 +128,7 @@ async function mockLeadApis(
   });
 
   return {
+    leadRequestCount: () => leadRequestCount,
     sessionRequestCount: () => sessionRequestCount,
   };
 }
@@ -303,6 +310,57 @@ test.describe("marketing lead capture", () => {
     await expectPopupSuppressedAfterReload(page);
     expect(await page.evaluate((key) => window.localStorage.getItem(key), LEAD_CAPTURE_SUBMITTED_KEY))
       .toBe("submitted");
+  });
+
+  test("failed delivery preserves the visible form and a retry shows the real success confirmation", async ({ page }) => {
+    const api = await mockLeadApis(
+      page,
+      anonymousSession,
+      undefined,
+      [
+        {
+          status: 503,
+          body: JSON.stringify({
+            ok: false,
+            error: {
+              code: "MARKETING_LEAD_DELIVERY_UNAVAILABLE",
+              message: "We could not receive your request right now. Please try again shortly.",
+            },
+          }),
+        },
+        { status: 201, body: envelope({ received: true }) },
+      ],
+    );
+
+    await page.goto("/pricing?utm_source=google&utm_medium=cpc&utm_campaign=retry-check");
+    await page.getByRole("button", { name: "Essential only" }).click();
+    await triggerByMeaningfulScroll(page);
+
+    await page.getByLabel(/^Full Name/).fill("Quantara Retry Verification");
+    await page.getByLabel(/^Business Email/).fill("retry@example.com");
+    await page.getByLabel(/^WhatsApp \/ Mobile/).fill("+971 50 123 4567");
+    await page.getByLabel("Company", { exact: true }).fill("Example Contracting");
+    await page.getByLabel(/^Industry/).fill("Construction Software Verification");
+    await page.getByLabel(/I agree to receive Quantara product updates/).check();
+
+    const submit = page.getByRole("button", { name: "Get My Quantara Options" });
+    await submit.click();
+
+    await expect(page.getByText(
+      "We could not receive your request right now. Please try again shortly.",
+      { exact: true },
+    )).toBeVisible();
+    await expect(page.getByLabel(/^Full Name/)).toHaveValue("Quantara Retry Verification");
+    await expect(page.getByLabel(/^Business Email/)).toHaveValue("retry@example.com");
+    await expect(page.getByLabel(/^WhatsApp \/ Mobile/)).toHaveValue("+971 50 123 4567");
+    await expect(submit).toBeEnabled();
+    expect(api.leadRequestCount()).toBe(1);
+
+    await submit.click();
+
+    await expect(page.getByRole("status")).toHaveText("Thank you. Your request has been received.");
+    await expect(page.getByText("Thank you. Your request has been received.")).toBeVisible();
+    expect(api.leadRequestCount()).toBe(2);
   });
 
   test("dismissal suppresses for seven days and the homepage can reopen after expiry", async ({ page }) => {

@@ -1,12 +1,14 @@
 import { expect, test, type Page } from "@playwright/test";
 
 const USER_ID = "onboarding_first_project_e2e";
+const CLIENT_ID = "11111111-1111-4111-8111-111111111111";
 
 function envelope(data: unknown) {
   return JSON.stringify({ ok: true, data });
 }
 
 async function mockAuthenticatedDashboard(page: Page, activeProjects: number) {
+  const projectSubmissions: unknown[] = [];
   await page.context().addCookies([
     {
       name: "quantara_session",
@@ -59,6 +61,21 @@ async function mockAuthenticatedDashboard(page: Page, activeProjects: number) {
       data = { products: [] };
     } else if (pathname === "/api/admin/simulation") {
       data = { simulation: null };
+    } else if (pathname === "/api/industries") {
+      data = [{ id: "industry-e2e", key: "fit-out", name: "Fit-out", enabled: true }];
+    } else if (pathname === "/api/clients" && route.request().method() === "GET") {
+      data = {
+        items: [{ id: CLIENT_ID, name: "Existing Test Client", companyName: null }],
+        total: 1,
+        page: 1,
+        pageSize: 20,
+      };
+    } else if (pathname === "/api/projects" && route.request().method() === "POST") {
+      projectSubmissions.push(route.request().postDataJSON());
+      data = {
+        project: { id: "first-project-e2e" },
+        boq: { id: "first-boq-e2e" },
+      };
     }
 
     await route.fulfill({
@@ -67,6 +84,8 @@ async function mockAuthenticatedDashboard(page: Page, activeProjects: number) {
       body: envelope(data),
     });
   });
+
+  return projectSubmissions;
 }
 
 test.describe("first-project onboarding route", () => {
@@ -88,5 +107,33 @@ test.describe("first-project onboarding route", () => {
 
     await expect(page.getByRole("dialog", { name: "Welcome to Quantara" })).toHaveCount(0);
     await expect(page).toHaveURL(/\/dashboard$/);
+  });
+
+  test("successful project creation opens its automatically created BOQ", async ({ page }) => {
+    const submissions = await mockAuthenticatedDashboard(page, 0);
+    await page.goto("/projects/new", { waitUntil: "domcontentloaded" });
+
+    await page.getByLabel("Project name").fill("First Value Project");
+    await page.getByLabel("Project reference").fill("FIRST-VALUE-001");
+    const clientsLoaded = page.waitForResponse((response) =>
+      new URL(response.url()).pathname === "/api/clients"
+      && response.request().method() === "GET",
+    );
+    await page.getByRole("button", { name: "Select or create a client" }).click();
+    await clientsLoaded;
+    await page.getByRole("button", { name: "Existing Test Client" }).click();
+    await page.getByLabel("Industry engine").selectOption("fit-out");
+    await page.getByLabel("Location").fill("Dubai");
+    await page.getByRole("button", { name: "Create project" }).click();
+
+    await expect(page).toHaveURL(/\/projects\/first-project-e2e\/boq$/);
+    expect(submissions).toEqual([
+      expect.objectContaining({
+        name: "First Value Project",
+        reference: "FIRST-VALUE-001",
+        clientId: CLIENT_ID,
+        industryId: "fit-out",
+      }),
+    ]);
   });
 });

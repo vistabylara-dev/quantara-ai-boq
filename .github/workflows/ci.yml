@@ -61,6 +61,12 @@ jobs:
       - name: Test with isolated PostgreSQL
         run: npm test
 
+      - name: Install Chromium for onboarding acceptance
+        run: npx playwright install --with-deps chromium
+
+      - name: Verify first-project onboarding in Chromium
+        run: npx playwright test tests/e2e/onboarding-first-project.spec.ts --project=chromium
+
       - name: Build Next.js
         run: npm run build
 

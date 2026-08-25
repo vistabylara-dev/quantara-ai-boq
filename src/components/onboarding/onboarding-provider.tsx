@@ -9,7 +9,7 @@ import {
   X,
 } from "lucide-react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import {
   createContext,
   useCallback,
@@ -97,6 +97,7 @@ export function useOnboarding(): OnboardingContextValue | null {
 
 export function OnboardingProvider({ children }: { children: ReactNode }) {
   const pathname = usePathname();
+  const router = useRouter();
   const t = useTranslations();
   const [userId, setUserId] = useState<string | null>(null);
   const [state, setState] = useState<OnboardingState | null>(null);
@@ -217,7 +218,10 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
     setRestartWelcomeOpen(false);
     setChecklistOpen(true);
     updateState((current) => continueOnboardingGuidance(current));
-  }, [updateState]);
+    if (!state?.completedActions.PROJECT_CREATED) {
+      router.push("/projects/new");
+    }
+  }, [router, state?.completedActions.PROJECT_CREATED, updateState]);
 
   const exploreMyself = useCallback(() => {
     setRestartWelcomeOpen(false);

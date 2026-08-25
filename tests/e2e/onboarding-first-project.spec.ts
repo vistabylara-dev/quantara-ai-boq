@@ -114,7 +114,7 @@ test.describe("first-project onboarding route", () => {
 
     await page.getByLabel("Project name").fill("First Value Project");
     await page.getByLabel("Project reference").fill("FIRST-VALUE-001");
-    await page.getByRole("button", { name: "Select a client" }).click();
+    await page.getByRole("button", { name: "Select or create a client" }).click();
     await page.getByRole("button", { name: "Existing Test Client" }).click();
     await page.getByLabel("Location").fill("Dubai");
     await page.getByRole("button", { name: "Create project" }).click();

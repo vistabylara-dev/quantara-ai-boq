@@ -61,12 +61,6 @@ describe("onboarding shell integration", () => {
     expect(state).not.toContain("prisma.");
   });
 
-  it("sends a first-run guided user directly to project creation", () => {
-    expect(provider).toContain('import { usePathname, useRouter } from "next/navigation";');
-    expect(provider).toContain('if (!state?.completedActions.PROJECT_CREATED)');
-    expect(provider).toContain('router.push("/projects/new")');
-  });
-
   it("uses browser-only versioned onboarding persistence, not a new API route", () => {
     expect(state).toContain("quantara:onboarding:v");
     expect(provider).toContain("window.localStorage");

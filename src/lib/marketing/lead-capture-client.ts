@@ -303,6 +303,9 @@ export function isLeadCaptureEligiblePath(pathname: string): boolean {
 }
 
 export function isDashboardLeadCaptureEligiblePath(pathname: string): boolean {
+  // Never interrupt the first-value project creation workflow with a sales prompt.
+  if (pathname === "/projects/new") return false;
+
   return DASHBOARD_LEAD_PATH_PREFIXES.some(
     (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),
   );

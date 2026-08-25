@@ -512,17 +512,14 @@ export async function processStripeWebhookEvent(event: Stripe.Event, overrideCli
           event.type === "checkout.session.expired"
         ) {
           const sessionObj = event.data.object as Stripe.Checkout.Session;
-
-          if (sessionObj.metadata?.quantara_checkout_mode === "ENTERPRISE_ONE_TIME") {
-            const stripeClientForSession = resolveWebhookStripeClient(overrideClient);
-
-            await applyEnterpriseOneTimeCheckoutSession(
-              tx,
-              sessionObj,
-              event.type,
-              stripeClientForSession,
-            );
-          } else {
+          const stripeClientForSession = resolveWebhookStripeClient(overrideClient);
+          const handledByEnterprise = await applyEnterpriseOneTimeCheckoutSession(
+            tx,
+            sessionObj,
+            event.type,
+            stripeClientForSession,
+          );
+          if (!handledByEnterprise) {
             await applyTayqanCheckoutSession(
               tx,
               sessionObj,

@@ -519,6 +519,13 @@ export function TayqanWorkOrderPanel({
               <button disabled={busy} onClick={() => void answer({ action: "RETRY" })} className="rounded-xl border border-slate-700 px-3 py-2 text-xs text-slate-200">{t("tayqan.hire.checkAgain")}</button>
             </div>
           )}
+          {blocker.kind === "ERROR" && state.status === "NEEDS_INPUT" && (
+            <div className="mt-3 flex gap-2">
+              <button disabled={busy} onClick={() => void answer({ action: "RETRY" })} className="rounded-xl border border-slate-700 px-3 py-2 text-xs font-semibold text-slate-200 disabled:cursor-not-allowed disabled:opacity-60">
+                {busy ? t("tayqan.hire.starting") : t("tayqan.hire.retry")}
+              </button>
+            </div>
+          )}
         </div>
       )}
     </div>

@@ -914,6 +914,11 @@ function isTerminalTayqanMeasurementError(error: unknown): error is AppError {
   return error instanceof AppError && TAYQAN_TERMINAL_MEASUREMENT_ERROR_CODES.has(error.code);
 }
 
+function isRetryableTayqanMeasurementProviderRejection(error: unknown): error is AppError {
+  return error instanceof AppError
+    && error.code === "TAYQAN_MEASUREMENT_AI_REQUEST_REJECTED";
+}
+
 async function runTayqanWorkOrderPhase<T>(
   orderId: string,
   phase: string,
@@ -1713,6 +1718,19 @@ async function advanceSourceProcessing(actor: CurrentActor, projectSlug: string,
               error: { code: error.code, reason: error.message.slice(0, 300) },
             },
             error,
+          );
+        }
+        if (isRetryableTayqanMeasurementProviderRejection(error)) {
+          return block(
+            actor,
+            order,
+            "TAYQAN_MEASUREMENT_PROVIDER_RETRY_REQUIRED",
+            "tayqan.hire.workflow.measurementProviderRetryRequired",
+            {
+              kind: "ERROR",
+              i18nKey: "tayqan.hire.workflow.measurementProviderRetryRequired",
+              error: { code: error.code, reason: error.message.slice(0, 300) },
+            },
           );
         }
         // Preserve the service contract: transient provider/network errors

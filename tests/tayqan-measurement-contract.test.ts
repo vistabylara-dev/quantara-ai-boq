@@ -1108,6 +1108,8 @@ describe("TAYQAN senior work-order governance wiring", () => {
     const panel = readFileSync("src/components/tayqan/tayqan-work-order-panel.tsx", "utf8");
     expect(panel).toContain("advanceInFlight.current");
     expect(panel).toContain(".finally(() =>");
+    expect(panel).toContain('blocker.kind === "ERROR" && state.status === "NEEDS_INPUT"');
+    expect(panel).toContain('answer({ action: "RETRY" })');
   });
 
   it("starts a durable work order without synchronously running the full Senior QS pipeline", () => {

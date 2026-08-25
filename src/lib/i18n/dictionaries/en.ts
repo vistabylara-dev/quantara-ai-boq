@@ -2182,6 +2182,7 @@ const en = {
         measurementComplete: "TAYQAN completed the senior measurement and independent cross-check for {count} measurable scope item(s). Evidence, revisions, units and exceptions were reconciled before Draft BOQ assembly; unit prices remain for professional input and final review.",
         sourceNeedsInput: "One source-processing task needs input before I can continue.",
         sourceFailed: "A project source could not be processed. Resolve that source and I will resume the same work order.",
+        measurementProviderRetryRequired: "The AI measurement provider could not accept this bounded request right now. The existing source evidence and BOQ are preserved. Retry this same assignment when provider capacity is available.",
         reviewEvidence: "I found extracted project evidence that requires a professional decision before I can use it in the BOQ.",
         draftReadyForReview: "AI Draft BOQ is ready. I prepared everything I safely could without assuming your pre-approval. Review or correct quantities inside the BOQ, then ask me to check again and I will proceed to final review.",
         scopeCoverageIncomplete: "TAYQAN could not safely represent all extracted scope items within the Draft BOQ. The generated draft has been retained for technical review.",

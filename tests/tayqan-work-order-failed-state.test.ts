@@ -15,17 +15,19 @@ import { advanceTayqanWorkOrder } from "../src/lib/services/tayqan-work-order-se
  * TAYQAN AUDIT FIX 3 — proves the new FAILED transition in
  * advanceSourceProcessing (via advanceTayqanWorkOrder): a genuinely terminal
  * error (a whitelisted AppError code) transitions the order to FAILED with a
- * real blockerMessage/TayqanWorkEvent, while a transient-style error (an
- * unlisted AppError code, or a plain Error — e.g. representative of a rate
- * limit/timeout from the AI reasoner) leaves the existing propagate/retry
- * behavior completely unchanged. Also proves the FAILED early-return in
+ * real blockerMessage/TayqanWorkEvent, while an exhausted provider rejection
+ * becomes a resumable NEEDS_INPUT blocker and an unrelated plain network
+ * error retains the existing propagation behavior. Also proves the FAILED early-return in
  * advanceTayqanWorkOrder is reachable and short-circuits before any further
  * stage logic runs.
  *
  * prepareTayqanMeasurementProposals is mocked (tayqan-work-order-service.ts
  * imports only that one named export from tayqan-measurement-service.ts) so
  * these tests exercise real Postgres end to end for the work order itself
- * without needing a full extraction-job/AI-reasoner pipeline.
+ * without needing a full extraction-job/AI-reasoner pipeline. Exhausted
+ * provider rejections are now preserved as explicit retry blockers so the UI
+ * cannot call the expensive advance route every three seconds indefinitely;
+ * unrelated network errors keep their previous resumable propagation path.
  */
 const prepareTayqanMeasurementProposalsMock = vi.hoisted(() => vi.fn());
 
@@ -173,20 +175,34 @@ describe("TAYQAN AUDIT FIX 3: work order FAILED state (integration, real local P
     });
   });
 
-  it("a transient-style error (unlisted AppError code) does NOT transition to FAILED — it propagates unchanged, exactly like before this fix", async () => {
+  it("an exhausted provider rejection becomes a durable retry blocker instead of remaining in an automatic polling loop", async () => {
     const order = await createWorkOrder();
-    // Representative of an AI-reasoner-side error (e.g. a rate limit) —
-    // deliberately NOT in TAYQAN_TERMINAL_MEASUREMENT_ERROR_CODES.
-    const transientError = new AppError("TAYQAN_MEASUREMENT_RATE_LIMITED", "The AI provider rate-limited this request.", 429);
-    prepareTayqanMeasurementProposalsMock.mockRejectedValueOnce(transientError);
+    const providerError = new AppError(
+      "TAYQAN_MEASUREMENT_AI_REQUEST_REJECTED",
+      "TAYQAN's AI measurement request was rejected by the configured provider (HTTP 429).",
+      503,
+    );
+    prepareTayqanMeasurementProposalsMock.mockRejectedValueOnce(providerError);
 
-    await expect(advanceTayqanWorkOrder(actor(), projectId, order.id)).rejects.toBe(transientError);
+    const result = await advanceTayqanWorkOrder(actor(), projectId, order.id);
 
+    expect(result.status).toBe("NEEDS_INPUT");
+    expect(result.blockerCode).toBe("TAYQAN_MEASUREMENT_PROVIDER_RETRY_REQUIRED");
+    expect(result.blocker).toMatchObject({
+      kind: "ERROR",
+      i18nKey: "tayqan.hire.workflow.measurementProviderRetryRequired",
+      error: {
+        code: "TAYQAN_MEASUREMENT_AI_REQUEST_REJECTED",
+        reason: providerError.message,
+      },
+    });
     const dbOrder = await prisma.tayqanWorkOrder.findUniqueOrThrow({ where: { id: order.id } });
-    expect(dbOrder.status).toBe(TayqanWorkStatus.RUNNING);
+    expect(dbOrder.status).toBe(TayqanWorkStatus.NEEDS_INPUT);
     expect(dbOrder.completedAt).toBeNull();
     const failedEvent = await prisma.tayqanWorkEvent.findFirst({ where: { workOrderId: order.id, eventType: "WORK_FAILED" } });
     expect(failedEvent).toBeNull();
+    const blockedEvent = await prisma.tayqanWorkEvent.findFirst({ where: { workOrderId: order.id, eventType: "WORK_BLOCKED" } });
+    expect(blockedEvent).not.toBeNull();
   });
 
   it("a transient-style error (a plain Error, not an AppError at all) also does NOT transition to FAILED", async () => {

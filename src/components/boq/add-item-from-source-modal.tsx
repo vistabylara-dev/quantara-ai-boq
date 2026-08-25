@@ -803,7 +803,7 @@ export default function AddItemFromSourceModal({
 
         {tab === "manual" && (
           <div className="mt-4 space-y-3">
-            <input value={manualDraft.itemCode} onChange={(e) => setManualDraft({ ...manualDraft, itemCode: e.target.value })} placeholder={t("boqEditor.manualItemCodePlaceholder")} className="w-full rounded-2xl border border-slate-800 bg-slate-900 px-4 py-3 text-white outline-none focus:border-blue-500" />
+            <input value={manualDraft.itemCode} onChange={(e) => setManualDraft({ ...manualDraft, itemCode: e.target.value })} placeholder={`${t("boqEditor.manualItemCodePlaceholder")} *`} className="w-full rounded-2xl border border-slate-800 bg-slate-900 px-4 py-3 text-white outline-none focus:border-blue-500" />
             <input value={manualDraft.category} onChange={(e) => setManualDraft({ ...manualDraft, category: e.target.value })} placeholder={t("boqEditor.manualCategoryPlaceholder")} className="w-full rounded-2xl border border-slate-800 bg-slate-900 px-4 py-3 text-white outline-none focus:border-blue-500" />
             <input value={manualDraft.description} onChange={(e) => setManualDraft({ ...manualDraft, description: e.target.value })} placeholder={t("boqEditor.manualDescriptionPlaceholder")} className="w-full rounded-2xl border border-slate-800 bg-slate-900 px-4 py-3 text-white outline-none focus:border-blue-500" />
             <input value={manualDraft.specification} onChange={(e) => setManualDraft({ ...manualDraft, specification: e.target.value })} placeholder={t("boqEditor.manualSpecificationPlaceholder")} className="w-full rounded-2xl border border-slate-800 bg-slate-900 px-4 py-3 text-white outline-none focus:border-blue-500" />
@@ -901,6 +901,20 @@ export default function AddItemFromSourceModal({
               <input value={manualDraft.unitCost} onChange={(e) => setManualDraft({ ...manualDraft, unitCost: e.target.value })} placeholder={t("boqEditor.manualUnitCostPlaceholder")} className="rounded-2xl border border-slate-800 bg-slate-900 px-4 py-3 text-white outline-none focus:border-blue-500" />
             </div>
             {error && <p className="text-xs text-rose-300">{error}</p>}
+            {!isSaving && (!manualDraft.itemCode || !manualDraft.description || !manualDraft.unit || !sectionId) && (
+              <p className="text-xs text-amber-300">
+                {t("boqEditor.manualMissingFieldsHint", {
+                  fields: [
+                    !sectionId && t("boqEditor.sectionLabel"),
+                    !manualDraft.itemCode && t("boqEditor.manualItemCodePlaceholder"),
+                    !manualDraft.description && t("boqEditor.manualDescriptionPlaceholder"),
+                    !manualDraft.unit && t("boqEditor.manualUnitPlaceholder"),
+                  ]
+                    .filter((label): label is string => Boolean(label))
+                    .join(", "),
+                })}
+              </p>
+            )}
             <button
               type="button"
               onClick={() => void addManual()}

@@ -103,6 +103,8 @@ describe("substantive legal page contracts", () => {
     );
     expect(rootLayout).toContain("analytics_storage: storedConsent === 'granted' ? 'granted' : 'denied'");
     expect(rootLayout).toContain("ad_storage: 'denied'");
+    expect(rootLayout).toContain("ad_user_data: 'denied'");
+    expect(rootLayout).toContain("ad_personalization: 'denied'");
     expect(rootLayout).not.toContain("googletagmanager.com/ns.html");
     expect(marketingLayout).toContain("<AnalyticsConsentBanner />");
     expect(banner).toContain('ANALYTICS_CONSENT_KEY = "quantara-analytics-consent"');
@@ -110,5 +112,9 @@ describe("substantive legal page contracts", () => {
     expect(banner).toContain("Allow analytics");
     expect(banner).toContain("الأساسي فقط");
     expect(banner).toContain("السماح بالتحليلات");
+    expect(banner).toContain('event: "quantara_consent_update"');
+    expect(banner).toContain('ad_storage: "denied"');
+    expect(banner).toContain('ad_user_data: "denied"');
+    expect(banner).toContain('ad_personalization: "denied"');
   });
 });

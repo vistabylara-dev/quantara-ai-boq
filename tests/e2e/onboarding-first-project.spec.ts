@@ -7,8 +7,14 @@ function envelope(data: unknown) {
   return JSON.stringify({ ok: true, data });
 }
 
-async function mockAuthenticatedDashboard(page: Page, activeProjects: number) {
+async function mockAuthenticatedDashboard(
+  page: Page,
+  activeProjects: number,
+  options: { existingClient?: boolean } = {},
+) {
   const projectSubmissions: unknown[] = [];
+  const clientSubmissions: unknown[] = [];
+  const existingClient = options.existingClient ?? true;
   await page.context().addCookies([
     {
       name: "quantara_session",
@@ -65,10 +71,21 @@ async function mockAuthenticatedDashboard(page: Page, activeProjects: number) {
       data = [{ id: "industry-e2e", key: "fit-out", name: "Fit-out", enabled: true }];
     } else if (pathname === "/api/clients" && route.request().method() === "GET") {
       data = {
-        items: [{ id: CLIENT_ID, name: "Existing Test Client", companyName: null }],
-        total: 1,
+        items: existingClient
+          ? [{ id: CLIENT_ID, name: "Existing Test Client", companyName: null }]
+          : [],
+        total: existingClient ? 1 : 0,
         page: 1,
         pageSize: 20,
+      };
+    } else if (pathname === "/api/clients" && route.request().method() === "POST") {
+      clientSubmissions.push(route.request().postDataJSON());
+      data = {
+        id: CLIENT_ID,
+        name: "Quick Client",
+        companyName: null,
+        email: null,
+        phone: null,
       };
     } else if (pathname === "/api/projects" && route.request().method() === "POST") {
       projectSubmissions.push(route.request().postDataJSON());
@@ -85,7 +102,7 @@ async function mockAuthenticatedDashboard(page: Page, activeProjects: number) {
     });
   });
 
-  return projectSubmissions;
+  return { clientSubmissions, projectSubmissions };
 }
 
 test.describe("first-project onboarding route", () => {
@@ -110,7 +127,7 @@ test.describe("first-project onboarding route", () => {
   });
 
   test("successful project creation opens its automatically created BOQ", async ({ page }) => {
-    const submissions = await mockAuthenticatedDashboard(page, 0);
+    const { projectSubmissions } = await mockAuthenticatedDashboard(page, 0);
     await page.goto("/projects/new", { waitUntil: "domcontentloaded" });
 
     await page.getByLabel("Project name").fill("First Value Project");
@@ -127,12 +144,42 @@ test.describe("first-project onboarding route", () => {
     await page.getByRole("button", { name: "Create project" }).click();
 
     await expect(page).toHaveURL(/\/projects\/first-project-e2e\/boq$/);
-    expect(submissions).toEqual([
+    expect(projectSubmissions).toEqual([
       expect.objectContaining({
         name: "First Value Project",
         reference: "FIRST-VALUE-001",
         clientId: CLIENT_ID,
         industryId: "fit-out",
+      }),
+    ]);
+  });
+
+  test("a zero-client user can self-serve client creation and reach the first BOQ", async ({ page }) => {
+    const { clientSubmissions, projectSubmissions } = await mockAuthenticatedDashboard(
+      page,
+      0,
+      { existingClient: false },
+    );
+    await page.goto("/projects/new", { waitUntil: "domcontentloaded" });
+
+    await expect(page.getByRole("dialog", { name: "Find the Right Quantara Package" })).toHaveCount(0);
+
+    await page.getByLabel("Project name").fill("Self Service Project");
+    await page.getByLabel("Project reference").fill("SELF-SERVICE-001");
+    await page.getByRole("button", { name: "Select or create a client" }).click();
+    await page.getByPlaceholder("Search clients...").fill("Quick Client");
+    await page.getByRole("button", { name: "Create and select “Quick Client”" }).click();
+    await page.getByLabel("Industry engine").selectOption("fit-out");
+    await page.getByLabel("Location").fill("Dubai");
+    await page.getByRole("button", { name: "Create project" }).click();
+
+    await expect(page).toHaveURL(/\/projects\/first-project-e2e\/boq$/);
+    expect(clientSubmissions).toEqual([{ name: "Quick Client" }]);
+    expect(projectSubmissions).toEqual([
+      expect.objectContaining({
+        clientId: CLIENT_ID,
+        industryId: "fit-out",
+        name: "Self Service Project",
       }),
     ]);
   });

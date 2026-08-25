@@ -170,6 +170,7 @@ describe("marketing lead popup state", () => {
 
     expect(isDashboardLeadCaptureEligiblePath("/dashboard")).toBe(true);
     expect(isDashboardLeadCaptureEligiblePath("/projects/project-1")).toBe(true);
+    expect(isDashboardLeadCaptureEligiblePath("/projects/new")).toBe(false);
     expect(isDashboardLeadCaptureEligiblePath("/settings")).toBe(true);
     expect(isDashboardLeadCaptureEligiblePath("/marketplace")).toBe(false);
     expect(isDashboardLeadCaptureEligiblePath("/admin")).toBe(false);

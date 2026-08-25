@@ -2605,7 +2605,6 @@ const en = {
     manualUnitPlaceholder: "Unit",
     manualQuantityPlaceholder: "Quantity",
     manualUnitCostPlaceholder: "Unit cost",
-    manualMissingFieldsHint: "Add to BOQ is disabled until you fill in: {fields}",
     addMeasurementCalculation: "Add measurement calculation",
     voiceInsideMeasurementPanel: "Voice input appears inside the measurement panel after you select a supported calculation type.",
     selectCalculationType: "Select a calculation type…",

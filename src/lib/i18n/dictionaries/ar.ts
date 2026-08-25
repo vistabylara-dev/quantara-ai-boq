@@ -3817,7 +3817,6 @@ const ar: Dictionary = {
     manualUnitPlaceholder: "الوحدة",
     manualQuantityPlaceholder: "الكمية",
     manualUnitCostPlaceholder: "تكلفة الوحدة",
-    manualMissingFieldsHint: "زر «إضافة إلى جدول الكميات» معطّل حتى تُكمل: {fields}",
     addMeasurementCalculation: "إضافة حساب قياس",
     voiceInsideMeasurementPanel: "يظهر الإدخال الصوتي داخل لوحة القياس بعد اختيار نوع حساب مدعوم.",
     selectCalculationType: "اختر نوع حساب…",

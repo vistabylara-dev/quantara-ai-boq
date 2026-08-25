@@ -42,7 +42,25 @@ function unavailableError() {
 }
 
 function normalizePrivateKey(value: string): string {
-  return value.replace(/\\n/g, "\n").trim();
+  const trimmed = value.trim();
+  let candidate = trimmed;
+
+  try {
+    const parsed: unknown = JSON.parse(trimmed);
+    if (typeof parsed === "string") candidate = parsed;
+    if (
+      typeof parsed === "object"
+      && parsed !== null
+      && "private_key" in parsed
+      && typeof parsed.private_key === "string"
+    ) {
+      candidate = parsed.private_key;
+    }
+  } catch {
+    // A plain PEM value is not JSON and remains the primary supported format.
+  }
+
+  return candidate.replace(/\\n/g, "\n").trim();
 }
 
 async function withTimeout<T>(
@@ -78,13 +96,21 @@ export function readGoogleSheetsLeadConfiguration(
   const privateKey = normalizePrivateKey(environment.GOOGLE_SHEETS_PRIVATE_KEY!);
   const spreadsheetId = environment.GOOGLE_SHEETS_SPREADSHEET_ID!.trim();
 
-  if (
-    !/^[^@\s]+@[^@\s]+$/.test(clientEmail)
-    || !privateKey.startsWith("-----BEGIN PRIVATE KEY-----")
-    || !privateKey.endsWith("-----END PRIVATE KEY-----")
-    || !/^[A-Za-z0-9_-]{10,200}$/.test(spreadsheetId)
-  ) {
-    console.error("[marketing-leads] Google Sheets configuration has an invalid format.");
+  const invalid = [
+    !/^[^@\s]+@[^@\s]+$/.test(clientEmail) ? "GOOGLE_SHEETS_CLIENT_EMAIL" : null,
+    !privateKey.startsWith("-----BEGIN PRIVATE KEY-----")
+      || !privateKey.endsWith("-----END PRIVATE KEY-----")
+      ? "GOOGLE_SHEETS_PRIVATE_KEY"
+      : null,
+    !/^[A-Za-z0-9_-]{10,200}$/.test(spreadsheetId)
+      ? "GOOGLE_SHEETS_SPREADSHEET_ID"
+      : null,
+  ].filter((name): name is string => name !== null);
+
+  if (invalid.length > 0) {
+    console.error("[marketing-leads] Google Sheets configuration has an invalid format.", {
+      invalid,
+    });
     throw unavailableError();
   }
 

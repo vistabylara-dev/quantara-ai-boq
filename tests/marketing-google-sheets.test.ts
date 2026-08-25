@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { appendMarketingLeadToGoogleSheets } from "@/lib/integrations/connectors/google-sheets-lead-client";
+import { readGoogleSheetsLeadConfiguration } from "@/lib/integrations/connectors/google-sheets-lead-client";
 import {
   MARKETING_LEAD_SHEET_COLUMNS,
   buildMarketingLeadSheetRow,
@@ -101,6 +102,43 @@ describe("Google Sheets marketing lead append", () => {
       majorDimension: "ROWS",
       values: [buildMarketingLeadSheetRow(lead)],
     });
+  });
+
+  it("accepts Vercel-safe JSON-quoted PEM and service-account JSON values", () => {
+    const pem = escapedPrivateKey.replace(/\\n/g, "\n");
+    const jsonQuoted = readGoogleSheetsLeadConfiguration({
+      ...environment,
+      GOOGLE_SHEETS_PRIVATE_KEY: JSON.stringify(pem),
+    });
+    const serviceAccountJson = readGoogleSheetsLeadConfiguration({
+      ...environment,
+      GOOGLE_SHEETS_PRIVATE_KEY: JSON.stringify({
+        type: "service_account",
+        private_key_id: "not-used-as-the-key",
+        private_key: pem,
+        client_email: environment.GOOGLE_SHEETS_CLIENT_EMAIL,
+      }),
+    });
+
+    expect(jsonQuoted.privateKey).toBe(pem.trim());
+    expect(serviceAccountJson.privateKey).toBe(pem.trim());
+  });
+
+  it("rejects a private-key id and logs only the invalid variable name", () => {
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
+
+    expect(() => readGoogleSheetsLeadConfiguration({
+      ...environment,
+      GOOGLE_SHEETS_PRIVATE_KEY: "0123456789abcdef0123456789abcdef01234567",
+    })).toThrowError(expect.objectContaining({
+      code: "MARKETING_LEAD_DELIVERY_UNAVAILABLE",
+      status: 503,
+    }));
+    expect(consoleError).toHaveBeenCalledWith(
+      "[marketing-leads] Google Sheets configuration has an invalid format.",
+      { invalid: ["GOOGLE_SHEETS_PRIVATE_KEY"] },
+    );
+    expect(JSON.stringify(consoleError.mock.calls)).not.toContain("0123456789abcdef");
   });
 
   it("uses RAW input so formula-like lead text is never evaluated by Sheets", async () => {

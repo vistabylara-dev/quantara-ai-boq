@@ -72,6 +72,13 @@ export async function prefillDimensionValues(
     if (entity.projectId !== project.id) {
       throw new AppError("ENTITY_PROJECT_MISMATCH", "This extracted entity does not belong to the specified project.", 400);
     }
+    if (entity.status !== "CONFIRMED" && entity.status !== "CORRECTED") {
+      throw new AppError(
+        "ENTITY_NOT_CONFIRMED",
+        "This extracted entity must receive a professional confirmation or correction before it can prefill a calculation.",
+        409,
+      );
+    }
   }
   let room: { area: unknown; perimeter: unknown; ceilingHeight: unknown } | null = null;
   if (options.detectedRoomId) {
@@ -241,6 +248,13 @@ export async function createCalculation(actor: CurrentActor, input: CreateCalcul
     const entity = await getExtractedEntityRecord(actor.companyId, input.extractedEntityId);
     if (entity.projectId !== project.id) {
       throw new AppError("ENTITY_PROJECT_MISMATCH", "This extracted entity does not belong to the specified project.", 400);
+    }
+    if (entity.status !== "CONFIRMED" && entity.status !== "CORRECTED") {
+      throw new AppError(
+        "ENTITY_NOT_CONFIRMED",
+        "This extracted entity must receive a professional confirmation or correction before it can be linked to a calculation.",
+        409,
+      );
     }
   }
 

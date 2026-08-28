@@ -175,6 +175,7 @@ function legacySnapshot(input: ProjectWorkflowInput): ProjectWorkflowSnapshot {
       unknown,
     },
     boq: { exists: input.hasBoq ?? null },
+    quantityCalculations: { total: null, confirmed: null },
     sources: [],
   };
 }
@@ -244,6 +245,11 @@ function buildFactualSummary(snapshot: ProjectWorkflowSnapshot, projectExists: b
   if ((snapshot.files.processingErrorCount ?? 0) > 0) {
     const processingErrorCount = snapshot.files.processingErrorCount ?? 0;
     facts.push(`${processingErrorCount} ${pluralize(processingErrorCount, "source")} need processing attention`);
+  }
+
+  const confirmedCalculations = snapshot.quantityCalculations?.confirmed;
+  if (confirmedCalculations !== null && confirmedCalculations !== undefined && confirmedCalculations > 0) {
+    facts.push(`${confirmedCalculations} confirmed ${pluralize(confirmedCalculations, "calculation")}`);
   }
 
   return facts;
@@ -351,6 +357,10 @@ export function deriveProjectWorkflow(input: ProjectWorkflowInput): ProjectWorkf
         };
       }
     }
+  }
+
+  if (input.projectExists && (snapshot.quantityCalculations?.confirmed ?? 0) > 0) {
+    states.CALCULATIONS = "COMPLETE";
   }
 
   const stages = GUIDE_STAGE_IDS.map((stageId) => ({

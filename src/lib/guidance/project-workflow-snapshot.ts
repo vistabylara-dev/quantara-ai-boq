@@ -66,6 +66,10 @@ export type ProjectWorkflowSnapshot = {
   boq: {
     exists: boolean | null;
   };
+  quantityCalculations?: {
+    total: ProvenCount;
+    confirmed: ProvenCount;
+  };
   sources: ProjectSourceSnapshot[];
 };
 
@@ -98,6 +102,7 @@ export type ProjectWorkflowSnapshotRecords = {
   files: readonly ProjectWorkflowSnapshotFileRecord[];
   jobs?: readonly ProjectWorkflowSnapshotJobRecord[] | null;
   entityStatuses?: readonly (string | null | undefined)[] | null;
+  calculationStatuses?: readonly (string | null | undefined)[] | null;
   hasBoq?: boolean | null;
 };
 
@@ -294,6 +299,10 @@ export function buildProjectWorkflowSnapshot(
   const unknownEntityCount = entityStatuses === null
     ? null
     : entityStatuses.length - (reviewedEntityCount ?? 0) - (reviewableEntityCount ?? 0);
+  const calculationStatuses = records.calculationStatuses === null || records.calculationStatuses === undefined
+    ? null
+    : records.calculationStatuses.map(normalizeStatus);
+  const calculationStatusCounts = calculationStatuses === null ? null : countByStatus(calculationStatuses);
 
   return {
     projectId: records.projectId,
@@ -336,6 +345,10 @@ export function buildProjectWorkflowSnapshot(
       unknown: unknownEntityCount,
     },
     boq: { exists: records.hasBoq ?? null },
+    quantityCalculations: {
+      total: calculationStatuses?.length ?? null,
+      confirmed: nullableStatusCount(calculationStatusCounts, "CONFIRMED"),
+    },
     sources,
   };
 }
@@ -346,7 +359,7 @@ export async function getProjectWorkflowSnapshot(
 ): Promise<ProjectWorkflowSnapshot> {
   const project = await getProjectRecord(actor.companyId, projectIdentifier);
 
-  const [files, jobs, entities, boq] = await Promise.all([
+  const [files, jobs, entities, calculations, boq] = await Promise.all([
     prisma.projectFile.findMany({
       where: { companyId: actor.companyId, projectId: project.id },
       orderBy: { createdAt: "asc" },
@@ -376,6 +389,10 @@ export async function getProjectWorkflowSnapshot(
       },
     }),
     prisma.extractedEntity.findMany({
+      where: { companyId: actor.companyId, projectId: project.id },
+      select: { status: true },
+    }),
+    prisma.quantityCalculation.findMany({
       where: { companyId: actor.companyId, projectId: project.id },
       select: { status: true },
     }),
@@ -410,6 +427,7 @@ export async function getProjectWorkflowSnapshot(
       resultSummary: job.resultSummaryJson,
     })),
     entityStatuses: entities.map((entity) => entity.status),
+    calculationStatuses: calculations.map((calculation) => calculation.status),
     hasBoq: Boolean(boq),
   });
 }

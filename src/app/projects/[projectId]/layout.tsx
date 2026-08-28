@@ -84,6 +84,12 @@ export default async function ProjectLayout({ children, params }: ProjectLayoutP
               Drawings
             </Link>
             <Link
+              href={`${basePath}/rooms`}
+              className="rounded-full border border-slate-800 bg-slate-900 px-4 py-2 text-sm text-slate-200 transition hover:bg-slate-800"
+            >
+              Rooms
+            </Link>
+            <Link
               href={`${basePath}/integrations`}
               className="rounded-full border border-slate-800 bg-slate-900 px-4 py-2 text-sm text-slate-200 transition hover:bg-slate-800"
             >

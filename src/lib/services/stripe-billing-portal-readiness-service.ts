@@ -1,6 +1,7 @@
-import { PlatformRole } from "@prisma/client";
+import { PlatformRole, Prisma } from "@prisma/client";
 import type Stripe from "stripe";
 import type { PlatformActor } from "@/lib/auth/platform-authorization";
+import { prisma } from "@/lib/db/prisma";
 import { AppError, PermissionDeniedError } from "@/lib/errors/app-error";
 import {
   getConfiguredStripeMode,
@@ -10,6 +11,7 @@ import {
 } from "@/lib/payments/stripe-client";
 import { listAllCommerceProductsWithPrices } from "@/lib/repositories/commerce-product-repository";
 import { listMappingsForEnvironment } from "@/lib/repositories/commerce-provider-mapping-repository";
+import type { PlatformRequestMetadata } from "@/lib/repositories/platform-admin-repository";
 
 const PORTAL_PRODUCT_SPECS = [
   { productCode: "starter", priceCodes: ["starter_monthly_aed_149", "starter_annual_aed_1490"] },
@@ -188,6 +190,7 @@ export type StripeBillingPortalReadinessReport = {
 
 export async function ensureStripeBillingPortalReady(
   actor: PlatformActor,
+  requestMetadata: PlatformRequestMetadata,
   overrideClient?: Stripe,
 ): Promise<StripeBillingPortalReadinessReport> {
   requireOwner(actor);
@@ -249,7 +252,7 @@ export async function ensureStripeBillingPortalReady(
     );
   }
 
-  return {
+  const report: StripeBillingPortalReadinessReport = {
     ready: true,
     environment: "LIVE",
     configurationId: configuration.id,
@@ -259,4 +262,22 @@ export async function ensureStripeBillingPortalReady(
     upgradeBehavior: "PRORATED_IMMEDIATELY",
     downgradeBehavior: "SCHEDULED_AT_PERIOD_END",
   };
+
+  await prisma.platformAuditLog.create({
+    data: {
+      actorUserId: actor.userId,
+      actorPlatformRole: actor.platformRole,
+      action: "commerce_stripe_live.portal_ready",
+      targetType: "StripeBillingPortalConfiguration",
+      targetId: configuration.id,
+      requestMetadataJson: {
+        method: requestMetadata.method,
+        path: requestMetadata.path,
+        ...(requestMetadata.requestId ? { requestId: requestMetadata.requestId } : {}),
+      },
+      afterJson: report as unknown as Prisma.InputJsonObject,
+    },
+  });
+
+  return report;
 }

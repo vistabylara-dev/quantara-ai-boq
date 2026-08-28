@@ -1,0 +1,35 @@
+import { apiSuccess, handleApiError, parseJsonBody } from "@/lib/http/api-response";
+import { getCurrentActor } from "@/lib/auth/current-actor";
+import { setActorContext, withActorRequestContext } from "@/lib/auth/request-context";
+import { createManualDetectedRoom, listRoomsForProject } from "@/lib/services/detected-room-service";
+import { createDetectedRoomSchema } from "@/lib/validation/detected-room-schema";
+import { projectIdParamsSchema } from "@/lib/validation/boq-route-schemas";
+
+export const dynamic = "force-dynamic";
+type RouteContext = { params: Promise<{ projectId: string }> };
+
+async function GETHandler(_request: Request, context: RouteContext) {
+  try {
+    const actor = await getCurrentActor();
+    setActorContext(actor);
+    const { projectId } = projectIdParamsSchema.parse(await context.params);
+    return apiSuccess(await listRoomsForProject(actor, projectId));
+  } catch (error) {
+    return handleApiError(error);
+  }
+}
+
+async function POSTHandler(request: Request, context: RouteContext) {
+  try {
+    const actor = await getCurrentActor();
+    setActorContext(actor);
+    const { projectId } = projectIdParamsSchema.parse(await context.params);
+    const body = await parseJsonBody(request, createDetectedRoomSchema);
+    return apiSuccess(await createManualDetectedRoom(actor, projectId, body), 201);
+  } catch (error) {
+    return handleApiError(error);
+  }
+}
+
+export const GET = withActorRequestContext(GETHandler);
+export const POST = withActorRequestContext(POSTHandler);

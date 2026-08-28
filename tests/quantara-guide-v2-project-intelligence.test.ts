@@ -111,6 +111,7 @@ describe("Quantara Guide v2 registry and advisory navigation", () => {
     });
 
     expect(stateOf(result, "EXTRACTION")).toBe("NEEDS_ATTENTION");
+    expect(stateOf(result, "BOQ")).toBe("CURRENT");
     expect(stateOf(result, "CALCULATIONS")).toBe("COMPLETE");
     expect(result.nextStep?.ctaLabel).toBe("Review Extracted Information");
     expect(result.factualSummary).toContain("1 confirmed calculation");
@@ -339,7 +340,7 @@ describe("Quantara Guide v2 snapshot and workflow decisions", () => {
     expect(stateOf(result, "EXTRACTION")).toBe("COMPLETE");
     expect(stateOf(result, "DIMENSIONS")).toBe("CURRENT");
     expect(stateOf(result, "CALCULATIONS")).toBe("NOT_STARTED");
-    expect(stateOf(result, "BOQ")).toBe("NOT_STARTED");
+    expect(stateOf(result, "BOQ")).toBe("CURRENT");
     expect(result.nextStep?.ctaLabel).toBe("Review Dimensions");
     expect(result.nextStep?.href).toBe(
       `/projects/${PROJECT_ID}/boq?action=review_dimensions`,

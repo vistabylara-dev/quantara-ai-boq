@@ -35,10 +35,41 @@ export type DimensionValueState = {
 type CalculationDTO = {
   id: string;
   status: string;
+  calculationType: QuantityCalculationType;
+  extractedEntityId: string | null;
+  inputValues: Record<string, number>;
   resultValue: number;
   resultUnit: string;
   formula: string;
 };
+
+export function findReusableConfirmedCalculation(
+  calculations: readonly CalculationDTO[],
+  calculationType: QuantityCalculationType,
+  extractedEntityId: string,
+  dimensionValues: readonly DimensionValueState[],
+): CalculationDTO | null {
+  const currentInputValues = Object.fromEntries(
+    dimensionValues
+      .filter((dimension): dimension is DimensionValueState & { value: number } => dimension.value !== null)
+      .map((dimension) => [dimension.key, dimension.value]),
+  );
+  const currentEntries = Object.entries(currentInputValues);
+
+  return calculations.find((calculation) => {
+    if (
+      calculation.status !== "CONFIRMED"
+      || calculation.calculationType !== calculationType
+      || calculation.extractedEntityId !== extractedEntityId
+    ) {
+      return false;
+    }
+
+    const savedEntries = Object.entries(calculation.inputValues);
+    return savedEntries.length === currentEntries.length
+      && currentEntries.every(([key, value]) => calculation.inputValues[key] === value);
+  }) ?? null;
+}
 
 type PendingDimensionVoiceProposal = {
   proposal: VoiceCommandProposal;
@@ -85,12 +116,26 @@ export function QuantityCalculationPanel({ projectId, calculationType, extracted
     setError(null);
     const query = new URLSearchParams({ calculationType, projectId });
     if (extractedEntityId) query.set("extractedEntityId", extractedEntityId);
-    apiClient
-      .get<DimensionValueState[]>(`/api/quantity-calculations/prefill?${query.toString()}`, controller.signal)
-      .then((values) => {
+    const prefillRequest = apiClient.get<DimensionValueState[]>(
+      `/api/quantity-calculations/prefill?${query.toString()}`,
+      controller.signal,
+    );
+    const existingCalculationsRequest = extractedEntityId
+      ? apiClient.get<CalculationDTO[]>(
+          `/api/extractions/${encodeURIComponent(extractedEntityId)}/quantity-calculations`,
+          controller.signal,
+        )
+      : Promise.resolve([]);
+
+    Promise.all([prefillRequest, existingCalculationsRequest])
+      .then(([values, calculations]) => {
         setDimensionValues(values);
         setPendingVoiceProposal(null);
-        setSavedCalculation(null);
+        setSavedCalculation(
+          extractedEntityId
+            ? findReusableConfirmedCalculation(calculations, calculationType, extractedEntityId, values)
+            : null,
+        );
       })
       .catch((err) => {
         if (err instanceof DOMException && err.name === "AbortError") return;

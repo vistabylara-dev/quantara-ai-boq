@@ -5,6 +5,10 @@ import {
   formatMeasurementMethodSuggestionMarker,
   recommendMeasurementMethod,
 } from "../src/lib/calculations/measurement-method-recommender";
+import {
+  findReusableConfirmedCalculation,
+  type DimensionValueState,
+} from "../src/components/boq/quantity-calculation-panel";
 
 function recommend(
   label: string,
@@ -23,6 +27,46 @@ function recommend(
 }
 
 describe("normal Quantara measurement method recommendation", () => {
+  it("reuses only a confirmed calculation with the same entity, type and deterministic inputs", () => {
+    const dimensions: DimensionValueState[] = [{
+      key: "verifiedCount",
+      label: "Verified Count",
+      unit: null,
+      required: true,
+      value: 1,
+      source: "extracted_entity",
+      confidence: 100,
+      reviewStatus: "PREFILLED",
+    }];
+    const matching = {
+      id: "confirmed-count",
+      status: "CONFIRMED",
+      calculationType: QuantityCalculationType.COUNT,
+      extractedEntityId: "entity-1",
+      inputValues: { verifiedCount: 1 },
+      resultValue: 1,
+      resultUnit: "nr",
+      formula: "verifiedCount",
+    };
+
+    expect(findReusableConfirmedCalculation(
+      [
+        { ...matching, id: "wrong-input", inputValues: { verifiedCount: 2 } },
+        { ...matching, id: "unconfirmed", status: "EXTRACTED" },
+        matching,
+      ],
+      QuantityCalculationType.COUNT,
+      "entity-1",
+      dimensions,
+    )).toEqual(matching);
+    expect(findReusableConfirmedCalculation(
+      [matching],
+      QuantityCalculationType.COUNT,
+      "entity-2",
+      dimensions,
+    )).toBeNull();
+  });
+
   it("keeps structural type rows as counts instead of guessing concrete volume", () => {
     expect(
       recommend("F1", { sourceText: "reinforced concrete footing schedule" })

@@ -363,6 +363,10 @@ export function deriveProjectWorkflow(input: ProjectWorkflowInput): ProjectWorkf
     states.CALCULATIONS = "COMPLETE";
   }
 
+  if (input.projectExists && (snapshot.boq.exists ?? input.hasBoq) === true) {
+    states.BOQ = "CURRENT";
+  }
+
   const stages = GUIDE_STAGE_IDS.map((stageId) => ({
     id: stageId,
     label: getGuideStageDefinition(stageId).title,

@@ -92,6 +92,8 @@ export function QuantityCalculationPanel({ projectId, calculationType, extracted
   const { locale, t } = useLocale();
   const localizationRef = useRef({ locale, t });
   localizationRef.current = { locale, t };
+  const onConfirmedRef = useRef(onConfirmed);
+  onConfirmedRef.current = onConfirmed;
   const definition = useMemo(() => getRequiredDimensions(calculationType), [calculationType]);
   const [dimensionValues, setDimensionValues] = useState<DimensionValueState[]>([]);
   const [isLoadingPrefill, setIsLoadingPrefill] = useState(true);
@@ -129,13 +131,13 @@ export function QuantityCalculationPanel({ projectId, calculationType, extracted
 
     Promise.all([prefillRequest, existingCalculationsRequest])
       .then(([values, calculations]) => {
+        const reusableCalculation = extractedEntityId
+          ? findReusableConfirmedCalculation(calculations, calculationType, extractedEntityId, values)
+          : null;
         setDimensionValues(values);
         setPendingVoiceProposal(null);
-        setSavedCalculation(
-          extractedEntityId
-            ? findReusableConfirmedCalculation(calculations, calculationType, extractedEntityId, values)
-            : null,
-        );
+        setSavedCalculation(reusableCalculation);
+        if (reusableCalculation) onConfirmedRef.current?.(reusableCalculation);
       })
       .catch((err) => {
         if (err instanceof DOMException && err.name === "AbortError") return;

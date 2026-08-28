@@ -35,7 +35,7 @@ vi.mock("@/lib/services/extracted-entity-service", () => ({
   rejectExtractedEntity: mocks.rejectExtractedEntity,
 }));
 
-import { GET as listExtractionsGET } from "../src/app/api/projects/[projectId]/extractions/route";
+import { GET as listExtractionsGET, POST as addExtractionPOST } from "../src/app/api/projects/[projectId]/extractions/route";
 import { POST as confirmExtractionPOST } from "../src/app/api/extractions/[entityId]/confirm/route";
 import { POST as correctExtractionPOST } from "../src/app/api/extractions/[entityId]/correct/route";
 import { POST as rejectExtractionPOST } from "../src/app/api/extractions/[entityId]/reject/route";
@@ -43,6 +43,7 @@ import { POST as rejectExtractionPOST } from "../src/app/api/extractions/[entity
 const COMPANY_ID = "11111111-1111-4111-8111-111111111111";
 const PROJECT_ID = "22222222-2222-4222-8222-222222222222";
 const ENTITY_ID = "33333333-3333-4333-8333-333333333333";
+const PROJECT_FILE_ID = "55555555-5555-4555-8555-555555555555";
 
 const actor = {
   userId: "44444444-4444-4444-8444-444444444444",
@@ -84,6 +85,53 @@ describe("Release 1 extraction review API contracts", () => {
       entityType: "ROOM",
     });
     expect(await response.json()).toEqual({ ok: true, data: entities });
+  });
+
+  it("creates typed professional furniture evidence for review without touching the BOQ", async () => {
+    const created = { id: ENTITY_ID, status: "NEEDS_REVIEW", entityType: "FURNITURE" };
+    mocks.manuallyAddExtractedEntity.mockResolvedValue(created);
+
+    const response = await addExtractionPOST(
+      actionRequest("/api/projects/dubai-tower/extractions", {
+        projectFileId: PROJECT_FILE_ID,
+        entityType: "FURNITURE",
+        label: "  Workstation desk  ",
+        quantity: 12,
+        unit: " nr ",
+        sourceText: "  Furniture plan A-201  ",
+      }),
+      { params: Promise.resolve({ projectId: "dubai-tower" }) },
+    );
+
+    expect(response.status).toBe(201);
+    expect(mocks.manuallyAddExtractedEntity).toHaveBeenCalledWith(actor, {
+      projectId: "dubai-tower",
+      projectFileId: PROJECT_FILE_ID,
+      entityType: "FURNITURE",
+      label: "Workstation desk",
+      quantity: 12,
+      unit: "nr",
+      confidence: 100,
+      extractionMethod: "MANUAL",
+      sourceText: "Furniture plan A-201",
+    });
+    expect(await response.json()).toEqual({ ok: true, data: created });
+  });
+
+  it.each(["NOT_A_REAL_ENTITY", "BOQ_ITEM"])("rejects unsupported manual entity type %s before calling the service", async (entityType) => {
+    const response = await addExtractionPOST(
+      actionRequest("/api/projects/dubai-tower/extractions", {
+        projectFileId: PROJECT_FILE_ID,
+        entityType,
+        label: "Unsupported candidate",
+        quantity: 1,
+        unit: "nr",
+      }),
+      { params: Promise.resolve({ projectId: "dubai-tower" }) },
+    );
+
+    expect(response.status).toBe(400);
+    expect(mocks.manuallyAddExtractedEntity).not.toHaveBeenCalled();
   });
 
   it("confirms an extracted candidate through the existing action without a request body", async () => {
@@ -182,5 +230,7 @@ describe("Release 1 extraction review API contracts", () => {
     expect(pageSource).not.toContain("import-to-boq");
     expect(pageSource).not.toContain("extraction-to-boq-service");
     expect(pageSource).not.toContain("importExtractedEntityToBoq");
+    expect(pageSource).toContain("Save for professional review");
+    expect(pageSource).toContain("No BOQ value was changed");
   });
 });

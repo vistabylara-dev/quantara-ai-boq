@@ -473,7 +473,7 @@ describe("Structured source → human-review candidate bridge (real local Postgr
     const manualAfter = await prisma.extractedEntity.findUniqueOrThrow({ where: { id: manual.id } });
     expect(manualAfter.label).toBe("Manually added item");
     expect(manualAfter.extractionMethod).toBe("MANUAL");
-    expect(manualAfter.status).toBe("EXTRACTED");
+    expect(manualAfter.status).toBe("NEEDS_REVIEW");
 
     const autoEntities = await prisma.extractedEntity.findMany({ where: { companyId: companyAId, projectFileId: file.id, extractionMethod: "TABLE_PARSER" } });
     expect(autoEntities).toHaveLength(1); // still only one auto candidate — regeneration replaced, didn't duplicate, and never touched the manual one

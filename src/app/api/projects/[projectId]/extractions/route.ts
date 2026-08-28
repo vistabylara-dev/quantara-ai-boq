@@ -13,11 +13,11 @@ type RouteContext = { params: Promise<{ projectId: string }> };
 
 const addEntityBodySchema = z.object({
   projectFileId: z.string().uuid(),
-  entityType: z.string(),
+  entityType: z.nativeEnum(ExtractedEntityType),
   label: z.string().trim().min(1).max(200),
-  quantity: z.number().optional(),
-  unit: z.string().max(20).optional(),
-  sourceText: z.string().max(500).optional(),
+  quantity: z.number().positive().optional(),
+  unit: z.string().trim().min(1).max(20).optional(),
+  sourceText: z.string().trim().max(500).optional(),
 }).strict();
 
 async function GETHandler(request: Request, context: RouteContext) {
@@ -50,7 +50,7 @@ async function POSTHandler(request: Request, context: RouteContext) {
     const data = await manuallyAddExtractedEntity(actor, {
       projectId,
       projectFileId: body.projectFileId,
-      entityType: body.entityType as ExtractedEntityType,
+      entityType: body.entityType,
       label: body.label,
       quantity: body.quantity,
       unit: body.unit,

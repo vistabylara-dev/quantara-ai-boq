@@ -56,6 +56,15 @@ type CorrectionDraft = {
   reason: string;
 };
 
+type ManualEntityDraft = {
+  projectFileId: string;
+  entityType: "FURNITURE" | "FIXTURE";
+  label: string;
+  quantity: string;
+  unit: string;
+  sourceText: string;
+};
+
 type PendingAction = {
   entityId: string;
   action: "confirm" | "correct" | "reject";
@@ -172,6 +181,15 @@ export default function ProjectExtractionsPage(props: { params: Promise<{ projec
   const [filters, setFilters] = useState<ExtractionReviewFilters>({ ...DEFAULT_EXTRACTION_REVIEW_FILTERS });
   const [exceptionsOnly, setExceptionsOnly] = useState(false);
   const [isGeneratingDraft, setIsGeneratingDraft] = useState(false);
+  const [manualDraft, setManualDraft] = useState<ManualEntityDraft>({
+    projectFileId: "",
+    entityType: "FURNITURE",
+    label: "",
+    quantity: "",
+    unit: "nr",
+    sourceText: "",
+  });
+  const [isAddingManualEntity, setIsAddingManualEntity] = useState(false);
 
   const encodedProjectId = encodeURIComponent(params.projectId);
 
@@ -387,6 +405,59 @@ export default function ProjectExtractionsPage(props: { params: Promise<{ projec
     focusReviewItems();
   }
 
+  async function addManualEntity() {
+    if (isAddingManualEntity) return;
+    const quantity = Number(manualDraft.quantity);
+    if (!manualDraft.projectFileId) {
+      setFormError("Select the project source file that supports this professional entry.");
+      return;
+    }
+    if (!manualDraft.label.trim()) {
+      setFormError("Enter the furniture or fixture description.");
+      return;
+    }
+    if (!Number.isFinite(quantity) || quantity <= 0) {
+      setFormError("Enter a positive verified count.");
+      return;
+    }
+    if (!manualDraft.unit.trim()) {
+      setFormError("Enter the verified count unit.");
+      return;
+    }
+
+    setIsAddingManualEntity(true);
+    setActionError(null);
+    setActionMessage(null);
+    setFormError(null);
+    try {
+      await apiClient.post<ExtractedEntityView>(
+        `/api/projects/${encodedProjectId}/extractions`,
+        {
+          projectFileId: manualDraft.projectFileId,
+          entityType: manualDraft.entityType,
+          label: manualDraft.label.trim(),
+          quantity,
+          unit: manualDraft.unit.trim(),
+          sourceText: manualDraft.sourceText.trim() || undefined,
+        },
+      );
+      setManualDraft({
+        projectFileId: "",
+        entityType: "FURNITURE",
+        label: "",
+        quantity: "",
+        unit: "nr",
+        sourceText: "",
+      });
+      setActionMessage("Professional entity evidence saved for review. No BOQ value was changed.");
+      await refreshAfterAction();
+    } catch (error) {
+      setActionError(safeReviewError(error, "The professional entity evidence could not be saved. Try again."));
+    } finally {
+      setIsAddingManualEntity(false);
+    }
+  }
+
   async function generateDraftBoq() {
     if (isGeneratingDraft || draftSummary.eligibleCount === 0) return;
     setIsGeneratingDraft(true);
@@ -468,6 +539,95 @@ export default function ProjectExtractionsPage(props: { params: Promise<{ projec
         <p className="mt-3 max-w-3xl text-sm text-[#536078] dark:text-[#B8C4D8]">
           Quantara presents source-linked candidates for professional review. Nothing is professionally confirmed automatically. You can review first, or prepare an editable AI Draft BOQ and perform the professional review in the completed BOQ table.
         </p>
+
+        <div className="mt-6 rounded-3xl border border-[#D9E2EC] bg-[#EEF3F8] p-5 dark:border-[#1E2A42] dark:bg-[#111D33]">
+          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#0077B6] dark:text-[#21C7F3]">Professional drawing evidence</p>
+          <h3 className="mt-2 text-xl font-semibold text-[#0B1630] dark:text-white">Add furniture or fixture evidence</h3>
+          <p className="mt-2 max-w-4xl text-sm leading-6 text-[#536078] dark:text-[#B8C4D8]">
+            Record only a count you verified against a selected project source. The entry starts in Needs Review, is never treated as automatic detection, and is not imported into the BOQ.
+          </p>
+
+          {files.length === 0 ? (
+            <p className="mt-4 rounded-xl border border-[#D98A16]/30 bg-[#D98A16]/5 p-3 text-sm text-[#D98A16] dark:text-amber-300">
+              Add a project source file before recording furniture or fixture evidence.
+            </p>
+          ) : (
+            <div className="mt-4 grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+              <label className="text-sm font-medium text-[#0B1630] dark:text-white">
+                Source file *
+                <select
+                  value={manualDraft.projectFileId}
+                  onChange={(event) => setManualDraft((current) => ({ ...current, projectFileId: event.target.value }))}
+                  className="mt-2 w-full rounded-xl border border-[#D9E2EC] bg-white px-3 py-2.5 text-sm dark:border-[#1E2A42] dark:bg-[#0B1426]"
+                >
+                  <option value="">Select source evidence</option>
+                  {files.map((file) => <option key={file.id} value={file.id}>{file.originalName}</option>)}
+                </select>
+              </label>
+              <label className="text-sm font-medium text-[#0B1630] dark:text-white">
+                Evidence type *
+                <select
+                  value={manualDraft.entityType}
+                  onChange={(event) => setManualDraft((current) => ({ ...current, entityType: event.target.value as ManualEntityDraft["entityType"] }))}
+                  className="mt-2 w-full rounded-xl border border-[#D9E2EC] bg-white px-3 py-2.5 text-sm dark:border-[#1E2A42] dark:bg-[#0B1426]"
+                >
+                  <option value="FURNITURE">Furniture</option>
+                  <option value="FIXTURE">Fixture</option>
+                </select>
+              </label>
+              <label className="text-sm font-medium text-[#0B1630] dark:text-white">
+                Description *
+                <input
+                  value={manualDraft.label}
+                  onChange={(event) => setManualDraft((current) => ({ ...current, label: event.target.value }))}
+                  maxLength={200}
+                  className="mt-2 w-full rounded-xl border border-[#D9E2EC] bg-white px-3 py-2.5 text-sm dark:border-[#1E2A42] dark:bg-[#0B1426]"
+                  placeholder="Example: Workstation desk"
+                />
+              </label>
+              <label className="text-sm font-medium text-[#0B1630] dark:text-white">
+                Verified count *
+                <input
+                  type="number"
+                  min="0.0001"
+                  step="any"
+                  value={manualDraft.quantity}
+                  onChange={(event) => setManualDraft((current) => ({ ...current, quantity: event.target.value }))}
+                  className="mt-2 w-full rounded-xl border border-[#D9E2EC] bg-white px-3 py-2.5 text-sm dark:border-[#1E2A42] dark:bg-[#0B1426]"
+                />
+              </label>
+              <label className="text-sm font-medium text-[#0B1630] dark:text-white">
+                Unit *
+                <input
+                  value={manualDraft.unit}
+                  onChange={(event) => setManualDraft((current) => ({ ...current, unit: event.target.value }))}
+                  maxLength={20}
+                  className="mt-2 w-full rounded-xl border border-[#D9E2EC] bg-white px-3 py-2.5 text-sm dark:border-[#1E2A42] dark:bg-[#0B1426]"
+                />
+              </label>
+              <label className="text-sm font-medium text-[#0B1630] dark:text-white md:col-span-2 lg:col-span-1">
+                Source note
+                <input
+                  value={manualDraft.sourceText}
+                  onChange={(event) => setManualDraft((current) => ({ ...current, sourceText: event.target.value }))}
+                  maxLength={500}
+                  className="mt-2 w-full rounded-xl border border-[#D9E2EC] bg-white px-3 py-2.5 text-sm dark:border-[#1E2A42] dark:bg-[#0B1426]"
+                  placeholder="Drawing reference or professional note"
+                />
+              </label>
+              <div className="flex items-end md:col-span-2 lg:col-span-3">
+                <button
+                  type="button"
+                  onClick={() => void addManualEntity()}
+                  disabled={isAddingManualEntity}
+                  className="rounded-xl bg-[#009FE3] px-4 py-2.5 text-sm font-semibold text-white hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-[#21C7F3] dark:text-[#040A16]"
+                >
+                  {isAddingManualEntity ? "Saving evidence..." : "Save for professional review"}
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
 
         <div className="mt-6 grid gap-3 sm:grid-cols-3">
           <div className="rounded-2xl border border-[#D9E2EC] bg-[#EEF3F8] p-4 dark:border-[#1E2A42] dark:bg-[#111D33]">

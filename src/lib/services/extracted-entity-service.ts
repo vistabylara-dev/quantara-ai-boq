@@ -82,7 +82,13 @@ export async function manuallyAddExtractedEntity(actor: CurrentActor, input: Cre
     throw new AppError("FILE_PROJECT_MISMATCH", "This file does not belong to the specified project.", 400);
   }
 
-  const row = await createExtractedEntity(actor.companyId, { ...input, projectId: project.id, projectFileId: file.id, extractionMethod: "MANUAL" });
+  const row = await createExtractedEntity(actor.companyId, {
+    ...input,
+    projectId: project.id,
+    projectFileId: file.id,
+    extractionMethod: "MANUAL",
+    status: "NEEDS_REVIEW",
+  });
   await createAuditLog(actor.companyId, { entityType: "ExtractedEntity", entityId: row.id, action: "ENTITY_MANUALLY_ADDED", payload: { entityType: input.entityType, label: input.label } });
   return toExtractedEntityDTO(row);
 }

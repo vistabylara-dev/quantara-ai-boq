@@ -253,7 +253,11 @@ describe("TAYQAN-AUDIT-FIX-2: checkout double-charge race (integration, real loc
       },
     } as unknown as Stripe.Event;
 
-    const result = await processStripeWebhookEvent(event);
+    // The expired-session path does not call Stripe, but webhook processing
+    // deliberately resolves a configured client before dispatch. Pass the
+    // suite's existing fake explicitly instead of relying on another test
+    // file leaking STRIPE_SECRET_KEY into the shared CI process.
+    const result = await processStripeWebhookEvent(event, fakeStripeStore().client);
     expect(result.outcome).toBe("processed");
 
     const updated = await prisma.tayqanHireEntitlement.findUnique({ where: { stripeCheckoutSessionId: expiredSessionId } });

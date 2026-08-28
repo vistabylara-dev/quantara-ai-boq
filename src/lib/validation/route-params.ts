@@ -78,6 +78,10 @@ export const drawingPageIdParamsSchema = z.object({
   pageId: z.string().uuid("A valid drawing page ID is required."),
 }).strict();
 
+export const detectedRoomIdParamsSchema = z.object({
+  roomId: z.string().uuid("A valid detected room ID is required."),
+}).strict();
+
 export const entityIdParamsSchema = z.object({
   entityId: z.string().uuid("A valid entity ID is required."),
 }).strict();

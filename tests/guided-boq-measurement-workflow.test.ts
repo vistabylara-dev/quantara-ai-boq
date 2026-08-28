@@ -26,6 +26,12 @@ import { proposeCalculatedQuantityForItem, confirmCalculatedQuantityForItem } fr
 import { importExtractedEntityToBoq } from "../src/lib/services/extraction-to-boq-service";
 import { correctExtractedEntity } from "../src/lib/services/extracted-entity-service";
 import { copyItemProvenance } from "../src/lib/services/estimate-integrity-service";
+import {
+  confirmDetectedRoom,
+  createManualDetectedRoom,
+  correctDetectedRoom,
+  listRoomsForProject,
+} from "../src/lib/services/detected-room-service";
 
 const RUN_ID = `${Date.now()}-${process.pid}`;
 
@@ -84,6 +90,7 @@ describe("Guided BOQ measurement workflow (Release 1) — integration (real loca
   let boqAId: string;
   let sectionAId: string;
   let projectFileAId: string;
+  let drawingPageAId: string;
 
   function ownerActor(): CurrentActor {
     return { userId: ownerUserId, companyId: companyAId, role: UserRole.COMPANY_OWNER, fullName: "Guided Workflow Owner", email: `guided-owner-${RUN_ID}@example.com` };
@@ -140,6 +147,15 @@ describe("Guided BOQ measurement workflow (Release 1) — integration (real loca
       },
     });
     projectFileAId = projectFile.id;
+    const drawingPage = await prisma.drawingPage.create({
+      data: {
+        companyId: companyAId,
+        projectFileId: projectFile.id,
+        pageNumber: 1,
+        processingStatus: "COMPLETED",
+      },
+    });
+    drawingPageAId = drawingPage.id;
   });
 
   afterAll(async () => {
@@ -149,7 +165,9 @@ describe("Guided BOQ measurement workflow (Release 1) — integration (real loca
     }
     await prisma.auditLog.deleteMany({ where: { companyId: { in: [companyAId, companyBId] } } });
     await prisma.quantityCalculation.deleteMany({ where: { companyId: { in: [companyAId, companyBId] } } });
+    await prisma.detectedRoom.deleteMany({ where: { companyId: { in: [companyAId, companyBId] } } });
     await prisma.extractedEntity.deleteMany({ where: { companyId: { in: [companyAId, companyBId] } } });
+    await prisma.drawingPage.deleteMany({ where: { companyId: { in: [companyAId, companyBId] } } });
     await prisma.projectFile.deleteMany({ where: { companyId: { in: [companyAId, companyBId] } } });
     await prisma.bOQRevisionSnapshot.deleteMany({ where: { companyId: { in: [companyAId, companyBId] } } });
     await prisma.verificationException.deleteMany({ where: { companyId: { in: [companyAId, companyBId] } } });
@@ -173,6 +191,60 @@ describe("Guided BOQ measurement workflow (Release 1) — integration (real loca
         dimensionValues: [dim("wallLength", "Wall Length", "m", true, 5)], // wallHeight intentionally omitted
       }),
     ).rejects.toMatchObject({ code: "MISSING_REQUIRED_DIMENSIONS" });
+  });
+
+  it("creates a manual room as NEEDS_REVIEW, confirms it once, and exposes only its explicit measurements for deterministic prefill", async () => {
+    const created = await createManualDetectedRoom(ownerActor(), projectASlug, {
+      drawingPageId: drawingPageAId,
+      roomName: "Meeting Room",
+      roomNumber: "L1-04",
+      area: 24.5,
+      perimeter: 20,
+      ceilingHeight: 3.1,
+      floorLevel: "Level 1",
+    });
+
+    expect(created).toMatchObject({
+      projectId: projectAId,
+      drawingPageId: drawingPageAId,
+      roomName: "Meeting Room",
+      area: 24.5,
+      status: "NEEDS_REVIEW",
+      confidence: 100,
+    });
+    expect(await listRoomsForProject(ownerActor(), projectASlug)).toEqual(
+      expect.arrayContaining([expect.objectContaining({ id: created.id, status: "NEEDS_REVIEW" })]),
+    );
+
+    await expect(prefillDimensionValues(companyAId, "FLOOR_AREA", {
+      projectId: projectASlug,
+      detectedRoomId: created.id,
+    })).rejects.toMatchObject({ code: "ROOM_NOT_CONFIRMED" });
+
+    const confirmed = await confirmDetectedRoom(ownerActor(), created.id);
+    expect(confirmed.status).toBe("CONFIRMED");
+    expect(confirmed.confirmedByUserId).toBe(ownerUserId);
+
+    const prefilled = await prefillDimensionValues(companyAId, "FLOOR_AREA", {
+      projectId: projectASlug,
+      detectedRoomId: created.id,
+    });
+    expect(prefilled.find((value) => value.key === "netFloorArea")).toMatchObject({
+      value: 24.5,
+      source: "detected_room",
+      reviewStatus: "PREFILLED",
+    });
+    expect(prefilled.find((value) => value.key === "wastagePercentage")?.value).toBeNull();
+
+    await expect(confirmDetectedRoom(ownerActor(), created.id)).rejects.toMatchObject({ code: "ROOM_ALREADY_FINALIZED" });
+    await expect(correctDetectedRoom(ownerActor(), created.id, { area: 25, reason: "Late correction" })).rejects.toMatchObject({ code: "ROOM_ALREADY_FINALIZED" });
+  });
+
+  it("fails closed when an explicitly selected room does not belong to the requested project", async () => {
+    await expect(prefillDimensionValues(companyAId, "FLOOR_AREA", {
+      projectId: projectASlug,
+      detectedRoomId: "99999999-9999-4999-8999-999999999999",
+    })).rejects.toMatchObject({ code: "ROOM_PROJECT_MISMATCH" });
   });
 
   it("creates, previews, and confirms a calculation end-to-end, recording confirmedBy/confirmedAt", async () => {

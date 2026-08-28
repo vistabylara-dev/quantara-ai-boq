@@ -75,10 +75,17 @@ export async function prefillDimensionValues(
   }
   let room: { area: unknown; perimeter: unknown; ceilingHeight: unknown } | null = null;
   if (options.detectedRoomId) {
-    room = await prisma.detectedRoom.findFirst({
-      where: { id: options.detectedRoomId, companyId, projectId: project.id },
-      select: { area: true, perimeter: true, ceilingHeight: true },
+    const selectedRoom = await prisma.detectedRoom.findFirst({
+      where: { id: options.detectedRoomId, companyId },
+      select: { projectId: true, status: true, area: true, perimeter: true, ceilingHeight: true },
     });
+    if (!selectedRoom || selectedRoom.projectId !== project.id) {
+      throw new AppError("ROOM_PROJECT_MISMATCH", "This detected room does not belong to the specified project.", 400);
+    }
+    if (selectedRoom.status !== "CONFIRMED" && selectedRoom.status !== "CORRECTED") {
+      throw new AppError("ROOM_NOT_CONFIRMED", "This room must receive a professional confirmation or correction before it can prefill a calculation.", 409);
+    }
+    room = selectedRoom;
   }
   const technicalData = (entity?.technicalDataJson as Record<string, unknown> | null) ?? null;
   const entityConfidence = entity ? entity.confidence.toNumber() : null;

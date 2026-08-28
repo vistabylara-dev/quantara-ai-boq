@@ -740,6 +740,7 @@ describe("Guided BOQ measurement workflow (Release 1) — integration (real loca
         unit: "m",
         confidence: 90,
         extractionMethod: ExtractionMethod.VISION_MODEL,
+        status: "CONFIRMED",
       },
     });
 
@@ -769,6 +770,7 @@ describe("Guided BOQ measurement workflow (Release 1) — integration (real loca
         unit: "m2",
         confidence: 90,
         extractionMethod: ExtractionMethod.VISION_MODEL,
+        status: "CONFIRMED",
       },
     });
 
@@ -795,6 +797,7 @@ describe("Guided BOQ measurement workflow (Release 1) — integration (real loca
         confidence: 92,
         extractionMethod: ExtractionMethod.VISION_MODEL,
         technicalDataJson: { length: 4.2, width: 2.1, depth: 0.3 },
+        status: "CONFIRMED",
       },
     });
 
@@ -809,6 +812,61 @@ describe("Guided BOQ measurement workflow (Release 1) — integration (real loca
     expect(byKey.length.reviewStatus).toBe("PREFILLED");
     expect(byKey.width.value).toBe(2.1);
     expect(byKey.depth.value).toBe(0.3);
+  });
+
+  it("FURNITURE COUNT — unreviewed evidence cannot prefill or link a calculation; corrected evidence can", async () => {
+    const entity = await prisma.extractedEntity.create({
+      data: {
+        companyId: companyAId,
+        projectId: projectAId,
+        projectFileId: projectFileAId,
+        entityType: ExtractedEntityType.FURNITURE,
+        label: "Controlled furniture count",
+        quantity: 12,
+        unit: "nr",
+        confidence: 88,
+        extractionMethod: ExtractionMethod.VISION_MODEL,
+        status: "NEEDS_REVIEW",
+      },
+    });
+
+    await expect(
+      prefillDimensionValues(companyAId, "COUNT", {
+        projectId: projectAId,
+        extractedEntityId: entity.id,
+      }),
+    ).rejects.toMatchObject({ code: "ENTITY_NOT_CONFIRMED" });
+
+    await expect(
+      createCalculation(ownerActor(), {
+        projectId: projectAId,
+        calculationType: "COUNT",
+        extractedEntityId: entity.id,
+        dimensionValues: [dim("verifiedCount", "Verified count", "nr", true, 12)],
+      }),
+    ).rejects.toMatchObject({ code: "ENTITY_NOT_CONFIRMED" });
+
+    await correctExtractedEntity(ownerActor(), entity.id, {
+      quantity: 12,
+      unit: "nr",
+      reason: "Count verified against the furniture plan by the professional reviewer.",
+    });
+
+    const values = await prefillDimensionValues(companyAId, "COUNT", {
+      projectId: projectAId,
+      extractedEntityId: entity.id,
+    });
+    const verifiedCount = values.find((value) => value.key === "verifiedCount");
+    expect(verifiedCount).toMatchObject({ value: 12, source: "extracted_entity", reviewStatus: "PREFILLED" });
+
+    const calculation = await createCalculation(ownerActor(), {
+      projectId: projectAId,
+      calculationType: "COUNT",
+      extractedEntityId: entity.id,
+      dimensionValues: values,
+    });
+    expect(calculation.resultValue).toBe(12);
+    expect(calculation.resultUnit).toBe("nr");
   });
 
   it("PROJECT-SCOPED PREFILL — an extracted entity from a different project cannot prefill this calculation", async () => {

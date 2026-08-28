@@ -328,6 +328,7 @@ describe("Release 1 quantity integrity - persistence and atomic audit", () => {
         confidence: 90,
         extractionMethod: ExtractionMethod.VISION_MODEL,
         technicalDataJson: { netFloorArea: -20, wastagePercentage: 5 },
+        status: "CONFIRMED",
       },
     });
     const prefills = await prefillDimensionValues(companyId, "FLOOR_AREA", {

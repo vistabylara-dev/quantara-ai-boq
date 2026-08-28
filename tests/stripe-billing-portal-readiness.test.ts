@@ -16,6 +16,12 @@ vi.mock("../src/lib/repositories/commerce-provider-mapping-repository", () => ({
   listMappingsForEnvironment: vi.fn(),
 }));
 
+vi.mock("../src/lib/db/prisma", () => ({
+  prisma: {
+    platformAuditLog: { create: vi.fn(async () => ({ id: "audit-log" })) },
+  },
+}));
+
 function fixture() {
   const specs = [
     ["starter", "starter_monthly_aed_149", "starter_annual_aed_1490"],
@@ -163,7 +169,7 @@ describe("Stripe billing portal readiness", () => {
       platformRole: PlatformRole.PLATFORM_OWNER,
       fullName: "Platform Owner",
       email: "owner@example.com",
-    }, stripe);
+    }, { method: "POST", path: "/api/admin/commerce/stripe/portal-ready", requestId: "request-1" }, stripe);
 
     expect(report).toMatchObject({
       ready: true,

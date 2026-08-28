@@ -101,6 +101,21 @@ function processedVistaWorkflow() {
 }
 
 describe("Quantara Guide v2 registry and advisory navigation", () => {
+  it("reports a confirmed project calculation without hiding extraction attention", () => {
+    const result = workflow({
+      files: [file("source-1", { drawingPageCount: 1 })],
+      jobs: [job("job-1", "source-1", "COMPLETED", "2026-08-28T15:00:00.000Z")],
+      entityStatuses: ["CONFIRMED", "NEEDS_REVIEW"],
+      calculationStatuses: ["CONFIRMED"],
+      hasBoq: true,
+    });
+
+    expect(stateOf(result, "EXTRACTION")).toBe("NEEDS_ATTENTION");
+    expect(stateOf(result, "CALCULATIONS")).toBe("COMPLETE");
+    expect(result.nextStep?.ctaLabel).toBe("Review Extracted Information");
+    expect(result.factualSummary).toContain("1 confirmed calculation");
+  });
+
   it("defines all nine professional workflow stages in their required order", () => {
     expect(GUIDE_STAGE_IDS).toEqual([
       "PROJECT_SETUP",

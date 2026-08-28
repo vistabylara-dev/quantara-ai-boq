@@ -66,7 +66,7 @@ describe("deterministic project workflow guidance", () => {
       href: "/projects/dubai-tower/extractions",
     });
     expect(stateOf(result, "EXTRACTION")).toBe("NEEDS_ATTENTION");
-    expect(stateOf(result, "BOQ")).toBe("NOT_STARTED");
+    expect(stateOf(result, "BOQ")).toBe("CURRENT");
   });
 
   it("D. sends reviewed extraction with an existing BOQ to dimension review", () => {
@@ -84,7 +84,7 @@ describe("deterministic project workflow guidance", () => {
     expect(stateOf(result, "EXTRACTION")).toBe("COMPLETE");
     expect(stateOf(result, "DIMENSIONS")).toBe("CURRENT");
     expect(stateOf(result, "CALCULATIONS")).toBe("NOT_STARTED");
-    expect(stateOf(result, "BOQ")).toBe("NOT_STARTED");
+    expect(stateOf(result, "BOQ")).toBe("CURRENT");
   });
 
   it("E. sends reviewed extraction without a BOQ to workspace creation before dimension review", () => {

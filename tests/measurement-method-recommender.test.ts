@@ -228,5 +228,13 @@ describe("normal Quantara measurement method recommendation", () => {
     expect(calculationService).toContain(
       'input.key === "verifiedCount"',
     );
+
+    const calculationPanel = readFileSync(
+      "src/components/boq/quantity-calculation-panel.tsx",
+      "utf8",
+    );
+    expect(calculationPanel).toContain(
+      "if (reusableCalculation) onConfirmedRef.current?.(reusableCalculation)",
+    );
   });
 });

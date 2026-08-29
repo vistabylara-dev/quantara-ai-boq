@@ -168,7 +168,7 @@ test.describe("first-project onboarding route", () => {
     await page.getByLabel("Project reference").fill("SELF-SERVICE-001");
     await page.getByRole("button", { name: "Select or create a client" }).click();
     await page.getByPlaceholder("Search clients...").fill("Quick Client");
-    await page.getByRole("button", { name: "+ Create new client" }).click();
+    await page.getByRole("button", { name: /Create new client/ }).click();
     await expect(page.getByLabel("Client name")).toHaveValue("Quick Client");
     await page.getByLabel("Company name").fill("Quick Client LLC");
     await page.getByLabel("Email").fill("projects@quickclient.example");

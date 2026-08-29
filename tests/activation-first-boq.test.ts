@@ -56,6 +56,8 @@ describe("first-value activation journey", () => {
     expect(clientPicker).not.toContain('apiClient.post<Client>("/api/clients", { name: quickCreateName })');
     expect(clientPicker).toContain("initialName={quickCreateName}");
     expect(clientForm).toContain('apiClient.post<Client>("/api/clients", values)');
+    expect(clientForm).toContain('const FormContainer = compact ? "div" : "form"');
+    expect(clientForm).toContain('type={compact ? "button" : "submit"}');
     expect(clientForm).toContain("companyName");
     expect(clientForm).toContain("taxRegistrationNumber");
     expect(clientPicker).toContain("setResults((current) => [client, ...current.filter");

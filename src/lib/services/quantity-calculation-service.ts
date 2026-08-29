@@ -105,12 +105,13 @@ export async function prefillDimensionValues(
       })
     : null;
 
-  // Only these three registry input keys have a well-defined, schema-backed DetectedRoom
+  // Only these registry input keys have a well-defined, schema-backed DetectedRoom
   // equivalent — an explicit, documented mapping, never a fuzzy guess.
   const roomFieldByKey: Record<string, "area" | "perimeter" | "ceilingHeight"> = {
     netFloorArea: "area",
     ceilingArea: "area",
     perimeter: "perimeter",
+    wallLength: "perimeter",
     wallHeight: "ceilingHeight",
   };
 

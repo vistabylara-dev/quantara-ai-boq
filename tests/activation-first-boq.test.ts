@@ -48,12 +48,16 @@ describe("first-value activation journey", () => {
     expect(industriesRoute).toContain("ensureCompanyIndustryEngines(actor.companyId)");
   });
 
-  it("offers one-action client creation inside the project picker", () => {
+  it("routes new project clients through the complete client record form", () => {
     const clientPicker = source("src/components/projects/client-picker.tsx");
+    const clientForm = source("src/components/clients/client-form.tsx");
     const clientRepository = source("src/lib/repositories/client-repository.ts");
 
-    expect(clientPicker).toContain('apiClient.post<Client>("/api/clients", { name: quickCreateName })');
-    expect(clientPicker).toContain("projects.clientPicker.quickCreate");
+    expect(clientPicker).not.toContain('apiClient.post<Client>("/api/clients", { name: quickCreateName })');
+    expect(clientPicker).toContain("initialName={quickCreateName}");
+    expect(clientForm).toContain('apiClient.post<Client>("/api/clients", values)');
+    expect(clientForm).toContain("companyName");
+    expect(clientForm).toContain("taxRegistrationNumber");
     expect(clientPicker).toContain("setResults((current) => [client, ...current.filter");
     expect(clientPicker).toContain("loadError");
     expect(clientPicker).toContain("loadClients(search)");

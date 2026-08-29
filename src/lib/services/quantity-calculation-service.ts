@@ -105,12 +105,13 @@ export async function prefillDimensionValues(
       })
     : null;
 
-  // Only these three registry input keys have a well-defined, schema-backed DetectedRoom
+  // Only these registry input keys have a well-defined, schema-backed DetectedRoom
   // equivalent — an explicit, documented mapping, never a fuzzy guess.
   const roomFieldByKey: Record<string, "area" | "perimeter" | "ceilingHeight"> = {
     netFloorArea: "area",
     ceilingArea: "area",
     perimeter: "perimeter",
+    wallLength: "perimeter",
     wallHeight: "ceilingHeight",
   };
 
@@ -257,88 +258,3 @@ export async function createCalculation(actor: CurrentActor, input: CreateCalcul
       );
     }
   }
-
-  const values = Object.fromEntries(input.dimensionValues.filter((d) => d.value !== null).map((d) => [d.key, d.value as number]));
-  const result = definition.compute(values);
-  assertValidFormulaResult(result);
-
-  const providedConfidences = input.dimensionValues.map((d) => d.confidence).filter((c): c is number => c !== null);
-  // Confidence reflects the weakest evidence actually used — never a fabricated blanket
-  // number. A fully professional-entered calculation (no extracted evidence) is 100%
-  // confident by construction: every value was a direct human decision, not an extraction.
-  const confidence = providedConfidences.length > 0 ? Math.min(...providedConfidences) : 100;
-
-  const created = await createQuantityCalculation(actor.companyId, {
-    projectId: project.id,
-    extractedEntityId: input.extractedEntityId ?? null,
-    calculationType: input.calculationType,
-    inputValues: result.inputValues,
-    deductions: result.deductions ?? null,
-    allowances: result.allowances ?? null,
-    formula: result.formula,
-    resultValue: result.resultValue,
-    resultUnit: result.resultUnit,
-    confidence,
-  });
-
-  await createAuditLog(actor.companyId, {
-    entityType: "QuantityCalculation",
-    entityId: created.id,
-    action: "CALCULATION_CREATED",
-    payload: { calculationType: input.calculationType, formula: result.formula, resultValue: result.resultValue, resultUnit: result.resultUnit },
-  });
-
-  return toQuantityCalculationDTO(created);
-}
-
-export async function listCalculationsForProject(actor: CurrentActor, projectId: string) {
-  // Same tenant-resolution requirement as createCalculation: the caller-supplied identifier
-  // (slug or UUID) must resolve to a project this company actually owns before querying by it.
-  const project = await getProjectRecord(actor.companyId, projectId);
-  const rows = await listQuantityCalculationsForProject(actor.companyId, project.id);
-  return rows.map(toQuantityCalculationDTO);
-}
-
-export async function listCalculationsForEntity(actor: CurrentActor, extractedEntityId: string) {
-  const rows = await listQuantityCalculationsForEntity(actor.companyId, extractedEntityId);
-  return rows.map(toQuantityCalculationDTO);
-}
-
-export async function getCalculation(actor: CurrentActor, calculationId: string) {
-  const row = await getQuantityCalculationRecord(actor.companyId, calculationId);
-  return toQuantityCalculationDTO(row);
-}
-
-/** Human confirmation (spec section 6) — records confirmedBy/confirmedAt, matching confirmExtractedEntity's pattern exactly. */
-export async function confirmCalculation(actor: CurrentActor, calculationId: string) {
-  requireCapability(actor, "verification:manage");
-  const current = await getQuantityCalculationRecord(actor.companyId, calculationId);
-  assertValidCalculatedResult(current.resultValue.toNumber());
-  const updated = await confirmQuantityCalculationRecord(actor.companyId, calculationId, actor.userId);
-  await createAuditLog(actor.companyId, { entityType: "QuantityCalculation", entityId: calculationId, action: "CALCULATION_CONFIRMED", payload: {} });
-  return toQuantityCalculationDTO(updated);
-}
-
-export async function rejectCalculation(actor: CurrentActor, calculationId: string, reason: string) {
-  requireCapability(actor, "verification:manage");
-  const updated = await rejectQuantityCalculationRecord(actor.companyId, calculationId);
-  await createAuditLog(actor.companyId, { entityType: "QuantityCalculation", entityId: calculationId, action: "CALCULATION_REJECTED", payload: { reason } });
-  return toQuantityCalculationDTO(updated);
-}
-
-export async function overrideCalculationResult(actor: CurrentActor, calculationId: string, newResultValue: number, reason: string) {
-  requireCapability(actor, "verification:manage");
-  if (!reason || !reason.trim()) {
-    throw new AppError("OVERRIDE_REASON_REQUIRED", "A reason is required to override a calculated quantity.", 400);
-  }
-  assertValidOverrideResult(newResultValue);
-  const current = await getQuantityCalculationRecord(actor.companyId, calculationId);
-  const updated = await overrideQuantityCalculationRecord(actor.companyId, calculationId, newResultValue, reason);
-  await createAuditLog(actor.companyId, {
-    entityType: "QuantityCalculation",
-    entityId: calculationId,
-    action: "CALCULATION_OVERRIDDEN",
-    payload: { originalResultValue: current.resultValue.toNumber(), newResultValue, reason },
-  });
-  return toQuantityCalculationDTO(updated);
-}

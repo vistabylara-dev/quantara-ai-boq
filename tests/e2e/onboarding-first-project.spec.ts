@@ -106,6 +106,7 @@ async function mockAuthenticatedDashboard(
 }
 
 test.describe("first-project onboarding route", () => {
+  test.describe.configure({ mode: "serial" });
   test("Start guided tour takes a zero-project user directly to New Project", async ({ page }) => {
     await mockAuthenticatedDashboard(page, 0);
     await page.goto("/dashboard", { waitUntil: "domcontentloaded" });
@@ -174,6 +175,8 @@ test.describe("first-project onboarding route", () => {
     await page.getByLabel("Email").fill("projects@quickclient.example");
     await page.getByLabel("Phone").fill("+971 50 000 0000");
     await page.getByRole("button", { name: "Create and select" }).click();
+    await expect(page.getByRole("heading", { name: "Create client" })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Quick Client" })).toBeVisible();
     await page.getByLabel("Industry engine").selectOption("fit-out");
     await page.getByLabel("Location").fill("Dubai");
     await page.getByRole("button", { name: "Create project" }).click();

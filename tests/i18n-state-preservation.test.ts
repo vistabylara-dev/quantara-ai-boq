@@ -19,10 +19,10 @@ describe("locale switching preserves in-progress authenticated work", () => {
       "utf8",
     );
 
-    expect(source).toContain("[calculationType, definition, extractedEntityId, projectId]");
+    expect(source).toContain("[calculationType, definition, extractedEntityId, projectId, selectedRoomId]");
     expect(source).toContain("[calculationType, definition, dimensionValues]");
     expect(
-      source.match(/\}, \[calculationType, definition, extractedEntityId, projectId\]\);/g),
+      source.match(/\}, \[calculationType, definition, extractedEntityId, projectId, selectedRoomId\]\);/g),
     ).toHaveLength(1);
     expect(
       source.match(/\}, \[calculationType, definition, dimensionValues\]\);/g),

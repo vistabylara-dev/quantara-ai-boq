@@ -71,6 +71,19 @@ export function findReusableConfirmedCalculation(
   }) ?? null;
 }
 
+type DetectedRoomDTO = {
+  id: string;
+  roomName: string;
+  roomNumber: string | null;
+  status: string;
+};
+
+export function listProfessionallyReviewedRooms(
+  rooms: readonly DetectedRoomDTO[],
+): DetectedRoomDTO[] {
+  return rooms.filter((room) => room.status === "CONFIRMED" || room.status === "CORRECTED");
+}
+
 type PendingDimensionVoiceProposal = {
   proposal: VoiceCommandProposal;
   dimensionKey: string;
@@ -105,8 +118,35 @@ export function QuantityCalculationPanel({ projectId, calculationType, extracted
   const [isVoiceBusy, setIsVoiceBusy] = useState(false);
   const [pendingVoiceProposal, setPendingVoiceProposal] = useState<PendingDimensionVoiceProposal | null>(null);
   const [voiceProposalError, setVoiceProposalError] = useState<string | null>(null);
+  const [reviewedRooms, setReviewedRooms] = useState<DetectedRoomDTO[]>([]);
+  const [selectedRoomId, setSelectedRoomId] = useState("");
+  const [roomEvidenceError, setRoomEvidenceError] = useState(false);
   const voiceButtonRef = useRef<HTMLButtonElement>(null);
   const calculationLabel = translateCalculationType(calculationType, t);
+
+  useEffect(() => {
+    if (extractedEntityId) {
+      setReviewedRooms([]);
+      setSelectedRoomId("");
+      setRoomEvidenceError(false);
+      return;
+    }
+    const controller = new AbortController();
+    setRoomEvidenceError(false);
+    apiClient
+      .get<DetectedRoomDTO[]>(
+        `/api/projects/${encodeURIComponent(projectId)}/rooms`,
+        controller.signal,
+      )
+      .then((rooms) => setReviewedRooms(listProfessionallyReviewedRooms(rooms)))
+      .catch((err) => {
+        if (err instanceof DOMException && err.name === "AbortError") return;
+        setReviewedRooms([]);
+        setSelectedRoomId("");
+        setRoomEvidenceError(true);
+      });
+    return () => controller.abort();
+  }, [extractedEntityId, projectId]);
 
   useEffect(() => {
     if (!definition) {
@@ -118,6 +158,7 @@ export function QuantityCalculationPanel({ projectId, calculationType, extracted
     setError(null);
     const query = new URLSearchParams({ calculationType, projectId });
     if (extractedEntityId) query.set("extractedEntityId", extractedEntityId);
+    if (selectedRoomId) query.set("detectedRoomId", selectedRoomId);
     const prefillRequest = apiClient.get<DimensionValueState[]>(
       `/api/quantity-calculations/prefill?${query.toString()}`,
       controller.signal,
@@ -146,7 +187,7 @@ export function QuantityCalculationPanel({ projectId, calculationType, extracted
       })
       .finally(() => setIsLoadingPrefill(false));
     return () => controller.abort();
-  }, [calculationType, definition, extractedEntityId, projectId]);
+  }, [calculationType, definition, extractedEntityId, projectId, selectedRoomId]);
 
   useEffect(() => {
     if (!definition || dimensionValues.length === 0) return;
@@ -323,6 +364,40 @@ export function QuantityCalculationPanel({ projectId, calculationType, extracted
           ariaLabel={t("measurement.voiceRecordInstruction", { label: calculationLabel })}
         />
       </div>
+
+      {!extractedEntityId && (
+        <label className="block text-sm text-slate-300">
+          <span className="text-slate-400">
+            {locale === "ar" ? "دليل الغرفة المؤكد (اختياري)" : "Confirmed room evidence (optional)"}
+          </span>
+          <select
+            value={selectedRoomId}
+            onChange={(event) => {
+              setSelectedRoomId(event.target.value);
+              setSavedCalculation(null);
+              setPreview({ result: null, missing: [] });
+              setPendingVoiceProposal(null);
+            }}
+            className="mt-2 w-full rounded-xl border border-slate-800 bg-slate-900 px-3 py-2 text-white outline-none focus:border-blue-500"
+          >
+            <option value="">
+              {locale === "ar" ? "إدخال القياسات يدوياً" : "Enter dimensions manually"}
+            </option>
+            {reviewedRooms.map((room) => (
+              <option key={room.id} value={room.id}>
+                {room.roomNumber ? `${room.roomNumber} · ` : ""}{room.roomName}
+              </option>
+            ))}
+          </select>
+          {roomEvidenceError && (
+            <span className="mt-1 block text-xs text-amber-300">
+              {locale === "ar"
+                ? "تعذر تحميل دليل الغرفة المؤكد. لا يزال الإدخال اليدوي متاحاً."
+                : "Confirmed room evidence is unavailable. Manual entry remains available."}
+            </span>
+          )}
+        </label>
+      )}
 
       {isLoadingPrefill ? (
         <p className="text-sm text-slate-400">{t("measurement.loadingKnownEvidence")}</p>

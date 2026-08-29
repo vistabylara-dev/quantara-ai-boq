@@ -31,6 +31,7 @@ type ClientFormProps = {
   submitLabel?: string;
   compact?: boolean;
   editingClient?: Client;
+  initialName?: string;
 };
 
 function valuesFromClient(client?: Client): ClientFormValues {
@@ -52,9 +53,13 @@ export default function ClientForm({
   submitLabel,
   compact = false,
   editingClient,
+  initialName = "",
 }: ClientFormProps) {
   const t = useTranslations();
-  const [values, setValues] = useState<ClientFormValues>(() => valuesFromClient(editingClient));
+  const [values, setValues] = useState<ClientFormValues>(() => {
+    const initialValues = valuesFromClient(editingClient);
+    return editingClient ? initialValues : { ...initialValues, name: initialName };
+  });
   const [fieldErrors, setFieldErrors] = useState<Record<string, string[]>>({});
   const [formError, setFormError] = useState<string | null>(null);
   const [existingClient, setExistingClient] = useState<Client | null>(null);

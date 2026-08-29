@@ -236,6 +236,21 @@ describe("Guided BOQ measurement workflow (Release 1) — integration (real loca
     });
     expect(prefilled.find((value) => value.key === "wastagePercentage")?.value).toBeNull();
 
+    const wallPrefill = await prefillDimensionValues(companyAId, "WALL_AREA", {
+      projectId: projectASlug,
+      detectedRoomId: created.id,
+    });
+    expect(wallPrefill.find((value) => value.key === "wallLength")).toMatchObject({
+      value: 20,
+      source: "detected_room",
+      reviewStatus: "PREFILLED",
+    });
+    expect(wallPrefill.find((value) => value.key === "wallHeight")).toMatchObject({
+      value: 3.1,
+      source: "detected_room",
+      reviewStatus: "PREFILLED",
+    });
+
     await expect(confirmDetectedRoom(ownerActor(), created.id)).rejects.toMatchObject({ code: "ROOM_ALREADY_FINALIZED" });
     await expect(correctDetectedRoom(ownerActor(), created.id, { area: 25, reason: "Late correction" })).rejects.toMatchObject({ code: "ROOM_ALREADY_FINALIZED" });
   });

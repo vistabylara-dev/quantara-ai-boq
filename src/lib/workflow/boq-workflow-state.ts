@@ -90,6 +90,7 @@ export type WorkflowCalculationFact = {
   id: string;
   extractedEntityId: string | null;
   status: string;
+  inputValues?: Record<string, number> | null;
 };
 
 export type BoqWorkflowStateInput = {
@@ -117,6 +118,34 @@ const ACCEPTED_ENTITY_STATUSES = new Set([
   "CONFIRMED",
   "CORRECTED",
   "IMPORTED",
+]);
+
+const DIMENSION_INPUT_KEYS = new Set([
+  "approvedAllowancePercentage",
+  "approvedTerminationAllowance",
+  "barLength",
+  "ceilingArea",
+  "coats",
+  "depth",
+  "ductPerimeter",
+  "exposedConcreteSurfaceArea",
+  "faces",
+  "height",
+  "length",
+  "netFloorArea",
+  "openingsArea",
+  "perimeter",
+  "routeLength",
+  "scheduleQuantity",
+  "totalDoorWidths",
+  "unitWeightPerMeter",
+  "verifiedRouteLength",
+  "verticalDrops",
+  "wallArea",
+  "wallHeight",
+  "wallLength",
+  "wastagePercentage",
+  "width",
 ]);
 
 function hasUsableDirectReviewedQuantity(entity: WorkflowEntityFact): boolean {
@@ -183,7 +212,11 @@ export function computeBoqWorkflowState(
     (calculation) => calculation.status !== "CONFIRMED",
   );
 
-  const hasAnyEntityCalculation = linkedNonRejectedCalculations.length > 0;
+  const hasAnyEntityDimensionEvidence = linkedNonRejectedCalculations.some(
+    (calculation) => Object.keys(calculation.inputValues ?? {}).some(
+      (inputKey) => DIMENSION_INPUT_KEYS.has(inputKey),
+    ),
+  );
 
   const sourcesStatus: WorkflowStepStatus =
     input.fileCount > 0 ? "COMPLETE" : "NOT_STARTED";
@@ -202,7 +235,7 @@ export function computeBoqWorkflowState(
       ? "NEEDS_ATTENTION"
       : acceptedEntities.length === 0
         ? "NOT_STARTED"
-        : hasAnyEntityCalculation
+        : hasAnyEntityDimensionEvidence
           ? "COMPLETE"
           : "NOT_REQUIRED";
 

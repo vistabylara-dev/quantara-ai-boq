@@ -1,5 +1,5 @@
 import type { CurrentActor } from "@/lib/auth/current-actor";
-import { requireCapability } from "@/lib/auth/rbac";
+import { hasCapability, requireCapability } from "@/lib/auth/rbac";
 import {
   archiveClient as archiveClientRecord,
   countClientProjects,
@@ -22,7 +22,12 @@ export async function getClientForCompany(actor: CurrentActor, clientId: string)
 }
 
 export async function createClientForCompany(actor: CurrentActor, input: ClientWriteInput) {
-  requireCapability(actor, "clients:manage");
+  if (
+    !hasCapability(actor.role, "clients:manage")
+    && !hasCapability(actor.role, "projects:create")
+  ) {
+    requireCapability(actor, "clients:manage");
+  }
   return createClientRecord(actor.companyId, input);
 }
 

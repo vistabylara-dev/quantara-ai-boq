@@ -7,6 +7,7 @@ import {
 } from "../src/lib/calculations/measurement-method-recommender";
 import {
   findReusableConfirmedCalculation,
+  listProfessionallyReviewedRooms,
   type DimensionValueState,
 } from "../src/components/boq/quantity-calculation-panel";
 
@@ -27,6 +28,18 @@ function recommend(
 }
 
 describe("normal Quantara measurement method recommendation", () => {
+  it("offers only professionally confirmed or corrected rooms for deterministic prefill", () => {
+    expect(listProfessionallyReviewedRooms([
+      { id: "needs-review", roomName: "Draft room", roomNumber: null, status: "NEEDS_REVIEW" },
+      { id: "confirmed", roomName: "Confirmed room", roomNumber: "R01", status: "CONFIRMED" },
+      { id: "corrected", roomName: "Corrected room", roomNumber: null, status: "CORRECTED" },
+      { id: "rejected", roomName: "Rejected room", roomNumber: null, status: "REJECTED" },
+    ])).toEqual([
+      { id: "confirmed", roomName: "Confirmed room", roomNumber: "R01", status: "CONFIRMED" },
+      { id: "corrected", roomName: "Corrected room", roomNumber: null, status: "CORRECTED" },
+    ]);
+  });
+
   it("reuses only a confirmed calculation with the same entity, type and deterministic inputs", () => {
     const dimensions: DimensionValueState[] = [{
       key: "verifiedCount",

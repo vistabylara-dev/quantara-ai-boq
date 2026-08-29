@@ -96,7 +96,6 @@ function assertCompanyProfileComplete(company: {
   if (!company.email.trim()) missing.push("company email");
   if (!company.address?.trim()) missing.push("company address");
   if (!company.defaultCurrency.trim()) missing.push("default currency");
-  if (!company.taxRegistrationNumber?.trim()) missing.push("tax registration number");
   if (missing.length > 0) {
     throw new AppError(
       "COMPANY_PROFILE_INCOMPLETE",

@@ -88,6 +88,18 @@ describe("client and project services (integration, real local Postgres)", () =>
         }),
       ).rejects.toThrow(PermissionDeniedError);
     });
+
+    it("allows a project-creating role to create the client required by the new-project workflow", async () => {
+      const client = await createClientForCompany(actor(companyAId, UserRole.QUANTITY_SURVEYOR), {
+        name: "Project Workflow Client",
+        email: `project-workflow-client-${RUN_ID}@example.com`,
+      });
+
+      expect(client).toMatchObject({
+        companyId: companyAId,
+        name: "Project Workflow Client",
+      });
+    });
   });
 
   describe("project service: atomic project + default R01 BOQ", () => {

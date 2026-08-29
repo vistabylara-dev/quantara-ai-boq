@@ -306,7 +306,10 @@ describe("document generation service (integration, real local Postgres)", () =>
           documentType: "PDF",
           audience: "CLIENT",
         }),
-      ).rejects.toMatchObject({ code: "COMPANY_PROFILE_INCOMPLETE" });
+      ).rejects.toMatchObject({
+        code: "COMPANY_PROFILE_INCOMPLETE",
+        message: "Complete your company profile in Settings before generating client documents. Missing: company address.",
+      });
 
       expect(await prisma.bOQRevisionItemEvidence.count({ where: { companyId: incompleteCompany.id } })).toBeGreaterThan(0);
     });

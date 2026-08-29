@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   boqItemSchema,
+  companyUpdateSchema,
   projectSchema,
   validateWriteInput,
 } from "../src/lib/validation/backend-schemas";
@@ -8,6 +9,18 @@ import {
 const uuid = "11111111-1111-4111-8111-111111111111";
 
 describe("backend write schemas", () => {
+  it("normalizes a blank optional company website to null", () => {
+    expect(companyUpdateSchema.parse({
+      address: "Dubai",
+      taxRegistrationNumber: "",
+      website: "   ",
+    })).toEqual({
+      address: "Dubai",
+      taxRegistrationNumber: "",
+      website: null,
+    });
+  });
+
   it("returns path-addressable field errors", () => {
     const result = validateWriteInput(projectSchema, {
       clientId: "not-a-uuid",

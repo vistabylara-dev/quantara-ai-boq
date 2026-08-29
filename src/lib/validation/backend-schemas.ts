@@ -96,6 +96,10 @@ const requiredText = (label: string, maximum = 255) =>
   z.string({ required_error: `${label} is required.` }).trim().min(1, `${label} is required.`).max(maximum);
 const optionalText = (maximum = 2_000) => z.string().trim().max(maximum).optional();
 const nullableText = (maximum = 2_000) => z.string().trim().max(maximum).nullable().optional();
+const nullableUrl = z.preprocess(
+  (value) => typeof value === "string" && value.trim() === "" ? null : value,
+  z.string().trim().url("A valid website URL is required.").max(2_048).nullable().optional(),
+);
 const currencySchema = z.string().trim().regex(/^[A-Za-z]{3}$/, "Currency must be a three-letter ISO code.").transform((value) => value.toUpperCase());
 const uuidSchema = z.string().uuid("A valid UUID is required.");
 const slugSchema = z
@@ -114,7 +118,7 @@ export const companySchema = z.object({
   tradeName: requiredText("Trade name"),
   email: z.string().trim().email("A valid company email is required.").max(320),
   phone: nullableText(50),
-  website: z.string().trim().url("A valid website URL is required.").max(2_048).nullable().optional(),
+  website: nullableUrl,
   address: nullableText(1_000),
   country: nullableText(100),
   taxRegistrationNumber: nullableText(100),

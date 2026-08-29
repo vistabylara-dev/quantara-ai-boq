@@ -19,8 +19,6 @@ export default function ClientPicker({ selectedClient, onSelect }: ClientPickerP
   const [isLoading, setIsLoading] = useState(false);
   const [loadError, setLoadError] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
-  const [isQuickCreating, setIsQuickCreating] = useState(false);
-  const [quickCreateError, setQuickCreateError] = useState<string | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
   const loadClients = useCallback(async (searchValue: string, signal?: AbortSignal) => {
@@ -59,27 +57,6 @@ export default function ClientPicker({ selectedClient, onSelect }: ClientPickerP
   }, []);
 
   const quickCreateName = search.trim();
-  const hasExactMatch = results.some(
-    (client) => client.name.trim().toLocaleLowerCase() === quickCreateName.toLocaleLowerCase(),
-  );
-
-  const quickCreateClient = async () => {
-    if (!quickCreateName || isQuickCreating) return;
-    setIsQuickCreating(true);
-    setQuickCreateError(null);
-    try {
-      const client = await apiClient.post<Client>("/api/clients", { name: quickCreateName });
-      setResults((current) => [client, ...current.filter((item) => item.id !== client.id)]);
-      onSelect(client);
-      setSearch("");
-      setIsOpen(false);
-    } catch {
-      setQuickCreateError(t("projects.clientPicker.quickCreateError"));
-    } finally {
-      setIsQuickCreating(false);
-    }
-  };
-
   return (
     <div className="relative" ref={containerRef}>
       <span className="text-sm text-slate-400">{t("projects.clientPicker.label")}</span>
@@ -138,19 +115,6 @@ export default function ClientPicker({ selectedClient, onSelect }: ClientPickerP
               </button>
             ))}
           </div>
-          {quickCreateName && !hasExactMatch && (
-            <button
-              type="button"
-              disabled={isQuickCreating}
-              onClick={() => void quickCreateClient()}
-              className="mt-2 w-full rounded-xl bg-blue-600 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-500 disabled:opacity-60"
-            >
-              {isQuickCreating
-                ? t("projects.clientPicker.quickCreating")
-                : t("projects.clientPicker.quickCreate", { name: quickCreateName })}
-            </button>
-          )}
-          {quickCreateError && <p role="alert" className="mt-2 px-2 text-xs text-rose-300">{quickCreateError}</p>}
           <button
             type="button"
             onClick={() => {
@@ -170,6 +134,7 @@ export default function ClientPicker({ selectedClient, onSelect }: ClientPickerP
             <h3 className="mb-4 text-lg font-semibold text-white">{t("projects.clientPicker.createClientTitle")}</h3>
             <ClientForm
               compact
+              initialName={quickCreateName}
               submitLabel={t("projects.clientPicker.createAndSelect")}
               onCancel={() => setIsCreating(false)}
               onCreated={(client) => {

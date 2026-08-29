@@ -31,6 +31,7 @@ type ClientFormProps = {
   submitLabel?: string;
   compact?: boolean;
   editingClient?: Client;
+  initialName?: string;
 };
 
 function valuesFromClient(client?: Client): ClientFormValues {
@@ -52,9 +53,13 @@ export default function ClientForm({
   submitLabel,
   compact = false,
   editingClient,
+  initialName = "",
 }: ClientFormProps) {
   const t = useTranslations();
-  const [values, setValues] = useState<ClientFormValues>(() => valuesFromClient(editingClient));
+  const [values, setValues] = useState<ClientFormValues>(() => {
+    const initialValues = valuesFromClient(editingClient);
+    return editingClient ? initialValues : { ...initialValues, name: initialName };
+  });
   const [fieldErrors, setFieldErrors] = useState<Record<string, string[]>>({});
   const [formError, setFormError] = useState<string | null>(null);
   const [existingClient, setExistingClient] = useState<Client | null>(null);
@@ -64,8 +69,8 @@ export default function ClientForm({
     setValues((current) => ({ ...current, [field]: event.target.value }));
   };
 
-  const handleSubmit = async (event: FormEvent) => {
-    event.preventDefault();
+  const handleSubmit = async (event?: FormEvent) => {
+    event?.preventDefault();
     setIsSubmitting(true);
     setFormError(null);
     setFieldErrors({});
@@ -105,9 +110,10 @@ export default function ClientForm({
   const inputClass =
     "mt-2 w-full rounded-2xl border border-slate-800 bg-slate-900 px-4 py-3 text-white outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20";
   const resolvedSubmitLabel = submitLabel ?? (editingClient ? t("clients.form.saveChanges") : t("clients.form.saveClient"));
+  const FormContainer = compact ? "div" : "form";
 
   return (
-    <form onSubmit={handleSubmit} className={compact ? "space-y-4" : "space-y-6 rounded-[32px] border border-slate-800 bg-slate-950 p-6"}>
+    <FormContainer onSubmit={compact ? undefined : handleSubmit} className={compact ? "space-y-4" : "space-y-6 rounded-[32px] border border-slate-800 bg-slate-950 p-6"}>
       <div className="grid gap-4 sm:grid-cols-2">
         <label className="block text-sm text-slate-300">
           <span className="text-slate-400">{t("clients.form.clientNameLabel")}</span>
@@ -174,13 +180,14 @@ export default function ClientForm({
           </button>
         )}
         <button
-          type="submit"
+          type={compact ? "button" : "submit"}
+          onClick={compact ? () => void handleSubmit() : undefined}
           disabled={isSubmitting}
           className="inline-flex rounded-2xl bg-blue-600 px-6 py-3 text-sm font-semibold text-white transition hover:bg-blue-500 disabled:opacity-60"
         >
           {isSubmitting ? t("clients.form.saving") : resolvedSubmitLabel}
         </button>
       </div>
-    </form>
+    </FormContainer>
   );
 }

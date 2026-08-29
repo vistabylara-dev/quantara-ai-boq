@@ -106,6 +106,7 @@ async function mockAuthenticatedDashboard(
 }
 
 test.describe("first-project onboarding route", () => {
+  test.describe.configure({ mode: "serial" });
   test("Start guided tour takes a zero-project user directly to New Project", async ({ page }) => {
     await mockAuthenticatedDashboard(page, 0);
     await page.goto("/dashboard", { waitUntil: "domcontentloaded" });
@@ -168,13 +169,27 @@ test.describe("first-project onboarding route", () => {
     await page.getByLabel("Project reference").fill("SELF-SERVICE-001");
     await page.getByRole("button", { name: "Select or create a client" }).click();
     await page.getByPlaceholder("Search clients...").fill("Quick Client");
-    await page.getByRole("button", { name: "Create and select “Quick Client”" }).click();
+    await page.getByRole("button", { name: /Create new client/ }).click();
+    await expect(page.getByLabel("Client name")).toHaveValue("Quick Client");
+    await page.getByLabel("Company name").fill("Quick Client LLC");
+    await page.getByLabel("Email").fill("projects@quickclient.example");
+    await page.getByLabel("Phone").fill("+971 50 000 0000");
+    await page.getByRole("button", { name: "Create and select" }).click();
+    await expect(page.getByRole("heading", { name: "Create client" })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Quick Client" })).toBeVisible();
     await page.getByLabel("Industry engine").selectOption("fit-out");
     await page.getByLabel("Location").fill("Dubai");
     await page.getByRole("button", { name: "Create project" }).click();
 
     await expect(page).toHaveURL(/\/projects\/first-project-e2e\/boq$/);
-    expect(clientSubmissions).toEqual([{ name: "Quick Client" }]);
+    expect(clientSubmissions).toEqual([
+      expect.objectContaining({
+        name: "Quick Client",
+        companyName: "Quick Client LLC",
+        email: "projects@quickclient.example",
+        phone: "+971 50 000 0000",
+      }),
+    ]);
     expect(projectSubmissions).toEqual([
       expect.objectContaining({
         clientId: CLIENT_ID,

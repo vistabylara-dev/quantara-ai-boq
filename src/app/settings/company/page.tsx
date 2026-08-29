@@ -2,28 +2,9 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { apiClient, getApiErrorMessage } from "@/lib/api/client";
+import { toCompanyProfileUpdate, type CompanyProfileUpdate } from "@/lib/company-profile-update";
 
-type CompanyProfile = {
-  legalName: string;
-  tradeName: string;
-  email: string;
-  phone: string | null;
-  website: string | null;
-  address: string | null;
-  country: string | null;
-  taxRegistrationNumber: string | null;
-  defaultCurrency: string;
-  vatRate: number;
-  defaultLanguage: string;
-  logoUrl: string | null;
-  authorizedSignatoryName: string | null;
-  authorizedSignatoryTitle: string | null;
-  stampUrl: string | null;
-  signatureUrl: string | null;
-  defaultTerms: string | null;
-  defaultExclusions: string | null;
-  defaultValidityDays: number;
-};
+type CompanyProfile = CompanyProfileUpdate & Record<string, unknown>;
 
 type Branding = {
   primaryColor: string;
@@ -83,7 +64,7 @@ export default function CompanySettingsPage() {
     setSaveError(null);
     setSaveMessage(null);
     try {
-      const updated = await apiClient.put<CompanyProfile>("/api/company", profile);
+      const updated = await apiClient.put<CompanyProfile>("/api/company", toCompanyProfileUpdate(profile));
       setProfile(updated);
       setSaveMessage("Company profile saved.");
     } catch (error) {

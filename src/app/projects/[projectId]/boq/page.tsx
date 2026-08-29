@@ -89,6 +89,7 @@ export default function ProjectBOQPage(props: PageProps) {
     id: string;
     extractedEntityId: string | null;
     status: string;
+    inputValues: Record<string, number>;
   }>>([]);
   const [generatedDocuments, setGeneratedDocuments] = useState<Array<{
     boqId: string;
@@ -123,6 +124,7 @@ export default function ProjectBOQPage(props: PageProps) {
             id: string;
             extractedEntityId: string | null;
             status: string;
+            inputValues: Record<string, number>;
           }>>(`/api/projects/${encodedProjectId}/quantity-calculations`, signal)
           .catch(() => null),
         apiClient

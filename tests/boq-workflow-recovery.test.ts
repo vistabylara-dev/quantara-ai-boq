@@ -16,6 +16,7 @@ const base = {
     id: string;
     extractedEntityId: string | null;
     status: string;
+    inputValues?: Record<string, number>;
   }>,
   boqItemCount: 0,
   validationWarningCount: 0 as number | null,
@@ -48,6 +49,56 @@ describe("BOQ workflow recovery", () => {
     expect(status(result, "calculation")).toBe("NOT_REQUIRED");
     expect(result.nextAction.ctaAction).toBe("open_boq");
     expect(result.nextAction.ctaLabel).toBe("Open reviewed items");
+  });
+
+  it("does not report dimensions complete from a confirmed Count calculation", () => {
+    const result = computeBoqWorkflowState({
+      ...base,
+      extractedEntities: [
+        {
+          id: "entity-1",
+          status: "CONFIRMED",
+          quantity: 1,
+          unit: "nr",
+        },
+      ],
+      calculations: [
+        {
+          id: "count-1",
+          extractedEntityId: "entity-1",
+          status: "CONFIRMED",
+          inputValues: { verifiedCount: 1, futureUnknownInput: 1 },
+        },
+      ],
+    });
+
+    expect(status(result, "dimensions")).toBe("NOT_REQUIRED");
+    expect(status(result, "calculation")).toBe("COMPLETE");
+  });
+
+  it("reports dimensions complete only from an actual dimensional calculation input", () => {
+    const result = computeBoqWorkflowState({
+      ...base,
+      extractedEntities: [
+        {
+          id: "entity-1",
+          status: "CONFIRMED",
+          quantity: 12,
+          unit: "m2",
+        },
+      ],
+      calculations: [
+        {
+          id: "area-1",
+          extractedEntityId: "entity-1",
+          status: "CONFIRMED",
+          inputValues: { length: 4, width: 3 },
+        },
+      ],
+    });
+
+    expect(status(result, "dimensions")).toBe("COMPLETE");
+    expect(status(result, "calculation")).toBe("COMPLETE");
   });
 
   it("requires dimensions when reviewed extraction lacks a usable direct quantity", () => {

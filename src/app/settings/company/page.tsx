@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import Image, { type ImageLoader } from "next/image";
 import { apiClient, getApiErrorMessage } from "@/lib/api/client";
 import { toCompanyProfileUpdate, type CompanyProfileUpdate } from "@/lib/company-profile-update";
 
@@ -23,6 +24,18 @@ type Tab = "profile" | "branding" | "documents";
 const inputClass = "mt-2 w-full rounded-2xl border border-slate-800 bg-slate-900 px-4 py-3 text-white outline-none focus:border-blue-500";
 const labelClass = "block text-sm text-slate-300";
 const sublabelClass = "text-slate-400";
+const logoPreviewLoader: ImageLoader = ({ src }) => src;
+
+function logoPreviewUrl(value: string | null): string | null {
+  if (!value?.trim()) return null;
+  try {
+    const parsed = new URL(value);
+    if ((parsed.protocol !== "http:" && parsed.protocol !== "https:") || parsed.username || parsed.password) return null;
+    return parsed.toString();
+  } catch {
+    return null;
+  }
+}
 
 export default function CompanySettingsPage() {
   const [tab, setTab] = useState<Tab>("profile");
@@ -107,6 +120,8 @@ export default function CompanySettingsPage() {
     );
   }
 
+  const previewLogoUrl = logoPreviewUrl(profile.logoUrl);
+
   return (
     <div className="space-y-6">
       <div className="rounded-[32px] border border-slate-800 bg-slate-950 p-8">
@@ -148,7 +163,37 @@ export default function CompanySettingsPage() {
             <label className={labelClass}><span className={sublabelClass}>Default currency</span><input value={profile.defaultCurrency} onChange={(e) => setProfile({ ...profile, defaultCurrency: e.target.value })} className={inputClass} /></label>
             <label className={labelClass}><span className={sublabelClass}>VAT rate (%)</span><input type="number" value={profile.vatRate} onChange={(e) => setProfile({ ...profile, vatRate: Number(e.target.value) })} className={inputClass} /></label>
             <label className={labelClass}><span className={sublabelClass}>Default language</span><input value={profile.defaultLanguage} onChange={(e) => setProfile({ ...profile, defaultLanguage: e.target.value })} className={inputClass} /></label>
-            <label className={labelClass}><span className={sublabelClass}>Logo URL</span><input value={profile.logoUrl ?? ""} onChange={(e) => setProfile({ ...profile, logoUrl: e.target.value })} className={inputClass} /></label>
+            <label className={`${labelClass} sm:col-span-2`}>
+              <span className={sublabelClass}>Company logo URL</span>
+              <input value={profile.logoUrl ?? ""} onChange={(e) => setProfile({ ...profile, logoUrl: e.target.value })} className={inputClass} placeholder="https://example.com/logo.png" />
+              <span className="mt-1 block text-xs text-slate-500">Provide a public PNG or JPG URL. Safe, reachable images appear on generated BOQs and client proposals.</span>
+              {previewLogoUrl ? (
+                <span className="mt-3 flex items-center gap-3 rounded-2xl border border-slate-800 bg-slate-900 p-3">
+                  <Image
+                    loader={logoPreviewLoader}
+                    unoptimized
+                    src={previewLogoUrl}
+                    width={160}
+                    height={48}
+                    alt="Company logo preview"
+                    className="h-12 w-auto max-w-[160px] rounded-lg border border-slate-800 bg-white object-contain p-1"
+                    onError={(event) => {
+                      event.currentTarget.style.display = "none";
+                      const fallback = event.currentTarget.nextElementSibling as HTMLElement | null;
+                      if (fallback) fallback.style.display = "block";
+                    }}
+                    onLoad={(event) => {
+                      event.currentTarget.style.display = "block";
+                      const fallback = event.currentTarget.nextElementSibling as HTMLElement | null;
+                      if (fallback) fallback.style.display = "none";
+                    }}
+                  />
+                  <span className="hidden text-xs text-rose-300">Could not load this preview. Document generation will omit an unsafe or unavailable image.</span>
+                </span>
+              ) : profile.logoUrl ? (
+                <span className="mt-2 block text-xs text-rose-300">Enter a full public http:// or https:// image URL. Invalid text is never loaded.</span>
+              ) : null}
+            </label>
             <label className={labelClass}><span className={sublabelClass}>Authorized signatory name</span><input value={profile.authorizedSignatoryName ?? ""} onChange={(e) => setProfile({ ...profile, authorizedSignatoryName: e.target.value })} className={inputClass} /></label>
             <label className={labelClass}><span className={sublabelClass}>Authorized signatory title</span><input value={profile.authorizedSignatoryTitle ?? ""} onChange={(e) => setProfile({ ...profile, authorizedSignatoryTitle: e.target.value })} className={inputClass} /></label>
             <label className={labelClass}><span className={sublabelClass}>Stamp image URL</span><input value={profile.stampUrl ?? ""} onChange={(e) => setProfile({ ...profile, stampUrl: e.target.value })} className={inputClass} /></label>

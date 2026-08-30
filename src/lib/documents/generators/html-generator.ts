@@ -1,5 +1,6 @@
 import type { CanonicalDocumentData } from "../build-document-data";
 import type { DocumentTemplateContentConfig, DocumentTemplateStyleConfig } from "../template-config";
+import { logoImageToDataUri, type LoadedLogoImage } from "../logo-image";
 
 function escapeHtml(value: string): string {
   return value
@@ -31,6 +32,7 @@ export type GenerateHtmlInput = {
   data: CanonicalDocumentData;
   style: DocumentTemplateStyleConfig;
   content: DocumentTemplateContentConfig;
+  logoImage?: LoadedLogoImage | null;
 };
 
 /**
@@ -45,6 +47,7 @@ export function generateHtml(input: GenerateHtmlInput): string {
   const { data, style, content } = input;
   const rtl = style.direction === "rtl";
   const showInternal = data.boq.showInternalFields;
+  const logoDataUri = logoImageToDataUri(input.logoImage);
 
   const sectionsHtml = data.boq.sections
     .filter((section) => section.items.length > 0)
@@ -96,6 +99,8 @@ export function generateHtml(input: GenerateHtmlInput): string {
   body { font-family: ${rtl ? "'Noto Naskh Arabic', 'Segoe UI', Tahoma, sans-serif" : "'Segoe UI', Helvetica, Arial, sans-serif"}; background-color: #ffffff; color: #0f172a; margin: 0; padding: 32px; ${data.meta.watermarkText ? watermarkBackgroundCss(data.meta.watermarkText) : ""} }
   h1 { color: ${style.primaryColor}; font-size: 22px; margin: 0 0 4px; }
   .muted { color: #64748b; font-size: 12px; }
+  .header-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+  .company-logo { max-height: 56px; max-width: 180px; object-fit: contain; }
   .grid { display: flex; gap: 24px; margin: 20px 0; flex-wrap: wrap; }
   .grid > div { flex: 1; min-width: 220px; }
   .label { color: ${style.accentColor}; font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 6px; }
@@ -123,12 +128,17 @@ export function generateHtml(input: GenerateHtmlInput): string {
 <body>
   ${data.meta.isDraft ? `<div class="draft-badge">${escapeHtml(style.watermarkDraftText)}</div>` : ""}
   ${data.meta.watermarkText ? `<div class="trial-watermark-banner">${escapeHtml(data.meta.watermarkText)}</div>` : ""}
-  <h1>${escapeHtml(data.boq.title)}</h1>
-  <div class="muted">${escapeHtml(data.project.reference)} · Revision ${escapeHtml(data.boq.revision)} · ${data.boq.status.toUpperCase()}</div>
-  <div class="muted">Generated ${new Date(data.meta.generatedAt).toLocaleString()} by ${escapeHtml(data.meta.generatedByName)} · ${escapeHtml(data.meta.templateName)}</div>
+  <div class="header-row">
+    <div>
+      <h1>${escapeHtml(data.boq.title)}</h1>
+      <div class="muted">${escapeHtml(data.project.reference)} · Revision ${escapeHtml(data.boq.revision)} · ${data.boq.status.toUpperCase()}</div>
+      <div class="muted">Generated ${new Date(data.meta.generatedAt).toLocaleString()} by ${escapeHtml(data.meta.generatedByName)} · ${escapeHtml(data.meta.templateName)}</div>
+    </div>
+    ${logoDataUri ? `<img class="company-logo" src="${escapeHtml(logoDataUri)}" alt="${escapeHtml(data.company.tradeName || data.company.legalName || "Company")} logo" />` : ""}
+  </div>
 
   <div class="grid">
-    ${content.showCompanyInfo ? `<div><div class="label">From</div>${[data.company.legalName, data.company.address, data.company.email, data.company.phone].filter(Boolean).map((l) => `<div>${escapeHtml(l as string)}</div>`).join("")}</div>` : ""}
+    ${content.showCompanyInfo ? `<div><div class="label">From</div>${[data.company.legalName, data.company.address, data.company.email, data.company.phone, data.company.website, data.company.taxRegistrationNumber ? `TRN: ${data.company.taxRegistrationNumber}` : ""].filter(Boolean).map((l) => `<div>${escapeHtml(l as string)}</div>`).join("")}</div>` : ""}
     ${content.showProjectInfo ? `<div><div class="label">Bill To / Project</div>${[data.client.companyName ?? data.client.name, data.project.location, `Currency: ${data.project.currency} · Tax: ${data.project.taxRate}%`].filter(Boolean).map((l) => `<div>${escapeHtml(l as string)}</div>`).join("")}</div>` : ""}
   </div>
 

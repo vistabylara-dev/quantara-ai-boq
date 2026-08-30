@@ -112,6 +112,10 @@ const baseInput: Omit<BuildDocumentDataInput, "audience"> = {
 const style = mergeStyleConfig(DEFAULT_STYLE_CONFIG);
 const content = mergeContentConfig(DEFAULT_CONTENT_CONFIG);
 const rtlStyle = mergeStyleConfig({ direction: "rtl", coverStyle: "dark" });
+const tinyPng = Buffer.from(
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
+  "base64",
+);
 
 describe("buildDocumentData (canonical document data)", () => {
   it("maps company, client, project, and revision fields correctly", () => {
@@ -147,6 +151,18 @@ describe("buildDocumentData (canonical document data)", () => {
     const data = buildDocumentData({ ...baseInput, audience: "CLIENT", showInternalCostFieldsToClient: true });
     expect(data.boq.showInternalFields).toBe(true);
     expect(data.boq.sections[0].items[0].unitCost).toBe(320);
+  });
+
+  it("preserves an optional company logo without making other company details required", () => {
+    const withLogo = buildDocumentData({
+      ...baseInput,
+      audience: "CLIENT",
+      company: { ...baseInput.company, logoUrl: "https://cdn.example.test/logo.png", taxRegistrationNumber: null },
+    });
+    const withoutLogo = buildDocumentData({ ...baseInput, audience: "CLIENT" });
+    expect(withLogo.company.logoUrl).toBe("https://cdn.example.test/logo.png");
+    expect(withLogo.company.taxRegistrationNumber).toBeNull();
+    expect(withoutLogo.company.logoUrl).toBeNull();
   });
 });
 
@@ -272,5 +288,25 @@ describe("HTML generator", () => {
     const internalData = buildDocumentData({ ...baseInput, audience: "INTERNAL" });
     expect(generateHtml({ data: clientData, style, content })).not.toContain(">Landed<");
     expect(generateHtml({ data: internalData, style, content })).toContain(">Landed<");
+  });
+
+  it("embeds only validated logo bytes and includes optional company details", () => {
+    const data = buildDocumentData({
+      ...baseInput,
+      audience: "CLIENT",
+      company: { ...baseInput.company, logoUrl: "https://tenant.example.test/logo.png" },
+    });
+    const withoutValidatedLogo = generateHtml({ data, style, content });
+    const withValidatedLogo = generateHtml({
+      data,
+      style,
+      content,
+      logoImage: { buffer: tinyPng, format: "png", width: 1, height: 1 },
+    });
+
+    expect(withoutValidatedLogo).not.toContain("tenant.example.test");
+    expect(withValidatedLogo).toContain('<img class="company-logo" src="data:image/png;base64,');
+    expect(withValidatedLogo).toContain(baseInput.company.website!);
+    expect(withValidatedLogo).toContain(`TRN: ${baseInput.company.taxRegistrationNumber}`);
   });
 });

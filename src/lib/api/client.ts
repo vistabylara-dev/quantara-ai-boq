@@ -92,8 +92,8 @@ export const apiClient = {
     });
   },
   /** For multipart file uploads — passes FormData through untouched so the browser sets the correct boundary Content-Type. */
-  postForm<T>(path: string, formData: FormData, signal?: AbortSignal) {
-    return request<T>(path, { method: "POST", body: formData, signal });
+  postForm<T>(path: string, formData: FormData, signal?: AbortSignal, headers?: HeadersInit) {
+    return request<T>(path, { method: "POST", body: formData, signal, headers });
   },
   put<T>(path: string, body: unknown, signal?: AbortSignal) {
     return request<T>(path, {

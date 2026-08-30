@@ -2,7 +2,11 @@ import { apiSuccess, handleApiError } from "@/lib/http/api-response";
 import { getCurrentActor } from "@/lib/auth/current-actor";
 import { setActorContext, withActorRequestContext } from "@/lib/auth/request-context";
 import { AppError } from "@/lib/errors/app-error";
-import { listProjectDrawings, uploadProjectDrawing } from "@/lib/services/drawing-service";
+import {
+  assertBufferedDrawingUploadAllowed,
+  listProjectDrawings,
+  uploadProjectDrawing,
+} from "@/lib/services/drawing-service";
 import { drawingMetadataSchema } from "@/lib/validation/drawing-schema";
 import { projectIdParamsSchema } from "@/lib/validation/boq-route-schemas";
 
@@ -30,6 +34,10 @@ async function POSTHandler(request: Request, context: RouteContext) {
     setActorContext(actor);
     const params = await context.params;
     const { projectId } = projectIdParamsSchema.parse(params);
+
+    // Reject this local-only route before reading multipart bytes. Production
+    // clients must authorize, upload directly to private Blob, then finalize.
+    assertBufferedDrawingUploadAllowed();
 
     const formData = await request.formData();
     const file = formData.get("file");

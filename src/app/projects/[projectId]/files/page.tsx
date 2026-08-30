@@ -1,8 +1,16 @@
 "use client";
 
+import { put as putToBlob } from "@vercel/blob/client";
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState, use } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, use } from "react";
 import { apiClient, getApiErrorMessage } from "@/lib/api/client";
+import {
+  clearDrawingUploadResumeState,
+  createDrawingUploadResumeHandle,
+  uploadDrawingWithSafeRouting,
+  type DrawingUploadAuthorization,
+  type DrawingUploadResumeHandle,
+} from "@/lib/drawings/upload-routing";
 import { formatDate } from "@/lib/formatting/dates";
 import StatusBadge, { formatStatusLabel } from "@/components/dashboard/status-badge";
 import { FeatureHint, FEATURE_HINT_REGISTRY } from "@/components/guidance/feature-hint";
@@ -10,6 +18,14 @@ import { GuideTip } from "@/components/guidance/guide-tip";
 import { getProjectSourceOrigin, getProjectSourceProcessingState } from "@/lib/guidance/project-workflow";
 import type { ProjectWorkflowSnapshot } from "@/lib/guidance/project-workflow-snapshot";
 import { PageRecoveryPanel } from "@/components/files/page-recovery-panel";
+import {
+  PROJECT_SOURCE_ACCEPT,
+  STRUCTURED_SOURCE_FILENAME_HEADER,
+  STRUCTURED_SOURCE_MAX_FILE_SIZE_BYTES,
+  STRUCTURED_SOURCE_SIZE_HEADER,
+  validateStructuredSourceUpload,
+} from "@/lib/files/structured-source-upload";
+import { DRAWING_EXTENSIONS } from "@/lib/validation/drawing-schema";
 
 type FileView = {
   id: string;
@@ -162,6 +178,16 @@ function formatFileSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
 }
 
+function projectSourceExtension(fileName: string): string {
+  return fileName.trim().split(".").at(-1)?.toLowerCase() ?? "";
+}
+
+function isDrawingProjectSource(fileName: string): boolean {
+  return DRAWING_EXTENSIONS.includes(
+    projectSourceExtension(fileName) as (typeof DRAWING_EXTENSIONS)[number],
+  );
+}
+
 export default function ProjectFilesPage(props: {
   params: Promise<{ projectId: string }>;
   searchParams: Promise<{ file?: string | string[] }>;
@@ -189,6 +215,12 @@ export default function ProjectFilesPage(props: {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [drawingRetryAvailable, setDrawingRetryAvailable] = useState(false);
+  // Direct-upload credentials and the exact File survive only component
+  // retries in this tab. A refresh/unmount discards both.
+  const drawingUploadResumeRef = useRef<DrawingUploadResumeHandle>(createDrawingUploadResumeHandle());
+  const pendingDrawingFileRef = useRef<File | null>(null);
+  const sourceUploadInFlightRef = useRef(false);
 
   const selectedFile = useMemo(
     () => files.find((file) => file.id === selectedFileId) ?? null,
@@ -333,22 +365,102 @@ export default function ProjectFilesPage(props: {
     }
   }, [files, loadDetail, requestedFileId, selectedFileId]);
 
-  async function handleUpload(event: React.ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0];
-    if (!file) return;
+  async function uploadSourceFile(file: File) {
+    if (busy || sourceUploadInFlightRef.current) return;
+    const mimeType = file.type || "application/octet-stream";
+    const isDrawing = isDrawingProjectSource(file.name);
+
+    if (!isDrawing && process.env.NODE_ENV === "production") {
+      try {
+        validateStructuredSourceUpload(file.name, mimeType, file.size);
+      } catch (uploadError) {
+        setError(getApiErrorMessage(uploadError));
+        return;
+      }
+    }
+
+    sourceUploadInFlightRef.current = true;
     setBusy(true);
     setError(null);
     try {
-      const formData = new FormData();
-      formData.append("file", file);
-      await apiClient.postForm(`/api/projects/${encodeURIComponent(params.projectId)}/files`, formData);
+      const encodedProjectId = encodeURIComponent(params.projectId);
+      if (isDrawing) {
+        await uploadDrawingWithSafeRouting(
+          {
+            file,
+            metadata: {},
+            isProduction: process.env.NODE_ENV === "production",
+            onStage: () => undefined,
+            onProgress: () => undefined,
+          },
+          {
+            authorize: (declaration) => apiClient.post<DrawingUploadAuthorization>(
+              `/api/projects/${encodedProjectId}/drawings/upload-authorization`,
+              declaration,
+            ),
+            transferToPrivateBlob: async (transfer) => {
+              await putToBlob(transfer.pathname, transfer.file, {
+                access: transfer.access,
+                token: transfer.token,
+                contentType: transfer.contentType,
+                multipart: transfer.multipart,
+                onUploadProgress: (progress) => transfer.onProgress(Math.round(progress.percentage)),
+              });
+            },
+            finalize: (input) => apiClient.post(
+              `/api/projects/${encodedProjectId}/drawings/upload-authorization/${input.sessionId}/finalize`,
+              { metadata: input.metadata },
+            ),
+            bufferedUpload: async (input) => {
+              const formData = new FormData();
+              formData.append("file", input.file);
+              await apiClient.postForm(`/api/projects/${encodedProjectId}/files`, formData);
+            },
+            getErrorMessage: getApiErrorMessage,
+          },
+          drawingUploadResumeRef.current,
+        );
+        pendingDrawingFileRef.current = null;
+        setDrawingRetryAvailable(false);
+      } else {
+        const formData = new FormData();
+        formData.append("file", file);
+        await apiClient.postForm(
+          `/api/projects/${encodedProjectId}/files`,
+          formData,
+          undefined,
+          {
+            [STRUCTURED_SOURCE_FILENAME_HEADER]: encodeURIComponent(file.name),
+            [STRUCTURED_SOURCE_SIZE_HEADER]: String(file.size),
+          },
+        );
+      }
       await loadFiles();
     } catch (err) {
       setError(getApiErrorMessage(err));
+      if (isDrawing) setDrawingRetryAvailable(true);
     } finally {
+      sourceUploadInFlightRef.current = false;
       setBusy(false);
-      event.target.value = "";
     }
+  }
+
+  function handleUpload(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+
+    // Selecting any new File is deliberate replacement; it must invalidate a
+    // retained session/path/token before the new upload starts.
+    clearDrawingUploadResumeState(drawingUploadResumeRef.current);
+    pendingDrawingFileRef.current = isDrawingProjectSource(file.name) ? file : null;
+    setDrawingRetryAvailable(false);
+    void uploadSourceFile(file);
+  }
+
+  function retryDrawingUpload() {
+    const file = pendingDrawingFileRef.current;
+    if (file) void uploadSourceFile(file);
   }
 
   async function trigger(action: "classify" | "extract" | "preprocess") {
@@ -516,11 +628,23 @@ export default function ProjectFilesPage(props: {
                 {files.length} source{files.length === 1 ? "" : "s"} available
               </p>
             </div>
-            <label className="cursor-pointer rounded-full border border-slate-700 bg-slate-900 px-3 py-1 text-xs font-semibold text-slate-200 hover:bg-slate-800">
-              {busy ? "Working..." : "Upload"}
-              <input type="file" className="hidden" onChange={handleUpload} disabled={busy} />
-            </label>
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              <label className="cursor-pointer rounded-full border border-slate-700 bg-slate-900 px-3 py-1 text-xs font-semibold text-slate-200 hover:bg-slate-800">
+                {busy ? "Uploading..." : "Upload source"}
+                <input
+                  type="file"
+                  className="hidden"
+                  accept={PROJECT_SOURCE_ACCEPT}
+                  onChange={handleUpload}
+                  disabled={busy}
+                />
+              </label>
+            </div>
           </div>
+          <p className="mt-3 text-xs text-slate-500">
+            PDFs and drawings transfer directly to private storage up to 250 MB. CSV, XLSX, and DOCX use the bounded {STRUCTURED_SOURCE_MAX_FILE_SIZE_BYTES / (1024 * 1024)} MB source path.
+            For drawing metadata and upload recovery, you can also use <Link href={`/projects/${encodeURIComponent(params.projectId)}/drawings`} className="font-semibold text-blue-300 hover:text-blue-200">Drawing Intake</Link>.
+          </p>
 
           <ul className="mt-4 space-y-3">
             {files.map((file) => {
@@ -644,7 +768,7 @@ export default function ProjectFilesPage(props: {
             {loading && files.length === 0 && <li className="text-sm text-slate-500">Loading project sources...</li>}
             {!loading && filesAvailable === true && files.length === 0 && (
               <li className="rounded-2xl border border-dashed border-slate-700 p-4 text-sm text-slate-400">
-                No project sources are available yet. Upload a drawing, schedule, or supported project file to begin.
+                No project sources are available yet. Upload any supported drawing or structured source here.
               </li>
             )}
             {!loading && filesAvailable === false && files.length === 0 && (
@@ -656,7 +780,21 @@ export default function ProjectFilesPage(props: {
         </div>
 
         <div className="rounded-2xl border border-slate-800 bg-slate-950 p-6">
-          {error && <p className="mb-4 rounded-lg border border-red-900 bg-red-950/50 p-3 text-sm text-red-300">{error}</p>}
+          {error && (
+            <div className="mb-4 rounded-lg border border-red-900 bg-red-950/50 p-3 text-sm text-red-300">
+              <p>{error}</p>
+              {drawingRetryAvailable && pendingDrawingFileRef.current && (
+                <button
+                  type="button"
+                  onClick={retryDrawingUpload}
+                  disabled={busy}
+                  className="mt-2 text-xs font-semibold underline disabled:opacity-50"
+                >
+                  Retry the same drawing upload
+                </button>
+              )}
+            </div>
+          )}
           {!selectedFile && (
             <p className="text-sm text-slate-500">
               Select a source to review its processing actions, rendered pages, and extracted tables.

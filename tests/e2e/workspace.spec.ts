@@ -192,7 +192,9 @@ test.describe('Workspace and Data Workflows', () => {
       }
     });
 
-    // 5.5 File Upload (PDF)
+    // 5.5 Local/test general-uploader compatibility (PDF). Production
+    // rejects this headerless buffered request before formData(); its UI uses
+    // authorize -> private Blob -> finalize instead.
     const pdfPath = path.resolve(__dirname, 'fixtures/sample-text.pdf');
     const pdfBuffer = fs.readFileSync(pdfPath);
     

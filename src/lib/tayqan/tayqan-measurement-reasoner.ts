@@ -173,13 +173,30 @@ export type TayqanSeniorReviewSummary = {
   evidencePageCoveragePercent: number;
 };
 
-export type TayqanMeasurementReasonerResult = {
-  provider: string;
-  model: string;
-  responseIds: string[];
-  plan: TayqanMeasurementPlan;
-  seniorReview: TayqanSeniorReviewSummary;
-};
+export const tayqanMeasurementReasonerResultSchema = z.object({
+  provider: z.string().trim().min(1).max(120),
+  model: z.string().trim().min(1).max(240),
+  responseIds: z.array(z.string().trim().min(1).max(240)).max(10_000),
+  plan: tayqanMeasurementPlanSchema,
+  seniorReview: z.object({
+    clusterReviewCount: z.number().int().nonnegative(),
+    globalReviewApplied: z.boolean(),
+    acceptedSubjectCount: z.number().int().nonnegative(),
+    rejectedSubjectCount: z.number().int().nonnegative(),
+    findingCount: z.number().int().nonnegative(),
+    evidencePageCoveragePercent: z.number().min(0).max(100),
+  }).strict(),
+}).strict();
+
+/**
+ * The provider result is persisted and later replayed after a downstream
+ * write failure. Keeping its runtime schema beside the reasoner contract
+ * prevents an untrusted/corrupted progressJson value from being treated as a
+ * paid provider success.
+ */
+export type TayqanMeasurementReasonerResult = z.infer<
+  typeof tayqanMeasurementReasonerResultSchema
+>;
 
 export type TayqanMeasurementReasoner = (
   input: TayqanMeasurementReasonerInput,

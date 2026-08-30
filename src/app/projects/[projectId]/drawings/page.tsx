@@ -5,6 +5,14 @@ import { AlertTriangle, ArrowLeft, Sparkles, Upload, X } from "lucide-react";
 import Link from "next/link";
 import { use, useCallback, useEffect, useRef, useState } from "react";
 import { apiClient, getApiErrorMessage } from "@/lib/api/client";
+import {
+  clearDrawingUploadResumeState,
+  createDrawingUploadResumeHandle,
+  isDrawingUploadCancelledError,
+  uploadDrawingWithSafeRouting,
+  type DrawingUploadAuthorization,
+  type DrawingUploadResumeHandle,
+} from "@/lib/drawings/upload-routing";
 import SectionHeader from "@/components/dashboard/section-header";
 import EmptyState from "@/components/dashboard/empty-state";
 import LoadingSkeleton from "@/components/dashboard/loading-skeleton";
@@ -29,10 +37,6 @@ const inputClass =
 const labelClass = "block text-xs font-medium text-[#536078] dark:text-[#8CA0BE]";
 
 const EMPTY_METADATA: DrawingMetadataInput = {};
-// Keep comfortably below Vercel's buffered request-body ceiling. Small files
-// are more reliable through the single-request route; large drawings retain
-// the direct-to-Blob path so they never pass through function memory.
-const SERVER_BUFFERED_UPLOAD_MAX_BYTES = 3 * 1024 * 1024;
 
 function formatLabel(value: string): string {
   return value.replace(/_/g, " ").toLowerCase().replace(/\b\w/g, (letter) => letter.toUpperCase());
@@ -43,15 +47,7 @@ function getExtension(fileName: string): string {
   return parts.length > 1 ? parts[parts.length - 1].toLowerCase() : "";
 }
 
-type AuthorizeUploadResponse = {
-  sessionId: string;
-  uploadToken: string;
-  pathname: string;
-  maxSizeBytes: number;
-  expiresAt: string;
-};
-
-/** Server-buffered fallback path — only reachable when STORAGE_PROVIDER isn't vercel-blob (local dev without a Blob token). Never used in production, where direct upload is always available. */
+/** Local-development fallback for an intentionally unconfigured Blob provider. Production never routes drawing bytes through this application endpoint. */
 function uploadDrawingViaLegacyRoute(
   url: string,
   file: File,
@@ -98,6 +94,10 @@ export default function ProjectDrawingsPage(props: { params: Promise<{ projectId
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [validationError, setValidationError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  // The scoped token and transfer checkpoint live only in this component's
+  // memory. They are intentionally never serialized or persisted.
+  const uploadResumeRef = useRef<DrawingUploadResumeHandle>(createDrawingUploadResumeHandle());
+  const uploadInFlightRef = useRef(false);
 
   const [previewDrawing, setPreviewDrawing] = useState<DrawingView | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -142,6 +142,7 @@ export default function ProjectDrawingsPage(props: { params: Promise<{ projectId
       setValidationError("This file is empty.");
       return;
     }
+    clearDrawingUploadResumeState(uploadResumeRef.current);
     setStagedFile(file);
     setMetadata(EMPTY_METADATA);
   }, []);
@@ -154,79 +155,53 @@ export default function ProjectDrawingsPage(props: { params: Promise<{ projectId
   }
 
   async function submitUpload() {
-    if (!stagedFile) return;
+    if (!stagedFile || uploadInFlightRef.current) return;
+    uploadInFlightRef.current = true;
     setUploadError(null);
-    setUploadStage("preparing");
     setUploadProgress(0);
     try {
-      if (stagedFile.size <= SERVER_BUFFERED_UPLOAD_MAX_BYTES) {
-        setUploadStage("uploading");
-        const response = await uploadDrawingViaLegacyRoute(
-          `/api/projects/${encodeURIComponent(params.projectId)}/drawings`,
-          stagedFile,
-          metadata,
-          setUploadProgress,
-        );
-        const body = response.body as { ok?: boolean; error?: { message?: string } } | null;
-        if (response.status < 200 || response.status >= 300 || !body?.ok) {
-          throw new Error(body?.error?.message ?? "The upload could not be completed.");
-        }
-        setStagedFile(null);
-        setUploadStage(null);
-        setUploadProgress(null);
-        setMetadata(EMPTY_METADATA);
-        await load();
-        return;
-      }
-
-      const authorization = await apiClient.post<AuthorizeUploadResponse | { directUploadUnsupported: true }>(
-        `/api/projects/${encodeURIComponent(params.projectId)}/drawings/upload-authorization`,
+      const encodedProjectId = encodeURIComponent(params.projectId);
+      await uploadDrawingWithSafeRouting(
         {
-          originalName: stagedFile.name,
-          declaredMimeType: stagedFile.type || "application/octet-stream",
-          declaredByteSize: stagedFile.size,
-        },
-      ).catch((error) => {
-        // DIRECT_UPLOAD_NOT_SUPPORTED (local dev without vercel-blob configured) — fall back to the legacy server-buffered path.
-        if (getApiErrorMessage(error).includes("STORAGE_PROVIDER=vercel-blob")) {
-          return { directUploadUnsupported: true as const };
-        }
-        throw error;
-      });
-
-      if ("directUploadUnsupported" in authorization) {
-        setUploadStage("uploading");
-        const response = await uploadDrawingViaLegacyRoute(
-          `/api/projects/${encodeURIComponent(params.projectId)}/drawings`,
-          stagedFile,
+          file: stagedFile,
           metadata,
-          setUploadProgress,
-        );
-        const body = response.body as { ok?: boolean; error?: { message?: string } } | null;
-        if (response.status < 200 || response.status >= 300 || !body?.ok) {
-          throw new Error(body?.error?.message ?? "The upload could not be completed.");
-        }
-        setStagedFile(null);
-        setUploadStage(null);
-        setUploadProgress(null);
-        setMetadata(EMPTY_METADATA);
-        await load();
-        return;
-      }
-
-      setUploadStage("uploading");
-      await putToBlob(authorization.pathname, stagedFile, {
-        access: "private",
-        token: authorization.uploadToken,
-        contentType: stagedFile.type || "application/octet-stream",
-        multipart: stagedFile.size > 32 * 1024 * 1024,
-        onUploadProgress: (event) => setUploadProgress(Math.round(event.percentage)),
-      });
-
-      setUploadStage("finalizing");
-      await apiClient.post(
-        `/api/projects/${encodeURIComponent(params.projectId)}/drawings/upload-authorization/${authorization.sessionId}/finalize`,
-        { metadata },
+          isProduction: process.env.NODE_ENV === "production",
+          onStage: setUploadStage,
+          onProgress: setUploadProgress,
+        },
+        {
+          authorize: (declaration) => apiClient.post<DrawingUploadAuthorization>(
+            `/api/projects/${encodedProjectId}/drawings/upload-authorization`,
+            declaration,
+          ),
+          transferToPrivateBlob: async (transfer) => {
+            await putToBlob(transfer.pathname, transfer.file, {
+              access: transfer.access,
+              token: transfer.token,
+              contentType: transfer.contentType,
+              multipart: transfer.multipart,
+              onUploadProgress: (event) => transfer.onProgress(Math.round(event.percentage)),
+            });
+          },
+          finalize: (input) => apiClient.post(
+            `/api/projects/${encodedProjectId}/drawings/upload-authorization/${input.sessionId}/finalize`,
+            { metadata: input.metadata },
+          ),
+          bufferedUpload: async (input) => {
+            const response = await uploadDrawingViaLegacyRoute(
+              `/api/projects/${encodedProjectId}/drawings`,
+              input.file,
+              input.metadata,
+              input.onProgress,
+            );
+            const body = response.body as { ok?: boolean; error?: { message?: string } } | null;
+            if (response.status < 200 || response.status >= 300 || !body?.ok) {
+              throw new Error(body?.error?.message ?? "The upload could not be completed.");
+            }
+          },
+          getErrorMessage: getApiErrorMessage,
+        },
+        uploadResumeRef.current,
       );
 
       setStagedFile(null);
@@ -235,13 +210,17 @@ export default function ProjectDrawingsPage(props: { params: Promise<{ projectId
       setMetadata(EMPTY_METADATA);
       await load();
     } catch (error) {
+      if (isDrawingUploadCancelledError(error)) return;
       setUploadError(getApiErrorMessage(error));
       setUploadStage("failed");
       setUploadProgress(null);
+    } finally {
+      uploadInFlightRef.current = false;
     }
   }
 
   function cancelStagedUpload() {
+    clearDrawingUploadResumeState(uploadResumeRef.current);
     setStagedFile(null);
     setUploadStage(null);
     setUploadProgress(null);
@@ -290,7 +269,7 @@ export default function ProjectDrawingsPage(props: { params: Promise<{ projectId
         <p className="mt-3 text-xs uppercase tracking-[0.28em] text-[#7B879C] dark:text-[#8CA0BE]">{project.reference} · Drawing intake</p>
         <h1 className="mt-1 text-3xl font-semibold text-[#08152E] dark:text-white">Project Drawings</h1>
         <p className="mt-2 max-w-2xl text-sm text-[#536078] dark:text-[#8CA0BE]">
-          Upload, classify, and securely store drawings for this project — private Vercel Blob storage, tenant-isolated, ready for future AI analysis.
+          Upload, classify, and securely store drawings for this project in private, tenant-isolated Blob storage. Continue to Source Processing when you are ready to review or process the uploaded source.
         </p>
       </div>
 
@@ -336,7 +315,7 @@ export default function ProjectDrawingsPage(props: { params: Promise<{ projectId
                 <p className="text-xs text-[#7B879C] dark:text-[#8CA0BE]">{(stagedFile.size / 1024).toFixed(0)} KB</p>
               </div>
               {uploadStage === null && (
-                <button type="button" onClick={() => { setStagedFile(null); setUploadError(null); }} aria-label="Remove staged file" className="flex h-8 w-8 items-center justify-center rounded-lg border border-[#D5E0EC] text-[#536078] hover:bg-white dark:border-[#20304D] dark:text-[#8CA0BE] dark:hover:bg-[#091326]">
+                <button type="button" onClick={cancelStagedUpload} aria-label="Remove staged file" className="flex h-8 w-8 items-center justify-center rounded-lg border border-[#D5E0EC] text-[#536078] hover:bg-white dark:border-[#20304D] dark:text-[#8CA0BE] dark:hover:bg-[#091326]">
                   <X className="h-4 w-4" aria-hidden="true" />
                 </button>
               )}
@@ -435,7 +414,7 @@ export default function ProjectDrawingsPage(props: { params: Promise<{ projectId
                 <button type="button" onClick={() => void submitUpload()} className="rounded-2xl bg-[#009FE3] px-4 py-2 text-sm font-semibold text-white hover:opacity-90 dark:bg-[#21C7F3] dark:text-[#040A16]">
                   Upload drawing
                 </button>
-                <button type="button" onClick={() => setStagedFile(null)} className="rounded-2xl border border-[#D5E0EC] bg-white px-4 py-2 text-sm font-semibold text-[#08152E] hover:bg-[#EAF1F8] dark:border-[#20304D] dark:bg-[#091326] dark:text-white dark:hover:bg-[#101D34]">
+                <button type="button" onClick={cancelStagedUpload} className="rounded-2xl border border-[#D5E0EC] bg-white px-4 py-2 text-sm font-semibold text-[#08152E] hover:bg-[#EAF1F8] dark:border-[#20304D] dark:bg-[#091326] dark:text-white dark:hover:bg-[#101D34]">
                   Cancel
                 </button>
               </div>
@@ -451,14 +430,22 @@ export default function ProjectDrawingsPage(props: { params: Promise<{ projectId
         )}
       </div>
 
-      {/* 13. Future AI-analysis readiness disclosure */}
+      {/* Source processing is a separate, user-controlled workflow. */}
       <div className="rounded-[28px] border border-[#009FE3]/30 dark:border-[#21C7F3]/30 bg-[#009FE3]/[0.04] dark:bg-[#21C7F3]/[0.06] p-5">
-        <div className="flex items-start gap-3">
-          <Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-[#0077B6] dark:text-[#21C7F3]" aria-hidden="true" />
-          <p className="text-sm text-[#536078] dark:text-[#8CA0BE]">
-            <span className="font-semibold text-[#08152E] dark:text-white">AI analysis is not configured yet.</span>{" "}
-            Every drawing is stored securely and privately, ready to feed a future automated analysis engine. Nothing here is scanned, extracted, or analyzed today.
-          </p>
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <div className="flex items-start gap-3">
+            <Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-[#0077B6] dark:text-[#21C7F3]" aria-hidden="true" />
+            <p className="text-sm text-[#536078] dark:text-[#8CA0BE]">
+              <span className="font-semibold text-[#08152E] dark:text-white">Processing starts only when you request it.</span>{" "}
+              Drawing intake stores the source securely; it does not automatically classify, render, extract, or spend processing credits. Open Source Processing to inspect the file and run supported actions once.
+            </p>
+          </div>
+          <Link
+            href={`/projects/${encodeURIComponent(project.id)}/files`}
+            className="inline-flex shrink-0 items-center justify-center rounded-2xl bg-[#009FE3] px-4 py-2 text-sm font-semibold text-white hover:opacity-90 dark:bg-[#21C7F3] dark:text-[#040A16]"
+          >
+            View Source Processing
+          </Link>
         </div>
       </div>
 

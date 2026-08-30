@@ -237,6 +237,22 @@ describe("Drawing upload & intake pipeline (integration, real local Postgres)", 
     });
   });
 
+  describe("production guard", () => {
+    it("rejects the buffered drawing path before project lookup or storage", async () => {
+      vi.stubEnv("NODE_ENV", "production");
+      try {
+        await expect(uploadProjectDrawing(ownerActorA, "not-a-real-project", {
+          originalName: "production-buffered.pdf",
+          mimeType: "application/pdf",
+          buffer: pdfBuffer("must not reach storage"),
+          metadata: {},
+        })).rejects.toMatchObject({ code: "BUFFERED_UPLOAD_NOT_SUPPORTED", status: 409 });
+      } finally {
+        vi.unstubAllEnvs();
+      }
+    });
+  });
+
   describe("classification metadata", () => {
     it("persists discipline, drawing type, and optional metadata exactly as submitted — never inferred from the filename", async () => {
       const result = await uploadProjectDrawing(ownerActorA, projectAId, {

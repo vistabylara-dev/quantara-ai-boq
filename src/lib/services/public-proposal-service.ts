@@ -24,6 +24,7 @@ import { findProposalByRawToken, validateProposalAccess, type ProposalAccessReco
 import { assertNotRateLimited, approvalLimiter, commentLimiter, documentDownloadLimiter, passcodeAttemptLimiter, rejectionLimiter, revisionRequestLimiter } from "@/lib/security/rate-limiter";
 import { createStorageAdapter, resolveStorageProvider } from "@/lib/storage/storage-factory";
 import type { DocumentStorageAdapter } from "@/lib/storage/document-storage-adapter";
+import { loadLogoImage, logoImageToDataUri } from "@/lib/documents/logo-image";
 
 const MAX_COMMENT_LENGTH = 4_000;
 
@@ -74,6 +75,9 @@ async function assertPasscodeUnlocked(record: ProposalAccessRecord): Promise<voi
 
 async function buildViewData(record: ProposalAccessRecord): Promise<ProposalViewData> {
   const settings = mergeProposalSettings(record.settingsJson as Partial<ClientProposalSettings> | null);
+  // Public proposal pages receive validated image bytes, never an arbitrary
+  // tenant-controlled remote URL. Failed validation simply omits the logo.
+  const logoUrl = logoImageToDataUri(await loadLogoImage(record.company.logoUrl));
   const companyInput = {
     legalName: record.company.legalName,
     tradeName: record.company.tradeName,
@@ -81,6 +85,8 @@ async function buildViewData(record: ProposalAccessRecord): Promise<ProposalView
     email: record.company.email,
     phone: record.company.phone,
     website: record.company.website,
+    logoUrl,
+    taxRegistrationNumber: record.company.taxRegistrationNumber,
   };
   const projectInput = {
     name: record.project.name,

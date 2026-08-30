@@ -28,6 +28,7 @@ import { generateXlsx } from "@/lib/documents/generators/xlsx-generator";
 import { generatePdf } from "@/lib/documents/generators/pdf-generator";
 import { generateDocx } from "@/lib/documents/generators/docx-generator";
 import { generateHtml } from "@/lib/documents/generators/html-generator";
+import { loadLogoImage } from "@/lib/documents/logo-image";
 import { calculateBOQTotals } from "@/lib/calculations/boq-calculator";
 import { recordDocumentGenerated } from "@/lib/entitlements/entitlement-service";
 import { canGenerateDocumentEffective, getEffectiveEntitlements } from "@/lib/entitlements/effective-entitlement-service";
@@ -279,6 +280,7 @@ export async function generateDocument(actor: CurrentActor, projectIdentifier: s
       address: company.address,
       taxRegistrationNumber: company.taxRegistrationNumber,
       defaultCurrency: company.defaultCurrency,
+      logoUrl: company.logoUrl,
     },
     client: {
       name: project.client.name,
@@ -338,7 +340,15 @@ export async function generateDocument(actor: CurrentActor, projectIdentifier: s
         fileBuffer = await generateDocx({ data: documentData, style: effectiveStyleConfig, content: effectiveContentConfig });
         break;
       case GeneratedDocumentType.HTML:
-        fileBuffer = Buffer.from(generateHtml({ data: documentData, style: effectiveStyleConfig, content: effectiveContentConfig }), "utf-8");
+        fileBuffer = Buffer.from(
+          generateHtml({
+            data: documentData,
+            style: effectiveStyleConfig,
+            content: effectiveContentConfig,
+            logoImage: await loadLogoImage(documentData.company.logoUrl),
+          }),
+          "utf-8",
+        );
         break;
       default:
         throw new AppError("UNSUPPORTED_DOCUMENT_TYPE", "Unsupported document type.", 400);

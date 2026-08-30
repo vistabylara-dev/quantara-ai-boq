@@ -73,6 +73,8 @@ class FakeBlobAdapter implements DocumentStorageAdapter {
 }
 
 const fakeAdapter = new FakeBlobAdapter();
+const generateDrawingUploadTokenMock = vi.hoisted(() => vi.fn(async () => "fake-client-token"));
+const setUploadSessionStatusMock = vi.hoisted(() => vi.fn());
 
 vi.mock("@/lib/storage/storage-factory", () => ({
   resolveStorageProvider: () => "vercel-blob",
@@ -80,15 +82,28 @@ vi.mock("@/lib/storage/storage-factory", () => ({
 }));
 
 vi.mock("@/lib/storage/blob-client-upload", () => ({
-  generateDrawingUploadToken: vi.fn(async () => "fake-client-token"),
+  generateDrawingUploadToken: generateDrawingUploadTokenMock,
 }));
+
+vi.mock("@/lib/repositories/project-file-upload-session-repository", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../src/lib/repositories/project-file-upload-session-repository")>();
+  setUploadSessionStatusMock.mockImplementation(actual.setUploadSessionStatus);
+  return { ...actual, setUploadSessionStatus: setUploadSessionStatusMock };
+});
 
 import { prisma } from "../src/lib/db/prisma";
 import { createClient } from "../src/lib/repositories/client-repository";
 import { createProjectWithDefaultBoq } from "../src/lib/services/project-service";
 import { authorizeDrawingUpload, finalizeDrawingUpload } from "../src/lib/services/drawing-service";
+import { createProjectFile } from "../src/lib/repositories/project-file-repository";
+import { computeChecksum } from "../src/lib/files/file-security";
+import {
+  uploadDrawingWithSafeRouting,
+  type DrawingUploadDependencies,
+} from "../src/lib/drawings/upload-routing";
 import { NotFoundError } from "../src/lib/errors/app-error";
 import type { CurrentActor } from "../src/lib/auth/current-actor";
+import { requireIsolatedLocalTestDatabase } from "./helpers/require-isolated-test-database";
 
 const RUN_ID = `${Date.now()}-${process.pid}`;
 
@@ -102,9 +117,11 @@ describe("Direct-to-Blob drawing upload (integration, real local Postgres, fake 
   let projectAId: string;
   let projectASlug: string;
   let ownerActorA: CurrentActor;
+  let managerActorA: CurrentActor;
   let ownerActorB: CurrentActor;
 
   beforeAll(async () => {
+    requireIsolatedLocalTestDatabase();
     const construction = await prisma.industryEngine.findUniqueOrThrow({ where: { key: "construction" } });
 
     const companyA = await prisma.company.create({ data: { legalName: `Direct Upload Co A ${RUN_ID}`, tradeName: "Direct A", email: `direct-a-${RUN_ID}@example.com` } });
@@ -115,6 +132,10 @@ describe("Direct-to-Blob drawing upload (integration, real local Postgres, fake 
       data: { companyId: companyAId, email: `direct-owner-a-${RUN_ID}@example.com`, passwordHash: "test-fixture-not-a-real-hash", fullName: "Owner A", role: UserRole.COMPANY_OWNER, isActive: true, emailVerifiedAt: new Date() },
     });
     ownerActorA = { userId: ownerUserA.id, companyId: companyAId, role: UserRole.COMPANY_OWNER, fullName: "Owner A", email: ownerUserA.email };
+    const managerUserA = await prisma.user.create({
+      data: { companyId: companyAId, email: `direct-manager-a-${RUN_ID}@example.com`, passwordHash: "test-fixture-not-a-real-hash", fullName: "Manager A", role: UserRole.COMPANY_OWNER, isActive: true, emailVerifiedAt: new Date() },
+    });
+    managerActorA = { userId: managerUserA.id, companyId: companyAId, role: UserRole.COMPANY_OWNER, fullName: "Manager A", email: managerUserA.email };
 
     const { project } = await createProjectWithDefaultBoq(ownerActorA, {
       clientId: clientA.id,
@@ -166,7 +187,13 @@ describe("Direct-to-Blob drawing upload (integration, real local Postgres, fake 
       expect(result.pathname).toContain(`companies/${companyAId}/projects/${projectAId}/drawings/`);
       expect(result.sessionId).toBeTruthy();
       expect(result.uploadToken).toBe("fake-client-token");
+      expect(result.contentType).toBe("application/pdf");
       expect(result.maxSizeBytes).toBe(250 * 1024 * 1024);
+      expect(generateDrawingUploadTokenMock).toHaveBeenLastCalledWith(expect.objectContaining({
+        pathname: result.pathname,
+        contentType: "application/pdf",
+        maxSizeBytes: 1024,
+      }));
     });
 
     it("rejects a declared size above the configured maximum", async () => {
@@ -186,6 +213,7 @@ describe("Direct-to-Blob drawing upload (integration, real local Postgres, fake 
         declaredByteSize: 250 * 1024 * 1024,
       });
       expect(result.sessionId).toBeTruthy();
+      expect(result.contentType).toBe("application/pdf");
     });
 
     it("rejects an unsafe/unsupported extension", async () => {
@@ -205,6 +233,30 @@ describe("Direct-to-Blob drawing upload (integration, real local Postgres, fake 
         declaredByteSize: 2048,
       });
       expect(result.sessionId).toBeTruthy();
+      expect(result.contentType).toBe("application/pdf");
+    });
+
+    it("does not leave a PENDING session or authorization audit when scoped Blob token generation fails", async () => {
+      const sessionCountBefore = await prisma.projectFileUploadSession.count({
+        where: { companyId: companyAId, projectId: projectAId },
+      });
+      const auditCountBefore = await prisma.auditLog.count({
+        where: { companyId: companyAId, action: "DRAWING_UPLOAD_AUTHORIZED" },
+      });
+      generateDrawingUploadTokenMock.mockRejectedValueOnce(new Error("injected token generation failure"));
+
+      await expect(authorizeDrawingUpload(ownerActorA, projectAId, {
+        originalName: "token-failure.pdf",
+        declaredMimeType: "application/pdf",
+        declaredByteSize: 1024,
+      })).rejects.toThrow("injected token generation failure");
+
+      expect(await prisma.projectFileUploadSession.count({
+        where: { companyId: companyAId, projectId: projectAId },
+      })).toBe(sessionCountBefore);
+      expect(await prisma.auditLog.count({
+        where: { companyId: companyAId, action: "DRAWING_UPLOAD_AUTHORIZED" },
+      })).toBe(auditCountBefore);
     });
 
     it("scopes the session to the authenticated actor's own company/project — a cross-tenant project id is rejected", async () => {
@@ -215,6 +267,64 @@ describe("Direct-to-Blob drawing upload (integration, real local Postgres, fake 
           declaredByteSize: 1024,
         }),
       ).rejects.toThrow(NotFoundError);
+    });
+  });
+
+  describe("browser-to-service production workflow", () => {
+    it("moves an actual PDF above 4.5 MiB through authorize -> private Blob -> finalize without invoking the buffered app route", async () => {
+      const byteSize = Math.ceil(4.5 * 1024 * 1024) + 1;
+      const bytes = new Uint8Array(byteSize);
+      bytes.set(new TextEncoder().encode("%PDF-1.4\n"), 0);
+      bytes.set(new TextEncoder().encode("\n%%EOF"), byteSize - 6);
+      const file = new File([bytes], "browser-above-function-limit.pdf", { type: "application/pdf" });
+      const order: string[] = [];
+      const bufferedUpload = vi.fn<DrawingUploadDependencies["bufferedUpload"]>();
+      let finalizedDrawingId: string | undefined;
+
+      const result = await uploadDrawingWithSafeRouting(
+        {
+          file,
+          metadata: { discipline: "ARCHITECTURAL" },
+          isProduction: true,
+          onStage: () => undefined,
+          onProgress: () => undefined,
+        },
+        {
+          authorize: async (declaration) => {
+            order.push("authorize");
+            return authorizeDrawingUpload(ownerActorA, projectAId, declaration);
+          },
+          transferToPrivateBlob: async (transfer) => {
+            order.push("transfer");
+            expect(transfer.access).toBe("private");
+            expect(transfer.file).toBe(file);
+            fakeAdapter.seed(
+              transfer.pathname,
+              Buffer.from(await transfer.file.arrayBuffer()),
+              transfer.contentType,
+            );
+          },
+          finalize: async (input) => {
+            order.push("finalize");
+            const finalized = await finalizeDrawingUpload(ownerActorA, projectAId, input);
+            finalizedDrawingId = finalized.drawing.id;
+          },
+          bufferedUpload,
+          getErrorMessage: (error) => error instanceof Error ? error.message : "Unknown error",
+        },
+      );
+
+      expect(file.size).toBeGreaterThan(4.5 * 1024 * 1024);
+      expect(result).toBe("direct");
+      expect(order).toEqual(["authorize", "transfer", "finalize"]);
+      expect(bufferedUpload).not.toHaveBeenCalled();
+      expect(finalizedDrawingId).toBeTruthy();
+      if (!finalizedDrawingId) throw new Error("Expected the direct upload to finalize a drawing.");
+
+      const stored = await prisma.projectFile.findUniqueOrThrow({ where: { id: finalizedDrawingId } });
+      expect(stored.fileSize).toBe(file.size);
+      expect(stored.checksum).toMatch(/^[0-9a-f]{64}$/);
+      expect(await prisma.projectFile.count({ where: { id: finalizedDrawingId } })).toBe(1);
     });
   });
 
@@ -245,6 +355,106 @@ describe("Direct-to-Blob drawing upload (integration, real local Postgres, fake 
       expect(countAfterSecond).toBe(1);
     });
 
+    it("self-heals a PENDING session when its exact ProjectFile already exists from the old failure window", async () => {
+      const body = pdfBuffer("old partial finalize");
+      const auth = await authorizeDrawingUpload(ownerActorA, projectAId, {
+        originalName: "old-partial-finalize.pdf",
+        declaredMimeType: "application/pdf",
+        declaredByteSize: body.byteLength,
+      });
+      const session = await prisma.projectFileUploadSession.findUniqueOrThrow({ where: { id: auth.sessionId } });
+      fakeAdapter.seed(auth.pathname, body, "application/pdf");
+      const partialFile = await createProjectFile(companyAId, {
+        id: session.fileId,
+        projectId: projectAId,
+        uploadedByUserId: ownerActorA.userId,
+        originalName: session.originalName,
+        safeFileName: session.storageKey.split("/").pop() ?? session.originalName,
+        storageKey: session.storageKey,
+        mimeType: session.declaredMimeType,
+        extension: session.extension,
+        fileSize: body.byteLength,
+        checksum: computeChecksum(body),
+        metadataJson: { recordKind: "drawing", discipline: "ARCHITECTURAL" },
+      });
+
+      expect(session.status).toBe("PENDING");
+      expect(await prisma.auditLog.count({
+        where: { companyId: companyAId, entityId: partialFile.id, action: "DRAWING_UPLOADED" },
+      })).toBe(0);
+
+      const healed = await finalizeDrawingUpload(ownerActorA, projectAId, {
+        sessionId: auth.sessionId,
+        metadata: { discipline: "ARCHITECTURAL" },
+      });
+
+      expect(healed.alreadyFinalized).toBe(true);
+      expect(healed.drawing.id).toBe(partialFile.id);
+      expect((await prisma.projectFileUploadSession.findUniqueOrThrow({ where: { id: auth.sessionId } })).status).toBe("FINALIZED");
+      expect(await prisma.projectFile.count({ where: { id: partialFile.id } })).toBe(1);
+      expect(await prisma.auditLog.count({
+        where: { companyId: companyAId, entityId: partialFile.id, action: "DRAWING_UPLOADED" },
+      })).toBe(1);
+    });
+
+    it("rolls back the file when the FINALIZED transition fails, then succeeds once on retry", async () => {
+      const body = pdfBuffer("transaction rollback and retry");
+      const auth = await authorizeDrawingUpload(ownerActorA, projectAId, {
+        originalName: "status-transition-failure.pdf",
+        declaredMimeType: "application/pdf",
+        declaredByteSize: body.byteLength,
+      });
+      const session = await prisma.projectFileUploadSession.findUniqueOrThrow({ where: { id: auth.sessionId } });
+      fakeAdapter.seed(auth.pathname, body, "application/pdf");
+      setUploadSessionStatusMock.mockRejectedValueOnce(new Error("injected FINALIZED transition failure"));
+
+      await expect(finalizeDrawingUpload(ownerActorA, projectAId, {
+        sessionId: auth.sessionId,
+        metadata: {},
+      })).rejects.toThrow("injected FINALIZED transition failure");
+
+      expect(await prisma.projectFile.count({ where: { id: session.fileId } })).toBe(0);
+      expect((await prisma.projectFileUploadSession.findUniqueOrThrow({ where: { id: auth.sessionId } })).status).toBe("PENDING");
+      expect(await prisma.auditLog.count({
+        where: { companyId: companyAId, entityId: session.fileId, action: "DRAWING_UPLOADED" },
+      })).toBe(0);
+
+      const retried = await finalizeDrawingUpload(ownerActorA, projectAId, {
+        sessionId: auth.sessionId,
+        metadata: {},
+      });
+      expect(retried.alreadyFinalized).toBe(false);
+      expect(retried.drawing.id).toBe(session.fileId);
+      expect(await prisma.projectFile.count({ where: { id: session.fileId } })).toBe(1);
+      expect((await prisma.projectFileUploadSession.findUniqueOrThrow({ where: { id: auth.sessionId } })).status).toBe("FINALIZED");
+      expect(await prisma.auditLog.count({
+        where: { companyId: companyAId, entityId: session.fileId, action: "DRAWING_UPLOADED" },
+      })).toBe(1);
+    });
+
+    it("serializes concurrent finalize requests into one file and one success audit", async () => {
+      const body = pdfBuffer("concurrent finalize");
+      const auth = await authorizeDrawingUpload(ownerActorA, projectAId, {
+        originalName: "concurrent-finalize.pdf",
+        declaredMimeType: "application/pdf",
+        declaredByteSize: body.byteLength,
+      });
+      const session = await prisma.projectFileUploadSession.findUniqueOrThrow({ where: { id: auth.sessionId } });
+      fakeAdapter.seed(auth.pathname, body, "application/pdf");
+
+      const results = await Promise.all([
+        finalizeDrawingUpload(ownerActorA, projectAId, { sessionId: auth.sessionId, metadata: {} }),
+        finalizeDrawingUpload(ownerActorA, projectAId, { sessionId: auth.sessionId, metadata: {} }),
+      ]);
+
+      expect(results.map((result) => result.drawing.id)).toEqual([session.fileId, session.fileId]);
+      expect(results.map((result) => result.alreadyFinalized).sort()).toEqual([false, true]);
+      expect(await prisma.projectFile.count({ where: { id: session.fileId } })).toBe(1);
+      expect(await prisma.auditLog.count({
+        where: { companyId: companyAId, entityId: session.fileId, action: "DRAWING_UPLOADED" },
+      })).toBe(1);
+    });
+
     it("rejects finalize when the actual stored size does not match the declared size", async () => {
       const declaredSize = 5000;
       const auth = await authorizeDrawingUpload(ownerActorA, projectAId, {
@@ -257,6 +467,23 @@ describe("Direct-to-Blob drawing upload (integration, real local Postgres, fake 
       await expect(finalizeDrawingUpload(ownerActorA, projectAId, { sessionId: auth.sessionId, metadata: {} })).rejects.toMatchObject({
         code: "UPLOAD_SIZE_MISMATCH",
       });
+    });
+
+    it("rejects Blob metadata whose MIME differs from the server-authorized canonical type", async () => {
+      const body = Buffer.from("png-shaped test payload");
+      const auth = await authorizeDrawingUpload(ownerActorA, projectAId, {
+        originalName: "mime-bound.png",
+        declaredMimeType: "image/png",
+        declaredByteSize: body.byteLength,
+      });
+      expect(auth.contentType).toBe("image/png");
+      fakeAdapter.seed(auth.pathname, body, "application/octet-stream");
+
+      await expect(finalizeDrawingUpload(ownerActorA, projectAId, {
+        sessionId: auth.sessionId,
+        metadata: {},
+      })).rejects.toMatchObject({ code: "UPLOAD_MIME_MISMATCH" });
+      expect(await fakeAdapter.objectExists(auth.pathname)).toBe(false);
     });
 
     it("rejects finalize when the Blob object never actually arrived", async () => {
@@ -295,6 +522,31 @@ describe("Direct-to-Blob drawing upload (integration, real local Postgres, fake 
       fakeAdapter.seed(auth.pathname, pdfBuffer("x"), "application/pdf");
 
       await expect(finalizeDrawingUpload(ownerActorB, projectAId, { sessionId: auth.sessionId, metadata: {} })).rejects.toThrow(NotFoundError);
+    });
+
+    it("prevents a different same-tenant user from finalizing or changing uploader attribution", async () => {
+      const body = pdfBuffer("authorizing user attribution");
+      const auth = await authorizeDrawingUpload(ownerActorA, projectAId, {
+        originalName: "actor-bound.pdf",
+        declaredMimeType: "application/pdf",
+        declaredByteSize: body.byteLength,
+      });
+      const session = await prisma.projectFileUploadSession.findUniqueOrThrow({ where: { id: auth.sessionId } });
+      fakeAdapter.seed(auth.pathname, body, auth.contentType);
+
+      await expect(finalizeDrawingUpload(managerActorA, projectAId, {
+        sessionId: auth.sessionId,
+        metadata: { title: "Changed by another user" },
+      })).rejects.toThrow(NotFoundError);
+      expect(await prisma.projectFile.count({ where: { id: session.fileId } })).toBe(0);
+
+      const finalized = await finalizeDrawingUpload(ownerActorA, projectAId, {
+        sessionId: auth.sessionId,
+        metadata: { title: "Authorized title" },
+      });
+      const stored = await prisma.projectFile.findUniqueOrThrow({ where: { id: finalized.drawing.id } });
+      expect(stored.uploadedByUserId).toBe(ownerActorA.userId);
+      expect(stored.drawingTitle).toBe("Authorized title");
     });
 
     it("rejects finalize with a nonexistent sessionId", async () => {

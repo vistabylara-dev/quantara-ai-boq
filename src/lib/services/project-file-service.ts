@@ -150,7 +150,12 @@ export async function getProjectFileDownloadMeta(actor: CurrentActor, fileId: st
       409,
     );
   }
-  return { fileName: row.originalName, mimeType: row.mimeType, totalSize: row.fileSize };
+  return {
+    fileName: row.originalName,
+    mimeType: row.mimeType,
+    extension: row.extension,
+    totalSize: row.fileSize,
+  };
 }
 
 /**

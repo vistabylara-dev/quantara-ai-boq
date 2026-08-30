@@ -28,6 +28,7 @@ describe("file download route — streaming + Range support (integration, real l
   let ownerActorA: CurrentActor;
   let ownerActorB: CurrentActor;
   let fileId: string;
+  let zipFileId: string;
   let fileBody: Buffer;
 
   beforeAll(async () => {
@@ -64,6 +65,12 @@ describe("file download route — streaming + Range support (integration, real l
     fileBody = pdfBuffer("0123456789".repeat(50)); // 550+ bytes, enough for meaningful range slicing
     const uploaded = await uploadProjectFile(ownerActorA, projectAId, { originalName: "range-test.pdf", mimeType: "application/pdf", buffer: fileBody });
     fileId = uploaded.file.id;
+    const zipUpload = await uploadProjectFile(ownerActorA, projectAId, {
+      originalName: "active-content-risk.zip",
+      mimeType: "application/zip",
+      buffer: Buffer.from("PK\u0003\u0004test archive"),
+    });
+    zipFileId = zipUpload.file.id;
   });
 
   beforeEach(() => {
@@ -157,6 +164,19 @@ describe("file download route — streaming + Range support (integration, real l
     currentActorMock.mockResolvedValueOnce(ownerActorA);
     const res = await downloadGET(new Request(`http://localhost/api/files/${fileId}/download?disposition=inline`), { params: Promise.resolve({ fileId }) });
     expect(res.headers.get("content-disposition")).toMatch(/^inline;/);
+    expect(res.headers.get("x-content-type-options")).toBe("nosniff");
+  });
+
+  it("forces CAD/archive-like content to attachment even when inline is requested", async () => {
+    currentActorMock.mockResolvedValueOnce(ownerActorA);
+    const res = await downloadGET(
+      new Request(`http://localhost/api/files/${zipFileId}/download?disposition=inline`),
+      { params: Promise.resolve({ fileId: zipFileId }) },
+    );
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-disposition")).toMatch(/^attachment;/);
+    expect(res.headers.get("content-type")).toBe("application/zip");
+    expect(res.headers.get("x-content-type-options")).toBe("nosniff");
   });
 });
 

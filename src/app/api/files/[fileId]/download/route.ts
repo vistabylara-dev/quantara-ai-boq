@@ -10,6 +10,19 @@ export const runtime = "nodejs";
 
 type RouteContext = { params: Promise<{ fileId: string }> };
 
+const INLINE_MIME_BY_EXTENSION: Record<string, string> = {
+  pdf: "application/pdf",
+  png: "image/png",
+  jpg: "image/jpeg",
+  jpeg: "image/jpeg",
+  tif: "image/tiff",
+  tiff: "image/tiff",
+};
+
+function canRenderInline(extension: string, mimeType: string): boolean {
+  return INLINE_MIME_BY_EXTENSION[extension.toLowerCase()] === mimeType.toLowerCase();
+}
+
 /** Parses a single-range `Range: bytes=start-end` header. Multi-range requests and malformed headers return null (caller falls back to a full 200 response). */
 function parseRangeHeader(header: string | null, totalSize: number): { start: number; end: number } | null {
   if (!header) return null;
@@ -57,10 +70,11 @@ async function GETHandler(request: Request, context: RouteContext) {
     setActorContext(actor);
     const params = await context.params;
     const { fileId } = projectFileIdParamsSchema.parse(params);
-    const wantsInline = new URL(request.url).searchParams.get("disposition") === "inline";
-    const disposition = wantsInline ? "inline" : "attachment";
-
     const meta = await getProjectFileDownloadMeta(actor, fileId);
+    const wantsInline = new URL(request.url).searchParams.get("disposition") === "inline";
+    const disposition = wantsInline && canRenderInline(meta.extension, meta.mimeType)
+      ? "inline"
+      : "attachment";
     const range = parseRangeHeader(request.headers.get("range"), meta.totalSize);
     const result = await getProjectFileForStreamingDownload(actor, fileId, range ?? undefined);
 
@@ -68,6 +82,7 @@ async function GETHandler(request: Request, context: RouteContext) {
     const baseHeaders: Record<string, string> = {
       "Content-Type": result.mimeType,
       "Content-Disposition": `${disposition}; filename="${safeFileName}"`,
+      "X-Content-Type-Options": "nosniff",
       "Cache-Control": "private, no-store",
       "Accept-Ranges": "bytes",
     };

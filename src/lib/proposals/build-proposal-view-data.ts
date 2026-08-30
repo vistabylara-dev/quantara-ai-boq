@@ -54,6 +54,7 @@ type ProposalViewCompany = {
   email: string;
   phone: string | null;
   website: string | null;
+  taxRegistrationNumber: string | null;
 };
 
 type ProposalViewClient = { name: string; companyName: string | null };
@@ -103,6 +104,8 @@ export type BuildProposalViewDataInput = {
     email: string;
     phone: string | null;
     website: string | null;
+    logoUrl?: string | null;
+    taxRegistrationNumber?: string | null;
   };
   client: { name: string; companyName: string | null };
   project: { name: string; reference: string; location: string; currency: string; taxRate: number; industryName: string };
@@ -169,11 +172,12 @@ export function buildProposalViewData(input: BuildProposalViewDataInput): BoqPro
     company: {
       legalName: input.company.legalName,
       tradeName: input.company.tradeName,
-      logoUrl: null,
+      logoUrl: input.company.logoUrl ?? null,
       address: input.company.address,
       email: input.company.email,
       phone: input.company.phone,
       website: input.company.website,
+      taxRegistrationNumber: input.company.taxRegistrationNumber ?? null,
     },
     client: input.client,
     project: {
@@ -212,6 +216,8 @@ export type BuildTechnicalReportProposalViewDataInput = {
     email: string;
     phone: string | null;
     website: string | null;
+    logoUrl?: string | null;
+    taxRegistrationNumber?: string | null;
   };
   client: { name: string; companyName: string | null };
   project: { name: string; reference: string; location: string; currency: string; industryName: string };
@@ -235,11 +241,12 @@ export function buildTechnicalReportProposalViewData(input: BuildTechnicalReport
     company: {
       legalName: input.company.legalName,
       tradeName: input.company.tradeName,
-      logoUrl: null,
+      logoUrl: input.company.logoUrl ?? null,
       address: input.company.address,
       email: input.company.email,
       phone: input.company.phone,
       website: input.company.website,
+      taxRegistrationNumber: input.company.taxRegistrationNumber ?? null,
     },
     client: input.client,
     project: {

@@ -8,6 +8,7 @@ import { getTemplate } from "@/lib/repositories/document-template-repository";
 import { prisma } from "@/lib/db/prisma";
 import { buildDocumentData } from "@/lib/documents/build-document-data";
 import { generateHtml } from "@/lib/documents/generators/html-generator";
+import { loadLogoImage } from "@/lib/documents/logo-image";
 import { previewHtmlQuerySchema } from "@/lib/validation/document-schema";
 import { projectIdParamsSchema } from "@/lib/validation/boq-route-schemas";
 import { NotFoundError } from "@/lib/errors/app-error";
@@ -67,6 +68,7 @@ async function GETHandler(request: Request, context: RouteContext) {
         address: company.address,
         taxRegistrationNumber: company.taxRegistrationNumber,
         defaultCurrency: company.defaultCurrency,
+        logoUrl: company.logoUrl,
       },
       client: {
         name: project.client.name,
@@ -96,7 +98,12 @@ async function GETHandler(request: Request, context: RouteContext) {
       watermarkText: isCommerciallyLocked ? previewLockedWatermarkText(locale) : null,
     });
 
-    const html = generateHtml({ data: documentData, style: template.styleConfig, content: template.contentConfig });
+    const html = generateHtml({
+      data: documentData,
+      style: template.styleConfig,
+      content: template.contentConfig,
+      logoImage: await loadLogoImage(documentData.company.logoUrl),
+    });
     return new NextResponse(html, { headers: { "Content-Type": "text/html; charset=utf-8" } });
   } catch (error) {
     return handleApiError(error);

@@ -29,7 +29,9 @@ import {
   type TayqanMeasurementPageEvidence,
   type TayqanMeasurementReasoner,
   type TayqanMeasurementReasonerProgress,
+  type TayqanMeasurementReasonerResult,
   type TayqanSeniorReviewSummary,
+  tayqanMeasurementReasonerResultSchema,
 } from "@/lib/tayqan/tayqan-measurement-reasoner";
 import type { PageTextExtraction } from "@/lib/files/pdf-text-extraction";
 
@@ -130,6 +132,25 @@ export type PrepareTayqanMeasurementsOptions = {
   env?: NodeJS.ProcessEnv;
   /** Used by the persisted TAYQAN work order to keep its execution lease fresh. */
   onProgress?: (progress: TayqanMeasurementReasonerProgress) => Promise<void>;
+  /**
+   * A validated, durably checkpointed provider result. When supplied the paid
+   * reasoner is never constructed or invoked; only deterministic validation
+   * and idempotent local persistence are replayed.
+   */
+  replayReasonerResult?: TayqanMeasurementReasonerResult;
+  /**
+   * Persists the operation-bound provider-attempt boundary immediately before
+   * a fresh reasoner invocation. If this callback does not complete, the
+   * reasoner is never called.
+   */
+  onReasonerStart?: () => Promise<void>;
+  /**
+   * Called exactly once after a fresh reasoner success and before any
+   * proposal validation, measurement write, or completion audit.
+   */
+  onReasonerResult?: (result: TayqanMeasurementReasonerResult) => Promise<void>;
+  /** Stable work-order operation id used to deduplicate completion audit replay. */
+  completionAuditOperationId?: string;
 };
 
 async function buildEvidenceBundle(
@@ -457,53 +478,112 @@ export async function prepareTayqanMeasurementProposals(
     () => buildEvidenceBundle(actor, projectIdentifier, input),
   );
 
-  const env = options.env ?? process.env;
-  const apiKey = env.OPENAI_API_KEY?.trim();
-  const model = env.TAYQAN_MEASUREMENT_MODEL?.trim()
-    || "gpt-5.6";
-  const safetyIdentifier = `tayqan_${createHash("sha256")
-    .update(actor.userId)
-    .digest("hex")
-    .slice(0, 32)}`;
-  const useSeniorProMode = env.TAYQAN_SENIOR_PRO_MODE?.trim() === "1";
-  const reasoner = options.reasoner ?? (() => {
-    if (!apiKey) {
+  let result: TayqanMeasurementReasonerResult;
+  if (options.replayReasonerResult) {
+    const replay = tayqanMeasurementReasonerResultSchema.safeParse(
+      options.replayReasonerResult,
+    );
+    if (!replay.success) {
+      throw new AppError(
+        "TAYQAN_MEASUREMENT_PROVIDER_RESULT_REPLAY_INVALID",
+        "TAYQAN found an invalid preserved measurement result and stopped before making another paid provider request. Contact support to recover this assignment safely.",
+        409,
+      );
+    }
+    result = replay.data;
+  } else {
+    const env = options.env ?? process.env;
+    const apiKey = env.OPENAI_API_KEY?.trim();
+    const model = env.TAYQAN_MEASUREMENT_MODEL?.trim()
+      || "gpt-5.6";
+    const safetyIdentifier = `tayqan_${createHash("sha256")
+      .update(actor.userId)
+      .digest("hex")
+      .slice(0, 32)}`;
+    const useSeniorProMode = env.TAYQAN_SENIOR_PRO_MODE?.trim() === "1";
+    const providedReasoner = options.reasoner;
+    if (!providedReasoner && !apiKey) {
       throw new AppError(
         "TAYQAN_MEASUREMENT_AI_NOT_CONFIGURED",
         "TAYQAN drawing measurement requires the configured server-side AI provider before it can prepare a quantity-complete draft.",
         503,
       );
     }
-    return createOpenAITayqanMeasurementReasoner({
-      apiKey,
-      model,
-      safetyIdentifier,
-      useSeniorProMode,
-    });
-  })();
 
-  const result = await runTayqanMeasurementPhase(
-    "AI reasoning",
-    "TAYQAN_MEASUREMENT_AI_EXECUTION_FAILED",
-    "TAYQAN could not complete the bounded AI measurement pass. Retry this same assignment; completed work remains preserved.",
-    () => reasoner({
-      bundle,
-      onProgress: options.onProgress,
-      loadPageImageDataUrl: async (pageId) => {
-        const key = imageStorageKeyByPageId.get(pageId);
-        if (!key) return null;
-        const buffer = await getStorageAdapter().getObject(key);
-        if (buffer.byteLength > MAX_PAGE_IMAGE_BYTES) {
-          throw new AppError(
-            "TAYQAN_MEASUREMENT_PAGE_TOO_LARGE",
-            "A rendered drawing page is too large for bounded AI measurement analysis. Re-render the page at the standard processing resolution instead of sending an unbounded image.",
-            409,
-          );
+    const reasonerResult = await runTayqanMeasurementPhase(
+      "AI reasoning",
+      "TAYQAN_MEASUREMENT_AI_EXECUTION_FAILED",
+      "TAYQAN could not complete the bounded AI measurement pass. Retry this same assignment; completed work remains preserved.",
+      async () => {
+        if (options.onReasonerStart) {
+          try {
+            await options.onReasonerStart();
+          } catch (error) {
+            console.error(
+              "[TAYQAN-MEASUREMENT] provider attempt checkpoint failed before reasoner invocation",
+              error,
+            );
+            throw new AppError(
+              "TAYQAN_MEASUREMENT_PROVIDER_ATTEMPT_CHECKPOINT_FAILED",
+              "TAYQAN could not confirm the durable provider-attempt checkpoint, so it stopped before starting the paid measurement request. Retry only after the assignment state is rechecked.",
+              503,
+            );
+          }
         }
-        return `data:image/png;base64,${buffer.toString("base64")}`;
+
+        const reasoner = providedReasoner ?? createOpenAITayqanMeasurementReasoner({
+          apiKey: apiKey!,
+          model,
+          safetyIdentifier,
+          useSeniorProMode,
+        });
+        return reasoner({
+          bundle,
+          onProgress: options.onProgress,
+          loadPageImageDataUrl: async (pageId) => {
+            const key = imageStorageKeyByPageId.get(pageId);
+            if (!key) return null;
+            const buffer = await getStorageAdapter().getObject(key);
+            if (buffer.byteLength > MAX_PAGE_IMAGE_BYTES) {
+              throw new AppError(
+                "TAYQAN_MEASUREMENT_PAGE_TOO_LARGE",
+                "A rendered drawing page is too large for bounded AI measurement analysis. Re-render the page at the standard processing resolution instead of sending an unbounded image.",
+                409,
+              );
+            }
+            return `data:image/png;base64,${buffer.toString("base64")}`;
+          },
+        });
       },
-    }),
-  );
+    );
+    const parsedReasonerResult = tayqanMeasurementReasonerResultSchema.safeParse(
+      reasonerResult,
+    );
+    if (!parsedReasonerResult.success) {
+      throw new AppError(
+        "TAYQAN_MEASUREMENT_AI_RESPONSE_INVALID",
+        "TAYQAN's configured AI provider returned an invalid measurement result. Retry the assignment manually; no result was persisted.",
+        503,
+      );
+    }
+    result = parsedReasonerResult.data;
+
+    if (options.onReasonerResult) {
+      try {
+        await options.onReasonerResult(result);
+      } catch (error) {
+        console.error(
+          "[TAYQAN-MEASUREMENT] provider result checkpoint failed; paid result will not be requested again automatically",
+          error,
+        );
+        throw new AppError(
+          "TAYQAN_MEASUREMENT_PROVIDER_RESULT_CHECKPOINT_FAILED",
+          "TAYQAN received the measurement result but could not confirm its durable recovery checkpoint. The assignment has stopped to prevent another paid provider request; contact support.",
+          503,
+        );
+      }
+    }
+  }
 
   const allowedEntityIds = new Set(bundle.existingEntities.map((entity) => entity.id));
   const roomsById = new Map(
@@ -668,37 +748,57 @@ export async function prepareTayqanMeasurementProposals(
     "completion audit persistence",
     "TAYQAN_MEASUREMENT_AUDIT_PERSISTENCE_FAILED",
     "TAYQAN completed the measurement pass but could not preserve its completion record. Retry this same assignment; completed work remains preserved.",
-    () => createAuditLog(actor.companyId, {
-    entityType: "Project",
-    entityId: bundle.project.id,
-    action: "TAYQAN_MEASUREMENT_PASS_COMPLETED",
-    actorName: actor.fullName,
-    payload: {
-      measurementVersion: TAYQAN_MEASUREMENT_VERSION,
-      sourceFileCount: bundle.sourceFileIds.length,
-      pageCount: bundle.pages.length,
-      measuredSubjectCount: evaluated.length,
-      measurementMethodBreakdown: evaluated.reduce<Record<string, number>>((counts, measurement) => {
-        counts[measurement.subject.measurementMethod] =
-          (counts[measurement.subject.measurementMethod] ?? 0) + 1;
-        return counts;
-      }, {}),
-      supportingCheckCount: evaluated.reduce(
-        (total, measurement) => total + measurement.supportingChecks.length,
-        0,
-      ),
-      createdEntityCount,
-      reusedEntityCount,
-      createdCalculationCount,
-      reusedCalculationCount,
-      exceptionCount: exceptions.length,
-      provider: result.provider,
-      model: result.model,
-      seniorReview: result.seniorReview,
-      governingContext: bundle.governingContext,
-      professionallyConfirmed: false,
+    async () => {
+      if (options.completionAuditOperationId) {
+        const existing = await prisma.auditLog.findFirst({
+          where: {
+            companyId: actor.companyId,
+            entityType: "Project",
+            entityId: bundle.project.id,
+            action: "TAYQAN_MEASUREMENT_PASS_COMPLETED",
+            payloadJson: {
+              path: ["operationId"],
+              equals: options.completionAuditOperationId,
+            },
+          },
+          select: { id: true },
+        });
+        if (existing) return existing;
+      }
+
+      return createAuditLog(actor.companyId, {
+        entityType: "Project",
+        entityId: bundle.project.id,
+        action: "TAYQAN_MEASUREMENT_PASS_COMPLETED",
+        actorName: actor.fullName,
+        payload: {
+          measurementVersion: TAYQAN_MEASUREMENT_VERSION,
+          operationId: options.completionAuditOperationId ?? null,
+          sourceFileCount: bundle.sourceFileIds.length,
+          pageCount: bundle.pages.length,
+          measuredSubjectCount: evaluated.length,
+          measurementMethodBreakdown: evaluated.reduce<Record<string, number>>((counts, measurement) => {
+            counts[measurement.subject.measurementMethod] =
+              (counts[measurement.subject.measurementMethod] ?? 0) + 1;
+            return counts;
+          }, {}),
+          supportingCheckCount: evaluated.reduce(
+            (total, measurement) => total + measurement.supportingChecks.length,
+            0,
+          ),
+          createdEntityCount,
+          reusedEntityCount,
+          createdCalculationCount,
+          reusedCalculationCount,
+          exceptionCount: exceptions.length,
+          provider: result.provider,
+          model: result.model,
+          seniorReview: result.seniorReview,
+          governingContext: bundle.governingContext,
+          professionallyConfirmed: false,
+        },
+      });
     },
-    }),
   );
 
   return {

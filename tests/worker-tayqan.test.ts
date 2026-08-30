@@ -39,6 +39,7 @@ import {
   listWorkerDefinitions,
   TAYQAN_WORKER_DEFINITION,
 } from "../src/lib/worker/worker-definitions";
+import { requireIsolatedLocalTestDatabase } from "./helpers/require-isolated-test-database";
 
 /** Reads a dotted path (e.g. "tayqan.status.working") out of a dictionary object — mirrors src/lib/i18n/translate.ts's readPath, kept local since that function isn't exported. */
 function readDictionaryPath(dictionary: unknown, key: string): string | undefined {
@@ -287,6 +288,16 @@ describe("TAYQAN-1 EN/AR dictionary keys", () => {
     }
   });
 
+  it("describes measurement recovery as a generic manual retry in both locales", () => {
+    const english = en.tayqan.hire.workflow.measurementProviderRetryRequired;
+    const arabic = ar.tayqan.hire.workflow.measurementProviderRetryRequired;
+
+    expect(english).toContain("manually");
+    expect(english).not.toMatch(/\b(?:provider|capacity|accept(?:ed|ance)?|reject(?:ed|ion)?)\b/i);
+    expect(arabic).toContain("يدويًا");
+    expect(arabic).not.toMatch(/مزود|سعة|قبول|يقبل|رفض/);
+  });
+
   it("has an actual Arabic translation (not byte-identical to English) for TAYQAN prose, brand name aside", () => {
     for (const key of TAYQAN_FLAT_KEYS) {
       expect(ar.tayqan[key]).not.toBe(en.tayqan[key]);
@@ -385,6 +396,7 @@ describe("TAYQAN-1 hire flow and assignment lifecycle (integration, real local P
   }
 
   beforeAll(async () => {
+    requireIsolatedLocalTestDatabase();
     // claimNextWorkerRun claims the globally oldest QUEUED WorkerRun (a real
     // shared FIFO queue, not scoped to this test's own rows) — sweep out any
     // backlog left behind by a previous (e.g. interrupted) test invocation

@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import {
   ExtractionEngineType,
   ExtractionJobStatus,
@@ -31,6 +31,10 @@ import {
   tayqanMeasurementExceptionIsDangerous,
   tayqanMeasurementExceptionKey,
 } from "@/lib/tayqan/tayqan-measurement-contract";
+import {
+  tayqanMeasurementReasonerResultSchema,
+  type TayqanMeasurementReasonerResult,
+} from "@/lib/tayqan/tayqan-measurement-reasoner";
 import {
   confirmExtractedEntity,
   correctExtractedEntity,
@@ -89,6 +93,40 @@ export type WorkProgress = {
     alreadyPresentCount: number;
     unreviewedAddedCount: number;
     reviewedAddedCount: number;
+  };
+
+  /**
+   * Durable fail-closed boundary written under the active lease immediately
+   * before the first paid reasoner invocation. An attempt without a complete
+   * result is never automatically retried or taken over by a stale lease.
+   */
+  tayqanMeasurementProviderAttempt?: {
+    checkpointVersion: 1;
+    measurementVersion: string;
+    workOrderId: string;
+    companyId: string;
+    projectId: string;
+    sourceFiles: Array<{ id: string; checksum: string }>;
+    operationId: string;
+    attemptedAt: string;
+  };
+
+  /**
+   * Durable boundary immediately after the paid reasoner returns. It remains
+   * only until tayqanMeasurement commits, allowing every downstream failure
+   * window to replay locally without another provider request.
+   */
+  tayqanMeasurementProviderResult?: {
+    checkpointVersion: 1;
+    measurementVersion: string;
+    workOrderId: string;
+    companyId: string;
+    projectId: string;
+    sourceFiles: Array<{ id: string; checksum: string }>;
+    operationId: string;
+    resultFingerprint: string;
+    checkpointedAt: string;
+    result: TayqanMeasurementReasonerResult;
   };
 
   /** Senior TAYQAN measurement checkpoint; stored in existing progressJson, never schema. */
@@ -397,9 +435,401 @@ function sourceFileIdsFromProgress(
 
 const TAYQAN_MEASUREMENT_LEASE_CODE = "TAYQAN_MEASUREMENT_RUNNING";
 const TAYQAN_MEASUREMENT_LEASE_STALE_MS = 15 * 60 * 1_000;
+const TAYQAN_MEASUREMENT_PROVIDER_CHECKPOINT_VERSION = 1 as const;
 const TAYQAN_AI_DRAFT_LEASE_CODE = "TAYQAN_AI_DRAFT_RUNNING";
 const TAYQAN_AI_DRAFT_LEASE_STALE_MS = 15 * 60 * 1_000;
 const TAYQAN_EXCEPTION_EVENT_BATCH_SIZE = 25;
+
+type TayqanMeasurementOperation = {
+  workOrderId: string;
+  companyId: string;
+  projectId: string;
+  sourceFiles: Array<{ id: string; checksum: string }>;
+  operationId: string;
+};
+
+function sha256Json(value: unknown): string {
+  return createHash("sha256")
+    .update(JSON.stringify(value))
+    .digest("hex");
+}
+
+function tayqanMeasurementOperation(
+  order: {
+    id: string;
+    companyId: string;
+    projectId: string;
+    boqId: string | null;
+    desiredDeliverable: string;
+    includeRates: boolean;
+  },
+  progress: WorkProgress,
+  frozenSourceFiles: readonly { id: string; checksum: string }[],
+): TayqanMeasurementOperation {
+  const selectedSourceFileIds = new Set(
+    progress.selectedSourceFileIds ?? [],
+  );
+  const sourceFiles = frozenSourceFiles
+    .filter((file) => selectedSourceFileIds.has(file.id))
+    .map((file) => ({ id: file.id, checksum: file.checksum }))
+    .sort((left, right) =>
+      left.id.localeCompare(right.id)
+      || left.checksum.localeCompare(right.checksum));
+  const operationId = sha256Json({
+    checkpointVersion: TAYQAN_MEASUREMENT_PROVIDER_CHECKPOINT_VERSION,
+    measurementVersion: TAYQAN_MEASUREMENT_VERSION,
+    workOrderId: order.id,
+    companyId: order.companyId,
+    projectId: order.projectId,
+    sourceFiles,
+    desiredDeliverable: order.desiredDeliverable,
+    targetBoqId:
+      order.desiredDeliverable === "UPDATE_EXISTING_BOQ"
+        ? order.boqId
+        : null,
+    includeRates: order.includeRates,
+    governingContext: progress.instructionContext ?? null,
+  });
+
+  return {
+    workOrderId: order.id,
+    companyId: order.companyId,
+    projectId: order.projectId,
+    sourceFiles,
+    operationId,
+  };
+}
+
+function tayqanMeasurementProviderOperationMatches(
+  checkpoint: unknown,
+  operation: TayqanMeasurementOperation,
+): boolean {
+  if (!checkpoint || typeof checkpoint !== "object" || Array.isArray(checkpoint)) {
+    return false;
+  }
+  const value = checkpoint as Record<string, unknown>;
+  const sourceFiles = Array.isArray(value.sourceFiles)
+    ? value.sourceFiles
+    : null;
+  return value.checkpointVersion === TAYQAN_MEASUREMENT_PROVIDER_CHECKPOINT_VERSION
+    && value.measurementVersion === TAYQAN_MEASUREMENT_VERSION
+    && value.workOrderId === operation.workOrderId
+    && value.companyId === operation.companyId
+    && value.projectId === operation.projectId
+    && value.operationId === operation.operationId
+    && sourceFiles !== null
+    && sourceFiles.length === operation.sourceFiles.length
+    && sourceFiles.every((file, index) => {
+      if (!file || typeof file !== "object" || Array.isArray(file)) return false;
+      const sourceFile = file as Record<string, unknown>;
+      return sourceFile.id === operation.sourceFiles[index]?.id
+        && sourceFile.checksum === operation.sourceFiles[index]?.checksum;
+    });
+}
+
+function tayqanMeasurementProviderAttemptExists(
+  progress: WorkProgress,
+  operation: TayqanMeasurementOperation,
+): boolean {
+  const attempt = progress.tayqanMeasurementProviderAttempt as unknown;
+  if (attempt === undefined) return false;
+  const attemptRecord = attempt && typeof attempt === "object" && !Array.isArray(attempt)
+    ? attempt as Record<string, unknown>
+    : null;
+
+  if (
+    !tayqanMeasurementProviderOperationMatches(attempt, operation)
+    || typeof attemptRecord?.attemptedAt !== "string"
+    || Number.isNaN(Date.parse(attemptRecord.attemptedAt))
+  ) {
+    throw new AppError(
+      "TAYQAN_MEASUREMENT_PROVIDER_RESULT_REPLAY_INVALID",
+      "TAYQAN found a provider-attempt checkpoint that no longer matches this assignment. It stopped before making another paid provider request; contact support.",
+      409,
+    );
+  }
+
+  return true;
+}
+
+function replayableTayqanMeasurementProviderResult(
+  progress: WorkProgress,
+  operation: TayqanMeasurementOperation,
+): TayqanMeasurementReasonerResult | null {
+  const checkpoint = progress.tayqanMeasurementProviderResult as unknown;
+  if (checkpoint === undefined) return null;
+  const checkpointRecord = checkpoint && typeof checkpoint === "object" && !Array.isArray(checkpoint)
+    ? checkpoint as Record<string, unknown>
+    : null;
+
+  const hasAttempt = tayqanMeasurementProviderAttemptExists(progress, operation);
+  const parsed = tayqanMeasurementReasonerResultSchema.safeParse(
+    checkpointRecord?.result,
+  );
+  if (
+    !hasAttempt
+    || !tayqanMeasurementProviderOperationMatches(checkpoint, operation)
+    || typeof checkpointRecord?.checkpointedAt !== "string"
+    || Number.isNaN(Date.parse(checkpointRecord.checkpointedAt))
+    || !parsed.success
+    || checkpointRecord.resultFingerprint !== sha256Json(parsed.data)
+  ) {
+    throw new AppError(
+      "TAYQAN_MEASUREMENT_PROVIDER_RESULT_REPLAY_INVALID",
+      "TAYQAN found a preserved measurement result that no longer matches this assignment. It stopped before making another paid provider request; contact support.",
+      409,
+    );
+  }
+
+  return parsed.data;
+}
+
+async function checkpointTayqanMeasurementProviderAttempt(
+  actor: CurrentActor,
+  order: Awaited<ReturnType<typeof loadOrder>>,
+  leaseToken: string,
+  operation: TayqanMeasurementOperation,
+) {
+  await prisma.$transaction(async (tx) => {
+    const currentSourceFiles = operation.sourceFiles.length > 0
+      ? await tx.projectFile.findMany({
+          where: {
+            companyId: actor.companyId,
+            projectId: order.projectId,
+            id: { in: operation.sourceFiles.map((file) => file.id) },
+            status: { not: "ARCHIVED" },
+          },
+          select: { id: true, checksum: true },
+          orderBy: { id: "asc" },
+        })
+      : [];
+    const sourceScopeUnchanged =
+      currentSourceFiles.length === operation.sourceFiles.length
+      && currentSourceFiles.every(
+        (file, index) =>
+          file.id === operation.sourceFiles[index]?.id
+          && file.checksum === operation.sourceFiles[index]?.checksum,
+      );
+    if (!sourceScopeUnchanged) {
+      throw new ConflictError(
+        "TAYQAN_MEASUREMENT_SOURCE_CHECKSUM_CHANGED",
+        "A frozen source changed before the paid provider attempt could start.",
+      );
+    }
+
+    const current = await tx.tayqanWorkOrder.findFirst({
+      where: {
+        id: order.id,
+        companyId: actor.companyId,
+        blockerCode: TAYQAN_MEASUREMENT_LEASE_CODE,
+        blockerMessage: leaseToken,
+      },
+      select: { progressJson: true },
+    });
+    if (!current) {
+      throw new ConflictError(
+        "TAYQAN_MEASUREMENT_LEASE_LOST",
+        "TAYQAN measurement execution ownership changed before the paid provider attempt could start.",
+      );
+    }
+
+    const currentProgress = parseProgress(current.progressJson);
+    if (replayableTayqanMeasurementProviderResult(currentProgress, operation)) {
+      return;
+    }
+    if (tayqanMeasurementProviderAttemptExists(currentProgress, operation)) {
+      return;
+    }
+
+    const attemptedAt = new Date().toISOString();
+    const attempt: NonNullable<
+      WorkProgress["tayqanMeasurementProviderAttempt"]
+    > = {
+      checkpointVersion: TAYQAN_MEASUREMENT_PROVIDER_CHECKPOINT_VERSION,
+      measurementVersion: TAYQAN_MEASUREMENT_VERSION,
+      workOrderId: operation.workOrderId,
+      companyId: operation.companyId,
+      projectId: operation.projectId,
+      sourceFiles: operation.sourceFiles,
+      operationId: operation.operationId,
+      attemptedAt,
+    };
+    const updated = await tx.tayqanWorkOrder.updateMany({
+      where: {
+        id: order.id,
+        companyId: actor.companyId,
+        blockerCode: TAYQAN_MEASUREMENT_LEASE_CODE,
+        blockerMessage: leaseToken,
+      },
+      data: {
+        progressJson: jsonObject({
+          ...currentProgress,
+          tayqanMeasurementProviderAttempt: attempt,
+        }),
+        lastAdvancedAt: new Date(),
+      },
+    });
+    if (updated.count !== 1) {
+      throw new ConflictError(
+        "TAYQAN_MEASUREMENT_LEASE_LOST",
+        "TAYQAN measurement execution ownership changed before the paid provider attempt could start.",
+      );
+    }
+    await tx.tayqanWorkEvent.create({
+      data: {
+        companyId: actor.companyId,
+        workOrderId: order.id,
+        stage: order.stage,
+        eventType: "TAYQAN_MEASUREMENT_PROVIDER_ATTEMPT_STARTED",
+        payloadJson: jsonObject({
+          measurementVersion: TAYQAN_MEASUREMENT_VERSION,
+          operationId: operation.operationId,
+          sourceFileCount: operation.sourceFiles.length,
+          attemptedAt,
+        }),
+      },
+    });
+  }, {
+    maxWait: 10_000,
+    timeout: 30_000,
+    isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+  });
+}
+
+async function checkpointTayqanMeasurementProviderResult(
+  actor: CurrentActor,
+  order: Awaited<ReturnType<typeof loadOrder>>,
+  leaseToken: string,
+  operation: TayqanMeasurementOperation,
+  result: TayqanMeasurementReasonerResult,
+) {
+  const parsed = tayqanMeasurementReasonerResultSchema.parse(result);
+  const resultFingerprint = sha256Json(parsed);
+
+  await prisma.$transaction(async (tx) => {
+    const currentSourceFiles = operation.sourceFiles.length > 0
+      ? await tx.projectFile.findMany({
+          where: {
+            companyId: actor.companyId,
+            projectId: order.projectId,
+            id: { in: operation.sourceFiles.map((file) => file.id) },
+            status: { not: "ARCHIVED" },
+          },
+          select: { id: true, checksum: true },
+          orderBy: { id: "asc" },
+        })
+      : [];
+    const sourceScopeUnchanged =
+      currentSourceFiles.length === operation.sourceFiles.length
+      && currentSourceFiles.every(
+        (file, index) =>
+          file.id === operation.sourceFiles[index]?.id
+          && file.checksum === operation.sourceFiles[index]?.checksum,
+      );
+    if (!sourceScopeUnchanged) {
+      throw new ConflictError(
+        "TAYQAN_MEASUREMENT_SOURCE_CHECKSUM_CHANGED",
+        "A frozen source changed before the paid result could be checkpointed.",
+      );
+    }
+
+    const current = await tx.tayqanWorkOrder.findFirst({
+      where: {
+        id: order.id,
+        companyId: actor.companyId,
+        blockerCode: TAYQAN_MEASUREMENT_LEASE_CODE,
+        blockerMessage: leaseToken,
+      },
+      select: { progressJson: true },
+    });
+    if (!current) {
+      throw new ConflictError(
+        "TAYQAN_MEASUREMENT_LEASE_LOST",
+        "TAYQAN measurement execution ownership changed before the paid result could be checkpointed.",
+      );
+    }
+
+    const currentProgress = parseProgress(current.progressJson);
+    if (!tayqanMeasurementProviderAttemptExists(currentProgress, operation)) {
+      throw new ConflictError(
+        "TAYQAN_MEASUREMENT_PROVIDER_ATTEMPT_MISSING",
+        "The paid provider result cannot be checkpointed without its durable operation-bound attempt marker.",
+      );
+    }
+    const existingResult = replayableTayqanMeasurementProviderResult(
+      currentProgress,
+      operation,
+    );
+    if (existingResult) {
+      const existing = currentProgress.tayqanMeasurementProviderResult!;
+      if (existing.resultFingerprint !== resultFingerprint) {
+        throw new ConflictError(
+          "TAYQAN_MEASUREMENT_PROVIDER_RESULT_CONFLICT",
+          "A different paid measurement result is already checkpointed for this assignment.",
+        );
+      }
+      return;
+    }
+
+    const checkpoint: NonNullable<
+      WorkProgress["tayqanMeasurementProviderResult"]
+    > = {
+      checkpointVersion: TAYQAN_MEASUREMENT_PROVIDER_CHECKPOINT_VERSION,
+      measurementVersion: TAYQAN_MEASUREMENT_VERSION,
+      workOrderId: operation.workOrderId,
+      companyId: operation.companyId,
+      projectId: operation.projectId,
+      sourceFiles: operation.sourceFiles,
+      operationId: operation.operationId,
+      resultFingerprint,
+      checkpointedAt: new Date().toISOString(),
+      result: parsed,
+    };
+    const updated = await tx.tayqanWorkOrder.updateMany({
+      where: {
+        id: order.id,
+        companyId: actor.companyId,
+        blockerCode: TAYQAN_MEASUREMENT_LEASE_CODE,
+        blockerMessage: leaseToken,
+      },
+      data: {
+        progressJson: jsonObject({
+          ...currentProgress,
+          tayqanMeasurementProviderResult: checkpoint,
+        }),
+        lastAdvancedAt: new Date(),
+      },
+    });
+    if (updated.count !== 1) {
+      throw new ConflictError(
+        "TAYQAN_MEASUREMENT_LEASE_LOST",
+        "TAYQAN measurement execution ownership changed before the paid result could be checkpointed.",
+      );
+    }
+    await tx.tayqanWorkEvent.create({
+      data: {
+        companyId: actor.companyId,
+        workOrderId: order.id,
+        stage: order.stage,
+        eventType: "TAYQAN_MEASUREMENT_PROVIDER_RESULT_CHECKPOINTED",
+        payloadJson: jsonObject({
+          measurementVersion: TAYQAN_MEASUREMENT_VERSION,
+          operationId: operation.operationId,
+          resultFingerprint,
+          provider: parsed.provider,
+          model: parsed.model,
+          responseCount: parsed.responseIds.length,
+          subjectCount: parsed.plan.subjects.length,
+          exceptionCount: parsed.plan.exceptions.length,
+        }),
+      },
+    });
+  }, {
+    maxWait: 10_000,
+    timeout: 30_000,
+    isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+  });
+}
 
 async function claimTayqanMeasurementLease(
   actor: CurrentActor,
@@ -908,15 +1338,52 @@ const TAYQAN_TERMINAL_MEASUREMENT_ERROR_CODES = new Set([
   "TAYQAN_MEASUREMENT_PAGES_REQUIRED",
   "TAYQAN_MEASUREMENT_AI_NOT_CONFIGURED",
   "TAYQAN_MEASUREMENT_PAGE_TOO_LARGE",
+  "TAYQAN_MEASUREMENT_PROVIDER_ATTEMPT_INCOMPLETE",
+  "TAYQAN_MEASUREMENT_PROVIDER_RESULT_CHECKPOINT_FAILED",
+  "TAYQAN_MEASUREMENT_PROVIDER_RESULT_REPLAY_INVALID",
 ]);
 
 function isTerminalTayqanMeasurementError(error: unknown): error is AppError {
   return error instanceof AppError && TAYQAN_TERMINAL_MEASUREMENT_ERROR_CODES.has(error.code);
 }
 
-function isRetryableTayqanMeasurementProviderRejection(error: unknown): error is AppError {
+const TAYQAN_UNSAFE_PAID_RETRY_ERROR_CODES = new Set([
+  "TAYQAN_MEASUREMENT_PROVIDER_ATTEMPT_INCOMPLETE",
+  "TAYQAN_MEASUREMENT_PROVIDER_RESULT_CHECKPOINT_FAILED",
+  "TAYQAN_MEASUREMENT_PROVIDER_RESULT_REPLAY_INVALID",
+]);
+
+function isUnsafePaidTayqanRetryError(error: unknown): error is AppError {
   return error instanceof AppError
-    && error.code === "TAYQAN_MEASUREMENT_AI_REQUEST_REJECTED";
+    && TAYQAN_UNSAFE_PAID_RETRY_ERROR_CODES.has(error.code);
+}
+
+/**
+ * Provider-stage failures and post-provider persistence failures must settle
+ * in the existing explicit Retry state. Leaving one of these errors on a
+ * RUNNING order makes the hire panel call /advance again every three seconds,
+ * which can repeat the same paid provider work without a new customer
+ * decision. Keep this as an exact allowlist: evidence-preparation and lease
+ * errors retain their separate recovery policies, while checkpoint reload is
+ * excluded because the durable measurement version has already committed.
+ */
+const TAYQAN_MANUAL_RETRY_MEASUREMENT_ERROR_CODES = new Set([
+  "TAYQAN_MEASUREMENT_PROVIDER_ATTEMPT_CHECKPOINT_FAILED",
+  "TAYQAN_MEASUREMENT_AI_REQUEST_REJECTED",
+  "TAYQAN_MEASUREMENT_AI_RESPONSE_INCOMPLETE",
+  "TAYQAN_MEASUREMENT_AI_RESPONSE_INVALID",
+  "TAYQAN_MEASUREMENT_AI_REFUSED",
+  "TAYQAN_MEASUREMENT_AI_TIMEOUT",
+  "TAYQAN_MEASUREMENT_AI_UNAVAILABLE",
+  "TAYQAN_MEASUREMENT_AI_EXECUTION_FAILED",
+  "TAYQAN_MEASUREMENT_PERSISTENCE_FAILED",
+  "TAYQAN_MEASUREMENT_AUDIT_PERSISTENCE_FAILED",
+  "TAYQAN_MEASUREMENT_CHECKPOINT_PERSISTENCE_FAILED",
+]);
+
+function requiresExplicitTayqanMeasurementRetry(error: unknown): error is AppError {
+  return error instanceof AppError
+    && TAYQAN_MANUAL_RETRY_MEASUREMENT_ERROR_CODES.has(error.code);
 }
 
 async function runTayqanWorkOrderPhase<T>(
@@ -1587,11 +2054,31 @@ async function advanceSourceProcessing(actor: CurrentActor, projectSlug: string,
            return advanceTayqanAiDraftWithLease(actor, projectSlug, leasedOrder);
         }
 
+        const measurementOperation = tayqanMeasurementOperation(
+          leasedOrder,
+          leasedProgress,
+          requirements.map(({ file }) => file),
+        );
+        const replayReasonerResult = replayableTayqanMeasurementProviderResult(
+          leasedProgress,
+          measurementOperation,
+        );
+        const providerAttemptExists = tayqanMeasurementProviderAttemptExists(
+          leasedProgress,
+          measurementOperation,
+        );
+        if (providerAttemptExists && !replayReasonerResult) {
+          throw new AppError(
+            "TAYQAN_MEASUREMENT_PROVIDER_ATTEMPT_INCOMPLETE",
+            "TAYQAN found an incomplete paid provider attempt with no safely replayable result. It stopped before another provider request; contact support to recover this assignment.",
+            409,
+          );
+        }
         const measurement = await prepareTayqanMeasurementProposals(
           actor, projectSlug,
           {
             projectId: leasedOrder.projectId,
-            sourceFileIds: sourceFileIdsFromProgress(leasedOrder),
+            sourceFileIds: frozenSourceFileIds,
             governingContext: leasedProgress.instructionContext ?? null,
             // PR2 gap 2: leasedOrder.boqId is already frozen for
             // UPDATE_EXISTING_BOQ — the intake flow blocks work-order
@@ -1600,7 +2087,35 @@ async function advanceSourceProcessing(actor: CurrentActor, projectSlug: string,
             // measurement pass, exactly like sourceFileIds.
             targetBoqId: leasedOrder.desiredDeliverable === "UPDATE_EXISTING_BOQ" ? leasedOrder.boqId : null,
           },
-          { onProgress: async () => heartbeatTayqanMeasurementLease(actor, order.id, leaseToken) },
+          {
+            onProgress: async () => heartbeatTayqanMeasurementLease(
+              actor,
+              order.id,
+              leaseToken,
+            ),
+            completionAuditOperationId: measurementOperation.operationId,
+            ...(replayReasonerResult
+              ? { replayReasonerResult }
+              : {
+                  onReasonerStart: async () => {
+                    await checkpointTayqanMeasurementProviderAttempt(
+                      actor,
+                      leasedOrder,
+                      leaseToken,
+                      measurementOperation,
+                    );
+                  },
+                  onReasonerResult: async (result) => {
+                    await checkpointTayqanMeasurementProviderResult(
+                      actor,
+                      leasedOrder,
+                      leaseToken,
+                      measurementOperation,
+                      result,
+                    );
+                  },
+                }),
+          },
         );
         const measurementExceptions = measurement.exceptions.slice(0, 50).map((exception) => ({ kind: exception.kind, message: exception.message, pageIds: exception.pageIds }));
         // PR1 mission 2: mirror every reasoner exception into the unified,
@@ -1627,6 +2142,9 @@ async function advanceSourceProcessing(actor: CurrentActor, projectSlug: string,
           exceptionKinds: [...new Set(measurement.exceptions.map((exception) => exception.kind))], seniorReview: measurement.seniorReview,
           exceptionRegisterRunId: leaseToken, exceptionRegisterBatchCount: exceptionBatches.length,
         };
+        const completedProgress = { ...leasedProgress };
+        delete completedProgress.tayqanMeasurementProviderAttempt;
+        delete completedProgress.tayqanMeasurementProviderResult;
         // Lock frame: the durable measurement checkpoint and every audit event
         // are one commit. A timeout or disconnect can no longer leave partial
         // exception events behind while the work order still looks unfinished.
@@ -1639,7 +2157,7 @@ async function advanceSourceProcessing(actor: CurrentActor, projectSlug: string,
           const completed = await tx.tayqanWorkOrder.updateMany({
             where: { id: order.id, companyId: actor.companyId, blockerCode: TAYQAN_MEASUREMENT_LEASE_CODE, blockerMessage: leaseToken },
             data: {
-              progressJson: jsonObject({ ...leasedProgress, measurementExceptions: mergedLedger, tayqanMeasurement: {
+              progressJson: jsonObject({ ...completedProgress, measurementExceptions: mergedLedger, tayqanMeasurement: {
                 version: TAYQAN_MEASUREMENT_VERSION, measuredSubjectCount: measurement.measuredSubjectCount, createdCalculationCount: measurement.createdCalculationCount, reusedCalculationCount: measurement.reusedCalculationCount,
                 exceptionCount: measurement.exceptionCount, provider: measurement.provider, model: measurement.model, seniorReview: measurement.seniorReview, exceptions: measurementExceptions,
                 exceptionRegisterRunId: leaseToken, exceptionRegisterBatchCount: exceptionBatches.length, exceptionPreviewTruncated: measurement.exceptions.length > measurementExceptions.length,
@@ -1706,6 +2224,96 @@ async function advanceSourceProcessing(actor: CurrentActor, projectSlug: string,
         } catch (releaseError) {
           console.error("[TAYQAN-WORK-ORDER] measurement lease release failed", releaseError);
         }
+        let replayableProviderResultAvailable = false;
+        let providerResultRecoveryError: AppError | null = null;
+        try {
+          const recoveryOrder = await loadOrder(actor.companyId, order.id);
+          const recoveryProgress = parseProgress(recoveryOrder.progressJson);
+          const recoveryOperation = tayqanMeasurementOperation(
+            recoveryOrder,
+            recoveryProgress,
+            requirements.map(({ file }) => file),
+          );
+          replayableProviderResultAvailable = replayableTayqanMeasurementProviderResult(
+            recoveryProgress,
+            recoveryOperation,
+          ) !== null;
+          const providerAttemptExists = tayqanMeasurementProviderAttemptExists(
+            recoveryProgress,
+            recoveryOperation,
+          );
+          if (providerAttemptExists && !replayableProviderResultAvailable) {
+            providerResultRecoveryError = new AppError(
+              "TAYQAN_MEASUREMENT_PROVIDER_ATTEMPT_INCOMPLETE",
+              "TAYQAN found an incomplete paid provider attempt with no safely replayable result. It stopped before another provider request; contact support to recover this assignment.",
+              409,
+            );
+          }
+        } catch (recoveryError) {
+          if (isUnsafePaidTayqanRetryError(recoveryError)) {
+            providerResultRecoveryError = recoveryError;
+          } else {
+            console.error(
+              "[TAYQAN-WORK-ORDER] could not inspect provider-result recovery checkpoint",
+              recoveryError,
+            );
+          }
+        }
+        if (providerResultRecoveryError) {
+          return fail(
+            actor,
+            order,
+            providerResultRecoveryError.code,
+            "tayqan.hire.workflow.workOrderFailed",
+            {
+              kind: "ERROR",
+              i18nKey: "tayqan.hire.workflow.workOrderFailed",
+              error: {
+                code: providerResultRecoveryError.code,
+                reason: providerResultRecoveryError.message.slice(0, 300),
+              },
+            },
+            providerResultRecoveryError,
+          );
+        }
+        if (replayableProviderResultAvailable) {
+          const retryError = error instanceof AppError
+            && !isUnsafePaidTayqanRetryError(error)
+            ? error
+            : new AppError(
+                "TAYQAN_MEASUREMENT_POST_PROVIDER_PERSISTENCE_FAILED",
+                "TAYQAN preserved the paid measurement result, but a downstream write failed. Retry will replay locally without another provider request.",
+                503,
+              );
+          return block(
+            actor,
+            order,
+            "TAYQAN_MEASUREMENT_PROVIDER_RETRY_REQUIRED",
+            "tayqan.hire.workflow.measurementProviderRetryRequired",
+            {
+              kind: "ERROR",
+              i18nKey: "tayqan.hire.workflow.measurementProviderRetryRequired",
+              error: {
+                code: retryError.code,
+                reason: retryError.message.slice(0, 300),
+              },
+            },
+          );
+        }
+        if (isUnsafePaidTayqanRetryError(error)) {
+          return fail(
+            actor,
+            order,
+            error.code,
+            "tayqan.hire.workflow.workOrderFailed",
+            {
+              kind: "ERROR",
+              i18nKey: "tayqan.hire.workflow.workOrderFailed",
+              error: { code: error.code, reason: error.message.slice(0, 300) },
+            },
+            error,
+          );
+        }
         if (isTerminalTayqanMeasurementError(error)) {
           return fail(
             actor,
@@ -1720,7 +2328,7 @@ async function advanceSourceProcessing(actor: CurrentActor, projectSlug: string,
             error,
           );
         }
-        if (isRetryableTayqanMeasurementProviderRejection(error)) {
+        if (requiresExplicitTayqanMeasurementRetry(error)) {
           return block(
             actor,
             order,
@@ -2829,6 +3437,32 @@ export async function answerTayqanWorkOrderBlocker(
   }
   const blocker = blockerFromJson(order.blockerJson);
   const progress = parseProgress(order.progressJson);
+
+  if (
+    input.action === "RETRY"
+    && order.status === TayqanWorkStatus.RUNNING
+    && order.blockerCode === TAYQAN_MEASUREMENT_LEASE_CODE
+  ) {
+    throw new ConflictError(
+      "TAYQAN_MEASUREMENT_ALREADY_RUNNING",
+      "TAYQAN's paid measurement request is already running. Wait for its durable result before retrying.",
+    );
+  }
+
+  if (
+    input.action === "RETRY"
+    && (
+      (order.blockerCode !== null
+        && TAYQAN_UNSAFE_PAID_RETRY_ERROR_CODES.has(order.blockerCode))
+      || (blocker?.error?.code !== undefined
+        && TAYQAN_UNSAFE_PAID_RETRY_ERROR_CODES.has(blocker.error.code))
+    )
+  ) {
+    throw new ConflictError(
+      "TAYQAN_MEASUREMENT_PROVIDER_RETRY_UNSAFE",
+      "TAYQAN cannot retry this assignment because the paid measurement result was not safely recoverable. Contact support; another provider request has been prevented.",
+    );
+  }
 
   if (input.action === "CONFIRM_ENTITY") {
     if (!blocker?.entity?.id) throw new ConflictError("TAYQAN_BLOCKER_CHANGED", "The current TAYQAN blocker is not an evidence review.");

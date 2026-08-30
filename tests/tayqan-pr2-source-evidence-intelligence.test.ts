@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it, vi } from "vitest";
 import { ExtractedEntityType, UserRole } from "@prisma/client";
 import type { CurrentActor } from "../src/lib/auth/current-actor";
 import { prisma } from "../src/lib/db/prisma";
@@ -6,6 +6,7 @@ import { getSourceProcessingCapability } from "../src/lib/files/source-processin
 import { pickLatestRevisionFileIdPerDrawing } from "../src/lib/services/tayqan-work-order-service";
 import { prepareTayqanMeasurementProposals } from "../src/lib/services/tayqan-measurement-service";
 import type { TayqanMeasurementReasonerResult } from "../src/lib/tayqan/tayqan-measurement-reasoner";
+import { requireIsolatedLocalTestDatabase } from "./helpers/require-isolated-test-database";
 
 const RUN_ID = `${Date.now()}-${process.pid}`;
 
@@ -89,6 +90,10 @@ describe("PR2 gaps 2 & 3: measurement service DB integration (real local Postgre
   let userId = "";
   let projectId = "";
 
+  beforeAll(() => {
+    requireIsolatedLocalTestDatabase();
+  });
+
   async function actor(): Promise<CurrentActor> {
     return { userId, companyId, role: UserRole.COMPANY_OWNER, fullName: "PR2 Evidence Owner", email: `pr2-evidence-${RUN_ID}@example.com` };
   }
@@ -129,14 +134,15 @@ describe("PR2 gaps 2 & 3: measurement service DB integration (real local Postgre
 
   function stubReasoner(result: Partial<TayqanMeasurementReasonerResult> & { captureBundle?: (bundle: unknown) => void }) {
     return async (input: { bundle: unknown }) => {
-      result.captureBundle?.(input.bundle);
+      const { captureBundle, ...resultOverrides } = result;
+      captureBundle?.(input.bundle);
       return {
         provider: "test",
         model: "test",
         responseIds: [],
         plan: { subjects: [], exceptions: [] },
         seniorReview: EMPTY_SENIOR_REVIEW,
-        ...result,
+        ...resultOverrides,
       } as TayqanMeasurementReasonerResult;
     };
   }
@@ -276,5 +282,124 @@ describe("PR2 gaps 2 & 3: measurement service DB integration (real local Postgre
       pageIds: [page.id],
       relatedEntityId: null,
     }));
+  });
+
+  it("checkpoints a fresh reasoner result before any downstream completion audit", async () => {
+    await ensureFixtures();
+    const { file } = await createFileWithPage(
+      `provider-checkpoint-${RUN_ID}.pdf`,
+      `PROVIDER-CHECKPOINT-${RUN_ID}`,
+      "R01",
+    );
+    const before = await prisma.auditLog.count({
+      where: {
+        companyId,
+        entityType: "Project",
+        entityId: projectId,
+        action: "TAYQAN_MEASUREMENT_PASS_COMPLETED",
+      },
+    });
+    const checkpoint = vi.fn(async () => {
+      throw new Error("controlled provider-result checkpoint failure");
+    });
+
+    await expect(prepareTayqanMeasurementProposals(
+      await actor(),
+      projectId,
+      { projectId, sourceFileIds: [file.id] },
+      {
+        reasoner: stubReasoner({ responseIds: ["mock-response-checkpoint"] }),
+        onReasonerResult: checkpoint,
+      },
+    )).rejects.toMatchObject({
+      code: "TAYQAN_MEASUREMENT_PROVIDER_RESULT_CHECKPOINT_FAILED",
+    });
+
+    expect(checkpoint).toHaveBeenCalledTimes(1);
+    await expect(prisma.auditLog.count({
+      where: {
+        companyId,
+        entityType: "Project",
+        entityId: projectId,
+        action: "TAYQAN_MEASUREMENT_PASS_COMPLETED",
+      },
+    })).resolves.toBe(before);
+  });
+
+  it("stops before invoking the reasoner when the provider-attempt checkpoint cannot be confirmed", async () => {
+    await ensureFixtures();
+    const { file } = await createFileWithPage(
+      `provider-attempt-checkpoint-${RUN_ID}.pdf`,
+      `PROVIDER-ATTEMPT-CHECKPOINT-${RUN_ID}`,
+      "R01",
+    );
+    const reasoner = vi.fn(async () => {
+      throw new Error("the paid reasoner must not run before its attempt checkpoint");
+    });
+    const onReasonerStart = vi.fn(async () => {
+      throw new Error("controlled provider-attempt checkpoint failure");
+    });
+    const onReasonerResult = vi.fn(async () => undefined);
+
+    await expect(prepareTayqanMeasurementProposals(
+      await actor(),
+      projectId,
+      { projectId, sourceFileIds: [file.id] },
+      {
+        reasoner,
+        onReasonerStart,
+        onReasonerResult,
+      },
+    )).rejects.toMatchObject({
+      code: "TAYQAN_MEASUREMENT_PROVIDER_ATTEMPT_CHECKPOINT_FAILED",
+    });
+
+    expect(onReasonerStart).toHaveBeenCalledTimes(1);
+    expect(reasoner).not.toHaveBeenCalled();
+    expect(onReasonerResult).not.toHaveBeenCalled();
+  });
+
+  it("replays a validated provider result without constructing the reasoner and deduplicates the completion audit", async () => {
+    await ensureFixtures();
+    const { file } = await createFileWithPage(
+      `provider-replay-${RUN_ID}.pdf`,
+      `PROVIDER-REPLAY-${RUN_ID}`,
+      "R01",
+    );
+    const replayResult: TayqanMeasurementReasonerResult = {
+      provider: "mock-provider",
+      model: "mock-model",
+      responseIds: ["mock-response-replay"],
+      plan: { subjects: [], exceptions: [] },
+      seniorReview: EMPTY_SENIOR_REVIEW,
+    };
+    const forbiddenReasoner = vi.fn(async () => {
+      throw new Error("the paid reasoner must not run during replay");
+    });
+    const operationId = `test-operation-${RUN_ID}-${file.id}`;
+
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      await prepareTayqanMeasurementProposals(
+        await actor(),
+        projectId,
+        { projectId, sourceFileIds: [file.id] },
+        {
+          reasoner: forbiddenReasoner,
+          replayReasonerResult: replayResult,
+          completionAuditOperationId: operationId,
+        },
+      );
+    }
+
+    expect(forbiddenReasoner).not.toHaveBeenCalled();
+    await expect(prisma.auditLog.count({
+      where: {
+        companyId,
+        entityType: "Project",
+        entityId: projectId,
+        action: "TAYQAN_MEASUREMENT_PASS_COMPLETED",
+        payloadJson: { path: ["operationId"], equals: operationId },
+      },
+    })).resolves.toBe(1);
   });
 });

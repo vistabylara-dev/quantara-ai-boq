@@ -105,6 +105,17 @@ async function mockAuthenticatedDashboard(
   return { clientSubmissions, projectSubmissions };
 }
 
+async function openHydratedNewProject(page: Page) {
+  const industriesLoaded = page.waitForResponse((response) =>
+    new URL(response.url()).pathname === "/api/industries"
+    && response.request().method() === "GET",
+  );
+
+  await page.goto("/projects/new", { waitUntil: "domcontentloaded" });
+  await industriesLoaded;
+  await expect(page.getByRole("heading", { name: "New project workspace" })).toBeVisible();
+}
+
 test.describe("first-project onboarding route", () => {
   test.describe.configure({ mode: "serial" });
   test("Start guided tour takes a zero-project user directly to New Project", async ({ page }) => {
@@ -129,16 +140,12 @@ test.describe("first-project onboarding route", () => {
 
   test("successful project creation opens its automatically created BOQ", async ({ page }) => {
     const { projectSubmissions } = await mockAuthenticatedDashboard(page, 0);
-    await page.goto("/projects/new", { waitUntil: "domcontentloaded" });
+    await openHydratedNewProject(page);
 
     await page.getByLabel("Project name").fill("First Value Project");
     await page.getByLabel("Project reference").fill("FIRST-VALUE-001");
-    const clientsLoaded = page.waitForResponse((response) =>
-      new URL(response.url()).pathname === "/api/clients"
-      && response.request().method() === "GET",
-    );
     await page.getByRole("button", { name: "Select or create a client" }).click();
-    await clientsLoaded;
+    await expect(page.getByRole("button", { name: "Existing Test Client" })).toBeVisible();
     await page.getByRole("button", { name: "Existing Test Client" }).click();
     await page.getByLabel("Industry engine").selectOption("fit-out");
     await page.getByLabel("Location").fill("Dubai");
@@ -161,7 +168,7 @@ test.describe("first-project onboarding route", () => {
       0,
       { existingClient: false },
     );
-    await page.goto("/projects/new", { waitUntil: "domcontentloaded" });
+    await openHydratedNewProject(page);
 
     await expect(page.getByRole("dialog", { name: "Find the Right Quantara Package" })).toHaveCount(0);
 

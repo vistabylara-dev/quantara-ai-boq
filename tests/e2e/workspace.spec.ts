@@ -2,6 +2,7 @@ import { createDirectPrismaClient } from "../../src/lib/db/direct-prisma-client"
 import { test, expect } from '@playwright/test';
 import fs from 'fs';
 import path from 'path';
+import { grantUnlimitedPlanForTests } from "../helpers/grant-unlimited-plan";
 
 const prisma = createDirectPrismaClient();
 
@@ -49,14 +50,15 @@ test.describe('Workspace and Data Workflows', () => {
     });
 
     const user = await prisma.user.findUnique({ where: { email: userEmail } });
-    if (user) {
-      userId = user.id;
-      companyId = user.companyId;
-      await prisma.user.update({
-        where: { id: userId },
-        data: { isActive: true, emailVerifiedAt: new Date() }
-      });
-    }
+    if (!user) throw new Error("Workspace test registration did not create a user.");
+
+    userId = user.id;
+    companyId = user.companyId;
+    await prisma.user.update({
+      where: { id: userId },
+      data: { isActive: true, emailVerifiedAt: new Date() }
+    });
+    await grantUnlimitedPlanForTests(companyId);
   });
 
   test('should create a project, BOQ, and handle file uploads and generations', async ({ request }) => {

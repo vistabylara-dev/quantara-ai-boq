@@ -160,7 +160,7 @@ describe("platform owner bootstrap (integration, real local PostgreSQL)", () => 
     expect(candidates.every((candidate) => candidate.platformRole === null)).toBe(true);
   });
 
-  it("fails closed when the configured account is already owner without one bootstrap audit", async () => {
+  it("fails closed when the configured account is already owner without one role-establishment audit", async () => {
     await prisma.user.update({
       where: { id: eligibleUserId },
       data: { platformRole: PlatformRole.PLATFORM_OWNER },
@@ -168,7 +168,7 @@ describe("platform owner bootstrap (integration, real local PostgreSQL)", () => 
 
     try {
       await expect(bootstrapPlatformOwner(prisma, emails.eligible)).rejects.toThrow(
-        "inconsistent bootstrap audit state",
+        "inconsistent role-establishment audit state",
       );
       await expect(
         prisma.platformAuditLog.count({
@@ -179,6 +179,47 @@ describe("platform owner bootstrap (integration, real local PostgreSQL)", () => 
         }),
       ).resolves.toBe(0);
     } finally {
+      await prisma.user.update({
+        where: { id: eligibleUserId },
+        data: { platformRole: null },
+      });
+    }
+  });
+
+  it("accepts an idempotent rerun for an owner created by the existing provisioning workflow", async () => {
+    await prisma.user.update({
+      where: { id: eligibleUserId },
+      data: { platformRole: PlatformRole.PLATFORM_OWNER },
+    });
+    const provisionAudit = await prisma.platformAuditLog.create({
+      data: {
+        actorUserId: eligibleUserId,
+        actorPlatformRole: PlatformRole.PLATFORM_OWNER,
+        action: "PLATFORM_OWNER_PROVISIONED",
+        targetType: "User",
+        targetId: eligibleUserId,
+        requestMetadataJson: { source: "local-cli-provisioning" },
+        beforeJson: { existed: false },
+        afterJson: { platformRole: PlatformRole.PLATFORM_OWNER },
+      },
+    });
+
+    try {
+      await expect(bootstrapPlatformOwner(prisma, emails.eligible)).resolves.toEqual({
+        userId: eligibleUserId,
+        email: emails.eligible,
+        changed: false,
+      });
+      await expect(
+        prisma.platformAuditLog.count({
+          where: {
+            targetId: eligibleUserId,
+            action: "PLATFORM_OWNER_BOOTSTRAPPED",
+          },
+        }),
+      ).resolves.toBe(0);
+    } finally {
+      await prisma.platformAuditLog.delete({ where: { id: provisionAudit.id } });
       await prisma.user.update({
         where: { id: eligibleUserId },
         data: { platformRole: null },
@@ -263,15 +304,15 @@ describe("platform owner bootstrap (integration, real local PostgreSQL)", () => 
     ).resolves.toBe(1);
   });
 
-  it("fails closed when role and bootstrap audit state have drifted", async () => {
-    const duplicateAudit = await prisma.platformAuditLog.create({
+  it("fails closed when role and establishment audit state have drifted or duplicated", async () => {
+    const conflictingEstablishmentAudit = await prisma.platformAuditLog.create({
       data: {
         actorUserId: eligibleUserId,
         actorPlatformRole: PlatformRole.PLATFORM_OWNER,
-        action: "PLATFORM_OWNER_BOOTSTRAPPED",
+        action: "PLATFORM_OWNER_PROVISIONED",
         targetType: "User",
         targetId: eligibleUserId,
-        requestMetadataJson: { source: "controlled-test-duplicate" },
+        requestMetadataJson: { source: "controlled-test-conflict" },
         beforeJson: { platformRole: null },
         afterJson: { platformRole: PlatformRole.PLATFORM_OWNER },
       },
@@ -279,10 +320,10 @@ describe("platform owner bootstrap (integration, real local PostgreSQL)", () => 
 
     try {
       await expect(bootstrapPlatformOwner(prisma, emails.eligible)).rejects.toThrow(
-        "inconsistent bootstrap audit state",
+        "inconsistent role-establishment audit state",
       );
     } finally {
-      await prisma.platformAuditLog.delete({ where: { id: duplicateAudit.id } });
+      await prisma.platformAuditLog.delete({ where: { id: conflictingEstablishmentAudit.id } });
     }
 
     await prisma.user.update({
@@ -291,7 +332,7 @@ describe("platform owner bootstrap (integration, real local PostgreSQL)", () => 
     });
     try {
       await expect(bootstrapPlatformOwner(prisma, emails.eligible)).rejects.toThrow(
-        "bootstrap audit without the matching owner role",
+        "owner-establishment audit without the matching owner role",
       );
       await expect(
         prisma.platformAuditLog.count({

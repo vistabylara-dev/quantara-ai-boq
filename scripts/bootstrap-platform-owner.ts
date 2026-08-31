@@ -3,6 +3,7 @@ import { fileURLToPath } from "node:url";
 import { PlatformRole, Prisma, type PrismaClient } from "@prisma/client";
 
 const BOOTSTRAP_ACTION = "PLATFORM_OWNER_BOOTSTRAPPED";
+const PROVISION_ACTION = "PLATFORM_OWNER_PROVISIONED";
 const MAX_SERIALIZABLE_ATTEMPTS = 3;
 
 export type PlatformOwnerBootstrapResult = {
@@ -96,18 +97,18 @@ export async function bootstrapPlatformOwner(
             );
           }
 
-          const bootstrapAuditCount = await transaction.platformAuditLog.count({
+          const ownerEstablishmentAuditCount = await transaction.platformAuditLog.count({
             where: {
-              action: BOOTSTRAP_ACTION,
+              action: { in: [BOOTSTRAP_ACTION, PROVISION_ACTION] },
               targetType: "User",
               targetId: user.id,
             },
           });
 
           if (user.platformRole === PlatformRole.PLATFORM_OWNER) {
-            if (bootstrapAuditCount !== 1) {
+            if (ownerEstablishmentAuditCount !== 1) {
               throw new PlatformOwnerBootstrapError(
-                "The configured owner has inconsistent bootstrap audit state. No changes were applied.",
+                "The configured owner has inconsistent role-establishment audit state. No changes were applied.",
               );
             }
             return {
@@ -117,9 +118,9 @@ export async function bootstrapPlatformOwner(
             };
           }
 
-          if (bootstrapAuditCount !== 0) {
+          if (ownerEstablishmentAuditCount !== 0) {
             throw new PlatformOwnerBootstrapError(
-              "The configured account has a bootstrap audit without the matching owner role. No changes were applied.",
+              "The configured account has an owner-establishment audit without the matching owner role. No changes were applied.",
             );
           }
 

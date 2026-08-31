@@ -52,7 +52,7 @@ const candidateStore = vi.hoisted(() => {
     }),
   };
   const tx = {
-    $queryRaw: vi.fn(async () => []),
+    $executeRaw: vi.fn(async () => 1),
     extractedEntity,
   };
   const prisma = {
@@ -305,7 +305,7 @@ describe("Furniture structured-source candidate persistence", () => {
     expect(candidateStore.state.entities.map((row) => row.id)).toEqual(firstIds);
     expect(candidateStore.state.entities.map(candidateIdOf)).toEqual(firstKeys);
     expect(candidateStore.state.entities).toHaveLength(2);
-    expect(candidateStore.tx.$queryRaw).toHaveBeenCalledTimes(2);
+    expect(candidateStore.tx.$executeRaw).toHaveBeenCalledTimes(2);
   });
 
   it("replaces stale unreviewed candidates when structured source rows disappear", async () => {

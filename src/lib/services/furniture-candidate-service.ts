@@ -284,7 +284,9 @@ export async function generateFurnitureCandidatesFromStructuredTables(
     // row or adding schema. This closes the read-then-create race between a
     // worker completion and a user-triggered prepare retry.
     const lockKey = `furniture-candidates:${input.companyId}:${file.id}`;
-    await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${lockKey}, 0))`;
+    // Advisory-lock functions return PostgreSQL `void`; use the execute path so
+    // Prisma's driver adapter does not try (and fail) to deserialize that value.
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${lockKey}, 0))`;
     const existing = await tx.extractedEntity.findMany({
       where: {
         companyId: input.companyId,

@@ -301,7 +301,7 @@ describe("Furniture professional-review isolation", () => {
       return {
         id: identifier === "other-project" ? PROJECT_OTHER : PROJECT_A,
         slug: identifier,
-        industryEngine: { key: "furniture-joinery-cabinetry" },
+        industryEngine: { key: "joinery" },
       };
     });
     auditRepository.createAuditLog.mockResolvedValue(undefined);
@@ -418,6 +418,36 @@ describe("Furniture professional-review isolation", () => {
       quantity: 3,
       reason: "Attempt after approval.",
     })).rejects.toMatchObject({ code: "FURNITURE_VALUES_LOCKED", status: 409 });
+  });
+
+  it("keeps an editable selected-edge assumption reviewable through approval", async () => {
+    const assumed = candidate({
+      edgeBanding: {
+        raw: "Front edge",
+        mode: "FRONT",
+        selectedEdges: [{ dimension: "WIDTH", count: 1 }],
+        orientation: "ASSUMED",
+      },
+      issues: [],
+      verificationStatus: "NEEDS_REVIEW",
+    });
+    const row = furnitureRow({ candidate: assumed });
+    entityStore.state.rows.push(row);
+
+    await expect(approveFurnitureCandidate(actor(), "project-a", ENTITY_A)).rejects.toMatchObject({
+      code: "FURNITURE_ISSUES_REQUIRE_ACKNOWLEDGEMENT",
+      fieldErrors: { issues: ["EDGE_ORIENTATION_REQUIRES_VERIFICATION"] },
+    });
+
+    const approved = await approveFurnitureCandidate(actor(), "project-a", ENTITY_A, [
+      "EDGE_ORIENTATION_REQUIRES_VERIFICATION",
+    ]);
+    expect(approved.status).toBe(ExtractedEntityStatus.CONFIRMED);
+    expect(approved.candidate.edgeBanding.orientation).toBe("ASSUMED");
+    expect(approved.candidate.issues).toContainEqual(expect.objectContaining({
+      code: "EDGE_ORIENTATION_REQUIRES_VERIFICATION",
+      severity: "REVIEW",
+    }));
   });
 
   it("fails closed for cross-project, cross-tenant, and missing-capability mutations", async () => {

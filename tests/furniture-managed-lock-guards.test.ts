@@ -12,16 +12,17 @@ import {
 } from "@/lib/furniture/candidate-mapper";
 import {
   FURNITURE_CANDIDATE_TECHNICAL_DATA_KIND,
-  FURNITURE_JOINERY_INDUSTRY_KEY,
   furnitureManagedItemCodeForKey,
   FURNITURE_MANAGED_SOURCE_PREFIX,
+  JOINERY_INDUSTRY_KEY,
   isStrictFurnitureManagedNonCommercialRow,
 } from "@/lib/furniture/types";
 import {
   furnitureManagedItemCode,
   readFurnitureManagedKey,
 } from "@/lib/services/furniture-boq-service";
-import { lockBOQ } from "@/lib/repositories/boq-repository";
+import { getBOQRecord, lockBOQ } from "@/lib/repositories/boq-repository";
+import { RETIRED_COMBINED_INDUSTRY_KEY } from "@/lib/repositories/industry-repository";
 import { prisma } from "@/lib/db/prisma";
 
 vi.mock("@/lib/db/prisma", () => {
@@ -63,10 +64,6 @@ vi.mock("@/lib/entitlements/entitlement-service", () => ({
 
 vi.mock("@/lib/repositories/audit-repository", () => ({
   createAuditLog: vi.fn(),
-}));
-
-vi.mock("@/lib/furniture/project-discipline", () => ({
-  getFurnitureProjectDiscipline: vi.fn().mockResolvedValue("JOINERY_CABINETRY"),
 }));
 
 function partCandidate(id = "candidate-1"): FurniturePartCandidate {
@@ -216,7 +213,7 @@ describe("strict furniture managed identity", () => {
 
   it("accepts only the exact noncommercial supplied-by-others HWA import guard", () => {
     const identity = {
-      industryKey: FURNITURE_JOINERY_INDUSTRY_KEY,
+      industryKey: JOINERY_INDUSTRY_KEY,
       sectionCode: "HWA",
       sourceType: "IMPORT",
       category: "SUPPLIED_BY_OTHERS",
@@ -231,6 +228,27 @@ describe("strict furniture managed identity", () => {
 
 describe("managed furniture lock freshness", () => {
   beforeEach(() => vi.clearAllMocks());
+
+  it("does not resolve a BOQ whose project uses the retired combined industry", async () => {
+    vi.mocked(prisma.bOQ.findFirst).mockResolvedValue(null as never);
+
+    await expect(getBOQRecord("company-1", "boq-retired-1")).rejects.toMatchObject({
+      code: "NOT_FOUND",
+    });
+    expect(prisma.bOQ.findFirst).toHaveBeenCalledWith(expect.objectContaining({
+      where: {
+        id: "boq-retired-1",
+        companyId: "company-1",
+        project: {
+          industryEngine: {
+            key: { not: RETIRED_COMBINED_INDUSTRY_KEY },
+          },
+        },
+      },
+    }));
+    expect(prisma.bOQ.updateMany).not.toHaveBeenCalled();
+    expect(prisma.bOQRevisionSnapshot.create).not.toHaveBeenCalled();
+  });
 
   it("rejects a stale input signature before any lock write occurs", async () => {
     const signatureKey = "integrity:input-signature";
@@ -248,7 +266,7 @@ describe("managed furniture lock freshness", () => {
       discountPercentage: new Prisma.Decimal(0),
       verificationExceptions: [],
       project: {
-        industryEngine: { key: FURNITURE_JOINERY_INDUSTRY_KEY },
+        industryEngine: { key: JOINERY_INDUSTRY_KEY },
       },
       sections: [{
         code: "VER",

@@ -13,6 +13,7 @@ import {
   type FurniturePartCandidate,
 } from "@/lib/furniture/candidate-mapper";
 import type { FurnitureOrderCategory } from "@/lib/furniture/calculations";
+import { FURNITURE_JOINERY_LINEAR_EDGE_ASSUMPTION_NOTE } from "@/lib/furniture/linear-edge-format";
 import {
   buildFurnitureManagedItemUpdate,
   furnitureManagedNotes,
@@ -171,6 +172,33 @@ describe("furniture canonical output", () => {
       wastagePercentage: 10,
       confirmedCandidates: [unconfirmed],
     })).toThrow("only CONFIRMED");
+  });
+
+  it("labels an assumed selected-edge total as editable and requiring professional verification", () => {
+    const assumedFront = candidate("candidate-front");
+    assumedFront.edgeBanding = {
+      raw: "Front edge (width)",
+      mode: "FRONT",
+      selectedEdges: [{ dimension: "WIDTH", count: 1 }],
+      orientation: "ASSUMED",
+    };
+    const output = buildFurnitureCanonicalOutput({
+      projectId: "project-1",
+      projectReference: "JOINERY-001",
+      projectName: "Controlled Joinery Test",
+      discipline: "JOINERY_CABINETRY",
+      wastagePercentage: 10,
+      confirmedCandidates: [confirmed(assumedFront)],
+    });
+    const edgeItem = output.sections
+      .find(({ code }) => code === "HWA")
+      ?.items.find(({ description }) => description === "Front-edge banding length");
+    expect(edgeItem).toMatchObject({
+      category: "HARDWARE",
+      unit: "lm",
+      specification: FURNITURE_JOINERY_LINEAR_EDGE_ASSUMPTION_NOTE,
+      notes: FURNITURE_JOINERY_LINEAR_EDGE_ASSUMPTION_NOTE,
+    });
   });
 
   it("keeps every specialist order category separate and moves supplied-by-others out of hardware", () => {

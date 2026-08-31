@@ -2,8 +2,8 @@ import { BOQStatus } from "@prisma/client";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   furnitureManagedItemCodeForKey,
-  FURNITURE_JOINERY_INDUSTRY_KEY,
   FURNITURE_MANAGED_SOURCE_PREFIX,
+  JOINERY_INDUSTRY_KEY,
 } from "@/lib/furniture/types";
 
 const verificationMocks = vi.hoisted(() => ({
@@ -149,7 +149,7 @@ describe("Furniture non-commercial verification guard", () => {
       category: "PROJECT_SUMMARY",
       sourceReference: "Manual project summary row",
     });
-    verificationMocks.getBOQRecord.mockResolvedValue(boq(FURNITURE_JOINERY_INDUSTRY_KEY, [
+    verificationMocks.getBOQRecord.mockResolvedValue(boq(JOINERY_INDUSTRY_KEY, [
       managedSummary,
       managedCommercialFurniture,
       unmarkedNonCommercialCategory,

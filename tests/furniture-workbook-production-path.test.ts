@@ -8,7 +8,7 @@ import {
   furnitureSourceTableToParsedTable,
   readFurnitureWorkbook,
 } from "@/lib/furniture/workbook-reader";
-import { FURNITURE_JOINERY_INDUSTRY_KEY } from "@/lib/furniture/types";
+import { JOINERY_INDUSTRY_KEY } from "@/lib/furniture/types";
 
 const FIXTURE_PATH = path.join(
   process.cwd(),
@@ -65,7 +65,7 @@ describe("furniture workbook production parser path", () => {
   it("dispatches the supported fixture into cutting-list and hardware stored tables", async () => {
     const tables = await parseXlsxTablesForIndustry(
       await readFile(FIXTURE_PATH),
-      FURNITURE_JOINERY_INDUSTRY_KEY,
+      JOINERY_INDUSTRY_KEY,
     );
 
     expect(tables.map((table) => [table.sheetName, table.rows.length])).toEqual([
@@ -88,7 +88,7 @@ describe("furniture workbook production parser path", () => {
   it("falls back to the same generic parser for other furniture workbooks", async () => {
     const buffer = await genericWorkbook();
     const existing = await parseXlsxTables(buffer);
-    const dispatched = await parseXlsxTablesForIndustry(buffer, FURNITURE_JOINERY_INDUSTRY_KEY);
+    const dispatched = await parseXlsxTablesForIndustry(buffer, JOINERY_INDUSTRY_KEY);
     expect(dispatched).toEqual(existing);
   });
 });

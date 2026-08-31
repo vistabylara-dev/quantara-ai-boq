@@ -1,33 +1,36 @@
-import { Prisma, UserRole } from "@prisma/client";
+import { UserRole } from "@prisma/client";
+import { createHash } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { projectCreateRequestSchema } from "../src/app/api/_shared/project-payload";
 import { demoIndustries } from "../src/config/industries";
 import { furnitureEngine } from "../src/config/industries/furniture";
-import { furnitureJoineryCabinetryEngine } from "../src/config/industries/furniture-joinery-cabinetry";
 import { joineryEngine } from "../src/config/industries/joinery";
 import type { CurrentActor } from "../src/lib/auth/current-actor";
 import { prisma } from "../src/lib/db/prisma";
-import { AppError, NotFoundError, PermissionDeniedError } from "../src/lib/errors/app-error";
 import {
-  FURNITURE_DISCIPLINE_SELECTED_ACTION,
-  getFurnitureProjectDiscipline,
-  recordInitialFurnitureProjectDiscipline,
-} from "../src/lib/furniture/project-discipline";
-import {
-  FURNITURE_JOINERY_INDUSTRY_KEY,
-  FURNITURE_JOINERY_INDUSTRY_NAME,
-  FurnitureDiscipline,
+  JOINERY_INDUSTRY_KEY,
+  JOINERY_INDUSTRY_NAME,
 } from "../src/lib/furniture/types";
 import { createClient } from "../src/lib/repositories/client-repository";
-import { projectReferenceExists } from "../src/lib/repositories/project-repository";
-import { createProjectWithDefaultBoq } from "../src/lib/services/project-service";
+import { getBOQRecord, lockBOQ } from "../src/lib/repositories/boq-repository";
+import {
+  getEnabledIndustry,
+  listIndustryEngines,
+} from "../src/lib/repositories/industry-repository";
+import {
+  getProjectRecord,
+  listProjects,
+} from "../src/lib/repositories/project-repository";
 import { bootstrapIndustryEngines } from "../src/lib/services/industry-bootstrap-service";
-import { projectCreateRequestSchema, projectUpdateRequestSchema } from "../src/app/api/_shared/project-payload";
+import { createProjectWithDefaultBoq } from "../src/lib/services/project-service";
 import { projectSchema as projectFormSchema } from "../src/lib/validation/project-schema";
 import { grantUnlimitedPlanForTests } from "./helpers/grant-unlimited-plan";
 
-const RUN_ID = Date.now();
+const FORBIDDEN_COMBINED_INDUSTRY_KEY = "furniture-joinery-cabinetry";
+const RUN_ID = `${Date.now()}-${process.pid}`;
 const SAMPLE_CLIENT_ID = "00000000-0000-4000-8000-000000000001";
-const SECTION_TITLES = [
+const RETIRED_PROJECT_SLUG = `retired-combined-${RUN_ID}`;
+const JOINERY_SECTION_TITLES = [
   "PROJECT SUMMARY",
   "BOARD / SHEET MATERIAL — ORDER QUANTITIES",
   "HARDWARE & ACCESSORIES — ORDER QUANTITIES",
@@ -35,23 +38,33 @@ const SECTION_TITLES = [
   "NOTES, ASSUMPTIONS & VERIFICATION ITEMS",
 ];
 
-function actor(companyId: string, role: UserRole = UserRole.COMPANY_OWNER): CurrentActor {
+function stableJson(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(stableJson).join(",")}]`;
+  if (value && typeof value === "object") {
+    return `{${Object.entries(value as Record<string, unknown>)
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([key, nested]) => `${JSON.stringify(key)}:${stableJson(nested)}`)
+      .join(",")}}`;
+  }
+  return JSON.stringify(value);
+}
+
+function actor(companyId: string): CurrentActor {
   return {
     userId: "test-user",
     companyId,
-    role,
-    fullName: "Furniture Test Actor",
-    email: "furniture-test@example.com",
+    role: UserRole.COMPANY_OWNER,
+    fullName: "Joinery Test Actor",
+    email: "joinery-test@example.com",
   };
 }
 
-function requestPayload(industryId: string, discipline?: FurnitureDiscipline) {
+function requestPayload(industryId: string) {
   return {
     clientId: SAMPLE_CLIENT_ID,
     industryId,
-    discipline,
-    reference: `FJC-PAYLOAD-${RUN_ID}`,
-    name: "Furniture Selection Project",
+    reference: `IND-PAYLOAD-${RUN_ID}`,
+    name: "Industry Identity Project",
     description: "",
     location: "Dubai, UAE",
     currency: "AED",
@@ -60,13 +73,12 @@ function requestPayload(industryId: string, discipline?: FurnitureDiscipline) {
   };
 }
 
-function formPayload(industryEngineId: string, discipline?: FurnitureDiscipline) {
+function formPayload(industryEngineId: string) {
   return {
     clientId: SAMPLE_CLIENT_ID,
     industryEngineId,
-    discipline,
-    reference: `FJC-FORM-${RUN_ID}`,
-    name: "Furniture Selection Project",
+    reference: `IND-FORM-${RUN_ID}`,
+    name: "Industry Identity Project",
     description: "",
     location: "Dubai, UAE",
     currency: "AED",
@@ -75,316 +87,191 @@ function formPayload(industryEngineId: string, discipline?: FurnitureDiscipline)
   };
 }
 
-describe("Furniture, Joinery & Cabinetry industry configuration", () => {
-  it("registers one additive engine with the two disciplines and exact output sections", () => {
-    expect(furnitureJoineryCabinetryEngine).toMatchObject({
-      id: FURNITURE_JOINERY_INDUSTRY_KEY,
-      name: FURNITURE_JOINERY_INDUSTRY_NAME,
+describe("Furniture and Joinery industry identities", () => {
+  it("registers only the two established identities and no combined third engine", () => {
+    expect(demoIndustries.filter((industry) => industry.id === "furniture")).toHaveLength(1);
+    expect(demoIndustries.filter((industry) => industry.id === JOINERY_INDUSTRY_KEY)).toHaveLength(1);
+    expect(demoIndustries.some((industry) => industry.id === FORBIDDEN_COMBINED_INDUSTRY_KEY)).toBe(false);
+    expect(new Set(demoIndustries.map((industry) => industry.id)).size).toBe(demoIndustries.length);
+  });
+
+  it("keeps Furniture active and separate without an automatic cutting list", () => {
+    expect(furnitureEngine).toMatchObject({ id: "furniture", name: "Furniture", status: "active" });
+    expect(furnitureEngine.boqSections.map((section) => section.code)).toEqual(["EXE", "WRK", "SEA", "STO"]);
+    expect(furnitureEngine.boqSections.some((section) => section.code === "CUT")).toBe(false);
+    expect(furnitureEngine.calculationTypes).not.toContain("edgeBandingLength");
+  });
+
+  it("attaches the exact five cutting-list sections to established Joinery", () => {
+    expect(joineryEngine).toMatchObject({
+      id: JOINERY_INDUSTRY_KEY,
+      name: JOINERY_INDUSTRY_NAME,
       status: "active",
     });
-    expect(furnitureJoineryCabinetryEngine.disciplines?.map((discipline) => discipline.id)).toEqual([
-      FurnitureDiscipline.FURNITURE,
-      FurnitureDiscipline.JOINERY_CABINETRY,
-    ]);
-    expect(furnitureJoineryCabinetryEngine.boqSections.map((section) => section.title)).toEqual(SECTION_TITLES);
-    expect(demoIndustries.filter((industry) => industry.id === FURNITURE_JOINERY_INDUSTRY_KEY)).toHaveLength(1);
+    expect(joineryEngine.boqSections.map((section) => section.title)).toEqual(JOINERY_SECTION_TITLES);
+    expect(joineryEngine.boqSections.map((section) => section.code)).toEqual(["PRJ", "BRD", "HWA", "CUT", "VER"]);
   });
 
-  it("does not replace or alter the existing Furniture and Joinery engines", () => {
-    expect(furnitureEngine).toMatchObject({ id: "furniture", name: "Furniture" });
-    expect(furnitureEngine.boqSections.map((section) => section.code)).toEqual(["EXE", "WRK", "SEA", "STO"]);
-    expect(joineryEngine).toMatchObject({ id: "joinery", name: "Joinery" });
-    expect(joineryEngine.boqSections.map((section) => section.code)).toEqual(["KTN", "WRD", "RCP", "WPL"]);
+  it("keeps every unrelated configured industry equivalent to the rescue baseline", () => {
+    const unrelated = demoIndustries
+      .filter((industry) => !["furniture", JOINERY_INDUSTRY_KEY].includes(industry.id))
+      .sort((left, right) => left.id.localeCompare(right.id));
+    const digest = createHash("sha256").update(stableJson(unrelated)).digest("hex");
+    expect(digest).toBe("a7d939fb39dad40e310b0eb7f61fe8322acc7b098b344daaf50850d72d33c171");
   });
 });
 
-describe("Furniture project discipline request validation", () => {
-  it.each([
-    FurnitureDiscipline.FURNITURE,
-    FurnitureDiscipline.JOINERY_CABINETRY,
-  ])("accepts the %s discipline for the combined industry", (discipline) => {
-    expect(projectCreateRequestSchema.safeParse(requestPayload(FURNITURE_JOINERY_INDUSTRY_KEY, discipline)).success).toBe(true);
-    expect(projectFormSchema.safeParse(formPayload(FURNITURE_JOINERY_INDUSTRY_KEY, discipline)).success).toBe(true);
+describe("Project creation without combined-industry discipline plumbing", () => {
+  it.each(["furniture", JOINERY_INDUSTRY_KEY])("accepts established %s directly", (industryKey) => {
+    expect(projectCreateRequestSchema.safeParse(requestPayload(industryKey)).success).toBe(true);
+    expect(projectFormSchema.safeParse(formPayload(industryKey)).success).toBe(true);
   });
 
-  it("requires a discipline for the combined industry", () => {
-    const apiResult = projectCreateRequestSchema.safeParse(requestPayload(FURNITURE_JOINERY_INDUSTRY_KEY));
-    const formResult = projectFormSchema.safeParse(formPayload(FURNITURE_JOINERY_INDUSTRY_KEY));
-    expect(apiResult.success).toBe(false);
-    expect(formResult.success).toBe(false);
-  });
-
-  it("preserves existing-industry creation without a discipline and rejects a furniture-only field there", () => {
-    expect(projectCreateRequestSchema.safeParse(requestPayload("construction")).success).toBe(true);
-    expect(projectFormSchema.safeParse(formPayload("construction")).success).toBe(true);
-    expect(projectCreateRequestSchema.safeParse(requestPayload("construction", FurnitureDiscipline.FURNITURE)).success).toBe(false);
-    expect(projectFormSchema.safeParse(formPayload("construction", FurnitureDiscipline.FURNITURE)).success).toBe(false);
-  });
-
-  it("keeps discipline immutable through the strict project-update contract", () => {
-    const result = projectUpdateRequestSchema.safeParse({
-      name: "Renamed project",
-      discipline: FurnitureDiscipline.JOINERY_CABINETRY,
-    });
-    expect(result.success).toBe(false);
+  it("does not accept the removed discipline selector field at the strict API boundary", () => {
+    expect(projectCreateRequestSchema.safeParse({
+      ...requestPayload(JOINERY_INDUSTRY_KEY),
+      discipline: "JOINERY_CABINETRY",
+    }).success).toBe(false);
   });
 });
 
-describe("Furniture project discipline persistence (isolated test database)", () => {
-  let companyAId: string;
-  let companyBId: string;
-  let clientAId: string;
-  let furnitureIndustryId: string;
+describe("Established Furniture and Joinery project persistence", () => {
+  let companyId: string;
+  let clientId: string;
+  let retiredBoqId: string;
 
   beforeAll(async () => {
-    // The full development seed intentionally has its own fixed demo taxonomy.
-    // Register the additive runtime engine before creating these isolated tenants.
     await bootstrapIndustryEngines();
-    const [companyA, companyB] = await Promise.all([
-      prisma.company.create({
-        data: {
-          legalName: `Furniture Selection A ${RUN_ID}`,
-          tradeName: `Furniture Selection A ${RUN_ID}`,
-          email: `furniture-selection-a-${RUN_ID}@example.com`,
-        },
-      }),
-      prisma.company.create({
-        data: {
-          legalName: `Furniture Selection B ${RUN_ID}`,
-          tradeName: `Furniture Selection B ${RUN_ID}`,
-          email: `furniture-selection-b-${RUN_ID}@example.com`,
-        },
-      }),
-    ]);
-    companyAId = companyA.id;
-    companyBId = companyB.id;
-    await grantUnlimitedPlanForTests(companyAId);
-    await grantUnlimitedPlanForTests(companyBId);
-
-    const [furnitureIndustry, constructionIndustry] = await Promise.all([
-      prisma.industryEngine.findUniqueOrThrow({ where: { key: FURNITURE_JOINERY_INDUSTRY_KEY } }),
-      prisma.industryEngine.findUniqueOrThrow({ where: { key: "construction" } }),
-    ]);
-    furnitureIndustryId = furnitureIndustry.id;
+    const company = await prisma.company.create({
+      data: {
+        legalName: `Industry Identity ${RUN_ID}`,
+        tradeName: `Industry Identity ${RUN_ID}`,
+        email: `industry-identity-${RUN_ID}@example.com`,
+      },
+    });
+    companyId = company.id;
+    await grantUnlimitedPlanForTests(companyId);
+    const industries = await prisma.industryEngine.findMany({
+      where: { key: { in: ["furniture", JOINERY_INDUSTRY_KEY] } },
+      select: { id: true },
+    });
     await prisma.companyIndustryEngine.createMany({
-      data: [
-        { companyId: companyAId, industryEngineId: furnitureIndustry.id, enabled: true },
-        { companyId: companyAId, industryEngineId: constructionIndustry.id, enabled: true },
-        { companyId: companyBId, industryEngineId: furnitureIndustry.id, enabled: true },
-      ],
+      data: industries.map((industry) => ({
+        companyId,
+        industryEngineId: industry.id,
+        enabled: true,
+      })),
     });
-    const client = await createClient(companyAId, {
-      name: "Furniture Selection Client",
-      email: `furniture-client-${RUN_ID}@example.com`,
-    });
-    clientAId = client.id;
-  });
-
-  afterAll(async () => {
-    const companyIds = [companyAId, companyBId].filter(Boolean);
-    if (companyIds.length > 0) {
-      await prisma.auditLog.deleteMany({ where: { companyId: { in: companyIds } } });
-      await prisma.bOQSection.deleteMany({ where: { companyId: { in: companyIds } } });
-      await prisma.bOQ.deleteMany({ where: { companyId: { in: companyIds } } });
-      await prisma.project.deleteMany({ where: { companyId: { in: companyIds } } });
-      await prisma.client.deleteMany({ where: { companyId: { in: companyIds } } });
-      await prisma.companyIndustryEngine.deleteMany({ where: { companyId: { in: companyIds } } });
-      await prisma.company.deleteMany({ where: { id: { in: companyIds } } });
-    }
-    await prisma.$disconnect();
-  });
-
-  it.each([
-    FurnitureDiscipline.FURNITURE,
-    FurnitureDiscipline.JOINERY_CABINETRY,
-  ])("creates a %s project, exact sections, and one readable discipline event", async (discipline) => {
-    const result = await createProjectWithDefaultBoq(actor(companyAId), {
-      clientId: clientAId,
-      industryEngineId: FURNITURE_JOINERY_INDUSTRY_KEY,
-      discipline,
-      reference: `FJC-${discipline}-${RUN_ID}`,
-      name: `${discipline} Project`,
-      location: "Dubai, UAE",
-      currency: "AED",
-      taxRate: "5",
-      language: "English",
-    });
-
-    expect(result.boq.sections.map((section) => section.title)).toEqual(SECTION_TITLES);
-    expect(await getFurnitureProjectDiscipline(companyAId, result.project.databaseId)).toBe(discipline);
-    const events = await prisma.auditLog.findMany({
-      where: {
-        companyId: companyAId,
-        entityId: result.project.databaseId,
-        action: FURNITURE_DISCIPLINE_SELECTED_ACTION,
+    const retiredCombined = await prisma.industryEngine.upsert({
+      where: { key: FORBIDDEN_COMBINED_INDUSTRY_KEY },
+      update: { isActive: true },
+      create: {
+        key: FORBIDDEN_COMBINED_INDUSTRY_KEY,
+        name: "Retired Combined Test Engine",
+        description: "Test-only stale reference row.",
+        isActive: true,
+        configJson: { id: FORBIDDEN_COMBINED_INDUSTRY_KEY },
       },
     });
-    expect(events).toHaveLength(1);
-    expect(events[0].payloadJson).toEqual({
-      schemaVersion: 1,
-      industryKey: FURNITURE_JOINERY_INDUSTRY_KEY,
-      discipline,
+    await prisma.companyIndustryEngine.createMany({
+      data: [{ companyId, industryEngineId: retiredCombined.id, enabled: true }],
+      skipDuplicates: true,
     });
-  });
-
-  it("rejects combined-industry creation without a discipline before writing", async () => {
-    const reference = `FJC-MISSING-${RUN_ID}`;
-    await expect(createProjectWithDefaultBoq(actor(companyAId), {
-      clientId: clientAId,
-      industryEngineId: FURNITURE_JOINERY_INDUSTRY_KEY,
-      reference,
-      name: "Missing Discipline Project",
-      location: "Dubai, UAE",
-      currency: "AED",
-      taxRate: "5",
-      language: "English",
-    })).rejects.toMatchObject({ code: "FURNITURE_DISCIPLINE_REQUIRED" });
-    expect(await projectReferenceExists(companyAId, reference)).toBe(false);
-  });
-
-  it("keeps the initial discipline immutable and retry-idempotent", async () => {
-    const result = await createProjectWithDefaultBoq(actor(companyAId), {
-      clientId: clientAId,
-      industryEngineId: FURNITURE_JOINERY_INDUSTRY_KEY,
-      discipline: FurnitureDiscipline.FURNITURE,
-      reference: `FJC-IMMUTABLE-${RUN_ID}`,
-      name: "Immutable Discipline Project",
-      location: "Dubai, UAE",
-      currency: "AED",
-      taxRate: "5",
-      language: "English",
+    const client = await createClient(companyId, {
+      name: "Industry Identity Client",
+      email: `industry-client-${RUN_ID}@example.com`,
     });
-
-    await prisma.$transaction((tx) => recordInitialFurnitureProjectDiscipline(
-      companyAId,
-      result.project.databaseId,
-      FurnitureDiscipline.FURNITURE,
-      tx,
-      "Furniture Test Actor",
-    ));
-    await expect(prisma.$transaction((tx) => recordInitialFurnitureProjectDiscipline(
-      companyAId,
-      result.project.databaseId,
-      FurnitureDiscipline.JOINERY_CABINETRY,
-      tx,
-      "Furniture Test Actor",
-    ))).rejects.toMatchObject({ code: "FURNITURE_DISCIPLINE_IMMUTABLE" });
-
-    expect(await prisma.auditLog.count({
-      where: {
-        companyId: companyAId,
-        entityId: result.project.databaseId,
-        action: FURNITURE_DISCIPLINE_SELECTED_ACTION,
-      },
-    })).toBe(1);
-    expect(await getFurnitureProjectDiscipline(companyAId, result.project.databaseId)).toBe(FurnitureDiscipline.FURNITURE);
-  });
-
-  it("rolls back the project and discipline event if default BOQ section creation fails", async () => {
-    const industry = await prisma.industryEngine.findUniqueOrThrow({
-      where: { id: furnitureIndustryId },
-      select: { configJson: true },
-    });
-    const beforeEventCount = await prisma.auditLog.count({
-      where: { companyId: companyAId, action: FURNITURE_DISCIPLINE_SELECTED_ACTION },
-    });
-    const reference = `FJC-ATOMIC-${RUN_ID}`;
-    const brokenConfig = {
-      ...(industry.configJson as Prisma.JsonObject),
-      boqSections: [
-        { code: "DUP", title: "First", order: 1 },
-        { code: "DUP", title: "Second", order: 2 },
-      ],
-    };
-
-    try {
-      await prisma.industryEngine.update({
-        where: { id: furnitureIndustryId },
-        data: { configJson: brokenConfig },
-      });
-      await expect(createProjectWithDefaultBoq(actor(companyAId), {
-        clientId: clientAId,
-        industryEngineId: FURNITURE_JOINERY_INDUSTRY_KEY,
-        discipline: FurnitureDiscipline.JOINERY_CABINETRY,
-        reference,
-        name: "Atomic Rollback Project",
+    clientId = client.id;
+    const retiredProject = await prisma.project.create({
+      data: {
+        companyId,
+        clientId,
+        industryEngineId: retiredCombined.id,
+        reference: `RETIRED-${RUN_ID}`,
+        slug: RETIRED_PROJECT_SLUG,
+        name: "Retired Combined Project",
         location: "Dubai, UAE",
         currency: "AED",
         taxRate: "5",
         language: "English",
-      })).rejects.toThrow();
-    } finally {
-      await prisma.industryEngine.update({
-        where: { id: furnitureIndustryId },
-        data: { configJson: industry.configJson as Prisma.InputJsonValue },
-      });
-    }
-
-    expect(await projectReferenceExists(companyAId, reference)).toBe(false);
-    expect(await prisma.auditLog.count({
-      where: { companyId: companyAId, action: FURNITURE_DISCIPLINE_SELECTED_ACTION },
-    })).toBe(beforeEventCount);
-  });
-
-  it("does not expose another tenant's project discipline", async () => {
-    const result = await createProjectWithDefaultBoq(actor(companyAId), {
-      clientId: clientAId,
-      industryEngineId: FURNITURE_JOINERY_INDUSTRY_KEY,
-      discipline: FurnitureDiscipline.JOINERY_CABINETRY,
-      reference: `FJC-TENANT-${RUN_ID}`,
-      name: "Tenant Scoped Discipline Project",
-      location: "Dubai, UAE",
-      currency: "AED",
-      taxRate: "5",
-      language: "English",
-    });
-    await expect(getFurnitureProjectDiscipline(companyBId, result.project.databaseId)).rejects.toBeInstanceOf(NotFoundError);
-  });
-
-  it("preserves authorization and existing-industry creation behavior", async () => {
-    await expect(createProjectWithDefaultBoq(actor(companyAId, UserRole.DESIGNER), {
-      clientId: clientAId,
-      industryEngineId: FURNITURE_JOINERY_INDUSTRY_KEY,
-      discipline: FurnitureDiscipline.FURNITURE,
-      reference: `FJC-UNAUTHORIZED-${RUN_ID}`,
-      name: "Unauthorized Furniture Project",
-      location: "Dubai, UAE",
-      currency: "AED",
-      taxRate: "5",
-      language: "English",
-    })).rejects.toBeInstanceOf(PermissionDeniedError);
-
-    const existingIndustry = await createProjectWithDefaultBoq(actor(companyAId), {
-      clientId: clientAId,
-      industryEngineId: "construction",
-      reference: `FJC-CONSTRUCTION-${RUN_ID}`,
-      name: "Existing Industry Project",
-      location: "Dubai, UAE",
-      currency: "AED",
-      taxRate: "5",
-      language: "English",
-    });
-    expect(existingIndustry.project.industryId).toBe("construction");
-    expect(await prisma.auditLog.count({
-      where: {
-        companyId: companyAId,
-        entityId: existingIndustry.project.databaseId,
-        action: FURNITURE_DISCIPLINE_SELECTED_ACTION,
       },
-    })).toBe(0);
+    });
+    const retiredBoq = await prisma.bOQ.create({
+      data: {
+        companyId,
+        projectId: retiredProject.id,
+        title: "Retired Combined BOQ",
+        taxRate: "5",
+      },
+    });
+    retiredBoqId = retiredBoq.id;
   });
 
-  it("rejects a furniture discipline passed directly to another industry", async () => {
-    await expect(createProjectWithDefaultBoq(actor(companyAId), {
-      clientId: clientAId,
-      industryEngineId: "construction",
-      discipline: FurnitureDiscipline.FURNITURE,
-      reference: `FJC-WRONG-INDUSTRY-${RUN_ID}`,
-      name: "Wrong Industry Discipline",
+  afterAll(async () => {
+    if (companyId) {
+      await prisma.auditLog.deleteMany({ where: { companyId } });
+      await prisma.bOQSection.deleteMany({ where: { companyId } });
+      await prisma.bOQ.deleteMany({ where: { companyId } });
+      await prisma.project.deleteMany({ where: { companyId } });
+      await prisma.client.deleteMany({ where: { companyId } });
+      await prisma.companyIndustryEngine.deleteMany({ where: { companyId } });
+      await prisma.company.deleteMany({ where: { id: companyId } });
+    }
+    await prisma.industryEngine.deleteMany({ where: { key: FORBIDDEN_COMBINED_INDUSTRY_KEY } });
+    await prisma.$disconnect();
+  });
+
+  it("creates Joinery with five sections and Furniture with its separate schedule", async () => {
+    const joinery = await createProjectWithDefaultBoq(actor(companyId), {
+      clientId,
+      industryEngineId: JOINERY_INDUSTRY_KEY,
+      reference: `JNY-${RUN_ID}`,
+      name: "Joinery Project",
       location: "Dubai, UAE",
       currency: "AED",
       taxRate: "5",
       language: "English",
-    })).rejects.toBeInstanceOf(AppError);
+    });
+    const furniture = await createProjectWithDefaultBoq(actor(companyId), {
+      clientId,
+      industryEngineId: "furniture",
+      reference: `FUR-${RUN_ID}`,
+      name: "Furniture Project",
+      location: "Dubai, UAE",
+      currency: "AED",
+      taxRate: "5",
+      language: "English",
+    });
+
+    expect(joinery.project.industryId).toBe(JOINERY_INDUSTRY_KEY);
+    expect(joinery.boq.sections.map((section) => section.title)).toEqual(JOINERY_SECTION_TITLES);
+    expect(furniture.project.industryId).toBe("furniture");
+    expect(furniture.boq.sections.map((section) => section.code)).toEqual(["EXE", "WRK", "SEA", "STO"]);
+  });
+
+  it("does not expose or resolve a stale combined database row", async () => {
+    const listed = await listIndustryEngines(companyId);
+    expect(listed.map((industry) => industry.key)).not.toContain(FORBIDDEN_COMBINED_INDUSTRY_KEY);
+    await expect(getEnabledIndustry(companyId, FORBIDDEN_COMBINED_INDUSTRY_KEY))
+      .rejects.toMatchObject({ code: "NOT_FOUND" });
+  });
+
+  it("does not expose or resolve a project persisted against the retired combined identity", async () => {
+    expect((await listProjects(companyId)).map((project) => project.id)).not.toContain(RETIRED_PROJECT_SLUG);
+    await expect(getProjectRecord(companyId, RETIRED_PROJECT_SLUG))
+      .rejects.toMatchObject({ code: "NOT_FOUND" });
+  });
+
+  it("does not read or enter the lock flow for a BOQ persisted against the retired identity", async () => {
+    await expect(getBOQRecord(companyId, retiredBoqId))
+      .rejects.toMatchObject({ code: "NOT_FOUND" });
+    await expect(lockBOQ(companyId, retiredBoqId))
+      .rejects.toMatchObject({ code: "NOT_FOUND" });
+
+    const persisted = await prisma.bOQ.findUniqueOrThrow({
+      where: { id: retiredBoqId },
+      select: { isLocked: true, lockedAt: true },
+    });
+    expect(persisted).toEqual({ isLocked: false, lockedAt: null });
   });
 });

@@ -6,27 +6,27 @@ function source(relativePath: string): string {
   return readFileSync(path.join(process.cwd(), ...relativePath.split("/")), "utf8");
 }
 
-describe("Furniture workspace UI and navigation guard", () => {
+describe("Joinery workspace UI and navigation guard", () => {
   it("adds the workspace link through an exact-industry visibility component", () => {
     const layout = source("src/app/projects/[projectId]/layout.tsx");
-    const link = source("src/components/projects/furniture-workspace-link.tsx");
+    const link = source("src/components/projects/joinery-workspace-link.tsx");
 
-    expect(layout).toContain("<FurnitureWorkspaceLink projectId={projectId} />");
-    expect(link).toContain("project.industryId === FURNITURE_JOINERY_INDUSTRY_KEY");
+    expect(layout).toContain("<JoineryWorkspaceLink projectId={projectId} />");
+    expect(link).toContain("project.industryId === JOINERY_INDUSTRY_KEY");
     expect(link).toContain("if (!visible) return null");
-    expect(link).toContain("/furniture`");
+    expect(link).toContain("/joinery`");
   });
 
   it("keeps correction, approval and generated-output actions on dedicated guarded endpoints", () => {
-    const page = source("src/app/projects/[projectId]/furniture/page.tsx");
+    const page = source("src/app/projects/[projectId]/joinery/page.tsx");
 
-    expect(page).toContain("project.industryId !== FURNITURE_JOINERY_INDUSTRY_KEY");
-    expect(page).toContain("/furniture/candidates");
-    expect(page).toContain("/furniture/candidates/${encodeURIComponent(entry.id)}");
-    expect(page).toContain("/furniture/order-items");
-    expect(page).toContain("/furniture/order-items/${encodeURIComponent(entry.id)}");
+    expect(page).toContain("project.industryId !== JOINERY_INDUSTRY_KEY");
+    expect(page).toContain("/joinery/candidates");
+    expect(page).toContain("/joinery/candidates/${encodeURIComponent(entry.id)}");
+    expect(page).toContain("/joinery/order-items");
+    expect(page).toContain("/joinery/order-items/${encodeURIComponent(entry.id)}");
     expect(page).toContain("/approve");
-    expect(page).toContain("/furniture/generate-boq");
+    expect(page).toContain("/joinery/generate-boq");
     expect(page).toContain("Correction saved with its original source evidence.");
     expect(page).toContain("Verified values approved and locked.");
   });
@@ -37,14 +37,14 @@ describe("Furniture workspace UI and navigation guard", () => {
 
     expect(genericReview).toContain("entity.categoryKey !== FURNITURE_CANDIDATE_TECHNICAL_DATA_KIND");
     expect(genericReview).toContain("entity.categoryKey !== FURNITURE_ORDER_ITEM_TECHNICAL_DATA_KIND");
-    expect(genericReview).toContain("Open Furniture workspace");
+    expect(genericReview).toContain("Open Joinery workspace");
     expect(aiDraft).toContain("{ categoryKey: { notIn: [");
     expect(aiDraft).toContain("FURNITURE_CANDIDATE_TECHNICAL_DATA_KIND");
     expect(aiDraft).toContain("FURNITURE_ORDER_ITEM_TECHNICAL_DATA_KIND");
   });
 
   it("renders separate order controls and keeps generation disabled until parts and order items are locked", () => {
-    const page = source("src/app/projects/[projectId]/furniture/page.tsx");
+    const page = source("src/app/projects/[projectId]/joinery/page.tsx");
 
     expect(page).toContain("Hardware, accessories and specialist order items");
     expect(page).toContain("Order category");

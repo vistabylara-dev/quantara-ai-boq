@@ -1,8 +1,18 @@
 import { ExtractedEntityStatus, ExtractedTableStatus, ExtractedTableType } from "@prisma/client";
+import { readFile } from "node:fs/promises";
+import path from "node:path";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { parseXlsxTablesForIndustry } from "@/lib/files/table-extraction-handler";
+import { buildFurnitureCanonicalOutput } from "@/lib/furniture/canonical-output";
+import {
+  formatFurnitureJoineryLinearEdgeQuantity,
+  FURNITURE_JOINERY_LINEAR_EDGE_ASSUMPTION_NOTE,
+} from "@/lib/furniture/linear-edge-format";
 import {
   FURNITURE_CANDIDATE_TECHNICAL_DATA_KIND,
   FURNITURE_ORDER_ITEM_TECHNICAL_DATA_KIND,
+  JOINERY_CUTTING_LIST_SECTION_TITLE,
+  JOINERY_INDUSTRY_KEY,
 } from "@/lib/furniture/types";
 
 type StoredEntity = Record<string, any>;
@@ -11,7 +21,8 @@ const candidateStore = vi.hoisted(() => {
   const state = { entities: [] as StoredEntity[], nextId: 1 };
 
   function matches(row: StoredEntity, where: Record<string, any>): boolean {
-    if (where.id !== undefined && row.id !== where.id) return false;
+    if (typeof where.id === "string" && row.id !== where.id) return false;
+    if (where.id?.in && !where.id.in.includes(row.id)) return false;
     if (where.companyId !== undefined && row.companyId !== where.companyId) return false;
     if (where.projectFileId !== undefined && row.projectFileId !== where.projectFileId) return false;
     if (where.categoryKey?.in && !where.categoryKey.in.includes(row.categoryKey)) return false;
@@ -34,6 +45,11 @@ const candidateStore = vi.hoisted(() => {
       for (const row of rows) Object.assign(row, data);
       return { count: rows.length };
     }),
+    deleteMany: vi.fn(async ({ where }: { where: Record<string, any> }) => {
+      const before = state.entities.length;
+      state.entities = state.entities.filter((row) => !matches(row, where));
+      return { count: before - state.entities.length };
+    }),
   };
   const tx = {
     $queryRaw: vi.fn(async () => []),
@@ -50,7 +66,6 @@ const projectRepository = vi.hoisted(() => ({ getProjectRecord: vi.fn() }));
 const fileRepository = vi.hoisted(() => ({ getProjectFileRecord: vi.fn(), listProjectFiles: vi.fn() }));
 const tableRepository = vi.hoisted(() => ({ listExtractedTablesForFile: vi.fn() }));
 const entityRepository = vi.hoisted(() => ({ hasReviewedTableDerivedCandidates: vi.fn() }));
-const disciplineService = vi.hoisted(() => ({ getFurnitureProjectDiscipline: vi.fn() }));
 const auditRepository = vi.hoisted(() => ({ createAuditLog: vi.fn() }));
 
 vi.mock("@/lib/db/prisma", () => ({ prisma: candidateStore.prisma }));
@@ -58,7 +73,6 @@ vi.mock("@/lib/repositories/project-repository", () => projectRepository);
 vi.mock("@/lib/repositories/project-file-repository", () => fileRepository);
 vi.mock("@/lib/repositories/extracted-table-repository", () => tableRepository);
 vi.mock("@/lib/repositories/extracted-entity-repository", () => entityRepository);
-vi.mock("@/lib/furniture/project-discipline", () => disciplineService);
 vi.mock("@/lib/repositories/audit-repository", () => auditRepository);
 
 import { generateFurnitureCandidatesFromStructuredTables } from "@/lib/services/furniture-candidate-service";
@@ -71,7 +85,7 @@ function decimal(value: number) {
   return { toNumber: () => value };
 }
 
-function sourceCells(part: string) {
+function sourceCells(part: string, edgeBanding = "All 4 edges") {
   return [
     ["room", "KITCHEN", "A5"],
     ["elevation_ref", "ELEV-A", "B5"],
@@ -83,7 +97,7 @@ function sourceCells(part: string) {
     ["thickness_mm", "18", "H5"],
     ["material", "MDF (Oak)", "I5"],
     ["finish", "Oak", "J5"],
-    ["edge_banding", "All 4 edges", "K5"],
+    ["edge_banding", edgeBanding, "K5"],
     ["grain_direction", "Vertical", "L5"],
   ].map(([columnKey, rawValue, reference], index) => ({
     id: `cell-${part}-${index}`,
@@ -100,14 +114,14 @@ function sourceCells(part: string) {
   }));
 }
 
-function table(id: string, part: string) {
+function table(id: string, part: string, edgeBanding = "All 4 edges", title = "Cutting List") {
   return {
     id,
     companyId: COMPANY_ID,
     projectFileId: FILE_ID,
     drawingPageId: null,
     sheetName: "Cutting List",
-    title: "Cutting List",
+    title,
     tableType: ExtractedTableType.FURNITURE_SCHEDULE,
     confidence: decimal(96),
     boundingGeometryJson: null,
@@ -127,7 +141,7 @@ function table(id: string, part: string) {
       status: ExtractedTableStatus.EXTRACTED,
       createdAt: new Date("2026-08-31T00:00:00.000Z"),
       updatedAt: new Date("2026-08-31T00:00:00.000Z"),
-      cells: sourceCells(part),
+      cells: sourceCells(part, edgeBanding),
     }],
   };
 }
@@ -183,6 +197,51 @@ function orderTable(id: string) {
   };
 }
 
+function storedFixtureTable(parsed: any, tableIndex: number) {
+  const createdAt = new Date("2026-08-31T00:00:00.000Z");
+  return {
+    id: `fixture-table-${tableIndex}`,
+    companyId: COMPANY_ID,
+    projectFileId: FILE_ID,
+    drawingPageId: null,
+    sheetName: parsed.sheetName ?? null,
+    title: parsed.title ?? null,
+    tableType: ExtractedTableType.FURNITURE_SCHEDULE,
+    confidence: decimal(parsed.confidence),
+    boundingGeometryJson: null,
+    sourceReference: parsed.sheetName ?? parsed.title ?? "fixture",
+    status: ExtractedTableStatus.EXTRACTED,
+    createdAt,
+    updatedAt: createdAt,
+    rows: parsed.rows.map((row: any, rowIndex: number) => ({
+      id: `fixture-row-${tableIndex}-${rowIndex}`,
+      companyId: COMPANY_ID,
+      extractedTableId: `fixture-table-${tableIndex}`,
+      rowNumber: row.rowNumber,
+      parentRowId: null,
+      normalizedDataJson: null,
+      rawDataJson: null,
+      confidence: decimal(row.confidence),
+      status: ExtractedTableStatus.EXTRACTED,
+      createdAt,
+      updatedAt: createdAt,
+      cells: row.cells.map((cell: any, cellIndex: number) => ({
+        id: `fixture-cell-${tableIndex}-${rowIndex}-${cellIndex}`,
+        companyId: COMPANY_ID,
+        extractedTableRowId: `fixture-row-${tableIndex}-${rowIndex}`,
+        columnKey: cell.columnKey,
+        rawValue: cell.rawValue,
+        normalizedValue: cell.normalizedValue ?? null,
+        confidence: decimal(row.confidence),
+        sourceCellReference: cell.sourceCellReference ?? null,
+        boundingGeometryJson: null,
+        createdAt,
+        updatedAt: createdAt,
+      })),
+    })),
+  };
+}
+
 function candidateIdOf(row: StoredEntity): string {
   return row.technicalDataJson.candidate.candidateId as string;
 }
@@ -194,7 +253,7 @@ describe("Furniture structured-source candidate persistence", () => {
     candidateStore.state.nextId = 1;
     projectRepository.getProjectRecord.mockResolvedValue({
       id: PROJECT_ID,
-      industryEngine: { key: "furniture-joinery-cabinetry" },
+      industryEngine: { key: JOINERY_INDUSTRY_KEY },
     });
     fileRepository.getProjectFileRecord.mockResolvedValue({
       id: FILE_ID,
@@ -207,7 +266,6 @@ describe("Furniture structured-source candidate persistence", () => {
       table("table-b", "Shelf"),
     ]);
     entityRepository.hasReviewedTableDerivedCandidates.mockResolvedValue(false);
-    disciplineService.getFurnitureProjectDiscipline.mockResolvedValue("JOINERY_CABINETRY");
     auditRepository.createAuditLog.mockResolvedValue(undefined);
   });
 
@@ -248,6 +306,149 @@ describe("Furniture structured-source candidate persistence", () => {
     expect(candidateStore.state.entities.map(candidateIdOf)).toEqual(firstKeys);
     expect(candidateStore.state.entities).toHaveLength(2);
     expect(candidateStore.tx.$queryRaw).toHaveBeenCalledTimes(2);
+  });
+
+  it("replaces stale unreviewed candidates when structured source rows disappear", async () => {
+    const input = { companyId: COMPANY_ID, projectId: PROJECT_ID, projectFileId: FILE_ID };
+    await generateFurnitureCandidatesFromStructuredTables(input);
+    const staleEntityId = candidateStore.state.entities.find(
+      (row) => row.technicalDataJson.candidate.part === "Shelf",
+    )?.id;
+
+    tableRepository.listExtractedTablesForFile.mockResolvedValue([table("table-a", "Door panel")]);
+    const replay = await generateFurnitureCandidatesFromStructuredTables(input);
+
+    expect(replay).toMatchObject({ status: "generated", candidatesCreated: 0 });
+    expect(candidateStore.state.entities).toHaveLength(1);
+    expect(candidateStore.state.entities[0].technicalDataJson.candidate.part).toBe("Door panel");
+    expect(candidateStore.extractedEntity.deleteMany).toHaveBeenCalledWith({
+      where: expect.objectContaining({ id: { in: [staleEntityId] }, companyId: COMPANY_ID, projectFileId: FILE_ID }),
+    });
+    expect(auditRepository.createAuditLog).toHaveBeenLastCalledWith(
+      COMPANY_ID,
+      expect.objectContaining({ payload: expect.objectContaining({ candidatesRemoved: 1 }) }),
+      candidateStore.tx,
+    );
+  });
+
+  it("removes both part and order candidates when a replacement contains no structured rows", async () => {
+    tableRepository.listExtractedTablesForFile.mockResolvedValue([
+      table("table-parts", "Door panel"),
+      orderTable("table-orders"),
+    ]);
+    const input = { companyId: COMPANY_ID, projectId: PROJECT_ID, projectFileId: FILE_ID };
+    await generateFurnitureCandidatesFromStructuredTables(input);
+    expect(candidateStore.state.entities).toHaveLength(2);
+
+    tableRepository.listExtractedTablesForFile.mockResolvedValue([]);
+    const replay = await generateFurnitureCandidatesFromStructuredTables(input);
+
+    expect(replay).toMatchObject({ status: "generated", tablesConsidered: 0, rowsConsidered: 0, candidatesCreated: 0 });
+    expect(candidateStore.state.entities).toEqual([]);
+    expect(auditRepository.createAuditLog).toHaveBeenLastCalledWith(
+      COMPANY_ID,
+      expect.objectContaining({ payload: expect.objectContaining({ candidatesRemoved: 2 }) }),
+      candidateStore.tx,
+    );
+  });
+
+  it("carries the controlled workbook width-edge interpretation into the production candidate path", async () => {
+    tableRepository.listExtractedTablesForFile.mockResolvedValue([
+      table("table-front", "Door panel", "Front edge", JOINERY_CUTTING_LIST_SECTION_TITLE),
+    ]);
+
+    await generateFurnitureCandidatesFromStructuredTables({
+      companyId: COMPANY_ID,
+      projectId: PROJECT_ID,
+      projectFileId: FILE_ID,
+    });
+
+    const candidate = candidateStore.state.entities[0].technicalDataJson.candidate;
+    expect(candidate.edgeBanding).toEqual({
+      raw: "Front edge",
+      mode: "FRONT",
+      selectedEdges: [{ dimension: "WIDTH", count: 1 }],
+      orientation: "ASSUMED",
+    });
+    expect(candidate.issues).toContainEqual(expect.objectContaining({
+      code: "EDGE_ORIENTATION_REQUIRES_VERIFICATION",
+      severity: "REVIEW",
+    }));
+  });
+
+  it("does not apply the controlled width-edge interpretation to a generic workbook table", async () => {
+    tableRepository.listExtractedTablesForFile.mockResolvedValue([
+      table("generic-front", "Door panel", "Front edge"),
+    ]);
+
+    await generateFurnitureCandidatesFromStructuredTables({
+      companyId: COMPANY_ID,
+      projectId: PROJECT_ID,
+      projectFileId: FILE_ID,
+    });
+
+    expect(candidateStore.state.entities[0].technicalDataJson.candidate.edgeBanding).toEqual({
+      raw: "Front edge",
+      mode: "FRONT",
+      selectedEdges: [],
+      orientation: "UNRESOLVED",
+    });
+  });
+
+  it("carries the Madam Juli fixture through the production table and candidate path at exactly 93.040 lm", async () => {
+    const fixturePath = path.join(
+      process.cwd(),
+      "tests",
+      "fixtures",
+      "furniture",
+      "Madam_Juli_BOQ_Cutting_List.xlsx",
+    );
+    const parsed = await parseXlsxTablesForIndustry(await readFile(fixturePath), JOINERY_INDUSTRY_KEY);
+    tableRepository.listExtractedTablesForFile.mockResolvedValue(parsed.map(storedFixtureTable));
+    fileRepository.getProjectFileRecord.mockResolvedValue({
+      id: FILE_ID,
+      projectId: PROJECT_ID,
+      originalName: "Madam_Juli_BOQ_Cutting_List.xlsx",
+      extension: "xlsx",
+    });
+
+    const result = await generateFurnitureCandidatesFromStructuredTables({
+      companyId: COMPANY_ID,
+      projectId: PROJECT_ID,
+      projectFileId: FILE_ID,
+    });
+    const partRows = candidateStore.state.entities.filter(
+      (row) => row.categoryKey === FURNITURE_CANDIDATE_TECHNICAL_DATA_KIND,
+    );
+    expect(result).toMatchObject({ status: "generated", tablesConsidered: 2, rowsConsidered: 167 });
+    expect(partRows).toHaveLength(155);
+
+    const timestamp = "2026-08-31T00:00:00.000Z";
+    const output = buildFurnitureCanonicalOutput({
+      projectId: PROJECT_ID,
+      projectReference: "MADAM-JULI",
+      projectName: "Madam Juli",
+      discipline: "JOINERY_CABINETRY",
+      wastagePercentage: 10,
+      confirmedCandidates: partRows.map((row) => ({
+        entityId: row.id,
+        status: "CONFIRMED" as const,
+        confirmedAt: timestamp,
+        updatedAt: timestamp,
+        candidate: row.technicalDataJson.candidate,
+      })),
+    });
+    const edge = output.sections
+      .find((section) => section.code === "HWA")
+      ?.items.find((item) => item.description === "Front-edge banding length");
+
+    expect(edge?.quantity).toBeCloseTo(93.04, 6);
+    expect(formatFurnitureJoineryLinearEdgeQuantity(edge!.quantity)).toBe("93.040");
+    expect(edge).toMatchObject({
+      unit: "lm",
+      specification: FURNITURE_JOINERY_LINEAR_EDGE_ASSUMPTION_NOTE,
+      notes: FURNITURE_JOINERY_LINEAR_EDGE_ASSUMPTION_NOTE,
+    });
   });
 
   it("stores explicit hardware rows under the order marker with stable evidence instead of flattening them into parts", async () => {
@@ -334,6 +535,7 @@ describe("Furniture structured-source candidate persistence", () => {
     }));
     expect(candidateStore.extractedEntity.create).not.toHaveBeenCalled();
     expect(candidateStore.extractedEntity.updateMany).not.toHaveBeenCalled();
+    expect(candidateStore.extractedEntity.deleteMany).not.toHaveBeenCalled();
     expect(auditRepository.createAuditLog).not.toHaveBeenCalled();
   });
 
@@ -362,7 +564,7 @@ describe("Furniture structured-source candidate persistence", () => {
     expect(candidateStore.extractedEntity.updateMany).not.toHaveBeenCalled();
   });
 
-  it("rejects non-combined industries and cross-project files before persistence", async () => {
+  it("rejects non-Joinery industries and cross-project files before persistence", async () => {
     projectRepository.getProjectRecord.mockResolvedValueOnce({
       id: PROJECT_ID,
       industryEngine: { key: "furniture" },
@@ -375,7 +577,7 @@ describe("Furniture structured-source candidate persistence", () => {
 
     projectRepository.getProjectRecord.mockResolvedValueOnce({
       id: PROJECT_ID,
-      industryEngine: { key: "furniture-joinery-cabinetry" },
+      industryEngine: { key: JOINERY_INDUSTRY_KEY },
     });
     fileRepository.getProjectFileRecord.mockResolvedValueOnce({
       id: FILE_ID,

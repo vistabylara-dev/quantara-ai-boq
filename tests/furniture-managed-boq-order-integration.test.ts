@@ -10,14 +10,13 @@ import type { FurniturePartCandidate } from "@/lib/furniture/candidate-mapper";
 import type { FurnitureOrderItemCandidate } from "@/lib/furniture/order-item-mapper";
 import {
   FURNITURE_CANDIDATE_TECHNICAL_DATA_KIND,
-  FURNITURE_JOINERY_INDUSTRY_KEY,
   FURNITURE_ORDER_ITEM_TECHNICAL_DATA_KIND,
+  JOINERY_INDUSTRY_KEY,
 } from "@/lib/furniture/types";
 
 const mocks = vi.hoisted(() => ({
   buildFurnitureCanonicalOutput: vi.fn(),
   getProjectRecord: vi.fn(),
-  getFurnitureProjectDiscipline: vi.fn(),
   createAuditLog: vi.fn(),
   recordReviewedExtractionQuantity: vi.fn(),
   confirmManualQuantityProvenance: vi.fn(),
@@ -97,9 +96,6 @@ vi.mock("@/lib/db/prisma", () => ({ prisma: managedStore.prisma }));
 vi.mock("@/lib/furniture/canonical-output", () => ({
   buildFurnitureCanonicalOutput: mocks.buildFurnitureCanonicalOutput,
   FURNITURE_CANONICAL_OUTPUT_VERSION: "furniture-canonical-v1",
-}));
-vi.mock("@/lib/furniture/project-discipline", () => ({
-  getFurnitureProjectDiscipline: mocks.getFurnitureProjectDiscipline,
 }));
 vi.mock("@/lib/repositories/project-repository", () => ({
   getProjectRecord: mocks.getProjectRecord,
@@ -317,9 +313,8 @@ describe("Furniture managed BOQ hardware/order integration", () => {
       id: PROJECT_ID,
       reference: "FJC-CONTROLLED",
       name: "Controlled Furniture Project",
-      industryEngine: { key: FURNITURE_JOINERY_INDUSTRY_KEY },
+      industryEngine: { key: JOINERY_INDUSTRY_KEY },
     });
-    mocks.getFurnitureProjectDiscipline.mockResolvedValue("JOINERY_CABINETRY");
     mocks.buildFurnitureCanonicalOutput.mockReturnValue(outputWith([]));
     mocks.createAuditLog.mockResolvedValue(undefined);
     mocks.recordReviewedExtractionQuantity.mockResolvedValue(undefined);

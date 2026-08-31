@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { JOINERY_INDUSTRY_KEY } from "@/lib/furniture/types";
 
 const mocks = vi.hoisted(() => ({
   getProjectRecord: vi.fn(),
@@ -39,7 +40,7 @@ const input = {
   extractionJobId: "44444444-4444-4444-8444-444444444444",
 };
 
-describe("Exact Furniture, Joinery & Cabinetry source dispatch", () => {
+describe("Exact Joinery source dispatch", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.getProjectFileRecord.mockResolvedValue({ id: input.projectFileId, projectId: input.projectId });
@@ -47,7 +48,7 @@ describe("Exact Furniture, Joinery & Cabinetry source dispatch", () => {
     mocks.listExtractedTablesForFile.mockResolvedValue([]);
   });
 
-  it("dispatches the exact combined industry to the guarded furniture mapper", async () => {
+  it("dispatches established Joinery to the guarded cutting-list mapper", async () => {
     const mapped = {
       status: "generated",
       tablesConsidered: 2,
@@ -56,7 +57,7 @@ describe("Exact Furniture, Joinery & Cabinetry source dispatch", () => {
     };
     mocks.getProjectRecord.mockResolvedValue({
       id: input.projectId,
-      industryEngine: { key: "furniture-joinery-cabinetry" },
+      industryEngine: { key: JOINERY_INDUSTRY_KEY },
     });
     mocks.generateFurnitureCandidatesFromStructuredTables.mockResolvedValue(mapped);
 
@@ -69,7 +70,7 @@ describe("Exact Furniture, Joinery & Cabinetry source dispatch", () => {
     expect(mocks.listExtractedTablesForFile).not.toHaveBeenCalled();
   });
 
-  it.each(["construction", "furniture", "joinery"])(
+  it.each(["construction", "furniture", "interior-fitout"])(
     "keeps the existing %s industry on the generic bridge",
     async (industryKey) => {
       mocks.getProjectRecord.mockResolvedValue({

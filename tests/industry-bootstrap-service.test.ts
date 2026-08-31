@@ -5,6 +5,7 @@ import {
   ensureCompanyIndustryEngines,
 } from "../src/lib/services/industry-bootstrap-service";
 import { demoIndustries } from "../src/config/industries";
+import { joineryEngine } from "../src/config/industries/joinery";
 
 /**
  * Regression coverage for the P0 production incident: the IndustryEngine reference table was
@@ -111,5 +112,49 @@ describe("industry-bootstrap-service (integration, real local Postgres)", () => 
     expect(await prisma.companyIndustryEngine.count({ where: { companyId: unrelatedCompanyId } }))
       .toBe(0);
     expect(await ensureCompanyIndustryEngines(targetCompanyId)).toBe(false);
+  });
+
+  it("synchronizes established Joinery for an existing tenant exactly once without changing another industry", async () => {
+    await bootstrapIndustryEngines();
+    const targetCompanyId = await createZeroLinkCompany("joinery-sync");
+    const [joinery, construction] = await Promise.all([
+      prisma.industryEngine.findUniqueOrThrow({ where: { key: "joinery" } }),
+      prisma.industryEngine.findUniqueOrThrow({ where: { key: "construction" } }),
+    ]);
+    await prisma.companyIndustryEngine.create({
+      data: { companyId: targetCompanyId, industryEngineId: joinery.id, enabled: true },
+    });
+    await prisma.industryEngine.update({
+      where: { id: joinery.id },
+      data: {
+        name: "Legacy Joinery",
+        configJson: { legacy: true },
+      },
+    });
+    const unrelatedBefore = await prisma.industryEngine.findUniqueOrThrow({
+      where: { id: construction.id },
+      select: { configJson: true, updatedAt: true },
+    });
+
+    expect(await ensureCompanyIndustryEngines(targetCompanyId)).toBe(false);
+    const first = await prisma.industryEngine.findUniqueOrThrow({
+      where: { id: joinery.id },
+      select: { name: true, configJson: true, updatedAt: true },
+    });
+    expect(first.name).toBe(joineryEngine.name);
+    expect(first.configJson).toEqual(JSON.parse(JSON.stringify(joineryEngine)));
+
+    expect(await ensureCompanyIndustryEngines(targetCompanyId)).toBe(false);
+    const second = await prisma.industryEngine.findUniqueOrThrow({
+      where: { id: joinery.id },
+      select: { configJson: true, updatedAt: true },
+    });
+    expect(second).toEqual({ configJson: first.configJson, updatedAt: first.updatedAt });
+
+    const unrelatedAfter = await prisma.industryEngine.findUniqueOrThrow({
+      where: { id: construction.id },
+      select: { configJson: true, updatedAt: true },
+    });
+    expect(unrelatedAfter).toEqual(unrelatedBefore);
   });
 });

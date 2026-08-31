@@ -9,6 +9,7 @@ import {
 } from "@/lib/furniture/calculations";
 import type { FurniturePartCandidate } from "@/lib/furniture/candidate-mapper";
 import { mapFurnitureWorkbookCandidates, type FurnitureWorkbookReadResult } from "@/lib/furniture/workbook-reader";
+import { formatFurnitureJoineryLinearEdgeQuantity } from "@/lib/furniture/linear-edge-format";
 
 const FIXTURE_PATH = path.join(process.cwd(), "tests", "fixtures", "furniture", "Madam_Juli_BOQ_Cutting_List.xlsx");
 const FIXTURE_SHA256 = "61b064f7611bc938810125916ff9950aa8fbe5811f55284118f70a18a1596c09";
@@ -128,6 +129,7 @@ describe("Furniture workbook fixture — Madam Juli deterministic reconciliation
   it("preserves the editable width-edge assumption at 93.040 lm and marks orientation for review", () => {
     const edge = calculateFurnitureEdgeBanding(candidates);
     expect(edge.byMode.FRONT).toBeCloseTo(93.04, 6);
+    expect(formatFurnitureJoineryLinearEdgeQuantity(edge.byMode.FRONT)).toBe("93.040");
     expect(edge.byMode.ALL_FOUR).toBeCloseTo(96.006, 6);
     expect(edge.unresolvedCandidateIds).toEqual([]);
     const frontCandidates = candidates.filter((candidate) => candidate.edgeBanding.mode === "FRONT");

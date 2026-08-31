@@ -34,12 +34,12 @@ vi.mock("@/lib/services/furniture-order-review-service", () => ({
   approveFurnitureOrderItemCandidate: mocks.approveFurnitureOrderItemCandidate,
 }));
 
-import { GET as listCandidatesGET } from "@/app/api/projects/[projectId]/furniture/candidates/route";
-import { PATCH as correctCandidatePATCH } from "@/app/api/projects/[projectId]/furniture/candidates/[candidateId]/route";
-import { POST as approveCandidatePOST } from "@/app/api/projects/[projectId]/furniture/candidates/[candidateId]/approve/route";
-import { GET as listOrderItemsGET } from "@/app/api/projects/[projectId]/furniture/order-items/route";
-import { PATCH as correctOrderItemPATCH } from "@/app/api/projects/[projectId]/furniture/order-items/[candidateId]/route";
-import { POST as approveOrderItemPOST } from "@/app/api/projects/[projectId]/furniture/order-items/[candidateId]/approve/route";
+import { GET as listCandidatesGET } from "@/app/api/projects/[projectId]/joinery/candidates/route";
+import { PATCH as correctCandidatePATCH } from "@/app/api/projects/[projectId]/joinery/candidates/[candidateId]/route";
+import { POST as approveCandidatePOST } from "@/app/api/projects/[projectId]/joinery/candidates/[candidateId]/approve/route";
+import { GET as listOrderItemsGET } from "@/app/api/projects/[projectId]/joinery/order-items/route";
+import { PATCH as correctOrderItemPATCH } from "@/app/api/projects/[projectId]/joinery/order-items/[candidateId]/route";
+import { POST as approveOrderItemPOST } from "@/app/api/projects/[projectId]/joinery/order-items/[candidateId]/approve/route";
 
 const COMPANY_ID = "11111111-1111-4111-8111-111111111111";
 const CANDIDATE_ID = "22222222-2222-4222-8222-222222222222";
@@ -69,7 +69,7 @@ describe("Furniture review route contracts", () => {
     mocks.getCurrentActor.mockRejectedValueOnce(new UnauthorizedError());
 
     const response = await listCandidatesGET(
-      new Request("http://localhost/api/projects/controlled-project/furniture/candidates"),
+      new Request("http://localhost/api/projects/controlled-project/joinery/candidates"),
       { params: Promise.resolve({ projectId: "controlled-project" }) },
     );
 
@@ -87,7 +87,7 @@ describe("Furniture review route contracts", () => {
     mocks.listFurnitureCandidates.mockResolvedValueOnce(candidates);
 
     const response = await listCandidatesGET(
-      new Request("http://localhost/api/projects/controlled-project/furniture/candidates"),
+      new Request("http://localhost/api/projects/controlled-project/joinery/candidates"),
       { params: Promise.resolve({ projectId: "controlled-project" }) },
     );
 
@@ -103,7 +103,7 @@ describe("Furniture review route contracts", () => {
     const response = await correctCandidatePATCH(
       request(
         "PATCH",
-        `/api/projects/controlled-project/furniture/candidates/${CANDIDATE_ID}`,
+        `/api/projects/controlled-project/joinery/candidates/${CANDIDATE_ID}`,
         {
           room: "  KITCHEN  ",
           quantity: 2,
@@ -133,7 +133,7 @@ describe("Furniture review route contracts", () => {
     ["non-positive dimension", { projectId: "controlled-project", candidateId: CANDIDATE_ID }, { reason: "Valid reason", dimensions: { width: 0 } }],
   ])("rejects %s before any correction mutation", async (_label, params, body) => {
     const response = await correctCandidatePATCH(
-      request("PATCH", "/api/projects/controlled-project/furniture/candidates/value", body),
+      request("PATCH", "/api/projects/controlled-project/joinery/candidates/value", body),
       { params: Promise.resolve(params) },
     );
 
@@ -148,7 +148,7 @@ describe("Furniture review route contracts", () => {
     const response = await approveCandidatePOST(
       request(
         "POST",
-        `/api/projects/controlled-project/furniture/candidates/${CANDIDATE_ID}/approve`,
+        `/api/projects/controlled-project/joinery/candidates/${CANDIDATE_ID}/approve`,
         { acknowledgedIssueCodes: ["FINISH_REQUIRES_VERIFICATION"] },
       ),
       { params: Promise.resolve({ projectId: "controlled-project", candidateId: CANDIDATE_ID }) },
@@ -169,7 +169,7 @@ describe("Furniture review route contracts", () => {
     const response = await approveCandidatePOST(
       request(
         "POST",
-        `/api/projects/controlled-project/furniture/candidates/${CANDIDATE_ID}/approve`,
+        `/api/projects/controlled-project/joinery/candidates/${CANDIDATE_ID}/approve`,
         {},
       ),
       { params: Promise.resolve({ projectId: "controlled-project", candidateId: CANDIDATE_ID }) },
@@ -185,7 +185,7 @@ describe("Furniture review route contracts", () => {
   it("keeps order-item GET authenticated and passes only actor plus route project", async () => {
     mocks.getCurrentActor.mockRejectedValueOnce(new UnauthorizedError());
     const unauthenticated = await listOrderItemsGET(
-      new Request("http://localhost/api/projects/controlled-project/furniture/order-items"),
+      new Request("http://localhost/api/projects/controlled-project/joinery/order-items"),
       { params: Promise.resolve({ projectId: "controlled-project" }) },
     );
     expect(unauthenticated.status).toBe(401);
@@ -195,7 +195,7 @@ describe("Furniture review route contracts", () => {
     const orderItems = [{ id: CANDIDATE_ID, status: "NEEDS_REVIEW", candidate: { category: "HARDWARE" } }];
     mocks.listFurnitureOrderItemCandidates.mockResolvedValueOnce(orderItems);
     const response = await listOrderItemsGET(
-      new Request("http://localhost/api/projects/controlled-project/furniture/order-items"),
+      new Request("http://localhost/api/projects/controlled-project/joinery/order-items"),
       { params: Promise.resolve({ projectId: "controlled-project" }) },
     );
 
@@ -211,7 +211,7 @@ describe("Furniture review route contracts", () => {
     const response = await correctOrderItemPATCH(
       request(
         "PATCH",
-        `/api/projects/controlled-project/furniture/order-items/${CANDIDATE_ID}`,
+        `/api/projects/controlled-project/joinery/order-items/${CANDIDATE_ID}`,
         {
           description: "  Soft-close concealed hinge  ",
           quantity: 14,
@@ -251,7 +251,7 @@ describe("Furniture review route contracts", () => {
     ["invented category", { projectId: "controlled-project", candidateId: CANDIDATE_ID }, { reason: "Valid reason", category: "MISC" }],
   ])("rejects %s before any order-item correction", async (_label, params, body) => {
     const response = await correctOrderItemPATCH(
-      request("PATCH", "/api/projects/controlled-project/furniture/order-items/value", body),
+      request("PATCH", "/api/projects/controlled-project/joinery/order-items/value", body),
       { params: Promise.resolve(params) },
     );
 
@@ -266,7 +266,7 @@ describe("Furniture review route contracts", () => {
     const response = await approveOrderItemPOST(
       request(
         "POST",
-        `/api/projects/controlled-project/furniture/order-items/${CANDIDATE_ID}/approve`,
+        `/api/projects/controlled-project/joinery/order-items/${CANDIDATE_ID}/approve`,
         { acknowledgedIssueCodes: ["MISSING_UNIT", "CATEGORY_REQUIRES_REVIEW"] },
       ),
       { params: Promise.resolve({ projectId: "controlled-project", candidateId: CANDIDATE_ID }) },
@@ -286,7 +286,7 @@ describe("Furniture review route contracts", () => {
     const rejected = await approveOrderItemPOST(
       request(
         "POST",
-        `/api/projects/controlled-project/furniture/order-items/${CANDIDATE_ID}/approve`,
+        `/api/projects/controlled-project/joinery/order-items/${CANDIDATE_ID}/approve`,
         { acknowledgedIssueCodes: [], companyId: COMPANY_ID },
       ),
       { params: Promise.resolve({ projectId: "controlled-project", candidateId: CANDIDATE_ID }) },

@@ -2,6 +2,7 @@ import type { CanonicalDocumentData } from "../build-document-data";
 import type { DocumentTemplateContentConfig, DocumentTemplateStyleConfig } from "../template-config";
 import {
   getDocumentItemSpecification,
+  getDocumentItemQuantity,
   getDocumentOutputSections,
   shouldRenderDocumentSection,
   shouldRenderSpecification,
@@ -69,7 +70,7 @@ export function generateHtml(input: GenerateHtmlInput): string {
             <td>${escapeHtml(item.description)}</td>
             ${showSpecification ? `<td class="specification">${escapeHtml(getDocumentItemSpecification(data, item))}</td>` : ""}
             <td class="num">${escapeHtml(item.unit)}</td>
-            <td class="num">${item.quantity.toLocaleString("en-US", { maximumFractionDigits: 2 })}</td>
+            <td class="num">${getDocumentItemQuantity(data, item)}</td>
             ${showInternal ? `<td class="num">${(item.landedCost ?? 0).toLocaleString("en-US", { maximumFractionDigits: 2 })}</td>` : ""}
             ${showInternal ? `<td class="num">${(item.marginPercentage ?? 0).toLocaleString("en-US", { maximumFractionDigits: 1 })}%</td>` : ""}
             <td class="num">${(item.sellingRate ?? 0).toLocaleString("en-US", { maximumFractionDigits: 2 })}</td>

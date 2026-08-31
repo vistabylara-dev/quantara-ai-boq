@@ -5,9 +5,16 @@ import { use, useCallback, useEffect, useMemo, useState } from "react";
 import { apiClient, getApiErrorMessage } from "@/lib/api/client";
 import type { FurnitureEdgeBanding, FurniturePartCandidate } from "@/lib/furniture/candidate-mapper";
 import {
+  calculateFurnitureEdgeBanding,
   FURNITURE_ORDER_CATEGORIES,
   type FurnitureOrderCategory,
 } from "@/lib/furniture/calculations";
+import {
+  formatFurnitureJoineryLinearEdgeQuantity,
+  FURNITURE_JOINERY_LINEAR_EDGE_ASSUMPTION_LABEL,
+  FURNITURE_JOINERY_LINEAR_EDGE_INTERPRETATION_LABEL,
+  FURNITURE_JOINERY_LINEAR_EDGE_VERIFICATION_LABEL,
+} from "@/lib/furniture/linear-edge-format";
 import type { FurnitureOrderItemCandidate } from "@/lib/furniture/order-item-mapper";
 import { JOINERY_INDUSTRY_KEY } from "@/lib/furniture/types";
 
@@ -101,7 +108,7 @@ function positiveNumber(value: string): number | null {
 function edgeBanding(choice: EdgeChoice): FurnitureEdgeBanding {
   if (choice === "NONE") return { raw: "None", mode: "NONE", selectedEdges: [], orientation: "EXPLICIT" };
   if (choice === "ALL_FOUR") return { raw: "All four edges", mode: "ALL_FOUR", selectedEdges: [{ dimension: "WIDTH", count: 2 }, { dimension: "HEIGHT", count: 2 }], orientation: "EXPLICIT" };
-  if (choice === "WIDTH" || choice === "HEIGHT") return { raw: `Front edge (${choice.toLowerCase()})`, mode: "FRONT", selectedEdges: [{ dimension: choice, count: 1 }], orientation: "EXPLICIT" };
+  if (choice === "WIDTH" || choice === "HEIGHT") return { raw: `Front edge (${choice.toLowerCase()} assumption)`, mode: "FRONT", selectedEdges: [{ dimension: choice, count: 1 }], orientation: "ASSUMED" };
   return { raw: "Orientation to be verified", mode: "UNRESOLVED", selectedEdges: [], orientation: "UNRESOLVED" };
 }
 function orderDraftFrom(candidate: FurnitureOrderItemCandidate): OrderItemDraft {
@@ -175,6 +182,11 @@ export default function JoineryWorkspacePage(props: { params: Promise<{ projectI
     blocking: candidates.reduce((sum, entry) => sum + entry.candidate.issues.filter((issue) => issue.severity === "BLOCKING").length, 0)
       + orderItems.reduce((sum, entry) => sum + entry.candidate.issues.filter((issue) => issue.severity === "BLOCKING").length, 0),
   }), [candidates, orderItems]);
+
+  const selectedFrontEdgeLength = useMemo(
+    () => calculateFurnitureEdgeBanding(candidates.map((entry) => entry.candidate)).byMode.FRONT,
+    [candidates],
+  );
 
   function updateDraft(id: string, patch: Partial<CandidateDraft>) {
     setDrafts((current) => ({ ...current, [id]: { ...current[id], ...patch } }));
@@ -306,6 +318,12 @@ export default function JoineryWorkspacePage(props: { params: Promise<{ projectI
         <Link href={`/projects/${encodedProjectId}/proposals`} className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 dark:border-slate-700 dark:text-slate-200">Client proposal</Link>
       </div>
       <div className="mt-6 grid gap-3 sm:grid-cols-5">{Object.entries(stats).map(([label, value]) => <div key={label} className="rounded-2xl border border-[#D9E2EC] bg-[#EEF3F8] p-4 dark:border-[#1E2A42] dark:bg-[#111D33]"><p className="text-2xl font-semibold text-[#0B1630] dark:text-white">{value}</p><p className="mt-1 text-xs capitalize text-[#7B879C] dark:text-[#7F8DA6]">{label}</p></div>)}</div>
+      {selectedFrontEdgeLength > 0 && <div className="mt-5 rounded-2xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950 dark:border-amber-400/30 dark:bg-amber-400/10 dark:text-amber-100">
+        <p className="font-semibold">Selected-edge linear banding: {formatFurnitureJoineryLinearEdgeQuantity(selectedFrontEdgeLength)} lm</p>
+        <p className="mt-1">{FURNITURE_JOINERY_LINEAR_EDGE_ASSUMPTION_LABEL}</p>
+        <p>{FURNITURE_JOINERY_LINEAR_EDGE_VERIFICATION_LABEL}</p>
+        <p>{FURNITURE_JOINERY_LINEAR_EDGE_INTERPRETATION_LABEL}</p>
+      </div>}
     </section>
 
     {(error || message) && <div role={error ? "alert" : "status"} className={`rounded-2xl border p-4 text-sm ${error ? "border-rose-300 bg-rose-50 text-rose-800 dark:border-rose-400/30 dark:bg-rose-400/10 dark:text-rose-200" : "border-emerald-300 bg-emerald-50 text-emerald-800 dark:border-emerald-400/30 dark:bg-emerald-400/10 dark:text-emerald-200"}`}>{error ?? message}</div>}
@@ -326,7 +344,7 @@ export default function JoineryWorkspacePage(props: { params: Promise<{ projectI
         </dl>
         {entry.candidate.issues.length > 0 && <div className="mt-4 flex flex-wrap gap-2">{entry.candidate.issues.map((item, index) => <span key={`${item.code}-${index}`} className={`rounded-lg border px-2.5 py-1 text-xs ${item.severity === "BLOCKING" ? "border-rose-300 bg-rose-50 text-rose-800" : "border-amber-300 bg-amber-50 text-amber-800"}`}>{item.message}</span>)}</div>}
         <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-4">{fields.map(([label, key]) => <label key={key} className="text-xs font-medium text-[#536078] dark:text-[#B8C4D8]">{label}<input value={draft[key]} disabled={locked} onChange={(event) => updateDraft(entry.id, { [key]: event.target.value })} className={fieldClass} /></label>)}
-          <label className="text-xs font-medium text-[#536078] dark:text-[#B8C4D8]">Edge banding<select value={draft.edgeChoice} disabled={locked} onChange={(event) => updateDraft(entry.id, { edgeChoice: event.target.value as EdgeChoice })} className={fieldClass}><option value="UNRESOLVED">Requires verification</option><option value="NONE">None</option><option value="WIDTH">One width edge</option><option value="HEIGHT">One height edge</option><option value="ALL_FOUR">All four edges</option></select></label>
+          <label className="text-xs font-medium text-[#536078] dark:text-[#B8C4D8]">Edge banding<select value={draft.edgeChoice} disabled={locked} onChange={(event) => updateDraft(entry.id, { edgeChoice: event.target.value as EdgeChoice })} className={fieldClass}><option value="UNRESOLVED">Requires verification</option><option value="NONE">None</option><option value="WIDTH">Assume one width edge</option><option value="HEIGHT">Assume one height edge</option><option value="ALL_FOUR">All four edges</option></select></label>
           <label className="text-xs font-medium text-[#536078] dark:text-[#B8C4D8] xl:col-span-2">Hardware / accessories (one per line)<textarea rows={2} value={draft.hardwareNotes} disabled={locked} onChange={(event) => updateDraft(entry.id, { hardwareNotes: event.target.value })} className={fieldClass} /></label>
           <label className="text-xs font-medium text-[#536078] dark:text-[#B8C4D8]">Notes<input value={draft.notes} disabled={locked} onChange={(event) => updateDraft(entry.id, { notes: event.target.value })} className={fieldClass} /></label>
         </div>

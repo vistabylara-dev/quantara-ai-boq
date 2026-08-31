@@ -22,6 +22,11 @@ import { GuideTip } from "@/components/guidance/guide-tip";
 import { useLocale } from "@/lib/i18n/locale-provider";
 import { defaultTranslator, type TranslateFn } from "@/lib/i18n/translate";
 import { getLocalizedApiErrorMessage } from "@/lib/i18n/api-error-message";
+import {
+  formatFurnitureJoineryLinearEdgeQuantity,
+  isFurnitureJoineryLinearEdgeItem,
+} from "@/lib/furniture/linear-edge-format";
+import { JOINERY_INDUSTRY_KEY } from "@/lib/furniture/types";
 
 type BoqEditorProps = {
   boq: BOQ;
@@ -42,6 +47,12 @@ type BoqEditorProps = {
 
 export function isPersistedItemId(itemId: string): boolean {
   return !itemId.includes("-item-");
+}
+
+export function boqQuantityInputValue(industryId: string | undefined, item: BOQItem): number | string {
+  return industryId === JOINERY_INDUSTRY_KEY && isFurnitureJoineryLinearEdgeItem(item)
+    ? formatFurnitureJoineryLinearEdgeQuantity(item.quantity)
+    : item.quantity;
 }
 
 export function getVoiceBOQFieldLabel(
@@ -673,7 +684,7 @@ export default function BoqEditor({
                       <td className="px-4 py-3 w-24">
                         <input
                           type="number"
-                          value={item.quantity}
+                          value={boqQuantityInputValue(industryId, item)}
                           onChange={(event) => updateItem(section.id, item.id, "quantity", Number(event.target.value))}
                           disabled={editorControlsDisabled}
                           className="w-full rounded-2xl border border-slate-800 bg-slate-900 px-2 py-2 text-slate-100 outline-none focus:border-blue-500 disabled:cursor-not-allowed disabled:opacity-60"

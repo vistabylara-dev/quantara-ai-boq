@@ -4,7 +4,7 @@ import {
   FURNITURE_CANONICAL_SECTIONS,
   type FurnitureCanonicalSectionCode,
 } from "@/lib/furniture/canonical-output";
-import { JOINERY_INDUSTRY_KEY } from "@/lib/furniture/types";
+import { JOINERY_INDUSTRY_KEY, readStrictFurnitureManagedKey } from "@/lib/furniture/types";
 
 export type DocumentAudienceValue = "INTERNAL" | "CLIENT";
 
@@ -235,6 +235,18 @@ function buildFurnitureDocumentData(
 ): DocumentFurnitureData | null {
   if (industryKey !== JOINERY_INDUSTRY_KEY) return null;
 
+  // Existing Joinery BOQs predate the specialized five-section output and
+  // must remain downloadable, including when locked. Only BOQs that have
+  // entered the canonical Joinery layout are normalized by this adapter;
+  // legacy section sets continue through the unchanged generic renderer.
+  const hasStrictManagedRow = sections.some((section) => section.items.some((item) =>
+    readStrictFurnitureManagedKey({
+      itemCode: item.itemCode,
+      sourceReference: item.sourceReference,
+      notes: item.notes,
+    }) !== null));
+  if (!hasStrictManagedRow) return null;
+
   const sectionsByCode = new Map<string, BOQ["sections"][number]>();
   for (const section of sections) {
     if (sectionsByCode.has(section.code)) {
@@ -242,6 +254,10 @@ function buildFurnitureDocumentData(
     }
     sectionsByCode.set(section.code, section);
   }
+  const canonicalCodes = new Set<string>(FURNITURE_CANONICAL_SECTIONS.map((definition) => definition.code));
+  const preservedLegacyItems = sections
+    .filter((section) => !canonicalCodes.has(section.code))
+    .flatMap((section) => section.items);
 
   return {
     outputVersion: FURNITURE_CANONICAL_OUTPUT_VERSION,
@@ -254,7 +270,10 @@ function buildFurnitureDocumentData(
         code: definition.code,
         title: definition.title,
         description: definition.description,
-        items: persisted.items.map((item) => toFurnitureItemData(item, showInternalFields, pricingMode)),
+        items: [
+          ...persisted.items,
+          ...(definition.code === "VER" ? preservedLegacyItems : []),
+        ].map((item) => toFurnitureItemData(item, showInternalFields, pricingMode)),
       };
     }),
   };

@@ -1,7 +1,9 @@
 import ExcelJS from "exceljs";
 import type { CanonicalDocumentData } from "../build-document-data";
 import {
+  getDocumentItemNotes,
   getDocumentItemSpecification,
+  getDocumentItemQuantityNumberFormat,
   getDocumentOutputSections,
   shouldRenderDocumentSection,
 } from "../furniture-document-output";
@@ -146,6 +148,8 @@ export async function generateXlsx(data: CanonicalDocumentData): Promise<Buffer>
       row.getCell(4).value = item.description;
       row.getCell(5).value = getDocumentItemSpecification(data, item);
       row.getCell(6).value = item.quantity;
+      const quantityNumberFormat = getDocumentItemQuantityNumberFormat(data, item);
+      if (quantityNumberFormat) row.getCell(6).numFmt = quantityNumberFormat;
       row.getCell(7).value = item.unit;
 
       let colIndex = 8;
@@ -166,11 +170,13 @@ export async function generateXlsx(data: CanonicalDocumentData): Promise<Buffer>
       };
       row.getCell(colIndex++).value = item.roomOrZone;
       row.getCell(colIndex++).value = item.drawingReference;
-      row.getCell(colIndex++).value = item.notes;
+      row.getCell(colIndex++).value = getDocumentItemNotes(data, item);
 
-      row.getCell(4).alignment = { vertical: "top", wrapText: true };
-      row.getCell(5).alignment = { vertical: "top", wrapText: true };
-      row.getCell(colIndex - 1).alignment = { vertical: "top", wrapText: true };
+      if (data.furniture) {
+        row.getCell(4).alignment = { vertical: "top", wrapText: true };
+        row.getCell(5).alignment = { vertical: "top", wrapText: true };
+        row.getCell(colIndex - 1).alignment = { vertical: "top", wrapText: true };
+      }
 
       row.getCell(sellingRateCol).numFmt = CURRENCY_FMT;
       row.getCell(totalCol).numFmt = CURRENCY_FMT;

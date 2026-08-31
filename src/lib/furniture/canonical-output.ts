@@ -10,6 +10,7 @@ import {
 } from "./calculations";
 import type { FurniturePartCandidate } from "./candidate-mapper";
 import type { FurnitureCandidateDiscipline } from "./candidate-mapper";
+import { FURNITURE_JOINERY_LINEAR_EDGE_ASSUMPTION_NOTE } from "./linear-edge-format";
 
 export const FURNITURE_CANONICAL_OUTPUT_VERSION = "furniture-canonical-output-v1" as const;
 export const DEFAULT_FURNITURE_WASTAGE_PERCENTAGE = 10 as const;
@@ -460,6 +461,8 @@ export function buildFurnitureCanonicalOutput(input: BuildFurnitureCanonicalOutp
   const allEvidence = evidenceFor(input.confirmedCandidates);
   const board = calculateFurnitureBoardGroups(candidates, { wastagePercentage: input.wastagePercentage });
   const edge = calculateFurnitureEdgeBanding(candidates);
+  const frontEdgeUsesAssumedOrientation = candidates.some((candidate) =>
+    candidate.edgeBanding.mode === "FRONT" && candidate.edgeBanding.orientation === "ASSUMED");
   const separated = separateFurnitureOrderItems(confirmedOrderItems);
   const { items: hardwareItems, verificationItems: orderVerificationItems } = canonicalHardwareItems(
     confirmedOrderEntries,
@@ -474,7 +477,9 @@ export function buildFurnitureCanonicalOutput(input: BuildFurnitureCanonicalOutp
     category: "HARDWARE",
     description: entry.label,
     specification: entry.mode === "FRONT"
-      ? "Calculated only from the explicitly selected front-edge dimension on each confirmed part."
+      ? frontEdgeUsesAssumedOrientation
+        ? FURNITURE_JOINERY_LINEAR_EDGE_ASSUMPTION_NOTE
+        : "Calculated only from the explicitly selected front-edge dimension on each confirmed part."
       : "Calculated only from the explicitly selected four edges on each confirmed part.",
     quantity: entry.quantity,
     unit: "lm",
@@ -483,7 +488,9 @@ export function buildFurnitureCanonicalOutput(input: BuildFurnitureCanonicalOutp
     drawingReference: "",
     confidenceScore: 100,
     notes: entry.mode === "FRONT"
-      ? "Any retained source orientation assumption remains listed in verification items."
+      ? frontEdgeUsesAssumedOrientation
+        ? FURNITURE_JOINERY_LINEAR_EDGE_ASSUMPTION_NOTE
+        : "The selected front edge was professionally verified before generation."
       : "No unselected edge was included.",
     evidence: allEvidence,
   }));

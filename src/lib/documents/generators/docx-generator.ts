@@ -20,6 +20,7 @@ import type { CanonicalDocumentData } from "../build-document-data";
 import type { DocumentTemplateContentConfig, DocumentTemplateStyleConfig } from "../template-config";
 import {
   getDocumentItemSpecification,
+  getDocumentItemQuantity,
   getDocumentOutputSections,
   shouldRenderDocumentSection,
   shouldRenderSpecification,
@@ -140,7 +141,7 @@ export async function generateDocx(input: GenerateDocxInput): Promise<Buffer> {
         cell(item.description, rtl),
         ...(showSpecification ? [cell(getDocumentItemSpecification(data, item), rtl)] : []),
         cell(item.unit, rtl, { align: AlignmentType.CENTER }),
-        cell(item.quantity.toLocaleString("en-US", { maximumFractionDigits: 2 }), rtl, { align: AlignmentType.RIGHT }),
+        cell(getDocumentItemQuantity(data, item), rtl, { align: AlignmentType.RIGHT }),
         ...(showInternal
           ? [
               cell((item.landedCost ?? 0).toLocaleString("en-US", { maximumFractionDigits: 2 }), rtl, { align: AlignmentType.RIGHT }),

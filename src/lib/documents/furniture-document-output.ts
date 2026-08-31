@@ -4,13 +4,18 @@ import type {
   DocumentBOQSectionData,
   DocumentFurnitureItemData,
 } from "./build-document-data";
+import {
+  formatFurnitureJoineryQuantity,
+  furnitureJoineryQuantityNumberFormat,
+} from "@/lib/furniture/linear-edge-format";
+import { readStrictFurnitureManagedKey } from "@/lib/furniture/types";
 
 const MANAGED_MARKER_PREFIX = "[FJC_MANAGED_V1:";
 
 /**
  * Every renderer calls this selector. Existing industries retain their BOQ
- * sections unchanged; only the exact combined furniture industry switches to
- * the normalized five-section payload built upstream.
+ * sections unchanged; only the existing Joinery industry switches to the
+ * normalized five-section payload built upstream.
  */
 export function getDocumentOutputSections(data: CanonicalDocumentData): readonly DocumentBOQSectionData[] {
   return data.furniture?.sections ?? data.boq.sections;
@@ -27,10 +32,44 @@ export function shouldRenderSpecification(data: CanonicalDocumentData, configure
   return Boolean(data.furniture) || configured;
 }
 
-function visibleSourceReference(sourceReference: string): string {
-  if (!sourceReference.startsWith(MANAGED_MARKER_PREFIX)) return sourceReference;
-  const markerEnd = sourceReference.indexOf("]");
-  return markerEnd < 0 ? "" : sourceReference.slice(markerEnd + 1).trim();
+export function getDocumentItemQuantity(
+  data: CanonicalDocumentData,
+  item: DocumentBOQItemData,
+): string {
+  if (!data.furniture) {
+    return item.quantity.toLocaleString("en-US", { maximumFractionDigits: 2 });
+  }
+  return formatFurnitureJoineryQuantity(item as DocumentFurnitureItemData);
+}
+
+export function getDocumentItemQuantityNumberFormat(
+  data: CanonicalDocumentData,
+  item: DocumentBOQItemData,
+): "0.000" | null {
+  if (!data.furniture) return null;
+  return furnitureJoineryQuantityNumberFormat(item as DocumentFurnitureItemData);
+}
+
+function visibleManagedText(value: string): string {
+  if (!value.startsWith(MANAGED_MARKER_PREFIX)) return value;
+  const markerEnd = value.indexOf("]");
+  return markerEnd < 0 ? "" : value.slice(markerEnd + 1).trim();
+}
+
+function isStrictManagedItem(item: DocumentBOQItemData): boolean {
+  const furnitureItem = item as DocumentFurnitureItemData;
+  return readStrictFurnitureManagedKey({
+    itemCode: furnitureItem.itemCode,
+    sourceReference: furnitureItem.sourceReference,
+    notes: furnitureItem.notes,
+  }) !== null;
+}
+
+export function getDocumentItemNotes(
+  data: CanonicalDocumentData,
+  item: DocumentBOQItemData,
+): string {
+  return data.furniture && isStrictManagedItem(item) ? visibleManagedText(item.notes) : item.notes;
 }
 
 /**
@@ -46,12 +85,15 @@ export function getDocumentItemSpecification(
   if (!data.furniture) return item.specification;
 
   const furnitureItem = item as DocumentFurnitureItemData;
-  const sourceReference = visibleSourceReference(furnitureItem.sourceReference);
+  const sourceReference = isStrictManagedItem(item)
+    ? visibleManagedText(furnitureItem.sourceReference)
+    : furnitureItem.sourceReference;
+  const notes = getDocumentItemNotes(data, item);
   const evidence = [
     sourceReference ? `Source: ${sourceReference}` : "",
     furnitureItem.drawingReference ? `Drawing: ${furnitureItem.drawingReference}` : "",
     Number.isFinite(furnitureItem.confidenceScore) ? `Confidence: ${furnitureItem.confidenceScore}%` : "",
-    furnitureItem.notes ? `Evidence / notes: ${furnitureItem.notes}` : "",
+    notes ? `Evidence / notes: ${notes}` : "",
   ].filter(Boolean);
 
   return [item.specification, ...evidence].filter(Boolean).join("\n");

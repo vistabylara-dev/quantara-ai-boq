@@ -5,6 +5,7 @@ import type { DocumentTemplateContentConfig, DocumentTemplateStyleConfig } from 
 import { isArabicChar, splitScriptRuns, toVisualArabic } from "../arabic-text";
 import {
   getDocumentItemSpecification,
+  getDocumentItemQuantity,
   getDocumentOutputSections,
   shouldRenderDocumentSection,
   shouldRenderSpecification,
@@ -345,7 +346,7 @@ export async function generatePdf(input: GeneratePdfInput): Promise<Buffer> {
           description: item.description,
           specification: getDocumentItemSpecification(data, item),
           unit: item.unit,
-          quantity: item.quantity.toLocaleString("en-US", { maximumFractionDigits: 2 }),
+          quantity: getDocumentItemQuantity(data, item),
           landedCost: (item.landedCost ?? 0).toLocaleString("en-US", { maximumFractionDigits: 2 }),
           marginPercentage: (item.marginPercentage ?? 0).toLocaleString("en-US", { maximumFractionDigits: 1 }),
           sellingRate: (item.sellingRate ?? 0).toLocaleString("en-US", { maximumFractionDigits: 2 }),

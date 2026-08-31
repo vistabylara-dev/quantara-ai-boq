@@ -19,6 +19,7 @@ import {
 } from "@/lib/guidance/extraction-review-filters";
 import { summarizeAiDraftCandidates } from "@/lib/guidance/ai-draft-boq";
 import { GuideTip } from "@/components/guidance/guide-tip";
+import { FURNITURE_CANDIDATE_TECHNICAL_DATA_KIND } from "@/lib/furniture/types";
 
 type ProjectFileView = {
   id: string;
@@ -30,6 +31,7 @@ type ExtractedEntityView = {
   id: string;
   projectId: string;
   projectFileId: string;
+  categoryKey: string | null;
   entityType: string;
   label: string;
   quantity: number | null;
@@ -222,46 +224,54 @@ export default function ProjectExtractionsPage(props: { params: Promise<{ projec
   }, [loadWorkspace]);
 
   const sourceFiles = useMemo(() => new Map(files.map((file) => [file.id, file])), [files]);
-  const reviewSummary = useMemo(
-    () => summarizeExtractionReview(entities.map((entity) => entity.status)),
+  const furnitureCandidateCount = useMemo(
+    () => entities.filter((entity) => entity.categoryKey === FURNITURE_CANDIDATE_TECHNICAL_DATA_KIND).length,
     [entities],
+  );
+  const generalEntities = useMemo(
+    () => entities.filter((entity) => entity.categoryKey !== FURNITURE_CANDIDATE_TECHNICAL_DATA_KIND),
+    [entities],
+  );
+  const reviewSummary = useMemo(
+    () => summarizeExtractionReview(generalEntities.map((entity) => entity.status)),
+    [generalEntities],
   );
 
   const importableEntityCount = useMemo(
-    () => entities.filter(
+    () => generalEntities.filter(
       (entity) => entity.status === "CONFIRMED" || entity.status === "CORRECTED",
     ).length,
-    [entities],
+    [generalEntities],
   );
 
   const draftSummary = useMemo(
-    () => summarizeAiDraftCandidates(entities),
-    [entities],
+    () => summarizeAiDraftCandidates(generalEntities),
+    [generalEntities],
   );
 
   const filteredEntities = useMemo(() => {
-    const filtered = filterExtractionReviewEntities(entities, filters);
+    const filtered = filterExtractionReviewEntities(generalEntities, filters);
     if (!exceptionsOnly) return filtered;
     return filtered.filter(
       (entity) =>
         isReviewableExtractionStatus(entity.status)
         && getExtractionReviewPriority(entity) !== "SAFE",
     );
-  }, [entities, exceptionsOnly, filters]);
+  }, [exceptionsOnly, filters, generalEntities]);
   const statusOptions = useMemo(
-    () => uniqueExtractionFilterValues(entities.map((entity) => entity.status)),
-    [entities],
+    () => uniqueExtractionFilterValues(generalEntities.map((entity) => entity.status)),
+    [generalEntities],
   );
   const entityTypeOptions = useMemo(
-    () => uniqueExtractionFilterValues(entities.map((entity) => entity.entityType)),
-    [entities],
+    () => uniqueExtractionFilterValues(generalEntities.map((entity) => entity.entityType)),
+    [generalEntities],
   );
   const extractionMethodOptions = useMemo(
-    () => uniqueExtractionFilterValues(entities.map((entity) => entity.extractionMethod)),
-    [entities],
+    () => uniqueExtractionFilterValues(generalEntities.map((entity) => entity.extractionMethod)),
+    [generalEntities],
   );
   const priorityCounts = useMemo(
-    () => entities.filter(
+    () => generalEntities.filter(
       (entity) => isReviewableExtractionStatus(entity.status),
     ).reduce(
       (counts, entity) => {
@@ -270,7 +280,7 @@ export default function ProjectExtractionsPage(props: { params: Promise<{ projec
       },
       { SAFE: 0, REVIEW: 0, CRITICAL: 0 },
     ),
-    [entities],
+    [generalEntities],
   );
   const hasActiveFilters = exceptionsOnly || Object.entries(filters).some(
     ([key, value]) => key === "search" ? Boolean(value.trim()) : value !== "ALL",
@@ -539,6 +549,20 @@ export default function ProjectExtractionsPage(props: { params: Promise<{ projec
         <p className="mt-3 max-w-3xl text-sm text-[#536078] dark:text-[#B8C4D8]">
           Quantara presents source-linked candidates for professional review. Nothing is professionally confirmed automatically. You can review first, or prepare an editable AI Draft BOQ and perform the professional review in the completed BOQ table.
         </p>
+
+        {furnitureCandidateCount > 0 && (
+          <div className="mt-5 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-amber-300 bg-amber-50 p-4 dark:border-amber-400/30 dark:bg-amber-400/10">
+            <p className="text-sm text-amber-900 dark:text-amber-100">
+              {furnitureCandidateCount} hierarchical furniture {furnitureCandidateCount === 1 ? "candidate is" : "candidates are"} available. Review dimensions, edge orientation and evidence in the dedicated workspace so the generic BOQ path cannot flatten or duplicate them.
+            </p>
+            <Link
+              href={`/projects/${encodedProjectId}/furniture`}
+              className="rounded-xl bg-amber-700 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-800"
+            >
+              Open Furniture workspace
+            </Link>
+          </div>
+        )}
 
         <div className="mt-6 rounded-3xl border border-[#D9E2EC] bg-[#EEF3F8] p-5 dark:border-[#1E2A42] dark:bg-[#111D33]">
           <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#0077B6] dark:text-[#21C7F3]">Professional drawing evidence</p>

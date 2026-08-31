@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
+import FurnitureWorkspaceLink from "@/components/projects/furniture-workspace-link";
 
 type ProjectLayoutProps = {
   children: ReactNode;
@@ -53,6 +54,7 @@ export default async function ProjectLayout({ children, params }: ProjectLayoutP
             >
               TAYQAN
             </Link>
+            <FurnitureWorkspaceLink projectId={projectId} />
             <Link
               href={`${basePath}/documents`}
               className="rounded-full border border-slate-800 bg-slate-900 px-4 py-2 text-sm text-slate-200 transition hover:bg-slate-800"

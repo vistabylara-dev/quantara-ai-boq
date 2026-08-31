@@ -12,6 +12,7 @@ import {
 import { getProjectRecord } from "@/lib/repositories/project-repository";
 import { getProjectFileRecord } from "@/lib/repositories/project-file-repository";
 import { createAuditLog } from "@/lib/repositories/audit-repository";
+import { FURNITURE_CANDIDATE_TECHNICAL_DATA_KIND } from "@/lib/furniture/types";
 
 const REVIEWABLE_EXTRACTED_ENTITY_STATUSES: ReadonlySet<ExtractedEntityStatus> = new Set([
   "EXTRACTED",
@@ -27,6 +28,16 @@ function assertExtractedEntityIsReviewable(status: ExtractedEntityStatus): void 
     throw new AppError(
       "ENTITY_ALREADY_FINALIZED",
       "This entity has already received a professional decision and cannot be reviewed again without a new review cycle.",
+      409,
+    );
+  }
+}
+
+function assertGenericReviewAllowed(entity: ExtractedEntity): void {
+  if (entity.categoryKey === FURNITURE_CANDIDATE_TECHNICAL_DATA_KIND) {
+    throw new AppError(
+      "FURNITURE_REVIEW_REQUIRED",
+      "Review furniture dimensions, evidence, and verification items in the Furniture workspace.",
       409,
     );
   }
@@ -117,6 +128,7 @@ export async function confirmExtractedEntity(actor: CurrentActor, entityId: stri
   requireCapability(actor, "verification:manage");
   const updated = await prisma.$transaction(async (tx) => {
     const entity = await getExtractedEntityInTransaction(tx, actor.companyId, entityId);
+    assertGenericReviewAllowed(entity);
     const decided = await applyExtractedEntityReviewDecision(tx, actor, entity, {
       status: "CONFIRMED",
       confirmedByUserId: actor.userId,
@@ -132,6 +144,7 @@ export async function correctExtractedEntity(actor: CurrentActor, entityId: stri
   requireCapability(actor, "verification:manage");
   const updated = await prisma.$transaction(async (tx) => {
     const entity = await getExtractedEntityInTransaction(tx, actor.companyId, entityId);
+    assertGenericReviewAllowed(entity);
     const original = { label: entity.label, quantity: entity.quantity?.toNumber() ?? null, unit: entity.unit };
     const decided = await applyExtractedEntityReviewDecision(tx, actor, entity, {
       label: corrections.label ?? entity.label,
@@ -152,6 +165,7 @@ export async function rejectExtractedEntity(actor: CurrentActor, entityId: strin
   requireCapability(actor, "verification:manage");
   const updated = await prisma.$transaction(async (tx) => {
     const entity = await getExtractedEntityInTransaction(tx, actor.companyId, entityId);
+    assertGenericReviewAllowed(entity);
     const decided = await applyExtractedEntityReviewDecision(tx, actor, entity, {
       status: "REJECTED",
       rejectedByUserId: actor.userId,

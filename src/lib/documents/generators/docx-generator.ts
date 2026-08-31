@@ -18,6 +18,12 @@ import {
 } from "docx";
 import type { CanonicalDocumentData } from "../build-document-data";
 import type { DocumentTemplateContentConfig, DocumentTemplateStyleConfig } from "../template-config";
+import {
+  getDocumentItemSpecification,
+  getDocumentOutputSections,
+  shouldRenderDocumentSection,
+  shouldRenderSpecification,
+} from "../furniture-document-output";
 import { fitLogoBox, loadLogoImage, type LogoImageFormat } from "../logo-image";
 
 const DOCX_IMAGE_TYPE: Record<LogoImageFormat, "jpg" | "png"> = { png: "png", jpeg: "jpg" };
@@ -86,13 +92,14 @@ export async function generateDocx(input: GenerateDocxInput): Promise<Buffer> {
   const rtl = style.direction === "rtl";
   const showInternal = data.boq.showInternalFields;
   const quantitiesOnly = data.boq.pricingMode === "QUANTITIES_ONLY";
+  const showSpecification = shouldRenderSpecification(data, content.columns.specification);
   const logo = await loadLogoImage(data.company.logoUrl);
 
   const headerCells = [
     "#",
     "Code",
     "Description",
-    ...(content.columns.specification ? ["Spec"] : []),
+    ...(showSpecification ? [data.furniture ? "Specification / Evidence" : "Spec"] : []),
     "Unit",
     "Qty",
     ...(showInternal ? ["Landed Cost", "Margin %"] : []),
@@ -107,8 +114,8 @@ export async function generateDocx(input: GenerateDocxInput): Promise<Buffer> {
     }),
   ];
 
-  for (const section of data.boq.sections) {
-    if (section.items.length === 0) continue;
+  for (const section of getDocumentOutputSections(data)) {
+    if (!shouldRenderDocumentSection(data, section)) continue;
     tableRows.push(
       new TableRow({
         children: [
@@ -131,7 +138,7 @@ export async function generateDocx(input: GenerateDocxInput): Promise<Buffer> {
         cell(String(item.itemNumber), rtl, { align: AlignmentType.CENTER }),
         cell(item.itemCode, rtl),
         cell(item.description, rtl),
-        ...(content.columns.specification ? [cell(item.specification, rtl)] : []),
+        ...(showSpecification ? [cell(getDocumentItemSpecification(data, item), rtl)] : []),
         cell(item.unit, rtl, { align: AlignmentType.CENTER }),
         cell(item.quantity.toLocaleString("en-US", { maximumFractionDigits: 2 }), rtl, { align: AlignmentType.RIGHT }),
         ...(showInternal

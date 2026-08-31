@@ -1,4 +1,10 @@
 import type { BOQ, BOQItem } from "@/types/boq";
+import {
+  FURNITURE_CANONICAL_OUTPUT_VERSION,
+  FURNITURE_CANONICAL_SECTIONS,
+  type FurnitureCanonicalSectionCode,
+} from "@/lib/furniture/canonical-output";
+import { FURNITURE_JOINERY_INDUSTRY_KEY } from "@/lib/furniture/types";
 
 export type DocumentAudienceValue = "INTERNAL" | "CLIENT";
 
@@ -81,6 +87,28 @@ export type DocumentBOQData = {
   pricingMode: DocumentPricingMode;
 };
 
+export type DocumentFurnitureItemData = DocumentBOQItemData & {
+  category: string;
+  wastagePercentage: number;
+  sourceReference: string;
+  confidenceScore: number;
+};
+
+export type DocumentFurnitureSectionData = Omit<DocumentBOQSectionData, "code" | "items"> & {
+  code: FurnitureCanonicalSectionCode;
+  items: DocumentFurnitureItemData[];
+};
+
+/**
+ * Exact-industry-only payload consumed by every furniture document renderer.
+ * It is normalized once from the managed BOQ, so PDF, DOCX, XLSX and HTML
+ * cannot independently rename, omit, or reorder the five output sections.
+ */
+export type DocumentFurnitureData = {
+  outputVersion: typeof FURNITURE_CANONICAL_OUTPUT_VERSION;
+  sections: DocumentFurnitureSectionData[];
+};
+
 export type DocumentMeta = {
   generatedAt: string;
   generatedByName: string;
@@ -97,6 +125,7 @@ export type CanonicalDocumentData = {
   client: DocumentClientData;
   project: DocumentProjectData;
   boq: DocumentBOQData;
+  furniture?: DocumentFurnitureData;
   meta: DocumentMeta;
 };
 
@@ -139,6 +168,7 @@ export type BuildDocumentDataInput = {
     language: string;
   };
   industryName: string;
+  industryKey?: string | null;
   boq: BOQ;
   revisionNumber: number;
   audience: DocumentAudienceValue;
@@ -183,6 +213,53 @@ function toItemData(item: BOQItem, showInternalFields: boolean, pricingMode: Doc
   };
 }
 
+function toFurnitureItemData(
+  item: BOQItem,
+  showInternalFields: boolean,
+  pricingMode: DocumentPricingMode,
+): DocumentFurnitureItemData {
+  return {
+    ...toItemData(item, showInternalFields, pricingMode),
+    category: item.category,
+    wastagePercentage: item.wastagePercentage,
+    sourceReference: item.sourceReference,
+    confidenceScore: item.confidenceScore,
+  };
+}
+
+function buildFurnitureDocumentData(
+  industryKey: string | null | undefined,
+  sections: readonly BOQ["sections"][number][],
+  showInternalFields: boolean,
+  pricingMode: DocumentPricingMode,
+): DocumentFurnitureData | null {
+  if (industryKey !== FURNITURE_JOINERY_INDUSTRY_KEY) return null;
+
+  const sectionsByCode = new Map<string, BOQ["sections"][number]>();
+  for (const section of sections) {
+    if (sectionsByCode.has(section.code)) {
+      throw new Error(`Furniture document output contains duplicate section code ${section.code}.`);
+    }
+    sectionsByCode.set(section.code, section);
+  }
+
+  return {
+    outputVersion: FURNITURE_CANONICAL_OUTPUT_VERSION,
+    sections: FURNITURE_CANONICAL_SECTIONS.map((definition) => {
+      const persisted = sectionsByCode.get(definition.code);
+      if (!persisted) {
+        throw new Error(`Furniture document output is missing canonical section ${definition.code}.`);
+      }
+      return {
+        code: definition.code,
+        title: definition.title,
+        description: definition.description,
+        items: persisted.items.map((item) => toFurnitureItemData(item, showInternalFields, pricingMode)),
+      };
+    }),
+  };
+}
+
 /**
  * The one canonical document object every generator (CSV/XLSX/PDF/DOCX/HTML)
  * consumes. Internal commercial fields (unitCost/landedCost/margin/etc.) are
@@ -195,6 +272,21 @@ export function buildDocumentData(input: BuildDocumentDataInput): CanonicalDocum
   const showInternalFields = input.audience === "INTERNAL" || Boolean(input.showInternalCostFieldsToClient);
   const pricingMode: DocumentPricingMode = input.pricingMode ?? "WITH_PRICES";
   const quantitiesOnly = pricingMode === "QUANTITIES_ONLY";
+  const furniture = buildFurnitureDocumentData(
+    input.industryKey,
+    input.boq.sections,
+    showInternalFields,
+    pricingMode,
+  );
+  const sections: DocumentBOQSectionData[] = input.boq.sections
+    .slice()
+    .sort((a, b) => a.order - b.order)
+    .map((section) => ({
+      code: section.code,
+      title: section.title,
+      description: section.description,
+      items: section.items.map((item) => toItemData(item, showInternalFields, pricingMode)),
+    }));
 
   return {
     company: {
@@ -231,15 +323,7 @@ export function buildDocumentData(input: BuildDocumentDataInput): CanonicalDocum
       revisionNumber: input.revisionNumber,
       status: input.boq.status,
       lockedAt: input.boq.lockedAt ?? null,
-      sections: input.boq.sections
-        .slice()
-        .sort((a, b) => a.order - b.order)
-        .map((section) => ({
-          code: section.code,
-          title: section.title,
-          description: section.description,
-          items: section.items.map((item) => toItemData(item, showInternalFields, pricingMode)),
-        })),
+      sections,
       ...(quantitiesOnly ? {} : { totals: input.boq.totals }),
       // No VAT/payment terms apply before a BOQ has been priced — the
       // pricing disclaimer is never included in quantities-only mode, not
@@ -251,6 +335,7 @@ export function buildDocumentData(input: BuildDocumentDataInput): CanonicalDocum
       showInternalFields: showInternalFields && !quantitiesOnly,
       pricingMode,
     },
+    ...(furniture ? { furniture } : {}),
     meta: {
       generatedAt: (input.generatedAt ?? new Date()).toISOString(),
       generatedByName: input.generatedByName,

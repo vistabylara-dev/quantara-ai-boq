@@ -1,5 +1,10 @@
 import ExcelJS from "exceljs";
 import type { CanonicalDocumentData } from "../build-document-data";
+import {
+  getDocumentItemSpecification,
+  getDocumentOutputSections,
+  shouldRenderDocumentSection,
+} from "../furniture-document-output";
 import { fitLogoBox, loadLogoImage } from "../logo-image";
 
 const TITLE_FONT = { bold: true, size: 16, color: { argb: "FF0B1D3A" } };
@@ -124,8 +129,8 @@ export async function generateXlsx(data: CanonicalDocumentData): Promise<Buffer>
   let rowCursor = headerRowNumber + 1;
   const firstDataRow = rowCursor;
 
-  for (const section of data.boq.sections) {
-    if (section.items.length === 0) continue;
+  for (const section of getDocumentOutputSections(data)) {
+    if (!shouldRenderDocumentSection(data, section)) continue;
     const sectionRow = sheet.getRow(rowCursor);
     sectionRow.getCell(1).value = `${section.code} — ${section.title}`;
     sheet.mergeCells(rowCursor, 1, rowCursor, columns.length);
@@ -139,7 +144,7 @@ export async function generateXlsx(data: CanonicalDocumentData): Promise<Buffer>
       row.getCell(2).value = item.itemNumber;
       row.getCell(3).value = item.itemCode;
       row.getCell(4).value = item.description;
-      row.getCell(5).value = item.specification;
+      row.getCell(5).value = getDocumentItemSpecification(data, item);
       row.getCell(6).value = item.quantity;
       row.getCell(7).value = item.unit;
 
@@ -162,6 +167,10 @@ export async function generateXlsx(data: CanonicalDocumentData): Promise<Buffer>
       row.getCell(colIndex++).value = item.roomOrZone;
       row.getCell(colIndex++).value = item.drawingReference;
       row.getCell(colIndex++).value = item.notes;
+
+      row.getCell(4).alignment = { vertical: "top", wrapText: true };
+      row.getCell(5).alignment = { vertical: "top", wrapText: true };
+      row.getCell(colIndex - 1).alignment = { vertical: "top", wrapText: true };
 
       row.getCell(sellingRateCol).numFmt = CURRENCY_FMT;
       row.getCell(totalCol).numFmt = CURRENCY_FMT;

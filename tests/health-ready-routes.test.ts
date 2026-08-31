@@ -84,6 +84,16 @@ describe("GET /api/health", () => {
 });
 
 describe("GET /api/ready", () => {
+  function stubValidProductionConfiguration() {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("PROPOSAL_ACCESS_SECRET", "production-proposal-secret-with-more-than-thirty-two-bytes");
+    vi.stubEnv("INTEGRATION_CREDENTIALS_ENCRYPTION_KEY", Buffer.alloc(32, 4).toString("base64"));
+    vi.stubEnv("WORKER_RUNNER_SECRET", "production-worker-secret-with-more-than-thirty-two-bytes");
+    vi.stubEnv("WORKER_AI_PLANNER_ENABLED", "false");
+    vi.stubEnv("STORAGE_PROVIDER", "vercel-blob");
+    vi.stubEnv("BLOB_READ_WRITE_TOKEN", "test-blob-token");
+  }
+
   afterEach(() => {
     queryRawMock.mockReset();
     vi.unstubAllEnvs();
@@ -130,11 +140,7 @@ describe("GET /api/ready", () => {
   });
 
   it("accepts valid production security configuration before checking the database", async () => {
-    vi.stubEnv("NODE_ENV", "production");
-    vi.stubEnv("PROPOSAL_ACCESS_SECRET", "production-proposal-secret-with-more-than-thirty-two-bytes");
-    vi.stubEnv("INTEGRATION_CREDENTIALS_ENCRYPTION_KEY", Buffer.alloc(32, 4).toString("base64"));
-    vi.stubEnv("WORKER_RUNNER_SECRET", "production-worker-secret-with-more-than-thirty-two-bytes");
-    vi.stubEnv("WORKER_AI_PLANNER_ENABLED", "false");
+    stubValidProductionConfiguration();
     queryRawMock.mockResolvedValue([{ "?column?": 1 }]);
 
     const { GET } = await import("../src/app/api/ready/route");
@@ -142,6 +148,32 @@ describe("GET /api/ready", () => {
 
     expect(response.status).toBe(200);
     expect(queryRawMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("fails readiness closed when production project storage is missing", async () => {
+    stubValidProductionConfiguration();
+    vi.stubEnv("STORAGE_PROVIDER", "");
+
+    const { GET } = await import("../src/app/api/ready/route");
+    const response = await GET();
+
+    expect(response.status).toBe(503);
+    expect(queryRawMock).not.toHaveBeenCalled();
+    const body = (await response.json()) as ApiErrorBody;
+    expect(body.error.code).toBe("STORAGE_CONFIGURATION_UNAVAILABLE");
+    expect(JSON.stringify(body)).not.toContain("STORAGE_PROVIDER");
+  });
+
+  it("fails readiness closed when the production Blob credential is missing", async () => {
+    stubValidProductionConfiguration();
+    vi.stubEnv("BLOB_READ_WRITE_TOKEN", "");
+
+    const { GET } = await import("../src/app/api/ready/route");
+    const response = await GET();
+
+    expect(response.status).toBe(503);
+    expect(queryRawMock).not.toHaveBeenCalled();
+    expect((await response.json() as ApiErrorBody).error.code).toBe("STORAGE_CONFIGURATION_UNAVAILABLE");
   });
 
   it("fails readiness closed in production when the worker runner secret is missing", async () => {

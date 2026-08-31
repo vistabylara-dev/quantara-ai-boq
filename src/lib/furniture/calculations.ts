@@ -84,6 +84,11 @@ export type FurnitureOrderItem = {
     sheetName: string | null;
     rowNumber: number;
     sourceCellReferences: string[];
+    sourceFileId?: string | null;
+    sourceFileName?: string;
+    pageNumber?: number | null;
+    confidence?: number | null;
+    method?: string;
   };
 };
 

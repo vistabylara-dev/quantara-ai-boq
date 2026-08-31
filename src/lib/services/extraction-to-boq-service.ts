@@ -13,6 +13,7 @@ import {
 import { createAuditLog } from "@/lib/repositories/audit-repository";
 import { recordReviewedExtractionQuantity } from "@/lib/services/estimate-integrity-service";
 import { FURNITURE_CANDIDATE_TECHNICAL_DATA_KIND } from "@/lib/furniture/types";
+import { FURNITURE_ORDER_ITEM_TECHNICAL_DATA_KIND } from "@/lib/furniture/order-item-mapper";
 
 export type ImportEntityToBoqInput = {
   sectionId: string;
@@ -60,7 +61,10 @@ export async function importExtractedEntityToBoq(
       where: { id: entityId, companyId: actor.companyId },
     });
     if (!entity) throw new NotFoundError("Extracted entity not found.");
-    if (entity.categoryKey === FURNITURE_CANDIDATE_TECHNICAL_DATA_KIND) {
+    if (
+      entity.categoryKey === FURNITURE_CANDIDATE_TECHNICAL_DATA_KIND
+      || entity.categoryKey === FURNITURE_ORDER_ITEM_TECHNICAL_DATA_KIND
+    ) {
       throw new AppError(
         "FURNITURE_MANAGED_BOQ_REQUIRED",
         "Generate furniture items through the Furniture workspace so hierarchy, calculations, and evidence remain intact.",

@@ -44,6 +44,7 @@ import {
 import { getProjectRecord } from "@/lib/repositories/project-repository";
 import { TAYQAN_MEASUREMENT_CALCULATED_BY_PREFIX } from "@/lib/tayqan/tayqan-measurement-contract";
 import { FURNITURE_CANDIDATE_TECHNICAL_DATA_KIND } from "@/lib/furniture/types";
+import { FURNITURE_ORDER_ITEM_TECHNICAL_DATA_KIND } from "@/lib/furniture/order-item-mapper";
 
 const AI_DRAFT_FALLBACK_CODE = "AI-DRAFT";
 const REVIEWABLE_ENTITY_STATUSES = new Set(["EXTRACTED", "NEEDS_REVIEW"]);
@@ -191,7 +192,10 @@ export async function generateAiDraftBoq(
         // → Part. The generic draft path must never flatten or duplicate it.
         OR: [
           { categoryKey: null },
-          { categoryKey: { not: FURNITURE_CANDIDATE_TECHNICAL_DATA_KIND } },
+          { categoryKey: { notIn: [
+            FURNITURE_CANDIDATE_TECHNICAL_DATA_KIND,
+            FURNITURE_ORDER_ITEM_TECHNICAL_DATA_KIND,
+          ] } },
         ],
         ...(scopedProjectFileIds.length > 0
           ? { projectFileId: { in: scopedProjectFileIds } }

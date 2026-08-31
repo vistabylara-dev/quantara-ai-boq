@@ -19,7 +19,10 @@ import {
 } from "@/lib/guidance/extraction-review-filters";
 import { summarizeAiDraftCandidates } from "@/lib/guidance/ai-draft-boq";
 import { GuideTip } from "@/components/guidance/guide-tip";
-import { FURNITURE_CANDIDATE_TECHNICAL_DATA_KIND } from "@/lib/furniture/types";
+import {
+  FURNITURE_CANDIDATE_TECHNICAL_DATA_KIND,
+  FURNITURE_ORDER_ITEM_TECHNICAL_DATA_KIND,
+} from "@/lib/furniture/types";
 
 type ProjectFileView = {
   id: string;
@@ -225,11 +228,17 @@ export default function ProjectExtractionsPage(props: { params: Promise<{ projec
 
   const sourceFiles = useMemo(() => new Map(files.map((file) => [file.id, file])), [files]);
   const furnitureCandidateCount = useMemo(
-    () => entities.filter((entity) => entity.categoryKey === FURNITURE_CANDIDATE_TECHNICAL_DATA_KIND).length,
+    () => entities.filter((entity) => (
+      entity.categoryKey === FURNITURE_CANDIDATE_TECHNICAL_DATA_KIND
+      || entity.categoryKey === FURNITURE_ORDER_ITEM_TECHNICAL_DATA_KIND
+    )).length,
     [entities],
   );
   const generalEntities = useMemo(
-    () => entities.filter((entity) => entity.categoryKey !== FURNITURE_CANDIDATE_TECHNICAL_DATA_KIND),
+    () => entities.filter((entity) => (
+      entity.categoryKey !== FURNITURE_CANDIDATE_TECHNICAL_DATA_KIND
+      && entity.categoryKey !== FURNITURE_ORDER_ITEM_TECHNICAL_DATA_KIND
+    )),
     [entities],
   );
   const reviewSummary = useMemo(

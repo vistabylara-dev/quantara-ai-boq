@@ -1,4 +1,5 @@
 import ExcelJS from "exceljs";
+import type { ParsedTable } from "@/lib/files/table-extraction/types";
 import {
   mapFurnitureCandidateTable,
   type FurnitureMappingContext,
@@ -6,7 +7,10 @@ import {
   type FurnitureSourceCell,
   type FurnitureSourceTable,
 } from "./candidate-mapper";
-import type { FurnitureOrderCategory, FurnitureOrderItem } from "./calculations";
+import {
+  mapFurnitureOrderItemCandidates,
+  type FurnitureOrderItemCandidate,
+} from "./order-item-mapper";
 
 export const FURNITURE_WORKBOOK_READER_VERSION = "furniture-workbook-v1" as const;
 
@@ -14,8 +18,18 @@ export type FurnitureWorkbookReadResult = {
   readerVersion: typeof FURNITURE_WORKBOOK_READER_VERSION;
   sheetNames: string[];
   cuttingListTable: FurnitureSourceTable;
-  hardwareItems: FurnitureOrderItem[];
+  hardwareTable: FurnitureSourceTable;
+  hardwareItems: FurnitureOrderItemCandidate[];
 };
+
+export class UnsupportedFurnitureWorkbookError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "UnsupportedFurnitureWorkbookError";
+  }
+}
+
+const FURNITURE_STRUCTURED_TABLE_CONFIDENCE = 95;
 
 const HEADER_ALIASES: Record<string, string> = {
   room: "room",
@@ -87,7 +101,11 @@ function normalizeHeader(value: string): string {
 function findWorksheet(workbook: ExcelJS.Workbook, expectedName: string): ExcelJS.Worksheet {
   const sheet = workbook.worksheets.find((candidate) =>
     candidate.name.trim().toLowerCase() === expectedName.trim().toLowerCase());
-  if (!sheet) throw new Error(`Required furniture workbook sheet '${expectedName}' was not found.`);
+  if (!sheet) {
+    throw new UnsupportedFurnitureWorkbookError(
+      `Required furniture workbook sheet '${expectedName}' was not found.`,
+    );
+  }
   return sheet;
 }
 
@@ -106,7 +124,9 @@ function findHeader(
     const foundKeys = new Set(columns.values());
     if ([...requiredKeys].every((key) => foundKeys.has(key))) return { rowNumber, columns };
   }
-  throw new Error(`A supported header row was not found in '${worksheet.name}'.`);
+  throw new UnsupportedFurnitureWorkbookError(
+    `A supported header row was not found in '${worksheet.name}'.`,
+  );
 }
 
 function sourceCellsForRow(
@@ -138,57 +158,82 @@ function buildCuttingListTable(worksheet: ExcelJS.Worksheet): FurnitureSourceTab
     const valuesByKey = new Map(cells.map((cell) => [cell.columnKey, cell.rawValue]));
     // Footer/summary rows have no hierarchy identity and are not part candidates.
     if (!["room", "elevation_ref", "cabinet_unit"].some((key) => valuesByKey.get(key)?.trim())) continue;
-    rows.push({ rowNumber, cells, confidence: null });
+    rows.push({
+      sourceRowKey: `${worksheet.name}:${rowNumber}`,
+      rowNumber,
+      cells,
+      confidence: null,
+    });
   }
   return {
+    sourceTableKey: `workbook:${worksheet.name}`,
     sheetName: worksheet.name,
-    title: "Furniture cutting list",
+    title: "FULL CUTTING LIST — ALL ROOMS",
     rows,
     confidence: null,
     method: FURNITURE_WORKBOOK_READER_VERSION,
   };
 }
 
-function numericQuantity(raw: string): number | null {
-  if (!/^\d+(?:\.\d+)?$/.test(raw.trim())) return null;
-  const value = Number(raw);
-  return Number.isFinite(value) ? value : null;
-}
-
-function explicitHardwareCategory(description: string): FurnitureOrderCategory {
-  if (/drawer\s+(?:box|system)|tandembox|legrabox/i.test(description)) return "PROPRIETARY_DRAWER_SYSTEM";
-  if (/power\s*point|socket|electrical/i.test(description)) return "ELECTRICAL_ACCESSORY";
-  if (/\bled\b/i.test(description)) return "LED";
-  return "HARDWARE";
-}
-
-function buildHardwareItems(worksheet: ExcelJS.Worksheet): FurnitureOrderItem[] {
+function buildHardwareTable(worksheet: ExcelJS.Worksheet): FurnitureSourceTable {
   const header = findHeader(worksheet, new Set(["item", "quantity", "unit", "notes"]));
-  const items: FurnitureOrderItem[] = [];
+  const rows = [];
   for (let rowNumber = header.rowNumber + 1; rowNumber <= worksheet.rowCount; rowNumber += 1) {
     const cells = sourceCellsForRow(worksheet, rowNumber, header.columns);
     const values = new Map(cells.map((cell) => [cell.columnKey, cell.rawValue]));
     const description = values.get("item")?.trim() ?? "";
     if (description === "") continue;
-    const quantityText = values.get("quantity")?.trim() ?? "";
-    const notes = values.get("notes")?.trim() || null;
-    items.push({
-      id: `${worksheet.name}:${rowNumber}`,
-      description,
-      quantity: numericQuantity(quantityText),
-      quantityText,
-      unit: values.get("unit")?.trim() || null,
-      category: explicitHardwareCategory(description),
-      suppliedByOthers: notes ? /supplied\s+by\s+others/i.test(notes) : false,
-      notes,
-      evidence: {
-        sheetName: worksheet.name,
-        rowNumber,
-        sourceCellReferences: cells.map((cell) => cell.sourceCellReference).filter((value): value is string => Boolean(value)),
-      },
+    rows.push({
+      sourceRowKey: `${worksheet.name}:${rowNumber}`,
+      rowNumber,
+      cells,
+      confidence: null,
     });
   }
-  return items;
+  return {
+    sourceTableKey: `workbook:${worksheet.name}`,
+    sheetName: worksheet.name,
+    title: "HARDWARE & ACCESSORIES — ORDER QUANTITIES",
+    rows,
+    confidence: null,
+    method: FURNITURE_WORKBOOK_READER_VERSION,
+  };
+}
+
+/**
+ * Lossless structural adapter into the existing ExtractedTable persistence
+ * pipeline. The custom reader locates the real workbook header rows; the
+ * stored parser method remains one of the existing supported method values.
+ */
+export function furnitureSourceTableToParsedTable(table: FurnitureSourceTable): ParsedTable {
+  const tableConfidence = typeof table.confidence === "number"
+    ? table.confidence
+    : FURNITURE_STRUCTURED_TABLE_CONFIDENCE;
+  return {
+    sheetName: table.sheetName,
+    title: table.title,
+    confidence: tableConfidence,
+    method: "xlsx-merge-reconstruction",
+    rows: table.rows.map((row) => ({
+      rowNumber: row.rowNumber,
+      cells: row.cells.map((cell) => ({
+        columnKey: cell.columnKey,
+        rawValue: cell.rawValue,
+        ...(cell.normalizedValue !== undefined ? { normalizedValue: cell.normalizedValue } : {}),
+        ...(cell.sourceCellReference !== undefined
+          ? { sourceCellReference: cell.sourceCellReference }
+          : {}),
+      })),
+      confidence: typeof row.confidence === "number" ? row.confidence : tableConfidence,
+    })),
+  };
+}
+
+export function furnitureWorkbookToParsedTables(workbook: FurnitureWorkbookReadResult): ParsedTable[] {
+  return [
+    furnitureSourceTableToParsedTable(workbook.cuttingListTable),
+    furnitureSourceTableToParsedTable(workbook.hardwareTable),
+  ];
 }
 
 export async function readFurnitureWorkbook(buffer: Buffer): Promise<FurnitureWorkbookReadResult> {
@@ -196,12 +241,19 @@ export async function readFurnitureWorkbook(buffer: Buffer): Promise<FurnitureWo
   await workbook.xlsx.load(buffer as unknown as ArrayBuffer);
   const cuttingList = findWorksheet(workbook, "Cutting List");
   const hardware = findWorksheet(workbook, "Hardware & Accessories BOQ");
+  const cuttingListTable = buildCuttingListTable(cuttingList);
+  const hardwareTable = buildHardwareTable(hardware);
   return {
     readerVersion: FURNITURE_WORKBOOK_READER_VERSION,
     sheetNames: workbook.worksheets.map((worksheet) => worksheet.name),
-    cuttingListTable: buildCuttingListTable(cuttingList),
-    hardwareItems: buildHardwareItems(hardware),
+    cuttingListTable,
+    hardwareTable,
+    hardwareItems: mapFurnitureOrderItemCandidates(hardwareTable).items,
   };
+}
+
+export async function parseFurnitureWorkbookTables(buffer: Buffer): Promise<ParsedTable[]> {
+  return furnitureWorkbookToParsedTables(await readFurnitureWorkbook(buffer));
 }
 
 export async function mapFurnitureWorkbookCandidates(

@@ -44,6 +44,8 @@ export type VerificationItemInput = {
   minimumSellingRate?: DecimalInput | null;
   manualOverrideFields?: string[] | null;
   status?: string | null;
+  /** False only for explicitly guarded, non-commercial document rows. */
+  commercialPricingRequired?: boolean;
 };
 
 export type VerificationConfig = {
@@ -203,82 +205,84 @@ export function runVerification(input: VerificationRunInput): VerificationExcept
       );
     }
 
-    const sellingRate = optionalDecimal(item.sellingRate);
-    if (sellingRate === null || sellingRate.isZero()) {
-      results.push(
-        exception(input, item, "ZERO_SELLING_RATE", "CRITICAL", "Item selling rate is zero or missing.", currentDecimal(sellingRate), "Recalculate or enter a selling rate greater than zero."),
-      );
-    }
+    if (item.commercialPricingRequired !== false) {
+      const sellingRate = optionalDecimal(item.sellingRate);
+      if (sellingRate === null || sellingRate.isZero()) {
+        results.push(
+          exception(input, item, "ZERO_SELLING_RATE", "CRITICAL", "Item selling rate is zero or missing.", currentDecimal(sellingRate), "Recalculate or enter a selling rate greater than zero."),
+        );
+      }
 
-    const landedCostForComparison = optionalDecimal(item.landedCost);
-    if (sellingRate !== null && landedCostForComparison !== null && sellingRate.lessThan(landedCostForComparison)) {
-      results.push(
-        exception(
-          input,
-          item,
-          "SELLING_RATE_BELOW_LANDED_COST",
-          "CRITICAL",
-          "Item selling rate is below its landed cost.",
-          `sellingRate=${sellingRate.toString()} landedCost=${landedCostForComparison.toString()}`,
-          "Increase the selling rate or margin so it covers the landed cost.",
-        ),
-      );
-    }
+      const landedCostForComparison = optionalDecimal(item.landedCost);
+      if (sellingRate !== null && landedCostForComparison !== null && sellingRate.lessThan(landedCostForComparison)) {
+        results.push(
+          exception(
+            input,
+            item,
+            "SELLING_RATE_BELOW_LANDED_COST",
+            "CRITICAL",
+            "Item selling rate is below its landed cost.",
+            `sellingRate=${sellingRate.toString()} landedCost=${landedCostForComparison.toString()}`,
+            "Increase the selling rate or margin so it covers the landed cost.",
+          ),
+        );
+      }
 
-    const minimumSellingRate = optionalDecimal(item.minimumSellingRate);
-    if (sellingRate !== null && minimumSellingRate !== null && sellingRate.lessThan(minimumSellingRate)) {
-      results.push(
-        exception(
-          input,
-          item,
-          "SELLING_RATE_BELOW_MINIMUM",
-          "WARNING",
-          "Item selling rate is below the catalogue's configured minimum selling rate.",
-          sellingRate.toString(),
-          minimumSellingRate.toString(),
-        ),
-      );
-    }
+      const minimumSellingRate = optionalDecimal(item.minimumSellingRate);
+      if (sellingRate !== null && minimumSellingRate !== null && sellingRate.lessThan(minimumSellingRate)) {
+        results.push(
+          exception(
+            input,
+            item,
+            "SELLING_RATE_BELOW_MINIMUM",
+            "WARNING",
+            "Item selling rate is below the catalogue's configured minimum selling rate.",
+            sellingRate.toString(),
+            minimumSellingRate.toString(),
+          ),
+        );
+      }
 
-    if (item.manualOverrideFields && item.manualOverrideFields.length > 0) {
-      results.push(
-        exception(
-          input,
-          item,
-          "MANUAL_COMMERCIAL_OVERRIDE",
-          "WARNING",
-          `Item was manually edited after a catalogue rate was applied (${item.manualOverrideFields.join(", ")}).`,
-          item.manualOverrideFields.join(", "),
-          "Confirm the manual values or reapply the catalogue rate.",
-        ),
-      );
-    }
+      if (item.manualOverrideFields && item.manualOverrideFields.length > 0) {
+        results.push(
+          exception(
+            input,
+            item,
+            "MANUAL_COMMERCIAL_OVERRIDE",
+            "WARNING",
+            `Item was manually edited after a catalogue rate was applied (${item.manualOverrideFields.join(", ")}).`,
+            item.manualOverrideFields.join(", "),
+            "Confirm the manual values or reapply the catalogue rate.",
+          ),
+        );
+      }
 
-    const negativeCostFields = (
-      ["unitCost", "freightCost", "installationCost", "additionalCost", "landedCost"] as const
-    ).flatMap((field) => {
-      const value = optionalDecimal(item[field]);
-      return value?.isNegative() ? [`${field}=${value.toString()}`] : [];
-    });
-    if (negativeCostFields.length > 0) {
-      results.push(
-        exception(input, item, "NEGATIVE_COST", "CRITICAL", "Item contains one or more negative costs.", negativeCostFields.join(", "), "Correct all costs to zero or greater."),
-      );
-    }
+      const negativeCostFields = (
+        ["unitCost", "freightCost", "installationCost", "additionalCost", "landedCost"] as const
+      ).flatMap((field) => {
+        const value = optionalDecimal(item[field]);
+        return value?.isNegative() ? [`${field}=${value.toString()}`] : [];
+      });
+      if (negativeCostFields.length > 0) {
+        results.push(
+          exception(input, item, "NEGATIVE_COST", "CRITICAL", "Item contains one or more negative costs.", negativeCostFields.join(", "), "Correct all costs to zero or greater."),
+        );
+      }
 
-    const marginPercentage = optionalDecimal(item.marginPercentage);
-    if (marginPercentage !== null && marginPercentage.lessThan(minimumMargin)) {
-      results.push(
-        exception(
-          input,
-          item,
-          "MARGIN_BELOW_MINIMUM",
-          marginPercentage.isNegative() ? "CRITICAL" : "WARNING",
-          `Item margin is below the configured minimum of ${minimumMargin.toString()}%.`,
-          marginPercentage.toString(),
-          minimumMargin.toString(),
-        ),
-      );
+      const marginPercentage = optionalDecimal(item.marginPercentage);
+      if (marginPercentage !== null && marginPercentage.lessThan(minimumMargin)) {
+        results.push(
+          exception(
+            input,
+            item,
+            "MARGIN_BELOW_MINIMUM",
+            marginPercentage.isNegative() ? "CRITICAL" : "WARNING",
+            `Item margin is below the configured minimum of ${minimumMargin.toString()}%.`,
+            marginPercentage.toString(),
+            minimumMargin.toString(),
+          ),
+        );
+      }
     }
 
     const confidence = optionalDecimal(item.confidenceScore);
@@ -302,7 +306,7 @@ export function runVerification(input: VerificationRunInput): VerificationExcept
       );
     }
 
-    if (item.supplierRateExpiryDate) {
+    if (item.commercialPricingRequired !== false && item.supplierRateExpiryDate) {
       const expiryDate = item.supplierRateExpiryDate instanceof Date
         ? item.supplierRateExpiryDate
         : new Date(item.supplierRateExpiryDate);

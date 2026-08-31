@@ -13,6 +13,7 @@ import { getProjectRecord } from "@/lib/repositories/project-repository";
 import { getProjectFileRecord } from "@/lib/repositories/project-file-repository";
 import { createAuditLog } from "@/lib/repositories/audit-repository";
 import { FURNITURE_CANDIDATE_TECHNICAL_DATA_KIND } from "@/lib/furniture/types";
+import { FURNITURE_ORDER_ITEM_TECHNICAL_DATA_KIND } from "@/lib/furniture/order-item-mapper";
 
 const REVIEWABLE_EXTRACTED_ENTITY_STATUSES: ReadonlySet<ExtractedEntityStatus> = new Set([
   "EXTRACTED",
@@ -34,7 +35,10 @@ function assertExtractedEntityIsReviewable(status: ExtractedEntityStatus): void 
 }
 
 function assertGenericReviewAllowed(entity: ExtractedEntity): void {
-  if (entity.categoryKey === FURNITURE_CANDIDATE_TECHNICAL_DATA_KIND) {
+  if (
+    entity.categoryKey === FURNITURE_CANDIDATE_TECHNICAL_DATA_KIND
+    || entity.categoryKey === FURNITURE_ORDER_ITEM_TECHNICAL_DATA_KIND
+  ) {
     throw new AppError(
       "FURNITURE_REVIEW_REQUIRED",
       "Review furniture dimensions, evidence, and verification items in the Furniture workspace.",

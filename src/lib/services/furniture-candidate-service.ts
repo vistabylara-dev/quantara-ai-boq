@@ -15,6 +15,12 @@ import {
 } from "@/lib/furniture/candidate-mapper";
 import { getFurnitureProjectDiscipline } from "@/lib/furniture/project-discipline";
 import {
+  furnitureOrderItemCandidateEnvelope,
+  FURNITURE_ORDER_ITEM_TECHNICAL_DATA_KIND,
+  mapFurnitureOrderItemCandidates,
+  type FurnitureOrderItemCandidate,
+} from "@/lib/furniture/order-item-mapper";
+import {
   FURNITURE_CANDIDATE_TECHNICAL_DATA_KIND,
   FURNITURE_JOINERY_INDUSTRY_KEY,
 } from "@/lib/furniture/types";
@@ -48,6 +54,20 @@ function resolveSourceKind(extension: string): FurnitureSourceKind {
   if (extension.toLowerCase() === "xlsx") return "WORKBOOK";
   if (extension.toLowerCase() === "pdf") return "PDF_TABLE";
   return "EXTRACTED_TABLE";
+}
+
+function normalizedColumnKey(value: string): string {
+  return value.trim().toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/(^_|_$)/g, "");
+}
+
+function hasPartHierarchyColumns(table: FurnitureSourceTable): boolean {
+  const keys = new Set(table.rows.flatMap((row) => row.cells.map((cell) => normalizedColumnKey(cell.columnKey))));
+  return keys.has("room") && (
+    keys.has("part")
+    || keys.has("cabinet_unit")
+    || keys.has("cabinet_assembly")
+    || keys.has("unit_assembly")
+  );
 }
 
 function toSourceTable(
@@ -86,10 +106,14 @@ function asJson(value: unknown): Prisma.InputJsonValue {
 function readCandidateId(value: Prisma.JsonValue): string | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   const envelope = value as Record<string, unknown>;
-  if (envelope.kind !== FURNITURE_CANDIDATE_TECHNICAL_DATA_KIND) return null;
   const candidate = envelope.candidate;
   if (!candidate || typeof candidate !== "object" || Array.isArray(candidate)) return null;
-  const candidateId = (candidate as Record<string, unknown>).candidateId;
+  const candidateRecord = candidate as Record<string, unknown>;
+  const candidateId = envelope.kind === FURNITURE_CANDIDATE_TECHNICAL_DATA_KIND
+    ? candidateRecord.candidateId
+    : envelope.kind === FURNITURE_ORDER_ITEM_TECHNICAL_DATA_KIND
+      ? candidateRecord.id
+      : null;
   return typeof candidateId === "string" ? candidateId : null;
 }
 
@@ -135,6 +159,40 @@ function candidateData(
       kind: FURNITURE_CANDIDATE_TECHNICAL_DATA_KIND,
       candidate,
     }),
+    status: ExtractedEntityStatus.NEEDS_REVIEW,
+  };
+}
+
+function orderCandidateData(
+  input: FurnitureCandidateGenerationInput,
+  projectId: string,
+  projectFileId: string,
+  drawingPageId: string | null,
+  fileName: string,
+  candidate: FurnitureOrderItemCandidate,
+): Prisma.ExtractedEntityUncheckedCreateInput {
+  const location = candidate.evidence.sheetName
+    ?? (candidate.evidence.pageNumber === null ? "Source table" : `page ${candidate.evidence.pageNumber}`);
+  return {
+    companyId: input.companyId,
+    projectId,
+    projectFileId,
+    drawingPageId,
+    extractionJobId: input.extractionJobId ?? null,
+    entityType: ExtractedEntityType.FURNITURE,
+    categoryKey: FURNITURE_ORDER_ITEM_TECHNICAL_DATA_KIND,
+    label: candidate.description,
+    normalizedLabel: candidate.description.toLowerCase().trim(),
+    quantity: candidate.quantity,
+    unit: candidate.unit,
+    confidence: Math.max(0, Math.min(100, candidate.evidence.confidence ?? 0)),
+    extractionMethod: ExtractionMethod.TABLE_PARSER,
+    sourceText: Object.entries(candidate.evidence.rawCells)
+      .map(([key, value]) => `${key}: ${value}`)
+      .join("; ")
+      .slice(0, 4000),
+    sourceReference: [fileName, location, `row ${candidate.evidence.rowNumber}`].join(" · "),
+    technicalDataJson: asJson(furnitureOrderItemCandidateEnvelope(candidate)),
     status: ExtractedEntityStatus.NEEDS_REVIEW,
   };
 }
@@ -186,17 +244,26 @@ export async function generateFurnitureCandidatesFromStructuredTables(
     : [];
   const pageNumberById = new Map(drawingPages.map((page) => [page.id, page.pageNumber]));
   const discipline = await getFurnitureProjectDiscipline(input.companyId, project.id);
-  const mappedTables = tables.map((table, tableIndex) => ({
-    table,
-    result: mapFurnitureCandidateTable(toSourceTable(table, pageNumberById, tableIndex), {
+  const sourceKind = resolveSourceKind(file.extension);
+  const mappedTables = tables.map((table, tableIndex) => {
+    const sourceTable = toSourceTable(table, pageNumberById, tableIndex);
+    const orderResult = mapFurnitureOrderItemCandidates(sourceTable, {
+      sourceFileId: file.id,
+      sourceFileName: file.originalName,
+      sourceKind,
+    });
+    if (!hasPartHierarchyColumns(sourceTable) && orderResult.items.length > 0) {
+      return { kind: "ORDER_ITEMS" as const, table, result: orderResult };
+    }
+    return { kind: "PARTS" as const, table, result: mapFurnitureCandidateTable(sourceTable, {
       industryEnabled: true,
       discipline: discipline as FurnitureCandidateDiscipline,
-      sourceKind: resolveSourceKind(file.extension),
+      sourceKind,
       sourceFileName: file.originalName,
       sourceFileId: file.id,
       frontEdgeOrientationAssumption: null,
-    }),
-  }));
+    }) };
+  });
   const rowsConsidered = tables.reduce((sum, table) => sum + table.rows.length, 0);
 
   let candidatesCreated = 0;
@@ -211,7 +278,12 @@ export async function generateFurnitureCandidatesFromStructuredTables(
       where: {
         companyId: input.companyId,
         projectFileId: file.id,
-        categoryKey: FURNITURE_CANDIDATE_TECHNICAL_DATA_KIND,
+        categoryKey: {
+          in: [
+            FURNITURE_CANDIDATE_TECHNICAL_DATA_KIND,
+            FURNITURE_ORDER_ITEM_TECHNICAL_DATA_KIND,
+          ],
+        },
         extractionMethod: ExtractionMethod.TABLE_PARSER,
       },
       select: { id: true, status: true, technicalDataJson: true },
@@ -240,35 +312,54 @@ export async function generateFurnitureCandidatesFromStructuredTables(
       return true;
     }
 
-    for (const { table, result } of mappedTables) {
-      if (result.status !== "mapped") continue;
-      for (const candidate of result.candidates) {
-        const data = candidateData(
+    async function persistCandidateData(
+      candidateId: string,
+      data: Prisma.ExtractedEntityUncheckedCreateInput,
+    ): Promise<void> {
+      const existingId = existingByCandidateId.get(candidateId);
+      if (existingId) {
+        const { companyId: _companyId, projectId: _projectId, projectFileId: _projectFileId, ...updateData } = data;
+        await tx.extractedEntity.updateMany({
+          where: {
+            id: existingId,
+            companyId: input.companyId,
+            projectFileId: file.id,
+            status: { in: [ExtractedEntityStatus.EXTRACTED, ExtractedEntityStatus.NEEDS_REVIEW] },
+          },
+          data: updateData,
+        });
+      } else {
+        const created = await tx.extractedEntity.create({ data });
+        existingByCandidateId.set(candidateId, created.id);
+        candidatesCreated += 1;
+      }
+    }
+
+    for (const mapped of mappedTables) {
+      if (mapped.kind === "ORDER_ITEMS") {
+        for (const candidate of mapped.result.items) {
+          await persistCandidateData(candidate.id, orderCandidateData(
+            input,
+            project.id,
+            file.id,
+            mapped.table.drawingPageId ?? null,
+            file.originalName,
+            candidate,
+          ));
+        }
+        continue;
+      }
+      if (mapped.result.status !== "mapped") continue;
+      for (const candidate of mapped.result.candidates) {
+        await persistCandidateData(candidate.candidateId, candidateData(
           input,
           project.id,
           file.id,
-          table.drawingPageId ?? null,
+          mapped.table.drawingPageId ?? null,
           file.originalName,
-          table,
+          mapped.table,
           candidate,
-        );
-        const existingId = existingByCandidateId.get(candidate.candidateId);
-        if (existingId) {
-          const { companyId: _companyId, projectId: _projectId, projectFileId: _projectFileId, ...updateData } = data;
-          await tx.extractedEntity.updateMany({
-            where: {
-              id: existingId,
-              companyId: input.companyId,
-              projectFileId: file.id,
-              status: { in: [ExtractedEntityStatus.EXTRACTED, ExtractedEntityStatus.NEEDS_REVIEW] },
-            },
-            data: updateData,
-          });
-        } else {
-          const created = await tx.extractedEntity.create({ data });
-          existingByCandidateId.set(candidate.candidateId, created.id);
-          candidatesCreated += 1;
-        }
+        ));
       }
     }
 

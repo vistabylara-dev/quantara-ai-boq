@@ -11,6 +11,10 @@ export type PlatformOwnerBootstrapResult = {
   changed: boolean;
 };
 
+export type PlatformOwnerBootstrapOptions = {
+  auditSource?: "local-cli-bootstrap" | "trusted-runtime-recovery";
+};
+
 export class PlatformOwnerBootstrapError extends Error {
   constructor(message: string) {
     super(message);
@@ -44,6 +48,7 @@ function isSerializableConflict(error: unknown): boolean {
 export async function bootstrapPlatformOwner(
   database: PrismaClient,
   configuredEmail: string | undefined = process.env.PLATFORM_OWNER_EMAIL,
+  options: PlatformOwnerBootstrapOptions = {},
 ): Promise<PlatformOwnerBootstrapResult> {
   const email = normalizePlatformOwnerEmail(configuredEmail);
 
@@ -78,14 +83,6 @@ export async function bootstrapPlatformOwner(
             );
           }
 
-          if (user.platformRole === PlatformRole.PLATFORM_OWNER) {
-            return {
-              userId: user.id,
-              email: user.email,
-              changed: false,
-            };
-          }
-
           const differentOwnerExists = await transaction.user.count({
             where: {
               id: { not: user.id },
@@ -96,6 +93,33 @@ export async function bootstrapPlatformOwner(
           if (differentOwnerExists > 0) {
             throw new PlatformOwnerBootstrapError(
               "A different platform owner already exists. Use the authenticated owner workflow for role changes.",
+            );
+          }
+
+          const bootstrapAuditCount = await transaction.platformAuditLog.count({
+            where: {
+              action: BOOTSTRAP_ACTION,
+              targetType: "User",
+              targetId: user.id,
+            },
+          });
+
+          if (user.platformRole === PlatformRole.PLATFORM_OWNER) {
+            if (bootstrapAuditCount !== 1) {
+              throw new PlatformOwnerBootstrapError(
+                "The configured owner has inconsistent bootstrap audit state. No changes were applied.",
+              );
+            }
+            return {
+              userId: user.id,
+              email: user.email,
+              changed: false,
+            };
+          }
+
+          if (bootstrapAuditCount !== 0) {
+            throw new PlatformOwnerBootstrapError(
+              "The configured account has a bootstrap audit without the matching owner role. No changes were applied.",
             );
           }
 
@@ -113,7 +137,7 @@ export async function bootstrapPlatformOwner(
               targetType: "User",
               targetId: user.id,
               requestMetadataJson: {
-                source: "local-cli-bootstrap",
+                source: options.auditSource ?? "local-cli-bootstrap",
               },
               beforeJson: {
                 platformRole: user.platformRole,

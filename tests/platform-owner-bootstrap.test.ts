@@ -160,7 +160,33 @@ describe("platform owner bootstrap (integration, real local PostgreSQL)", () => 
     expect(candidates.every((candidate) => candidate.platformRole === null)).toBe(true);
   });
 
-  it("promotes one existing eligible user atomically without changing credentials or sessions", async () => {
+  it("fails closed when the configured account is already owner without one bootstrap audit", async () => {
+    await prisma.user.update({
+      where: { id: eligibleUserId },
+      data: { platformRole: PlatformRole.PLATFORM_OWNER },
+    });
+
+    try {
+      await expect(bootstrapPlatformOwner(prisma, emails.eligible)).rejects.toThrow(
+        "inconsistent bootstrap audit state",
+      );
+      await expect(
+        prisma.platformAuditLog.count({
+          where: {
+            targetId: eligibleUserId,
+            action: "PLATFORM_OWNER_BOOTSTRAPPED",
+          },
+        }),
+      ).resolves.toBe(0);
+    } finally {
+      await prisma.user.update({
+        where: { id: eligibleUserId },
+        data: { platformRole: null },
+      });
+    }
+  });
+
+  it("promotes one existing eligible user exactly once under concurrent first calls without changing credentials or sessions", async () => {
     const before = await prisma.user.findUniqueOrThrow({
       where: { id: eligibleUserId },
       select: { passwordHash: true },
@@ -171,11 +197,20 @@ describe("platform owner bootstrap (integration, real local PostgreSQL)", () => 
       orderBy: { id: "asc" },
     });
 
-    await expect(bootstrapPlatformOwner(prisma, ` ${emails.eligible.toUpperCase()} `)).resolves.toEqual({
-      userId: eligibleUserId,
-      email: emails.eligible,
-      changed: true,
-    });
+    const concurrentResults = await Promise.all([
+      bootstrapPlatformOwner(prisma, ` ${emails.eligible.toUpperCase()} `, {
+        auditSource: "trusted-runtime-recovery",
+      }),
+      bootstrapPlatformOwner(prisma, emails.eligible, {
+        auditSource: "trusted-runtime-recovery",
+      }),
+    ]);
+    expect(concurrentResults).toEqual(
+      expect.arrayContaining([
+        { userId: eligibleUserId, email: emails.eligible, changed: true },
+        { userId: eligibleUserId, email: emails.eligible, changed: false },
+      ]),
+    );
 
     const after = await prisma.user.findUniqueOrThrow({
       where: { id: eligibleUserId },
@@ -204,7 +239,7 @@ describe("platform owner bootstrap (integration, real local PostgreSQL)", () => 
     expect(audits[0]).toMatchObject({
       actorPlatformRole: PlatformRole.PLATFORM_OWNER,
       targetType: "User",
-      requestMetadataJson: { source: "local-cli-bootstrap" },
+      requestMetadataJson: { source: "trusted-runtime-recovery" },
       beforeJson: { platformRole: null },
       afterJson: { platformRole: PlatformRole.PLATFORM_OWNER },
     });
@@ -226,6 +261,79 @@ describe("platform owner bootstrap (integration, real local PostgreSQL)", () => 
         },
       }),
     ).resolves.toBe(1);
+  });
+
+  it("fails closed when role and bootstrap audit state have drifted", async () => {
+    const duplicateAudit = await prisma.platformAuditLog.create({
+      data: {
+        actorUserId: eligibleUserId,
+        actorPlatformRole: PlatformRole.PLATFORM_OWNER,
+        action: "PLATFORM_OWNER_BOOTSTRAPPED",
+        targetType: "User",
+        targetId: eligibleUserId,
+        requestMetadataJson: { source: "controlled-test-duplicate" },
+        beforeJson: { platformRole: null },
+        afterJson: { platformRole: PlatformRole.PLATFORM_OWNER },
+      },
+    });
+
+    try {
+      await expect(bootstrapPlatformOwner(prisma, emails.eligible)).rejects.toThrow(
+        "inconsistent bootstrap audit state",
+      );
+    } finally {
+      await prisma.platformAuditLog.delete({ where: { id: duplicateAudit.id } });
+    }
+
+    await prisma.user.update({
+      where: { id: eligibleUserId },
+      data: { platformRole: null },
+    });
+    try {
+      await expect(bootstrapPlatformOwner(prisma, emails.eligible)).rejects.toThrow(
+        "bootstrap audit without the matching owner role",
+      );
+      await expect(
+        prisma.platformAuditLog.count({
+          where: {
+            targetId: eligibleUserId,
+            action: "PLATFORM_OWNER_BOOTSTRAPPED",
+          },
+        }),
+      ).resolves.toBe(1);
+    } finally {
+      await prisma.user.update({
+        where: { id: eligibleUserId },
+        data: { platformRole: PlatformRole.PLATFORM_OWNER },
+      });
+    }
+  });
+
+  it("refuses an idempotent rerun if a conflicting platform owner exists", async () => {
+    await prisma.user.update({
+      where: { id: differentUserId },
+      data: { platformRole: PlatformRole.PLATFORM_OWNER },
+    });
+
+    try {
+      await expect(bootstrapPlatformOwner(prisma, emails.eligible)).rejects.toThrow(
+        "A different platform owner already exists.",
+      );
+      await expect(
+        prisma.platformAuditLog.count({
+          where: {
+            actorUserId: eligibleUserId,
+            targetId: eligibleUserId,
+            action: "PLATFORM_OWNER_BOOTSTRAPPED",
+          },
+        }),
+      ).resolves.toBe(1);
+    } finally {
+      await prisma.user.update({
+        where: { id: differentUserId },
+        data: { platformRole: null },
+      });
+    }
   });
 
   it("refuses a different candidate after the first owner exists", async () => {

@@ -43,6 +43,7 @@ import {
 } from "@/lib/repositories/boq-repository";
 import { getProjectRecord } from "@/lib/repositories/project-repository";
 import { TAYQAN_MEASUREMENT_CALCULATED_BY_PREFIX } from "@/lib/tayqan/tayqan-measurement-contract";
+import { FURNITURE_CANDIDATE_TECHNICAL_DATA_KIND } from "@/lib/furniture/types";
 
 const AI_DRAFT_FALLBACK_CODE = "AI-DRAFT";
 const REVIEWABLE_ENTITY_STATUSES = new Set(["EXTRACTED", "NEEDS_REVIEW"]);
@@ -186,6 +187,12 @@ export async function generateAiDraftBoq(
       where: {
         companyId: actor.companyId,
         projectId: project.id,
+        // The furniture workspace preserves Room → Elevation → Assembly
+        // → Part. The generic draft path must never flatten or duplicate it.
+        OR: [
+          { categoryKey: null },
+          { categoryKey: { not: FURNITURE_CANDIDATE_TECHNICAL_DATA_KIND } },
+        ],
         ...(scopedProjectFileIds.length > 0
           ? { projectFileId: { in: scopedProjectFileIds } }
           : {}),

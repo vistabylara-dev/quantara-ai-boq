@@ -3,6 +3,7 @@ import type { IndustryDiscipline } from "@/types/industry";
 export const FURNITURE_JOINERY_INDUSTRY_KEY = "furniture-joinery-cabinetry" as const;
 export const FURNITURE_JOINERY_INDUSTRY_NAME = "Furniture, Joinery & Cabinetry" as const;
 export const FURNITURE_HIERARCHY_SCHEMA_VERSION = 1 as const;
+export const FURNITURE_CANDIDATE_TECHNICAL_DATA_KIND = "FURNITURE_PART_CANDIDATE" as const;
 
 export enum FurnitureDiscipline {
   FURNITURE = "FURNITURE",

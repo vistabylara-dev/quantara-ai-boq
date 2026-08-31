@@ -1,3 +1,4 @@
+import { Prisma } from "@prisma/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 type ApiErrorBody = { ok: false; error: { code: string; message: string } };
@@ -13,11 +14,15 @@ type ApiErrorBody = { ok: false; error: { code: string; message: string } };
  */
 
 const queryRawMock = vi.fn();
+const sessionFindUniqueMock = vi.fn();
 const getPrismaConnectionMethodMock = vi.fn();
 const isCloudflareRuntimeMock = vi.fn();
 
 vi.mock("../src/lib/db/prisma", () => ({
-  prisma: { $queryRaw: (...args: unknown[]) => queryRawMock(...args) },
+  prisma: {
+    $queryRaw: (...args: unknown[]) => queryRawMock(...args),
+    session: { findUnique: (...args: unknown[]) => sessionFindUniqueMock(...args) },
+  },
   getPrismaConnectionMethod: () => getPrismaConnectionMethodMock(),
 }));
 
@@ -85,12 +90,13 @@ describe("GET /api/health", () => {
 
 describe("GET /api/ready", () => {
   afterEach(() => {
-    queryRawMock.mockReset();
+    sessionFindUniqueMock.mockReset();
     vi.unstubAllEnvs();
+    vi.restoreAllMocks();
   });
 
-  it("returns 200 when the readiness query succeeds", async () => {
-    queryRawMock.mockResolvedValue([{ "?column?": 1 }]);
+  it("returns 200 only after the core Session schema query succeeds", async () => {
+    sessionFindUniqueMock.mockResolvedValue(null);
 
     const { GET } = await import("../src/app/api/ready/route");
     const response = await GET();
@@ -98,10 +104,14 @@ describe("GET /api/ready", () => {
     expect(response.status).toBe(200);
     const body = await response.json();
     expect(body).toMatchObject({ ok: true, data: { status: "ready" } });
+    expect(sessionFindUniqueMock).toHaveBeenCalledWith({
+      where: { tokenHash: "quantara-readiness-schema-canary" },
+      select: { id: true, userId: true, expiresAt: true },
+    });
   });
 
   it("returns 503 with a structured, safe error when the readiness query fails", async () => {
-    queryRawMock.mockRejectedValue(new Error("timeout"));
+    sessionFindUniqueMock.mockRejectedValue(new Error("timeout"));
 
     const { GET } = await import("../src/app/api/ready/route");
     const response = await GET();
@@ -111,6 +121,28 @@ describe("GET /api/ready", () => {
     expect(body.ok).toBe(false);
     expect(body.error.code).toBe("DATABASE_UNAVAILABLE");
   });
+
+  it.each(["P2021", "P2022"])(
+    "returns a safe schema-incompatible failure for Prisma %s",
+    async (code) => {
+      vi.spyOn(console, "error").mockImplementation(() => undefined);
+      sessionFindUniqueMock.mockRejectedValue(
+        new Prisma.PrismaClientKnownRequestError(
+          "The database object `public.Session` is missing.",
+          { code, clientVersion: "6.19.3" },
+        ),
+      );
+
+      const { GET } = await import("../src/app/api/ready/route");
+      const response = await GET();
+
+      expect(response.status).toBe(503);
+      const body = (await response.json()) as ApiErrorBody;
+      expect(body.error.code).toBe("DATABASE_SCHEMA_INCOMPATIBLE");
+      expect(JSON.stringify(body)).not.toContain("public.Session");
+      expect(JSON.stringify(body)).not.toContain(code);
+    },
+  );
 
   it("fails readiness closed in production when a required security secret is missing", async () => {
     vi.stubEnv("NODE_ENV", "production");
@@ -123,7 +155,7 @@ describe("GET /api/ready", () => {
     const response = await GET();
 
     expect(response.status).toBe(503);
-    expect(queryRawMock).not.toHaveBeenCalled();
+    expect(sessionFindUniqueMock).not.toHaveBeenCalled();
     const body = (await response.json()) as ApiErrorBody;
     expect(body.error.code).toBe("SECURITY_CONFIGURATION_UNAVAILABLE");
     expect(JSON.stringify(body)).not.toContain("PROPOSAL_ACCESS_SECRET");
@@ -135,13 +167,13 @@ describe("GET /api/ready", () => {
     vi.stubEnv("INTEGRATION_CREDENTIALS_ENCRYPTION_KEY", Buffer.alloc(32, 4).toString("base64"));
     vi.stubEnv("WORKER_RUNNER_SECRET", "production-worker-secret-with-more-than-thirty-two-bytes");
     vi.stubEnv("WORKER_AI_PLANNER_ENABLED", "false");
-    queryRawMock.mockResolvedValue([{ "?column?": 1 }]);
+    sessionFindUniqueMock.mockResolvedValue(null);
 
     const { GET } = await import("../src/app/api/ready/route");
     const response = await GET();
 
     expect(response.status).toBe(200);
-    expect(queryRawMock).toHaveBeenCalledTimes(1);
+    expect(sessionFindUniqueMock).toHaveBeenCalledTimes(1);
   });
 
   it("fails readiness closed in production when the worker runner secret is missing", async () => {
@@ -155,7 +187,7 @@ describe("GET /api/ready", () => {
     const response = await GET();
 
     expect(response.status).toBe(503);
-    expect(queryRawMock).not.toHaveBeenCalled();
+    expect(sessionFindUniqueMock).not.toHaveBeenCalled();
     const body = (await response.json()) as ApiErrorBody;
     expect(body.error.code).toBe("SECURITY_CONFIGURATION_UNAVAILABLE");
     expect(JSON.stringify(body)).not.toContain("WORKER_RUNNER_SECRET");
@@ -174,7 +206,7 @@ describe("GET /api/ready", () => {
     const response = await GET();
 
     expect(response.status).toBe(503);
-    expect(queryRawMock).not.toHaveBeenCalled();
+    expect(sessionFindUniqueMock).not.toHaveBeenCalled();
     expect((await response.json() as ApiErrorBody).error.code).toBe("SECURITY_CONFIGURATION_UNAVAILABLE");
   });
 });

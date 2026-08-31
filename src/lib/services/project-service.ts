@@ -12,8 +12,42 @@ import {
   projectReferenceExists,
   type ProjectWriteInput,
 } from "@/lib/repositories/project-repository";
+import {
+  FURNITURE_JOINERY_INDUSTRY_KEY,
+  FurnitureDiscipline,
+  isFurnitureDiscipline,
+} from "@/lib/furniture/types";
+import { recordInitialFurnitureProjectDiscipline } from "@/lib/furniture/project-discipline";
 
-export type CreateProjectWithBoqInput = ProjectWriteInput;
+export type CreateProjectWithBoqInput = ProjectWriteInput & {
+  discipline?: FurnitureDiscipline;
+};
+
+function resolveFurnitureDiscipline(
+  industryKey: string,
+  discipline: unknown,
+): FurnitureDiscipline | null {
+  if (industryKey !== FURNITURE_JOINERY_INDUSTRY_KEY) {
+    if (discipline !== undefined) {
+      throw new AppError(
+        "FURNITURE_DISCIPLINE_NOT_APPLICABLE",
+        "A furniture discipline can only be selected for Furniture, Joinery & Cabinetry projects.",
+        400,
+        { discipline: ["Remove the furniture discipline for this industry."] },
+      );
+    }
+    return null;
+  }
+  if (!isFurnitureDiscipline(discipline)) {
+    throw new AppError(
+      "FURNITURE_DISCIPLINE_REQUIRED",
+      "Select Furniture or Joinery & Cabinetry before creating this project.",
+      400,
+      { discipline: ["Select Furniture or Joinery & Cabinetry."] },
+    );
+  }
+  return discipline;
+}
 
 /**
  * Creates a project and its default R01 BOQ (with industry-specific default
@@ -34,7 +68,8 @@ export async function createProjectWithDefaultBoq(actor: CurrentActor, input: Cr
 
   // Validate company boundaries before opening the write transaction.
   await getClient(actor.companyId, input.clientId);
-  await getEnabledIndustry(actor.companyId, input.industryEngineId);
+  const industry = await getEnabledIndustry(actor.companyId, input.industryEngineId);
+  const furnitureDiscipline = resolveFurnitureDiscipline(industry.key, input.discipline);
   if (await projectReferenceExists(actor.companyId, input.reference)) {
     throw new ConflictError("PROJECT_REFERENCE_EXISTS", "A project with this reference already exists.");
   }
@@ -45,6 +80,15 @@ export async function createProjectWithDefaultBoq(actor: CurrentActor, input: Cr
 
   const result = await prisma.$transaction(async (tx) => {
     const project = await createProject(actor.companyId, input, tx);
+    if (furnitureDiscipline) {
+      await recordInitialFurnitureProjectDiscipline(
+        actor.companyId,
+        project.databaseId,
+        furnitureDiscipline,
+        tx,
+        actor.fullName,
+      );
+    }
     const boq = await createProjectBOQ(actor.companyId, project.databaseId, undefined, tx);
     return { project, boq };
   });

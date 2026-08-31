@@ -14,6 +14,14 @@ export type IndustryEngine = {
   validationRules: string[];
   documentLabels: Record<string, string>;
   dashboardMetrics: IndustryDashboardMetric[];
+  /** Optional project-level choices exposed only by engines that define disciplines. */
+  disciplines?: readonly IndustryDiscipline[];
+};
+
+export type IndustryDiscipline = {
+  id: string;
+  name: string;
+  description: string;
 };
 
 export type IndustrySection = {

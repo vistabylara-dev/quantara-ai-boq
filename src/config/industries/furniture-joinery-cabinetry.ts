@@ -1,0 +1,82 @@
+import type { IndustryEngine } from "@/types/industry";
+import {
+  FURNITURE_DISCIPLINES,
+  FURNITURE_JOINERY_INDUSTRY_KEY,
+  FURNITURE_JOINERY_INDUSTRY_NAME,
+} from "@/lib/furniture/types";
+
+export const furnitureJoineryCabinetryEngine: IndustryEngine = {
+  id: FURNITURE_JOINERY_INDUSTRY_KEY,
+  name: FURNITURE_JOINERY_INDUSTRY_NAME,
+  shortName: "Furniture & Joinery",
+  description: "Furniture, architectural joinery, and cabinetry BOQs with verified cutting lists and hardware schedules.",
+  icon: "tool",
+  status: "active",
+  disciplines: FURNITURE_DISCIPLINES,
+  supportedUnits: ["pcs", "sets", "units", "m", "lm", "m2", "sheets", "LS"],
+  boqSections: [
+    {
+      id: "project-summary",
+      code: "PRJ",
+      title: "PROJECT SUMMARY",
+      description: "Project, discipline, source, and verified scope summary.",
+      order: 1,
+    },
+    {
+      id: "board-sheet-material-order-quantities",
+      code: "BRD",
+      title: "BOARD / SHEET MATERIAL — ORDER QUANTITIES",
+      description: "Grouped board and sheet ordering quantities with visible wastage assumptions.",
+      order: 2,
+    },
+    {
+      id: "hardware-accessories-order-quantities",
+      code: "HWA",
+      title: "HARDWARE & ACCESSORIES — ORDER QUANTITIES",
+      description: "Verified hardware, accessories, and proprietary system order quantities.",
+      order: 3,
+    },
+    {
+      id: "full-cutting-list-all-rooms",
+      code: "CUT",
+      title: "FULL CUTTING LIST — ALL ROOMS",
+      description: "Room, elevation, assembly, and part cutting list with source evidence.",
+      order: 4,
+    },
+    {
+      id: "notes-assumptions-verification-items",
+      code: "VER",
+      title: "NOTES, ASSUMPTIONS & VERIFICATION ITEMS",
+      description: "Visible assumptions, unresolved readings, orientation checks, and professional notes.",
+      order: 5,
+    },
+  ],
+  requiredFields: [
+    "discipline",
+    "room",
+    "elevationReference",
+    "assembly",
+    "part",
+    "quantity",
+    "dimensions",
+    "thickness",
+    "material",
+    "finishColour",
+    "edgeBanding",
+    "grainDirection",
+    "hardware",
+    "sourceEvidence",
+    "verificationStatus",
+  ],
+  calculationTypes: ["panelArea", "sheetQuantity", "edgeBandingLength", "hardwareQuantity", "unitMultiplicity"],
+  validationRules: ["quantityPositive", "dimensionEvidenceRequired", "uncertainReadingsRequireReview", "approvedValuesImmutable"],
+  documentLabels: {
+    boq: "Furniture, Joinery & Cabinetry BOQ",
+    cuttingList: "Full Cutting List",
+    verificationRegister: "Assumptions & Verification Register",
+  },
+  dashboardMetrics: [
+    { label: "Assemblies", value: "0", status: "normal" },
+    { label: "Verification Items", value: "0", status: "warning" },
+  ],
+};

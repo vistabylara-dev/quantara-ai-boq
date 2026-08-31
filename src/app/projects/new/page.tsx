@@ -10,6 +10,10 @@ import ClientPicker from "@/components/projects/client-picker";
 import type { Client } from "@/types/client";
 import { emitOnboardingActionComplete } from "@/lib/onboarding/onboarding-state";
 import { trackFirstConversionEvent } from "@/lib/marketing/conversion-events";
+import {
+  FURNITURE_DISCIPLINES,
+  FURNITURE_JOINERY_INDUSTRY_KEY,
+} from "@/lib/furniture/types";
 
 type IndustryOption = {
   id: string;
@@ -37,6 +41,7 @@ export default function NewProjectPage() {
     handleSubmit,
     control,
     setValue,
+    watch,
     formState: { errors },
   } = useForm<projectSchemaType>({
     resolver: zodResolver(projectSchema),
@@ -50,8 +55,12 @@ export default function NewProjectPage() {
       taxRate: 5,
       language: "English",
       description: "",
+      discipline: undefined,
     },
   });
+
+  const selectedIndustryKey = watch("industryEngineId");
+  const requiresFurnitureDiscipline = selectedIndustryKey === FURNITURE_JOINERY_INDUSTRY_KEY;
 
   // Extracted so the retry button can re-run exactly this without resetting any field the
   // user has already typed (react-hook-form state is untouched by calling this again).
@@ -83,6 +92,12 @@ export default function NewProjectPage() {
     }
   }, [industries, setValue]);
 
+  useEffect(() => {
+    if (!requiresFurnitureDiscipline) {
+      setValue("discipline", undefined);
+    }
+  }, [requiresFurnitureDiscipline, setValue]);
+
   const handleClientSelect = (client: Client) => {
     setSelectedClient(client);
     setValue("clientId", client.id, { shouldValidate: true });
@@ -97,6 +112,7 @@ export default function NewProjectPage() {
         reference: data.reference,
         clientId: data.clientId,
         industryId: data.industryEngineId,
+        discipline: data.discipline,
         description: data.description ?? "",
         location: data.location,
         currency: data.currency,
@@ -198,6 +214,31 @@ export default function NewProjectPage() {
               {errors.industryEngineId && <p className="mt-2 text-xs text-rose-400">{errors.industryEngineId.message}</p>}
             </label>
           </div>
+
+          {requiresFurnitureDiscipline && (
+            <label className="block text-sm text-slate-300">
+              <span className="text-slate-400">Discipline</span>
+              <Controller
+                control={control}
+                name="discipline"
+                render={({ field }) => (
+                  <select
+                    className="mt-2 w-full rounded-2xl border border-slate-800 bg-slate-900 px-4 py-3 text-white outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
+                    value={field.value ?? ""}
+                    onBlur={field.onBlur}
+                    onChange={(event) => field.onChange(event.target.value || undefined)}
+                    ref={field.ref}
+                  >
+                    <option value="" disabled>Select a discipline</option>
+                    {FURNITURE_DISCIPLINES.map((discipline) => (
+                      <option key={discipline.id} value={discipline.id}>{discipline.name}</option>
+                    ))}
+                  </select>
+                )}
+              />
+              {errors.discipline && <p className="mt-2 text-xs text-rose-400">{errors.discipline.message}</p>}
+            </label>
+          )}
 
           <div className="grid gap-4 sm:grid-cols-2">
             <label className="block text-sm text-slate-300">

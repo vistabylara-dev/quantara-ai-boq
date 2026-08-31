@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { ExtractedTableType, Prisma, ExtractedTableStatus } from "@prisma/client";
 import { prisma } from "@/lib/db/prisma";
 import type { ParsedTable } from "@/lib/files/table-extraction/types";
@@ -90,70 +91,75 @@ export async function replaceExtractedTablesForFile(
   parsedTables: ParsedTable[],
   tableType: ExtractedTableType,
 ): Promise<string[]> {
-  return prisma.$transaction(async (tx) => {
-    await tx.extractedTable.deleteMany({ where: { companyId, projectFileId } });
+  const createdTableIds: string[] = [];
+  const tables: Prisma.ExtractedTableCreateManyInput[] = [];
+  const rows: Prisma.ExtractedTableRowCreateManyInput[] = [];
+  const cells: Prisma.ExtractedTableCellCreateManyInput[] = [];
 
-    const createdTableIds: string[] = [];
-    for (const parsed of parsedTables) {
-      const table = await tx.extractedTable.create({
-        data: {
-          companyId,
-          projectFileId,
-          sheetName: parsed.sheetName,
-          title: parsed.title,
-          tableType,
-          confidence: parsed.confidence,
-          status: ExtractedTableStatus.EXTRACTED,
-        },
+  for (const parsed of parsedTables) {
+    const tableId = randomUUID();
+    createdTableIds.push(tableId);
+    tables.push({
+      id: tableId,
+      companyId,
+      projectFileId,
+      sheetName: parsed.sheetName,
+      title: parsed.title,
+      tableType,
+      confidence: parsed.confidence,
+      status: ExtractedTableStatus.EXTRACTED,
+    });
+
+    const rowIdByRowNumber = new Map<number, string>();
+    // Parents are always emitted before their children by the parsers, but sort defensively so parentRowId is always resolvable.
+    const orderedRows = [...parsed.rows].sort((a, b) => (a.parentRowNumber ? 1 : 0) - (b.parentRowNumber ? 1 : 0));
+
+    for (const row of orderedRows) {
+      const rowId = randomUUID();
+      const parentRowId = row.parentRowNumber !== undefined ? rowIdByRowNumber.get(row.parentRowNumber) ?? null : null;
+      const rawDataJson = Object.fromEntries(row.cells.map((cell) => [cell.columnKey, cell.rawValue]));
+      const headerTitles = Object.fromEntries(
+        row.cells.map((cell) => [cell.columnKey, cell.columnTitle ?? cell.columnKey]),
+      );
+
+      rows.push({
+        id: rowId,
+        companyId,
+        extractedTableId: tableId,
+        rowNumber: row.rowNumber,
+        parentRowId,
+        rawDataJson: rawDataJson as Prisma.InputJsonValue,
+        normalizedDataJson: { headerTitles } as Prisma.InputJsonValue,
+        confidence: row.confidence,
+        status: ExtractedTableStatus.EXTRACTED,
       });
-      createdTableIds.push(table.id);
+      // Only top-level rows register themselves as a lookup target for children. A row
+      // number can be reused by a same-numbered child (the XLSX parser's merge-group parent
+      // and its first physical row share a rowNumber) — never let that child's creation
+      // overwrite the true parent's id in this map.
+      if (row.parentRowNumber === undefined) rowIdByRowNumber.set(row.rowNumber, rowId);
 
-      const rowIdByRowNumber = new Map<number, string>();
-      // Parents are always emitted before their children by the parsers, but sort defensively so parentRowId is always resolvable.
-      const orderedRows = [...parsed.rows].sort((a, b) => (a.parentRowNumber ? 1 : 0) - (b.parentRowNumber ? 1 : 0));
-
-      for (const row of orderedRows) {
-        const parentRowId = row.parentRowNumber !== undefined ? rowIdByRowNumber.get(row.parentRowNumber) ?? null : null;
-        const rawDataJson = Object.fromEntries(row.cells.map((cell) => [cell.columnKey, cell.rawValue]));
-        const headerTitles = Object.fromEntries(
-          row.cells.map((cell) => [cell.columnKey, cell.columnTitle ?? cell.columnKey]),
-        );
-
-        const createdRow = await tx.extractedTableRow.create({
-          data: {
-            companyId,
-            extractedTableId: table.id,
-            rowNumber: row.rowNumber,
-            parentRowId,
-            rawDataJson: rawDataJson as Prisma.InputJsonValue,
-            normalizedDataJson: { headerTitles } as Prisma.InputJsonValue,
-            confidence: row.confidence,
-            status: ExtractedTableStatus.EXTRACTED,
-          },
+      for (const cell of row.cells) {
+        cells.push({
+          id: randomUUID(),
+          companyId,
+          extractedTableRowId: rowId,
+          columnKey: cell.columnKey,
+          rawValue: cell.rawValue,
+          normalizedValue: cell.normalizedValue,
+          confidence: row.confidence,
+          sourceCellReference: cell.sourceCellReference,
         });
-        // Only top-level rows register themselves as a lookup target for children. A row
-        // number can be reused by a same-numbered child (the XLSX parser's merge-group parent
-        // and its first physical row share a rowNumber) — never let that child's creation
-        // overwrite the true parent's id in this map.
-        if (row.parentRowNumber === undefined) {
-          rowIdByRowNumber.set(row.rowNumber, createdRow.id);
-        }
-
-        for (const cell of row.cells) {
-          await tx.extractedTableCell.create({
-            data: {
-              companyId,
-              extractedTableRowId: createdRow.id,
-              columnKey: cell.columnKey,
-              rawValue: cell.rawValue,
-              confidence: row.confidence,
-              sourceCellReference: cell.sourceCellReference,
-            },
-          });
-        }
       }
     }
+  }
 
-    return createdTableIds;
+  await prisma.$transaction(async (tx) => {
+    await tx.extractedTable.deleteMany({ where: { companyId, projectFileId } });
+    if (tables.length > 0) await tx.extractedTable.createMany({ data: tables });
+    if (rows.length > 0) await tx.extractedTableRow.createMany({ data: rows });
+    if (cells.length > 0) await tx.extractedTableCell.createMany({ data: cells });
   });
+
+  return createdTableIds;
 }

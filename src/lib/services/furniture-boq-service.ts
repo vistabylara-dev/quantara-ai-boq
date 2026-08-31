@@ -485,6 +485,7 @@ export async function regenerateFurnitureManagedBOQ(
         companyId: actor.companyId,
         projectId: project.id,
         categoryKey: FURNITURE_CANDIDATE_TECHNICAL_DATA_KIND,
+        status: { not: ExtractedEntityStatus.REJECTED },
       },
       orderBy: [{ createdAt: "asc" }, { id: "asc" }],
       select: {
@@ -530,6 +531,7 @@ export async function regenerateFurnitureManagedBOQ(
         companyId: actor.companyId,
         projectId: project.id,
         categoryKey: FURNITURE_ORDER_ITEM_TECHNICAL_DATA_KIND,
+        status: { not: ExtractedEntityStatus.REJECTED },
       },
       orderBy: [{ createdAt: "asc" }, { id: "asc" }],
       select: {

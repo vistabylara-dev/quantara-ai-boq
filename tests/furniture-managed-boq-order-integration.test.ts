@@ -31,9 +31,14 @@ const managedStore = vi.hoisted(() => {
   };
   const extractedEntity = {
     findMany: vi.fn(async ({ where }: { where: Record<string, any> }) => {
-      if (where.categoryKey === "FURNITURE_PART_CANDIDATE") return state.partRows;
-      if (where.categoryKey === "FURNITURE_ORDER_ITEM_CANDIDATE") return state.orderRows;
-      return [];
+      const rows = where.categoryKey === "FURNITURE_PART_CANDIDATE"
+        ? state.partRows
+        : where.categoryKey === "FURNITURE_ORDER_ITEM_CANDIDATE"
+          ? state.orderRows
+          : [];
+      return where.status?.not
+        ? rows.filter((row) => row.status !== where.status.not)
+        : rows;
     }),
   };
   const bOQ = {
@@ -373,6 +378,60 @@ describe("Furniture managed BOQ hardware/order integration", () => {
       }),
     ]);
     expect(canonicalInput.confirmedOrderItems[0].item).not.toHaveProperty("part");
+  });
+
+  it("excludes rejected false positives from canonical part and order inputs", async () => {
+    managedStore.state.partRows = [
+      partRow(),
+      { ...partRow(ExtractedEntityStatus.REJECTED), id: "rejected-part" },
+    ];
+    managedStore.state.orderRows = [
+      orderRow(),
+      { ...orderRow(ExtractedEntityStatus.REJECTED), id: "rejected-order" },
+    ];
+
+    await regenerateFurnitureManagedBOQ(actor, {
+      projectIdentifier: "controlled-project",
+      boqId: BOQ_ID,
+      wastagePercentage: 10,
+    });
+
+    const canonicalInput = mocks.buildFurnitureCanonicalOutput.mock.calls[0][0];
+    expect(canonicalInput.confirmedCandidates.map((row: { entityId: string }) => row.entityId))
+      .toEqual(["66666666-6666-4666-8666-666666666666"]);
+    expect(canonicalInput.confirmedOrderItems.map((row: { entityId: string }) => row.entityId))
+      .toEqual(["77777777-7777-4777-8777-777777777777"]);
+    expect(managedStore.extractedEntity.findMany).toHaveBeenNthCalledWith(1, expect.objectContaining({
+      where: expect.objectContaining({ status: { not: ExtractedEntityStatus.REJECTED } }),
+    }));
+    expect(managedStore.extractedEntity.findMany).toHaveBeenNthCalledWith(2, expect.objectContaining({
+      where: expect.objectContaining({ status: { not: ExtractedEntityStatus.REJECTED } }),
+    }));
+  });
+
+  it("fails closed when every detected part was rejected", async () => {
+    managedStore.state.partRows = [partRow(ExtractedEntityStatus.REJECTED)];
+
+    await expect(regenerateFurnitureManagedBOQ(actor, {
+      projectIdentifier: "controlled-project",
+      boqId: BOQ_ID,
+      wastagePercentage: 10,
+    })).rejects.toMatchObject({ code: "FURNITURE_CONFIRMED_CANDIDATES_REQUIRED", status: 409 });
+
+    expect(mocks.buildFurnitureCanonicalOutput).not.toHaveBeenCalled();
+    expect(managedStore.bOQ.findFirst).not.toHaveBeenCalled();
+  });
+
+  it("allows every optional hardware/order false positive to be rejected", async () => {
+    managedStore.state.orderRows = [orderRow(ExtractedEntityStatus.REJECTED)];
+
+    await regenerateFurnitureManagedBOQ(actor, {
+      projectIdentifier: "controlled-project",
+      boqId: BOQ_ID,
+      wastagePercentage: 10,
+    });
+
+    expect(mocks.buildFurnitureCanonicalOutput.mock.calls[0][0].confirmedOrderItems).toEqual([]);
   });
 
   it("records reviewed extraction quantity provenance for every newly created managed row", async () => {

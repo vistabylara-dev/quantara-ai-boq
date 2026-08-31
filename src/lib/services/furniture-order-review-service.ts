@@ -15,6 +15,11 @@ import { createAuditLog } from "@/lib/repositories/audit-repository";
 import { getProjectRecord } from "@/lib/repositories/project-repository";
 
 const FURNITURE_ORDER_REVIEW_SCHEMA_VERSION = 1 as const;
+const FURNITURE_ORDER_REJECTABLE_STATUSES = [
+  ExtractedEntityStatus.EXTRACTED,
+  ExtractedEntityStatus.NEEDS_REVIEW,
+  ExtractedEntityStatus.CORRECTED,
+] as const;
 
 export type FurnitureOrderItemCorrection = {
   description?: string;
@@ -34,6 +39,7 @@ export type FurnitureOrderItemReviewView = {
   candidate: FurnitureOrderItemCandidate;
   correction: Prisma.JsonValue | null;
   confirmedAt: string | null;
+  rejectedAt: string | null;
 };
 
 function parseCandidate(value: Prisma.JsonValue | null): FurnitureOrderItemCandidate {
@@ -70,6 +76,7 @@ function toView(entity: {
   technicalDataJson: Prisma.JsonValue | null;
   correctionJson: Prisma.JsonValue | null;
   confirmedAt: Date | null;
+  rejectedAt: Date | null;
 }): FurnitureOrderItemReviewView {
   return {
     id: entity.id,
@@ -79,6 +86,7 @@ function toView(entity: {
     candidate: parseCandidate(entity.technicalDataJson),
     correction: entity.correctionJson,
     confirmedAt: entity.confirmedAt?.toISOString() ?? null,
+    rejectedAt: entity.rejectedAt?.toISOString() ?? null,
   };
 }
 
@@ -213,6 +221,7 @@ export async function correctFurnitureOrderItemCandidate(
             ExtractedEntityStatus.CORRECTED,
           ],
         },
+        updatedAt: current.updatedAt,
       },
       data: {
         label: corrected.description,
@@ -309,6 +318,7 @@ export async function approveFurnitureOrderItemCandidate(
             ExtractedEntityStatus.CORRECTED,
           ],
         },
+        updatedAt: current.updatedAt,
       },
       data: {
         technicalDataJson: envelope(approved),
@@ -333,6 +343,85 @@ export async function approveFurnitureOrderItemCandidate(
       entityId: current.id,
       action: "FURNITURE_ORDER_ITEM_APPROVED_AND_LOCKED",
       payload: { candidateId: approved.id, acknowledgedIssueCodes },
+    }, tx);
+    return tx.extractedEntity.findFirstOrThrow({ where: { id: current.id, companyId: actor.companyId } });
+  });
+  return toView(updated);
+}
+
+export async function rejectFurnitureOrderItemCandidate(
+  actor: CurrentActor,
+  projectIdentifier: string,
+  candidateId: string,
+  rejectionReason: string,
+): Promise<FurnitureOrderItemReviewView> {
+  requireCapability(actor, "verification:manage");
+  const project = await requireFurnitureProject(actor.companyId, projectIdentifier);
+  const reason = rejectionReason.trim();
+  if (!reason) throw new AppError("REJECTION_REASON_REQUIRED", "A rejection reason is required.", 400);
+
+  const updated = await prisma.$transaction(async (tx) => {
+    const current = await tx.extractedEntity.findFirst({
+      where: {
+        id: candidateId,
+        companyId: actor.companyId,
+        projectId: project.id,
+        categoryKey: FURNITURE_ORDER_ITEM_TECHNICAL_DATA_KIND,
+      },
+    });
+    if (!current) throw new NotFoundError("Furniture order item not found.");
+    if (current.status === ExtractedEntityStatus.REJECTED) return current;
+    if (current.status === ExtractedEntityStatus.CONFIRMED || current.status === ExtractedEntityStatus.IMPORTED) {
+      throw new AppError("ENTITY_ALREADY_FINALIZED", "This furniture order item has already been finalized.", 409);
+    }
+
+    const candidate = parseCandidate(current.technicalDataJson);
+    const now = new Date();
+    const claimed = await tx.extractedEntity.updateMany({
+      where: {
+        id: current.id,
+        companyId: actor.companyId,
+        projectId: project.id,
+        categoryKey: FURNITURE_ORDER_ITEM_TECHNICAL_DATA_KIND,
+        status: { in: [...FURNITURE_ORDER_REJECTABLE_STATUSES] },
+        updatedAt: current.updatedAt,
+      },
+      data: {
+        status: ExtractedEntityStatus.REJECTED,
+        confirmedByUserId: null,
+        confirmedAt: null,
+        rejectedByUserId: actor.userId,
+        rejectedAt: now,
+        correctionJson: {
+          schemaVersion: FURNITURE_ORDER_REVIEW_SCHEMA_VERSION,
+          previous: current.correctionJson ?? null,
+          rejectedCandidate: candidate,
+          reason,
+          rejectedByUserId: actor.userId,
+          rejectedAt: now.toISOString(),
+        } as Prisma.InputJsonValue,
+      },
+    });
+    if (claimed.count !== 1) {
+      const latest = await tx.extractedEntity.findFirst({
+        where: {
+          id: current.id,
+          companyId: actor.companyId,
+          projectId: project.id,
+          categoryKey: FURNITURE_ORDER_ITEM_TECHNICAL_DATA_KIND,
+        },
+      });
+      if (latest?.status === ExtractedEntityStatus.REJECTED) return latest;
+      if (latest?.status === ExtractedEntityStatus.CONFIRMED || latest?.status === ExtractedEntityStatus.IMPORTED) {
+        throw new AppError("ENTITY_ALREADY_FINALIZED", "This furniture order item has already been finalized.", 409);
+      }
+      throw new AppError("ENTITY_REVIEW_CONFLICT", "This furniture order item changed while it was being rejected.", 409);
+    }
+    await createAuditLog(actor.companyId, {
+      entityType: "ExtractedEntity",
+      entityId: current.id,
+      action: "FURNITURE_ORDER_ITEM_REJECTED",
+      payload: { candidateId: candidate.id, reason },
     }, tx);
     return tx.extractedEntity.findFirstOrThrow({ where: { id: current.id, companyId: actor.companyId } });
   });

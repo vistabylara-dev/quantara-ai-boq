@@ -231,6 +231,14 @@ function normalizeIdentity(value: string): string {
     .replace(/(^-|-$)/g, "");
 }
 
+export function createFurnitureAssemblyGroupKey(
+  room: string,
+  elevationReference: string,
+  assembly: string,
+): string {
+  return [room, elevationReference, assembly].map(normalizeIdentity).join("|");
+}
+
 function evidenceReference(table: FurnitureSourceTable, row: FurnitureSourceRow, cell: FurnitureSourceCell): string {
   if (cell.sourceCellReference) return cell.sourceCellReference;
   if (table.sheetName) return `${table.sheetName}!R${row.rowNumber}:${cell.columnKey}`;
@@ -535,7 +543,7 @@ function mapRow(table: FurnitureSourceTable, row: FurnitureSourceRow, context: F
   const tableIdentity = table.sourceTableKey ?? table.sourceTableId ?? sourceLocation;
   const rowIdentity = row.sourceRowKey ?? row.sourceRowId ?? String(row.rowNumber);
   const candidateId = `${context.sourceFileId ?? context.sourceFileName}:${tableIdentity}:${rowIdentity}`;
-  const assemblyGroupKey = [room, elevationReference, assembly].map(normalizeIdentity).join("|");
+  const assemblyGroupKey = createFurnitureAssemblyGroupKey(room, elevationReference, assembly);
   const verificationStatus = issues.some((issue) => issue.severity === "BLOCKING")
     ? "BLOCKED"
     : issues.length > 0

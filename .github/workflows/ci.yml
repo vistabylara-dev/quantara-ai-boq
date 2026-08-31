@@ -67,6 +67,9 @@ jobs:
       - name: Verify first-project onboarding in Chromium
         run: npx playwright test tests/e2e/onboarding-first-project.spec.ts --project=chromium --project="Mobile Chrome"
 
+      - name: Verify mocked Joinery UI workflow in Chromium
+        run: npx playwright test tests/e2e/joinery-workspace-mocked.spec.ts --project=chromium --workers=1 --reporter=line
+
       - name: Build Next.js
         run: npm run build
 

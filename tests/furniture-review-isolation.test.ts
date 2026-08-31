@@ -19,6 +19,7 @@ const entityStore = vi.hoisted(() => {
     if (where.projectId !== undefined && row.projectId !== where.projectId) return false;
     if (where.categoryKey !== undefined && row.categoryKey !== where.categoryKey) return false;
     if (where.status?.in && !where.status.in.includes(row.status)) return false;
+    if (where.updatedAt !== undefined && row.updatedAt.getTime() !== where.updatedAt.getTime()) return false;
     return true;
   }
 
@@ -76,11 +77,13 @@ import {
   approveFurnitureCandidate,
   correctFurnitureCandidate,
   listFurnitureCandidates,
+  rejectFurnitureCandidate,
 } from "@/lib/services/furniture-review-service";
 import {
   approveFurnitureOrderItemCandidate,
   correctFurnitureOrderItemCandidate,
   listFurnitureOrderItemCandidates,
+  rejectFurnitureOrderItemCandidate,
 } from "@/lib/services/furniture-order-review-service";
 import {
   confirmExtractedEntity,
@@ -328,7 +331,11 @@ describe("Furniture professional-review isolation", () => {
     entityStore.state.rows.push(original);
 
     const result = await correctFurnitureCandidate(actor(), "project-a", ENTITY_A, {
+      room: "PANTRY",
+      elevationReference: "ELEV-B",
+      assembly: "Tall unit",
       dimensions: { width: 610 },
+      materialName: "Plywood",
       finish: "Walnut",
       reason: "Checked against signed cutting schedule A-401.",
     });
@@ -336,6 +343,12 @@ describe("Furniture professional-review isolation", () => {
     expect(result.status).toBe(ExtractedEntityStatus.CORRECTED);
     expect(result.candidate.dimensions.width.valueMm).toBe(610);
     expect(result.candidate.dimensions.width.readings).toEqual(candidate().dimensions.width.readings);
+    expect(result.candidate.assemblyGroupKey).toBe("pantry|elev-b|tall-unit");
+    expect(result.candidate.material).toEqual({
+      raw: "MDF (Oak)",
+      name: "Plywood",
+      finish: "Walnut",
+    });
     expect(result.candidate.evidence).toEqual(originalEvidence);
     expect(original.correctionJson).toMatchObject({
       reason: "Checked against signed cutting schedule A-401.",
@@ -362,6 +375,41 @@ describe("Furniture professional-review isolation", () => {
       corrected: { evidence: originalEvidence },
     });
   });
+
+  it.each(["correction", "approval"] as const)(
+    "fails candidate %s closed when a professional correction wins the concurrent review race",
+    async (operation) => {
+      const row = furnitureRow({ status: ExtractedEntityStatus.CORRECTED });
+      const originalUpdatedAt = row.updatedAt;
+      const concurrentCorrection = { schemaVersion: 1, reason: "Concurrent reviewer correction." };
+      const concurrentCandidate = candidate({ part: "Concurrent corrected door panel" });
+      entityStore.state.rows.push(row);
+      entityStore.extractedEntity.updateMany.mockImplementationOnce(async ({ where }) => {
+        expect(where.updatedAt).toEqual(originalUpdatedAt);
+        row.updatedAt = new Date("2026-08-31T00:01:00.000Z");
+        row.correctionJson = concurrentCorrection;
+        row.technicalDataJson = {
+          kind: FURNITURE_CANDIDATE_TECHNICAL_DATA_KIND,
+          candidate: concurrentCandidate,
+        };
+        return { count: 0 };
+      });
+
+      const request = operation === "correction"
+        ? correctFurnitureCandidate(actor(), "project-a", ENTITY_A, {
+          quantity: 3,
+          reason: "Stale correction attempt.",
+        })
+        : approveFurnitureCandidate(actor(), "project-a", ENTITY_A);
+      await expect(request).rejects.toMatchObject({ code: "ENTITY_REVIEW_CONFLICT", status: 409 });
+
+      expect(row.status).toBe(ExtractedEntityStatus.CORRECTED);
+      expect(row.confirmedAt).toBeNull();
+      expect(row.correctionJson).toEqual(concurrentCorrection);
+      expect(currentCandidate(row).part).toBe("Concurrent corrected door panel");
+      expect(auditRepository.createAuditLog).not.toHaveBeenCalled();
+    },
+  );
 
   it("blocks approval when a required dimension is missing or conflicting", async () => {
     const blocked = candidate({
@@ -418,6 +466,131 @@ describe("Furniture professional-review isolation", () => {
       quantity: 3,
       reason: "Attempt after approval.",
     })).rejects.toMatchObject({ code: "FURNITURE_VALUES_LOCKED", status: 409 });
+  });
+
+  it("rejects a managed candidate once with an auditable correction chain and immutable evidence", async () => {
+    const row = furnitureRow({ status: ExtractedEntityStatus.CORRECTED });
+    const originalEvidence = structuredClone(currentCandidate(row).evidence);
+    const priorCorrection = {
+      schemaVersion: 1,
+      reason: "Earlier professional correction.",
+      correctedByUserId: actor().userId,
+    };
+    row.correctionJson = priorCorrection;
+    entityStore.state.rows.push(row);
+
+    const rejected = await rejectFurnitureCandidate(
+      actor(),
+      "project-a",
+      ENTITY_A,
+      "  Duplicate schedule row; exclude from BOQ.  ",
+    );
+    const rejectionSnapshot = structuredClone(row.correctionJson);
+    const replay = await rejectFurnitureCandidate(
+      actor(),
+      "project-a",
+      ENTITY_A,
+      "A replay must not replace the original audit reason.",
+    );
+    const [listed] = await listFurnitureCandidates(actor(), "project-a");
+
+    expect(rejected.status).toBe(ExtractedEntityStatus.REJECTED);
+    expect(rejected.rejectedAt).toBe(row.rejectedAt.toISOString());
+    expect(replay.rejectedAt).toBe(rejected.rejectedAt);
+    expect(listed.rejectedAt).toBe(rejected.rejectedAt);
+    expect(row.rejectedByUserId).toBe(actor().userId);
+    expect(row.confirmedByUserId).toBeNull();
+    expect(row.confirmedAt).toBeNull();
+    expect(rejected.candidate.evidence).toEqual(originalEvidence);
+    expect(row.correctionJson).toEqual(rejectionSnapshot);
+    expect(row.correctionJson).toMatchObject({
+      previous: priorCorrection,
+      rejectedCandidate: { evidence: originalEvidence },
+      reason: "Duplicate schedule row; exclude from BOQ.",
+      rejectedByUserId: actor().userId,
+      rejectedAt: rejected.rejectedAt,
+    });
+    expect(auditRepository.createAuditLog.mock.calls.filter(([, entry]) =>
+      entry.action === "FURNITURE_CANDIDATE_REJECTED")).toHaveLength(1);
+    await expect(approveFurnitureCandidate(actor(), "project-a", ENTITY_A))
+      .rejects.toMatchObject({ code: "ENTITY_ALREADY_FINALIZED", status: 409 });
+    await expect(correctFurnitureCandidate(actor(), "project-a", ENTITY_A, {
+      quantity: 3,
+      reason: "Attempted edit after exclusion.",
+    })).rejects.toMatchObject({ code: "ENTITY_ALREADY_FINALIZED", status: 409 });
+  });
+
+  it("requires a rejection reason and keeps candidate rejection project, tenant, role, and category isolated", async () => {
+    const row = furnitureRow();
+    entityStore.state.rows.push(row);
+
+    await expect(rejectFurnitureCandidate(actor(), "project-a", ENTITY_A, "   "))
+      .rejects.toMatchObject({ code: "REJECTION_REASON_REQUIRED", status: 400 });
+    await expect(rejectFurnitureCandidate(actor(), "other-project", ENTITY_A, "Wrong project attempt."))
+      .rejects.toMatchObject({ code: "NOT_FOUND", status: 404 });
+    await expect(rejectFurnitureCandidate(
+      actor(UserRole.REVIEWER, COMPANY_B),
+      "project-a",
+      ENTITY_A,
+      "Wrong tenant attempt.",
+    )).rejects.toMatchObject({ code: "NOT_FOUND", status: 404 });
+    await expect(rejectFurnitureCandidate(
+      actor(UserRole.ESTIMATOR),
+      "project-a",
+      ENTITY_A,
+      "Unauthorized role attempt.",
+    )).rejects.toMatchObject({ code: "PERMISSION_DENIED", status: 403 });
+
+    entityStore.state.rows.splice(0, 1, orderRow());
+    await expect(rejectFurnitureCandidate(actor(), "project-a", ENTITY_A, "Wrong category attempt."))
+      .rejects.toMatchObject({ code: "NOT_FOUND", status: 404 });
+    expect(entityStore.state.rows[0].status).toBe(ExtractedEntityStatus.NEEDS_REVIEW);
+    expect(auditRepository.createAuditLog).not.toHaveBeenCalled();
+  });
+
+  it.each([ExtractedEntityStatus.CONFIRMED, ExtractedEntityStatus.IMPORTED])(
+    "refuses candidate rejection after the %s final state",
+    async (status) => {
+      const row = furnitureRow({ status });
+      entityStore.state.rows.push(row);
+
+      await expect(rejectFurnitureCandidate(actor(), "project-a", ENTITY_A, "Late exclusion attempt."))
+        .rejects.toMatchObject({ code: "ENTITY_ALREADY_FINALIZED", status: 409 });
+      expect(row.status).toBe(status);
+      expect(row.rejectedAt).toBeNull();
+      expect(auditRepository.createAuditLog).not.toHaveBeenCalled();
+    },
+  );
+
+  it("fails candidate rejection closed when a correction wins the concurrent review race", async () => {
+    const row = furnitureRow({ status: ExtractedEntityStatus.CORRECTED });
+    const originalUpdatedAt = row.updatedAt;
+    const concurrentCorrection = { schemaVersion: 1, reason: "Concurrent reviewer correction." };
+    const concurrentCandidate = candidate({ part: "Concurrent corrected door panel" });
+    entityStore.state.rows.push(row);
+    entityStore.extractedEntity.updateMany.mockImplementationOnce(async ({ where }) => {
+      expect(where.updatedAt).toEqual(originalUpdatedAt);
+      row.updatedAt = new Date("2026-08-31T00:01:00.000Z");
+      row.correctionJson = concurrentCorrection;
+      row.technicalDataJson = {
+        kind: FURNITURE_CANDIDATE_TECHNICAL_DATA_KIND,
+        candidate: concurrentCandidate,
+      };
+      return { count: 0 };
+    });
+
+    await expect(rejectFurnitureCandidate(
+      actor(),
+      "project-a",
+      ENTITY_A,
+      "Exclude the earlier candidate snapshot.",
+    )).rejects.toMatchObject({ code: "ENTITY_REVIEW_CONFLICT", status: 409 });
+
+    expect(row.status).toBe(ExtractedEntityStatus.CORRECTED);
+    expect(row.correctionJson).toEqual(concurrentCorrection);
+    expect(currentCandidate(row).part).toBe("Concurrent corrected door panel");
+    expect(row.rejectedAt).toBeNull();
+    expect(auditRepository.createAuditLog).not.toHaveBeenCalled();
   });
 
   it("keeps an editable selected-edge assumption reviewable through approval", async () => {
@@ -644,6 +817,175 @@ describe("Furniture professional-review isolation", () => {
       reason: "Attempted edit after approval.",
     })).rejects.toMatchObject({ code: "FURNITURE_VALUES_LOCKED", status: 409 });
     expect(row.technicalDataJson.candidate.evidence).toEqual(originalEvidence);
+  });
+
+  it.each(["correction", "approval"] as const)(
+    "fails order-item %s closed when a professional correction wins the concurrent review race",
+    async (operation) => {
+      const originalCandidate = orderCandidate({
+        unit: "pcs",
+        category: "HARDWARE",
+        issues: [],
+        verificationStatus: "CORRECTED",
+      });
+      const row = orderRow({ status: ExtractedEntityStatus.CORRECTED, candidate: originalCandidate });
+      const originalUpdatedAt = row.updatedAt;
+      const concurrentCorrection = { schemaVersion: 1, reason: "Concurrent hardware correction." };
+      const concurrentCandidate = orderCandidate({
+        ...originalCandidate,
+        description: "Concurrent corrected hinge",
+      });
+      entityStore.state.rows.push(row);
+      entityStore.extractedEntity.updateMany.mockImplementationOnce(async ({ where }) => {
+        expect(where.updatedAt).toEqual(originalUpdatedAt);
+        row.updatedAt = new Date("2026-08-31T00:01:00.000Z");
+        row.correctionJson = concurrentCorrection;
+        row.technicalDataJson = {
+          kind: FURNITURE_ORDER_ITEM_TECHNICAL_DATA_KIND,
+          candidate: concurrentCandidate,
+        };
+        return { count: 0 };
+      });
+
+      const request = operation === "correction"
+        ? correctFurnitureOrderItemCandidate(actor(), "project-a", ENTITY_A, {
+          quantity: 15,
+          reason: "Stale order correction attempt.",
+        })
+        : approveFurnitureOrderItemCandidate(actor(), "project-a", ENTITY_A);
+      await expect(request).rejects.toMatchObject({ code: "ENTITY_REVIEW_CONFLICT", status: 409 });
+
+      expect(row.status).toBe(ExtractedEntityStatus.CORRECTED);
+      expect(row.confirmedAt).toBeNull();
+      expect(row.correctionJson).toEqual(concurrentCorrection);
+      expect(row.technicalDataJson.candidate.description).toBe("Concurrent corrected hinge");
+      expect(auditRepository.createAuditLog).not.toHaveBeenCalled();
+    },
+  );
+
+  it("rejects a managed order item once with rejection actor, time, reason, and prior correction intact", async () => {
+    const row = orderRow({ status: ExtractedEntityStatus.CORRECTED });
+    const originalEvidence = structuredClone(row.technicalDataJson.candidate.evidence);
+    const priorCorrection = {
+      schemaVersion: 1,
+      reason: "Earlier order-item correction.",
+      correctedByUserId: actor().userId,
+    };
+    row.correctionJson = priorCorrection;
+    entityStore.state.rows.push(row);
+
+    const rejected = await rejectFurnitureOrderItemCandidate(
+      actor(),
+      "project-a",
+      ENTITY_A,
+      "  Supplied by client; exclude this order row.  ",
+    );
+    const rejectionSnapshot = structuredClone(row.correctionJson);
+    const replay = await rejectFurnitureOrderItemCandidate(
+      actor(),
+      "project-a",
+      ENTITY_A,
+      "Replay reason must not overwrite the first rejection.",
+    );
+    const [listed] = await listFurnitureOrderItemCandidates(actor(), "project-a");
+
+    expect(rejected.status).toBe(ExtractedEntityStatus.REJECTED);
+    expect(rejected.rejectedAt).toBe(row.rejectedAt.toISOString());
+    expect(replay.rejectedAt).toBe(rejected.rejectedAt);
+    expect(listed.rejectedAt).toBe(rejected.rejectedAt);
+    expect(row.rejectedByUserId).toBe(actor().userId);
+    expect(row.confirmedByUserId).toBeNull();
+    expect(row.confirmedAt).toBeNull();
+    expect(rejected.candidate.evidence).toEqual(originalEvidence);
+    expect(row.correctionJson).toEqual(rejectionSnapshot);
+    expect(row.correctionJson).toMatchObject({
+      previous: priorCorrection,
+      rejectedCandidate: { evidence: originalEvidence },
+      reason: "Supplied by client; exclude this order row.",
+      rejectedByUserId: actor().userId,
+      rejectedAt: rejected.rejectedAt,
+    });
+    expect(auditRepository.createAuditLog.mock.calls.filter(([, entry]) =>
+      entry.action === "FURNITURE_ORDER_ITEM_REJECTED")).toHaveLength(1);
+    await expect(approveFurnitureOrderItemCandidate(actor(), "project-a", ENTITY_A))
+      .rejects.toMatchObject({ code: "ENTITY_ALREADY_FINALIZED", status: 409 });
+    await expect(correctFurnitureOrderItemCandidate(actor(), "project-a", ENTITY_A, {
+      quantity: 13,
+      reason: "Attempted edit after exclusion.",
+    })).rejects.toMatchObject({ code: "ENTITY_ALREADY_FINALIZED", status: 409 });
+  });
+
+  it("keeps order-item rejection project, tenant, role, and category isolated", async () => {
+    const row = orderRow();
+    entityStore.state.rows.push(row);
+
+    await expect(rejectFurnitureOrderItemCandidate(actor(), "project-a", ENTITY_A, "   "))
+      .rejects.toMatchObject({ code: "REJECTION_REASON_REQUIRED", status: 400 });
+    await expect(rejectFurnitureOrderItemCandidate(actor(), "other-project", ENTITY_A, "Wrong project attempt."))
+      .rejects.toMatchObject({ code: "NOT_FOUND", status: 404 });
+    await expect(rejectFurnitureOrderItemCandidate(
+      actor(UserRole.REVIEWER, COMPANY_B),
+      "project-a",
+      ENTITY_A,
+      "Wrong tenant attempt.",
+    )).rejects.toMatchObject({ code: "NOT_FOUND", status: 404 });
+    await expect(rejectFurnitureOrderItemCandidate(
+      actor(UserRole.ESTIMATOR),
+      "project-a",
+      ENTITY_A,
+      "Unauthorized role attempt.",
+    )).rejects.toMatchObject({ code: "PERMISSION_DENIED", status: 403 });
+
+    entityStore.state.rows.splice(0, 1, furnitureRow());
+    await expect(rejectFurnitureOrderItemCandidate(actor(), "project-a", ENTITY_A, "Wrong category attempt."))
+      .rejects.toMatchObject({ code: "NOT_FOUND", status: 404 });
+    expect(entityStore.state.rows[0].status).toBe(ExtractedEntityStatus.NEEDS_REVIEW);
+    expect(auditRepository.createAuditLog).not.toHaveBeenCalled();
+  });
+
+  it.each([ExtractedEntityStatus.CONFIRMED, ExtractedEntityStatus.IMPORTED])(
+    "refuses order-item rejection after the %s final state",
+    async (status) => {
+      const row = orderRow({ status });
+      entityStore.state.rows.push(row);
+
+      await expect(rejectFurnitureOrderItemCandidate(actor(), "project-a", ENTITY_A, "Late exclusion attempt."))
+        .rejects.toMatchObject({ code: "ENTITY_ALREADY_FINALIZED", status: 409 });
+      expect(row.status).toBe(status);
+      expect(row.rejectedAt).toBeNull();
+      expect(auditRepository.createAuditLog).not.toHaveBeenCalled();
+    },
+  );
+
+  it("fails order-item rejection closed when a correction wins the concurrent review race", async () => {
+    const row = orderRow({ status: ExtractedEntityStatus.CORRECTED });
+    const originalUpdatedAt = row.updatedAt;
+    const concurrentCorrection = { schemaVersion: 1, reason: "Concurrent hardware correction." };
+    const concurrentCandidate = orderCandidate({ description: "Concurrent corrected hinge" });
+    entityStore.state.rows.push(row);
+    entityStore.extractedEntity.updateMany.mockImplementationOnce(async ({ where }) => {
+      expect(where.updatedAt).toEqual(originalUpdatedAt);
+      row.updatedAt = new Date("2026-08-31T00:01:00.000Z");
+      row.correctionJson = concurrentCorrection;
+      row.technicalDataJson = {
+        kind: FURNITURE_ORDER_ITEM_TECHNICAL_DATA_KIND,
+        candidate: concurrentCandidate,
+      };
+      return { count: 0 };
+    });
+
+    await expect(rejectFurnitureOrderItemCandidate(
+      actor(),
+      "project-a",
+      ENTITY_A,
+      "Exclude the earlier order-item snapshot.",
+    )).rejects.toMatchObject({ code: "ENTITY_REVIEW_CONFLICT", status: 409 });
+
+    expect(row.status).toBe(ExtractedEntityStatus.CORRECTED);
+    expect(row.correctionJson).toEqual(concurrentCorrection);
+    expect(row.technicalDataJson.candidate.description).toBe("Concurrent corrected hinge");
+    expect(row.rejectedAt).toBeNull();
+    expect(auditRepository.createAuditLog).not.toHaveBeenCalled();
   });
 
   it("fails order mutations closed across project and tenant boundaries", async () => {

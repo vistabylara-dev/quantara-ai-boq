@@ -142,7 +142,7 @@ export function calculateFurnitureBoardGroups(
       excluded.push({ candidateId: part.candidateId, reason: "Missing or conflicting thickness" });
       continue;
     }
-    if (part.material.raw.trim() === "") {
+    if (part.material.name.trim() === "") {
       excluded.push({ candidateId: part.candidateId, reason: "Missing material" });
       continue;
     }
@@ -177,8 +177,8 @@ export function calculateFurnitureBoardGroups(
 
   return {
     calculationVersion: FURNITURE_CALCULATION_VERSION,
-    groups: [...groups.values()].sort((left, right) =>
-      left.thicknessMm - right.thicknessMm || left.rawMaterial.localeCompare(right.rawMaterial)),
+  groups: [...groups.values()].sort((left, right) =>
+      left.thicknessMm - right.thicknessMm || left.material.localeCompare(right.material)),
     excluded,
   };
 }

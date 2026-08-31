@@ -8,9 +8,11 @@ const mocks = vi.hoisted(() => ({
   listFurnitureCandidates: vi.fn(),
   correctFurnitureCandidate: vi.fn(),
   approveFurnitureCandidate: vi.fn(),
+  rejectFurnitureCandidate: vi.fn(),
   listFurnitureOrderItemCandidates: vi.fn(),
   correctFurnitureOrderItemCandidate: vi.fn(),
   approveFurnitureOrderItemCandidate: vi.fn(),
+  rejectFurnitureOrderItemCandidate: vi.fn(),
 }));
 
 vi.mock("@/lib/auth/current-actor", () => ({
@@ -26,20 +28,24 @@ vi.mock("@/lib/services/furniture-review-service", () => ({
   listFurnitureCandidates: mocks.listFurnitureCandidates,
   correctFurnitureCandidate: mocks.correctFurnitureCandidate,
   approveFurnitureCandidate: mocks.approveFurnitureCandidate,
+  rejectFurnitureCandidate: mocks.rejectFurnitureCandidate,
 }));
 
 vi.mock("@/lib/services/furniture-order-review-service", () => ({
   listFurnitureOrderItemCandidates: mocks.listFurnitureOrderItemCandidates,
   correctFurnitureOrderItemCandidate: mocks.correctFurnitureOrderItemCandidate,
   approveFurnitureOrderItemCandidate: mocks.approveFurnitureOrderItemCandidate,
+  rejectFurnitureOrderItemCandidate: mocks.rejectFurnitureOrderItemCandidate,
 }));
 
 import { GET as listCandidatesGET } from "@/app/api/projects/[projectId]/joinery/candidates/route";
 import { PATCH as correctCandidatePATCH } from "@/app/api/projects/[projectId]/joinery/candidates/[candidateId]/route";
 import { POST as approveCandidatePOST } from "@/app/api/projects/[projectId]/joinery/candidates/[candidateId]/approve/route";
+import { POST as rejectCandidatePOST } from "@/app/api/projects/[projectId]/joinery/candidates/[candidateId]/reject/route";
 import { GET as listOrderItemsGET } from "@/app/api/projects/[projectId]/joinery/order-items/route";
 import { PATCH as correctOrderItemPATCH } from "@/app/api/projects/[projectId]/joinery/order-items/[candidateId]/route";
 import { POST as approveOrderItemPOST } from "@/app/api/projects/[projectId]/joinery/order-items/[candidateId]/approve/route";
+import { POST as rejectOrderItemPOST } from "@/app/api/projects/[projectId]/joinery/order-items/[candidateId]/reject/route";
 
 const COMPANY_ID = "11111111-1111-4111-8111-111111111111";
 const CANDIDATE_ID = "22222222-2222-4222-8222-222222222222";
@@ -162,6 +168,50 @@ describe("Furniture review route contracts", () => {
       ["FINISH_REQUIRES_VERIFICATION"],
     );
     expect(await response.json()).toEqual({ ok: true, data: approved });
+  });
+
+  it("strictly validates, trims, and scopes a candidate rejection", async () => {
+    const rejected = {
+      id: CANDIDATE_ID,
+      status: "REJECTED",
+      rejectedAt: "2026-08-31T12:00:00.000Z",
+    };
+    mocks.rejectFurnitureCandidate.mockResolvedValueOnce(rejected);
+    const response = await rejectCandidatePOST(
+      request(
+        "POST",
+        `/api/projects/controlled-project/joinery/candidates/${CANDIDATE_ID}/reject`,
+        { reason: "  Duplicate schedule row.  " },
+      ),
+      { params: Promise.resolve({ projectId: "controlled-project", candidateId: CANDIDATE_ID }) },
+    );
+
+    expect(response.status).toBe(200);
+    expect(mocks.rejectFurnitureCandidate).toHaveBeenCalledWith(
+      actor,
+      "controlled-project",
+      CANDIDATE_ID,
+      "Duplicate schedule row.",
+    );
+    expect(await response.json()).toEqual({ ok: true, data: rejected });
+  });
+
+  it.each([
+    ["invalid candidate id", { projectId: "controlled-project", candidateId: "not-a-uuid" }, { reason: "Valid reason" }],
+    ["missing reason", { projectId: "controlled-project", candidateId: CANDIDATE_ID }, {}],
+    ["blank reason", { projectId: "controlled-project", candidateId: CANDIDATE_ID }, { reason: "   " }],
+    ["two-character reason", { projectId: "controlled-project", candidateId: CANDIDATE_ID }, { reason: "ab" }],
+    ["1001-character reason", { projectId: "controlled-project", candidateId: CANDIDATE_ID }, { reason: "x".repeat(1_001) }],
+    ["unknown field", { projectId: "controlled-project", candidateId: CANDIDATE_ID }, { reason: "Valid reason", companyId: COMPANY_ID }],
+  ])("rejects candidate rejection with %s before calling the service", async (_label, params, body) => {
+    const response = await rejectCandidatePOST(
+      request("POST", "/api/projects/controlled-project/joinery/candidates/value/reject", body),
+      { params: Promise.resolve(params) },
+    );
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({ ok: false, error: { code: "VALIDATION_ERROR" } });
+    expect(mocks.rejectFurnitureCandidate).not.toHaveBeenCalled();
   });
 
   it("surfaces service capability denial without mutating", async () => {
@@ -293,5 +343,49 @@ describe("Furniture review route contracts", () => {
     );
     expect(rejected.status).toBe(400);
     expect(mocks.approveFurnitureOrderItemCandidate).not.toHaveBeenCalled();
+  });
+
+  it("strictly validates, trims, and scopes an order-item rejection", async () => {
+    const rejected = {
+      id: CANDIDATE_ID,
+      status: "REJECTED",
+      rejectedAt: "2026-08-31T12:00:00.000Z",
+    };
+    mocks.rejectFurnitureOrderItemCandidate.mockResolvedValueOnce(rejected);
+    const response = await rejectOrderItemPOST(
+      request(
+        "POST",
+        `/api/projects/controlled-project/joinery/order-items/${CANDIDATE_ID}/reject`,
+        { reason: "  Supplied by client; exclude this row.  " },
+      ),
+      { params: Promise.resolve({ projectId: "controlled-project", candidateId: CANDIDATE_ID }) },
+    );
+
+    expect(response.status).toBe(200);
+    expect(mocks.rejectFurnitureOrderItemCandidate).toHaveBeenCalledWith(
+      actor,
+      "controlled-project",
+      CANDIDATE_ID,
+      "Supplied by client; exclude this row.",
+    );
+    expect(await response.json()).toEqual({ ok: true, data: rejected });
+  });
+
+  it.each([
+    ["invalid order item id", { projectId: "controlled-project", candidateId: "not-a-uuid" }, { reason: "Valid reason" }],
+    ["missing reason", { projectId: "controlled-project", candidateId: CANDIDATE_ID }, {}],
+    ["blank reason", { projectId: "controlled-project", candidateId: CANDIDATE_ID }, { reason: "   " }],
+    ["two-character reason", { projectId: "controlled-project", candidateId: CANDIDATE_ID }, { reason: "ab" }],
+    ["1001-character reason", { projectId: "controlled-project", candidateId: CANDIDATE_ID }, { reason: "x".repeat(1_001) }],
+    ["unknown field", { projectId: "controlled-project", candidateId: CANDIDATE_ID }, { reason: "Valid reason", companyId: COMPANY_ID }],
+  ])("rejects order-item rejection with %s before calling the service", async (_label, params, body) => {
+    const response = await rejectOrderItemPOST(
+      request("POST", "/api/projects/controlled-project/joinery/order-items/value/reject", body),
+      { params: Promise.resolve(params) },
+    );
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({ ok: false, error: { code: "VALIDATION_ERROR" } });
+    expect(mocks.rejectFurnitureOrderItemCandidate).not.toHaveBeenCalled();
   });
 });

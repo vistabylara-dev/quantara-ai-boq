@@ -40,6 +40,10 @@ export const furnitureApprovalSchema = z.object({
   acknowledgedIssueCodes: z.array(z.string().trim().min(1).max(100)).max(100).default([]),
 }).strict();
 
+export const furnitureRejectionSchema = z.object({
+  reason: z.string().trim().min(3).max(1_000),
+}).strict();
+
 export const furnitureBoqGenerationSchema = z.object({
   boqId: z.string().uuid(),
   wastagePercentage: z.number().finite().min(0).max(100),

@@ -43,7 +43,7 @@ describe("Joinery workspace UI and navigation guard", () => {
     expect(aiDraft).toContain("FURNITURE_ORDER_ITEM_TECHNICAL_DATA_KIND");
   });
 
-  it("renders separate order controls and keeps generation disabled until parts and order items are locked", () => {
+  it("renders separate order controls and keeps generation disabled until active rows are locked", () => {
     const page = source("src/app/projects/[projectId]/joinery/page.tsx");
 
     expect(page).toContain("Hardware, accessories and specialist order items");
@@ -52,7 +52,31 @@ describe("Joinery workspace UI and navigation guard", () => {
     expect(page).toContain("Supplied by others");
     expect(page).toContain("Hardware/order item correction saved with source evidence.");
     expect(page).toContain("Hardware/order item approved and locked.");
-    expect(page).toContain("stats.lockedOrderItems !== orderItems.length");
+    expect(page).toContain("activeCandidates.every((entry) => entry.status === \"CONFIRMED\")");
+    expect(page).toContain("activeOrderItems.every((entry) => entry.status === \"CONFIRMED\")");
+    expect(page).toContain("!readyToGenerate");
     expect(page).toContain("Review and lock every detected part and hardware/order item before generating outputs.");
+  });
+
+  it("exposes governed false-positive exclusion without counting rejected rows in generation", () => {
+    const page = source("src/app/projects/[projectId]/joinery/page.tsx");
+    const service = source("src/lib/services/furniture-boq-service.ts");
+
+    expect(page).toContain("Exclude false positive");
+    expect(page).toContain("/reject");
+    expect(page).toContain("Excluded false positive");
+    expect(page).toContain("entry.status !== \"REJECTED\"");
+    expect(service).toContain("status: { not: ExtractedEntityStatus.REJECTED }");
+  });
+
+  it("blocks candidate and order-item approval until domain corrections are saved", () => {
+    const page = source("src/app/projects/[projectId]/joinery/page.tsx");
+
+    expect(page).toContain("isCandidateDraftDirty(draft, draftFrom(entry.candidate))");
+    expect(page).toContain("isOrderItemDraftDirty(draft, orderDraftFrom(entry.candidate))");
+    expect(page).toContain("blocking.length > 0 || hasUnsavedDomainFields");
+    expect(page).toContain("Save correction before approval");
+    expect(page).toContain("[updated.id]: draftFrom(updated.candidate)");
+    expect(page).toContain("[updated.id]: orderDraftFrom(updated.candidate)");
   });
 });

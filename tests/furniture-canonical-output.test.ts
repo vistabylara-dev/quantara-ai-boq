@@ -174,6 +174,57 @@ describe("furniture canonical output", () => {
     })).toThrow("only CONFIRMED");
   });
 
+  it("uses professionally corrected material semantics while preserving empty raw source provenance", () => {
+    const correctedMaterial = candidate("candidate-corrected-material");
+    correctedMaterial.material = { raw: "", name: "MDF", finish: "Oak" };
+    const output = buildFurnitureCanonicalOutput({
+      projectId: "project-1",
+      projectReference: "FJC-001",
+      projectName: "Controlled Furniture Test",
+      discipline: "JOINERY_CABINETRY",
+      wastagePercentage: 10,
+      confirmedCandidates: [confirmed(correctedMaterial)],
+    });
+
+    const boardItems = output.sections.find(({ code }) => code === "BRD")?.items ?? [];
+    const cuttingItems = output.sections.find(({ code }) => code === "CUT")?.items ?? [];
+    const verificationItems = output.sections.find(({ code }) => code === "VER")?.items ?? [];
+    expect(boardItems).toHaveLength(1);
+    expect(boardItems[0].description).toContain("MDF (Oak)");
+    expect(cuttingItems[0].specification).toContain("material MDF");
+    expect(cuttingItems[0].specification).not.toContain("material unavailable");
+    expect(verificationItems.some(({ managedKey }) =>
+      managedKey === "verification:board:candidate-corrected-material")).toBe(false);
+  });
+
+  it("uses a professionally corrected elevation in current rows while retaining the source reference as evidence", () => {
+    const correctedElevation = candidate("candidate-corrected-elevation");
+    correctedElevation.elevationReference = "ELEV-B";
+    correctedElevation.evidence.drawingReference = "ELEV-A";
+    correctedElevation.issues = [{
+      code: "GRAIN_DIRECTION_MISSING",
+      severity: "REVIEW",
+      field: "grainDirection",
+      message: "Grain direction requires verification.",
+      evidenceReferences: ["ELEV-A"],
+    }];
+    const output = buildFurnitureCanonicalOutput({
+      projectId: "project-1",
+      projectReference: "FJC-001",
+      projectName: "Controlled Furniture Test",
+      discipline: "JOINERY_CABINETRY",
+      wastagePercentage: 10,
+      confirmedCandidates: [confirmed(correctedElevation)],
+    });
+
+    const cuttingItem = output.sections.find(({ code }) => code === "CUT")?.items[0];
+    const verificationItem = output.sections.find(({ code }) => code === "VER")?.items.find(({ managedKey }) =>
+      managedKey.startsWith("verification:candidate:candidate-corrected-elevation:"));
+    expect(cuttingItem?.drawingReference).toBe("ELEV-B");
+    expect(verificationItem?.drawingReference).toBe("ELEV-B");
+    expect(correctedElevation.evidence.drawingReference).toBe("ELEV-A");
+  });
+
   it("labels an assumed selected-edge total as editable and requiring professional verification", () => {
     const assumedFront = candidate("candidate-front");
     assumedFront.edgeBanding = {

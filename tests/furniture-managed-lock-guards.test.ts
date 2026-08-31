@@ -130,6 +130,67 @@ function managedMarker(key: string): string {
   return `${FURNITURE_MANAGED_SOURCE_PREFIX}${encodeURIComponent(key)}]`;
 }
 
+function managedLockBoq(persistedSignature: string) {
+  const signatureKey = "integrity:input-signature";
+  const marker = managedMarker(signatureKey);
+  return {
+    id: "boq-1",
+    companyId: "company-1",
+    projectId: "project-1",
+    revisionNumber: 1,
+    version: 2,
+    verifiedVersion: 2,
+    verifiedAt: new Date("2026-08-31T08:10:00.000Z"),
+    isLocked: false,
+    taxRate: new Prisma.Decimal(0),
+    discountPercentage: new Prisma.Decimal(0),
+    verificationExceptions: [],
+    project: {
+      industryEngine: { key: JOINERY_INDUSTRY_KEY },
+    },
+    sections: [{
+      code: "VER",
+      items: [{
+        id: "item-signature-1",
+        itemNumber: 1,
+        itemCode: furnitureManagedItemCodeForKey(signatureKey),
+        description: "Managed furniture input signature",
+        sourceReference: marker,
+        notes: marker,
+        category: "VERIFICATION_ITEM",
+        sourceType: "IMPORT",
+        specification: `${FURNITURE_INPUT_SIGNATURE_SPECIFICATION_PREFIX}${persistedSignature}`,
+        quantity: new Prisma.Decimal(1),
+        unit: "item",
+        unitCost: new Prisma.Decimal(0),
+        freightCost: new Prisma.Decimal(0),
+        installationCost: new Prisma.Decimal(0),
+        additionalCost: new Prisma.Decimal(0),
+        marginMode: "MARKUP",
+        marginPercentage: new Prisma.Decimal(0),
+        totalAmount: new Prisma.Decimal(0),
+        wastagePercentage: new Prisma.Decimal(10),
+        quantityProvenance: {
+          sourceType: "IMPORT_CONFIRMED",
+          confirmedAt: new Date("2026-08-31T08:05:00.000Z"),
+          quantitySnapshot: new Prisma.Decimal(1),
+          unitSnapshot: "item",
+        },
+        rateProvenance: {
+          sourceType: "IMPORT_CONFIRMED",
+          confirmedAt: new Date("2026-08-31T08:05:00.000Z"),
+          unitCostSnapshot: new Prisma.Decimal(0),
+          freightCostSnapshot: new Prisma.Decimal(0),
+          installationCostSnapshot: new Prisma.Decimal(0),
+          additionalCostSnapshot: new Prisma.Decimal(0),
+          marginModeSnapshot: "MARKUP",
+          marginPercentageSnapshot: new Prisma.Decimal(0),
+        },
+      }],
+    }],
+  };
+}
+
 describe("furniture managed input signatures", () => {
   const partOne = {
     entityId: "part-1",
@@ -325,5 +386,54 @@ describe("managed furniture lock freshness", () => {
     expect(prisma.bOQRevisionSnapshot.create).not.toHaveBeenCalled();
     expect(prisma.bOQItem.updateMany).not.toHaveBeenCalled();
     expect(prisma.auditLog.create).not.toHaveBeenCalled();
+  });
+
+  it("keeps a generated signature lock-current when false-positive source rows were rejected", async () => {
+    const confirmedPart = {
+      id: "entity-part-1",
+      categoryKey: FURNITURE_CANDIDATE_TECHNICAL_DATA_KIND,
+      status: "CONFIRMED",
+      confirmedAt: new Date("2026-08-31T08:00:00.000Z"),
+      updatedAt: new Date("2026-08-31T08:01:00.000Z"),
+    };
+    const rejectedPart = {
+      id: "entity-part-rejected",
+      categoryKey: FURNITURE_CANDIDATE_TECHNICAL_DATA_KIND,
+      status: "REJECTED",
+      confirmedAt: null,
+      updatedAt: new Date("2026-08-31T08:02:00.000Z"),
+    };
+    const rejectedOrder = {
+      id: "entity-order-rejected",
+      categoryKey: "FURNITURE_ORDER_ITEM_CANDIDATE",
+      status: "REJECTED",
+      confirmedAt: null,
+      updatedAt: new Date("2026-08-31T08:03:00.000Z"),
+    };
+    const persistedSignature = computeFurnitureInputSignature({
+      discipline: "JOINERY_CABINETRY",
+      wastagePercentage: 10,
+      partEntities: [{
+        entityId: confirmedPart.id,
+        status: "CONFIRMED",
+        confirmedAt: confirmedPart.confirmedAt.toISOString(),
+        updatedAt: confirmedPart.updatedAt.toISOString(),
+      }],
+      orderEntities: [],
+    });
+    const current = managedLockBoq(persistedSignature);
+    const storedEntities = [confirmedPart, rejectedPart, rejectedOrder];
+    vi.mocked(prisma.bOQ.findFirst).mockResolvedValue(current as never);
+    vi.mocked(prisma.extractedEntity.findMany).mockResolvedValue(
+      storedEntities.filter((entity) => entity.status !== "REJECTED") as never,
+    );
+    vi.mocked(prisma.bOQRevisionSnapshot.create).mockRejectedValue(new Error("LOCK_WRITE_REACHED"));
+
+    await expect(lockBOQ("company-1", "boq-1")).rejects.toThrow("LOCK_WRITE_REACHED");
+
+    expect(prisma.extractedEntity.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({ status: { not: "REJECTED" } }),
+    }));
+    expect(prisma.bOQRevisionSnapshot.create).toHaveBeenCalledOnce();
   });
 });

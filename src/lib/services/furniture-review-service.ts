@@ -3,6 +3,7 @@ import type { CurrentActor } from "@/lib/auth/current-actor";
 import { requireCapability } from "@/lib/auth/rbac";
 import { prisma } from "@/lib/db/prisma";
 import { AppError, NotFoundError } from "@/lib/errors/app-error";
+import { createFurnitureAssemblyGroupKey } from "@/lib/furniture/candidate-mapper";
 import type {
   FurnitureCandidateIssue,
   FurnitureDimensionName,
@@ -17,6 +18,11 @@ import { createAuditLog } from "@/lib/repositories/audit-repository";
 import { getProjectRecord } from "@/lib/repositories/project-repository";
 
 const FURNITURE_REVIEW_SCHEMA_VERSION = 1 as const;
+const FURNITURE_REJECTABLE_STATUSES = [
+  ExtractedEntityStatus.EXTRACTED,
+  ExtractedEntityStatus.NEEDS_REVIEW,
+  ExtractedEntityStatus.CORRECTED,
+] as const;
 
 type FurnitureCandidateEnvelope = {
   kind: typeof FURNITURE_CANDIDATE_TECHNICAL_DATA_KIND;
@@ -47,6 +53,7 @@ export type FurnitureCandidateReviewView = {
   candidate: FurniturePartCandidate;
   correction: Prisma.JsonValue | null;
   confirmedAt: string | null;
+  rejectedAt: string | null;
 };
 
 function parseCandidate(value: Prisma.JsonValue | null): FurniturePartCandidate {
@@ -83,6 +90,7 @@ function toView(entity: {
   technicalDataJson: Prisma.JsonValue | null;
   correctionJson: Prisma.JsonValue | null;
   confirmedAt: Date | null;
+  rejectedAt: Date | null;
 }): FurnitureCandidateReviewView {
   return {
     id: entity.id,
@@ -92,6 +100,7 @@ function toView(entity: {
     candidate: parseCandidate(entity.technicalDataJson),
     correction: entity.correctionJson,
     confirmedAt: entity.confirmedAt?.toISOString() ?? null,
+    rejectedAt: entity.rejectedAt?.toISOString() ?? null,
   };
 }
 
@@ -169,17 +178,23 @@ function applyCorrection(
   original: FurniturePartCandidate,
   correction: FurnitureCandidateCorrection,
 ): FurniturePartCandidate {
+  const room = correction.room?.trim() ?? original.room;
+  const elevationReference = correction.elevationReference?.trim() ?? original.elevationReference;
+  const assembly = correction.assembly?.trim() ?? original.assembly;
+  const materialName = correction.materialName?.trim() ?? original.material.name;
+  const finish = correction.finish !== undefined ? correction.finish?.trim() ?? null : original.material.finish;
   const candidate: FurniturePartCandidate = {
     ...original,
-    room: correction.room?.trim() ?? original.room,
-    elevationReference: correction.elevationReference?.trim() ?? original.elevationReference,
-    assembly: correction.assembly?.trim() ?? original.assembly,
+    room,
+    elevationReference,
+    assembly,
+    assemblyGroupKey: createFurnitureAssemblyGroupKey(room, elevationReference, assembly),
     part: correction.part?.trim() ?? original.part,
     quantity: correction.quantity !== undefined ? correction.quantity : original.quantity,
     material: {
       ...original.material,
-      name: correction.materialName?.trim() ?? original.material.name,
-      finish: correction.finish !== undefined ? correction.finish : original.material.finish,
+      name: materialName,
+      finish,
     },
     edgeBanding: correction.edgeBanding ?? original.edgeBanding,
     grainDirection: correction.grainDirection !== undefined ? correction.grainDirection : original.grainDirection,
@@ -267,6 +282,7 @@ export async function correctFurnitureCandidate(
         companyId: actor.companyId,
         projectId: project.id,
         status: { in: [ExtractedEntityStatus.EXTRACTED, ExtractedEntityStatus.NEEDS_REVIEW, ExtractedEntityStatus.CORRECTED] },
+        updatedAt: current.updatedAt,
       },
       data: {
         label: corrected.part,
@@ -360,6 +376,7 @@ export async function approveFurnitureCandidate(
         companyId: actor.companyId,
         projectId: project.id,
         status: { in: [ExtractedEntityStatus.EXTRACTED, ExtractedEntityStatus.NEEDS_REVIEW, ExtractedEntityStatus.CORRECTED] },
+        updatedAt: current.updatedAt,
       },
       data: {
         technicalDataJson: envelope(approved),
@@ -387,6 +404,85 @@ export async function approveFurnitureCandidate(
         candidateId: candidate.candidateId,
         acknowledgedIssueCodes,
       },
+    }, tx);
+    return tx.extractedEntity.findFirstOrThrow({ where: { id: current.id, companyId: actor.companyId } });
+  });
+  return toView(updated);
+}
+
+export async function rejectFurnitureCandidate(
+  actor: CurrentActor,
+  projectIdentifier: string,
+  candidateId: string,
+  rejectionReason: string,
+): Promise<FurnitureCandidateReviewView> {
+  requireCapability(actor, "verification:manage");
+  const project = await requireFurnitureProject(actor.companyId, projectIdentifier);
+  const reason = rejectionReason.trim();
+  if (!reason) throw new AppError("REJECTION_REASON_REQUIRED", "A rejection reason is required.", 400);
+
+  const updated = await prisma.$transaction(async (tx) => {
+    const current = await tx.extractedEntity.findFirst({
+      where: {
+        id: candidateId,
+        companyId: actor.companyId,
+        projectId: project.id,
+        categoryKey: FURNITURE_CANDIDATE_TECHNICAL_DATA_KIND,
+      },
+    });
+    if (!current) throw new NotFoundError("Furniture candidate not found.");
+    if (current.status === ExtractedEntityStatus.REJECTED) return current;
+    if (current.status === ExtractedEntityStatus.CONFIRMED || current.status === ExtractedEntityStatus.IMPORTED) {
+      throw new AppError("ENTITY_ALREADY_FINALIZED", "This furniture candidate has already been finalized.", 409);
+    }
+
+    const candidate = parseCandidate(current.technicalDataJson);
+    const now = new Date();
+    const claimed = await tx.extractedEntity.updateMany({
+      where: {
+        id: current.id,
+        companyId: actor.companyId,
+        projectId: project.id,
+        categoryKey: FURNITURE_CANDIDATE_TECHNICAL_DATA_KIND,
+        status: { in: [...FURNITURE_REJECTABLE_STATUSES] },
+        updatedAt: current.updatedAt,
+      },
+      data: {
+        status: ExtractedEntityStatus.REJECTED,
+        confirmedByUserId: null,
+        confirmedAt: null,
+        rejectedByUserId: actor.userId,
+        rejectedAt: now,
+        correctionJson: {
+          schemaVersion: FURNITURE_REVIEW_SCHEMA_VERSION,
+          previous: current.correctionJson ?? null,
+          rejectedCandidate: candidate,
+          reason,
+          rejectedByUserId: actor.userId,
+          rejectedAt: now.toISOString(),
+        } as Prisma.InputJsonValue,
+      },
+    });
+    if (claimed.count !== 1) {
+      const latest = await tx.extractedEntity.findFirst({
+        where: {
+          id: current.id,
+          companyId: actor.companyId,
+          projectId: project.id,
+          categoryKey: FURNITURE_CANDIDATE_TECHNICAL_DATA_KIND,
+        },
+      });
+      if (latest?.status === ExtractedEntityStatus.REJECTED) return latest;
+      if (latest?.status === ExtractedEntityStatus.CONFIRMED || latest?.status === ExtractedEntityStatus.IMPORTED) {
+        throw new AppError("ENTITY_ALREADY_FINALIZED", "This furniture candidate has already been finalized.", 409);
+      }
+      throw new AppError("ENTITY_REVIEW_CONFLICT", "This furniture candidate changed while it was being rejected.", 409);
+    }
+    await createAuditLog(actor.companyId, {
+      entityType: "ExtractedEntity",
+      entityId: current.id,
+      action: "FURNITURE_CANDIDATE_REJECTED",
+      payload: { candidateId: candidate.candidateId, reason },
     }, tx);
     return tx.extractedEntity.findFirstOrThrow({ where: { id: current.id, companyId: actor.companyId } });
   });

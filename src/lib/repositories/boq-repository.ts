@@ -2,6 +2,7 @@ import {
   BoqItemSourceType,
   BOQItemStatus,
   BOQStatus,
+  ExtractedEntityStatus,
   MarginMode,
   Prisma,
   RateProvenanceSource,
@@ -153,6 +154,7 @@ async function assertFurnitureManagedInputsCurrent(
       categoryKey: {
         in: [FURNITURE_CANDIDATE_TECHNICAL_DATA_KIND, FURNITURE_ORDER_ITEM_TECHNICAL_DATA_KIND],
       },
+      status: { not: ExtractedEntityStatus.REJECTED },
     },
     select: { id: true, categoryKey: true, status: true, confirmedAt: true, updatedAt: true },
     orderBy: [{ createdAt: "asc" }, { id: "asc" }],

@@ -6,7 +6,7 @@ import type { DocumentStorageAdapter } from "@/lib/storage/document-storage-adap
 import { hasReviewedRows, replaceExtractedTablesForFile } from "@/lib/repositories/extracted-table-repository";
 import { hasReviewedTableDerivedCandidates } from "@/lib/repositories/extracted-entity-repository";
 import { generateCandidatesFromStructuredTables } from "@/lib/services/source-candidate-bridge-service";
-import { FURNITURE_JOINERY_INDUSTRY_KEY } from "@/lib/furniture/types";
+import { JOINERY_INDUSTRY_KEY } from "@/lib/furniture/types";
 import {
   parseFurnitureWorkbookTables,
   UnsupportedFurnitureWorkbookError,
@@ -21,14 +21,14 @@ export { TABLE_EXTRACTABLE_EXTENSIONS } from "./table-extraction/constants";
 
 /**
  * Exact-industry dispatch only. Every other industry calls the existing XLSX
- * parser directly. A furniture project whose workbook does not implement the
+ * parser directly. A Joinery project whose workbook does not implement the
  * supported cutting-list fixture shape also falls back to that same parser.
  */
 export async function parseXlsxTablesForIndustry(
   buffer: Buffer,
   industryKey: string,
 ): Promise<ParsedTable[]> {
-  if (industryKey !== FURNITURE_JOINERY_INDUSTRY_KEY) {
+  if (industryKey !== JOINERY_INDUSTRY_KEY) {
     return parseXlsxTables(buffer);
   }
   try {

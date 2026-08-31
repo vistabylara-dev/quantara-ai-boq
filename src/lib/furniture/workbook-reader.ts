@@ -11,6 +11,7 @@ import {
   mapFurnitureOrderItemCandidates,
   type FurnitureOrderItemCandidate,
 } from "./order-item-mapper";
+import { JOINERY_CUTTING_LIST_SECTION_TITLE } from "./types";
 
 export const FURNITURE_WORKBOOK_READER_VERSION = "furniture-workbook-v1" as const;
 
@@ -168,7 +169,7 @@ function buildCuttingListTable(worksheet: ExcelJS.Worksheet): FurnitureSourceTab
   return {
     sourceTableKey: `workbook:${worksheet.name}`,
     sheetName: worksheet.name,
-    title: "FULL CUTTING LIST — ALL ROOMS",
+    title: JOINERY_CUTTING_LIST_SECTION_TITLE,
     rows,
     confidence: null,
     method: FURNITURE_WORKBOOK_READER_VERSION,

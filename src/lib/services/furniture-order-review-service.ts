@@ -10,7 +10,7 @@ import {
   type FurnitureOrderItemIssue,
 } from "@/lib/furniture/order-item-mapper";
 import type { FurnitureOrderCategory } from "@/lib/furniture/calculations";
-import { FURNITURE_JOINERY_INDUSTRY_KEY } from "@/lib/furniture/types";
+import { JOINERY_INDUSTRY_KEY } from "@/lib/furniture/types";
 import { createAuditLog } from "@/lib/repositories/audit-repository";
 import { getProjectRecord } from "@/lib/repositories/project-repository";
 
@@ -84,10 +84,10 @@ function toView(entity: {
 
 async function requireFurnitureProject(companyId: string, projectIdentifier: string) {
   const project = await getProjectRecord(companyId, projectIdentifier);
-  if (project.industryEngine.key !== FURNITURE_JOINERY_INDUSTRY_KEY) {
+  if (project.industryEngine.key !== JOINERY_INDUSTRY_KEY) {
     throw new AppError(
       "FURNITURE_PROJECT_REQUIRED",
-      "This operation is available only for Furniture, Joinery & Cabinetry projects.",
+      "This operation is available only for Joinery projects.",
       400,
     );
   }

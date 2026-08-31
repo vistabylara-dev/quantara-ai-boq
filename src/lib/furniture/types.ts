@@ -1,7 +1,6 @@
-import type { IndustryDiscipline } from "@/types/industry";
-
-export const FURNITURE_JOINERY_INDUSTRY_KEY = "furniture-joinery-cabinetry" as const;
-export const FURNITURE_JOINERY_INDUSTRY_NAME = "Furniture, Joinery & Cabinetry" as const;
+export const JOINERY_INDUSTRY_KEY = "joinery" as const;
+export const JOINERY_INDUSTRY_NAME = "Joinery" as const;
+export const JOINERY_CUTTING_LIST_SECTION_TITLE = "FULL CUTTING LIST — ALL ROOMS" as const;
 export const FURNITURE_HIERARCHY_SCHEMA_VERSION = 1 as const;
 export const FURNITURE_CANDIDATE_TECHNICAL_DATA_KIND = "FURNITURE_PART_CANDIDATE" as const;
 export const FURNITURE_ORDER_ITEM_TECHNICAL_DATA_KIND = "FURNITURE_ORDER_ITEM_CANDIDATE" as const;
@@ -74,7 +73,7 @@ export function isStrictFurnitureManagedNonCommercialRow(
   input: FurnitureManagedRowIdentityInput,
 ): boolean {
   const requiredSection = FURNITURE_NON_COMMERCIAL_SECTION_BY_CATEGORY.get(input.category);
-  return input.industryKey === FURNITURE_JOINERY_INDUSTRY_KEY
+  return input.industryKey === JOINERY_INDUSTRY_KEY
     && input.sourceType === "IMPORT"
     && requiredSection === input.sectionCode
     && readStrictFurnitureManagedKey(input) !== null;
@@ -84,19 +83,6 @@ export enum FurnitureDiscipline {
   FURNITURE = "FURNITURE",
   JOINERY_CABINETRY = "JOINERY_CABINETRY",
 }
-
-export const FURNITURE_DISCIPLINES = [
-  {
-    id: FurnitureDiscipline.FURNITURE,
-    name: "Furniture",
-    description: "Loose and fitted furniture schedules, assemblies, parts, finishes, and hardware.",
-  },
-  {
-    id: FurnitureDiscipline.JOINERY_CABINETRY,
-    name: "Joinery & Cabinetry",
-    description: "Architectural joinery and cabinetry assemblies, panels, finishes, and hardware.",
-  },
-] satisfies readonly IndustryDiscipline[];
 
 export enum FurnitureHierarchyNodeKind {
   ROOM = "ROOM",
@@ -174,7 +160,3 @@ export type FurnitureHierarchyNode = {
   verificationIssues: string[];
   notes: string[];
 };
-
-export function isFurnitureDiscipline(value: unknown): value is FurnitureDiscipline {
-  return Object.values(FurnitureDiscipline).includes(value as FurnitureDiscipline);
-}

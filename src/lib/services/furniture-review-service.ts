@@ -11,7 +11,7 @@ import type {
 } from "@/lib/furniture/candidate-mapper";
 import {
   FURNITURE_CANDIDATE_TECHNICAL_DATA_KIND,
-  FURNITURE_JOINERY_INDUSTRY_KEY,
+  JOINERY_INDUSTRY_KEY,
 } from "@/lib/furniture/types";
 import { createAuditLog } from "@/lib/repositories/audit-repository";
 import { getProjectRecord } from "@/lib/repositories/project-repository";
@@ -97,10 +97,10 @@ function toView(entity: {
 
 async function requireFurnitureProject(companyId: string, projectIdentifier: string) {
   const project = await getProjectRecord(companyId, projectIdentifier);
-  if (project.industryEngine.key !== FURNITURE_JOINERY_INDUSTRY_KEY) {
+  if (project.industryEngine.key !== JOINERY_INDUSTRY_KEY) {
     throw new AppError(
       "FURNITURE_PROJECT_REQUIRED",
-      "This operation is available only for Furniture, Joinery & Cabinetry projects.",
+      "This operation is available only for Joinery projects.",
       400,
     );
   }
@@ -154,6 +154,13 @@ function deriveIssues(candidate: FurniturePartCandidate): FurnitureCandidateIssu
   }
   if (candidate.edgeBanding.orientation === "UNRESOLVED") {
     issues.push(issue("EDGE_ORIENTATION_REQUIRES_VERIFICATION", "REVIEW", "Front-edge orientation requires verification.", "edgeBanding"));
+  } else if (candidate.edgeBanding.mode === "FRONT" && candidate.edgeBanding.orientation === "ASSUMED") {
+    issues.push(issue(
+      "EDGE_ORIENTATION_REQUIRES_VERIFICATION",
+      "REVIEW",
+      "The editable selected-edge interpretation requires professional verification.",
+      "edgeBanding",
+    ));
   }
   return issues;
 }

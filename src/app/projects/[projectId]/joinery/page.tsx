@@ -9,7 +9,7 @@ import {
   type FurnitureOrderCategory,
 } from "@/lib/furniture/calculations";
 import type { FurnitureOrderItemCandidate } from "@/lib/furniture/order-item-mapper";
-import { FURNITURE_JOINERY_INDUSTRY_KEY } from "@/lib/furniture/types";
+import { JOINERY_INDUSTRY_KEY } from "@/lib/furniture/types";
 
 type ProjectView = { id: string; name: string; reference: string; industryId: string };
 type BoqChoice = { id: string; title: string; revision: string; status: string; isLocked?: boolean };
@@ -117,7 +117,7 @@ function orderDraftFrom(candidate: FurnitureOrderItemCandidate): OrderItemDraft 
   };
 }
 
-export default function FurnitureWorkspacePage(props: { params: Promise<{ projectId: string }> }) {
+export default function JoineryWorkspacePage(props: { params: Promise<{ projectId: string }> }) {
   const { projectId } = use(props.params);
   const encodedProjectId = encodeURIComponent(projectId);
   const [project, setProject] = useState<ProjectView | null>(null);
@@ -139,8 +139,8 @@ export default function FurnitureWorkspacePage(props: { params: Promise<{ projec
     try {
       const [projectData, candidateData, orderItemData, boqData] = await Promise.all([
         apiClient.get<ProjectView>(`/api/projects/${encodedProjectId}`, signal),
-        apiClient.get<CandidateView[]>(`/api/projects/${encodedProjectId}/furniture/candidates`, signal),
-        apiClient.get<OrderItemView[]>(`/api/projects/${encodedProjectId}/furniture/order-items`, signal),
+        apiClient.get<CandidateView[]>(`/api/projects/${encodedProjectId}/joinery/candidates`, signal),
+        apiClient.get<OrderItemView[]>(`/api/projects/${encodedProjectId}/joinery/order-items`, signal),
         apiClient.get<BoqChoice[]>(`/api/projects/${encodedProjectId}/boqs`, signal),
       ]);
       setProject(projectData);
@@ -198,7 +198,7 @@ export default function FurnitureWorkspacePage(props: { params: Promise<{ projec
     }
     setPending(entry.id); setError(null); setMessage(null);
     try {
-      replaceCandidate(await apiClient.patch<CandidateView>(`/api/projects/${encodedProjectId}/furniture/candidates/${encodeURIComponent(entry.id)}`, {
+      replaceCandidate(await apiClient.patch<CandidateView>(`/api/projects/${encodedProjectId}/joinery/candidates/${encodeURIComponent(entry.id)}`, {
         room: draft.room,
         elevationReference: draft.elevationReference,
         assembly: draft.assembly,
@@ -227,7 +227,7 @@ export default function FurnitureWorkspacePage(props: { params: Promise<{ projec
     }
     setPending(entry.id); setError(null); setMessage(null);
     try {
-      replaceCandidate(await apiClient.post<CandidateView>(`/api/projects/${encodedProjectId}/furniture/candidates/${encodeURIComponent(entry.id)}/approve`, {
+      replaceCandidate(await apiClient.post<CandidateView>(`/api/projects/${encodedProjectId}/joinery/candidates/${encodeURIComponent(entry.id)}/approve`, {
         acknowledgedIssueCodes: reviewIssues.map((issue) => issue.code),
       }));
       setMessage("Verified values approved and locked.");
@@ -243,7 +243,7 @@ export default function FurnitureWorkspacePage(props: { params: Promise<{ projec
     const pendingKey = `order:${entry.id}`;
     setPending(pendingKey); setError(null); setMessage(null);
     try {
-      replaceOrderItem(await apiClient.patch<OrderItemView>(`/api/projects/${encodedProjectId}/furniture/order-items/${encodeURIComponent(entry.id)}`, {
+      replaceOrderItem(await apiClient.patch<OrderItemView>(`/api/projects/${encodedProjectId}/joinery/order-items/${encodeURIComponent(entry.id)}`, {
         description: draft.description,
         quantity: positiveNumber(draft.quantity),
         unit: draft.unit || null,
@@ -267,7 +267,7 @@ export default function FurnitureWorkspacePage(props: { params: Promise<{ projec
     const pendingKey = `order:${entry.id}`;
     setPending(pendingKey); setError(null); setMessage(null);
     try {
-      replaceOrderItem(await apiClient.post<OrderItemView>(`/api/projects/${encodedProjectId}/furniture/order-items/${encodeURIComponent(entry.id)}/approve`, {
+      replaceOrderItem(await apiClient.post<OrderItemView>(`/api/projects/${encodedProjectId}/joinery/order-items/${encodeURIComponent(entry.id)}/approve`, {
         acknowledgedIssueCodes: reviewIssues.map((issue) => issue.code),
       }));
       setMessage("Hardware/order item approved and locked.");
@@ -277,26 +277,26 @@ export default function FurnitureWorkspacePage(props: { params: Promise<{ projec
   async function generateBoq() {
     const value = Number(wastage);
     if (!Number.isFinite(value) || value < 0 || value > 100) { setError("Enter a wastage percentage from 0 to 100."); return; }
-    if (!selectedBoqId) { setError("Create or select an unlocked draft BOQ before generating furniture outputs."); return; }
+    if (!selectedBoqId) { setError("Create or select an unlocked draft BOQ before generating Joinery outputs."); return; }
     if (candidates.length === 0 || stats.locked !== candidates.length || stats.lockedOrderItems !== orderItems.length) {
       setError("Review and lock every detected part and hardware/order item before generating outputs.");
       return;
     }
     setPending("generate"); setError(null); setMessage(null);
     try {
-      const result = await apiClient.post<{ createdItems: number; updatedItems: number; removedManagedItems: number; preservedManualItems: number }>(`/api/projects/${encodedProjectId}/furniture/generate-boq`, { boqId: selectedBoqId, wastagePercentage: value });
+      const result = await apiClient.post<{ createdItems: number; updatedItems: number; removedManagedItems: number; preservedManualItems: number }>(`/api/projects/${encodedProjectId}/joinery/generate-boq`, { boqId: selectedBoqId, wastagePercentage: value });
       setMessage(`Five-section output regenerated (${result.createdItems} created, ${result.updatedItems} updated, ${result.removedManagedItems} stale managed rows removed). ${result.preservedManualItems} manual rows were preserved.`);
     } catch (generationError) { setError(getApiErrorMessage(generationError)); }
     finally { setPending(null); }
   }
 
-  if (loading) return <div className="rounded-[32px] border border-slate-800 bg-slate-950 p-8 text-slate-300">Loading Furniture, Joinery &amp; Cabinetry workspace…</div>;
+  if (loading) return <div className="rounded-[32px] border border-slate-800 bg-slate-950 p-8 text-slate-300">Loading Joinery workspace…</div>;
   if (error && !project) return <div role="alert" className="rounded-[32px] border border-rose-300 bg-rose-50 p-8 text-rose-800 dark:border-rose-400/30 dark:bg-rose-400/10 dark:text-rose-200">{error}</div>;
-  if (!project || project.industryId !== FURNITURE_JOINERY_INDUSTRY_KEY) return <div className="rounded-[32px] border border-amber-800 bg-amber-950/30 p-8 text-amber-200">This workspace is available only for Furniture, Joinery &amp; Cabinetry projects.</div>;
+  if (!project || project.industryId !== JOINERY_INDUSTRY_KEY) return <div className="rounded-[32px] border border-amber-800 bg-amber-950/30 p-8 text-amber-200">This workspace is available only for Joinery projects.</div>;
 
   return <div className="space-y-6">
     <section className="rounded-[32px] border border-[#D9E2EC] bg-white p-8 dark:border-[#1E2A42] dark:bg-[#0B1426]">
-      <p className="text-xs font-semibold uppercase tracking-[0.28em] text-[#0077B6] dark:text-[#21C7F3]">Furniture, Joinery &amp; Cabinetry</p>
+      <p className="text-xs font-semibold uppercase tracking-[0.28em] text-[#0077B6] dark:text-[#21C7F3]">Joinery</p>
       <h2 className="mt-2 text-3xl font-semibold text-[#0B1630] dark:text-white">Verified assemblies, parts and order quantities</h2>
       <p className="mt-3 max-w-4xl text-sm leading-6 text-[#536078] dark:text-[#B8C4D8]">Source values stay linked through Room → Elevation/Reference → Unit/Assembly → Part. Correct uncertain values, approve and lock them, then regenerate the reconciled material BOQ, hardware BOQ and cutting list.</p>
       <div className="mt-5 flex flex-wrap gap-3">
@@ -361,7 +361,7 @@ export default function FurnitureWorkspacePage(props: { params: Promise<{ projec
     </section>}
 
     <section className="rounded-[32px] border border-[#D9E2EC] bg-white p-8 dark:border-[#1E2A42] dark:bg-[#0B1426]">
-      <h3 className="text-xl font-semibold text-[#0B1630] dark:text-white">Generate reconciled furniture outputs</h3>
+      <h3 className="text-xl font-semibold text-[#0B1630] dark:text-white">Generate reconciled Joinery outputs</h3>
       <p className="mt-2 text-sm text-[#536078] dark:text-[#B8C4D8]">Board wastage is visible and editable for this generation; it is never a hidden global constant.</p>
       <div className="mt-4 flex flex-wrap items-end gap-3">
         {boqs.length > 0 ? <label className="min-w-64 text-xs font-medium text-[#536078] dark:text-[#B8C4D8]">Unlocked draft BOQ<select value={selectedBoqId} onChange={(event) => setSelectedBoqId(event.target.value)} className={fieldClass}><option value="">Select a draft BOQ</option>{boqs.map((boq) => <option key={boq.id} value={boq.id} disabled={Boolean(boq.isLocked) || boq.status !== "draft"}>{boq.title} · {boq.revision}{boq.isLocked || boq.status !== "draft" ? " (locked/read-only)" : ""}</option>)}</select></label> : <p className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-2 text-sm text-amber-900">Create a draft BOQ in BOQ Studio first.</p>}

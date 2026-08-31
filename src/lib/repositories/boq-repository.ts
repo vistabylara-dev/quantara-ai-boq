@@ -17,17 +17,18 @@ import {
   FURNITURE_INPUT_SIGNATURE_SPECIFICATION_PREFIX,
 } from "@/lib/furniture/canonical-output";
 import type { FurnitureCandidateDiscipline } from "@/lib/furniture/candidate-mapper";
-import { getFurnitureProjectDiscipline } from "@/lib/furniture/project-discipline";
 import {
   FURNITURE_CANDIDATE_TECHNICAL_DATA_KIND,
-  FURNITURE_JOINERY_INDUSTRY_KEY,
   FURNITURE_MANAGED_ITEM_CODE_PREFIX,
   FURNITURE_MANAGED_SOURCE_PREFIX,
   FURNITURE_ORDER_ITEM_TECHNICAL_DATA_KIND,
+  FurnitureDiscipline,
+  JOINERY_INDUSTRY_KEY,
   isStrictFurnitureManagedNonCommercialRow,
   readStrictFurnitureManagedKey,
 } from "@/lib/furniture/types";
 import { createAuditLog } from "@/lib/repositories/audit-repository";
+import { RETIRED_COMBINED_INDUSTRY_KEY } from "@/lib/repositories/industry-repository";
 import { getProjectRecord } from "@/lib/repositories/project-repository";
 import type { BOQ, BOQItem, BOQItemPricingMetadata, BOQSection } from "@/types/boq";
 import {
@@ -99,7 +100,7 @@ async function assertFurnitureManagedInputsCurrent(
   tx: Prisma.TransactionClient,
   current: BOQRecord,
 ): Promise<void> {
-  if (current.project.industryEngine.key !== FURNITURE_JOINERY_INDUSTRY_KEY) return;
+  if (current.project.industryEngine.key !== JOINERY_INDUSTRY_KEY) return;
 
   const rows = current.sections.flatMap((section) =>
     section.items.map((item) => ({ sectionCode: section.code, item })));
@@ -167,7 +168,7 @@ async function assertFurnitureManagedInputsCurrent(
       409,
     );
   }
-  const discipline = await getFurnitureProjectDiscipline(current.companyId, current.projectId, tx);
+  const discipline = FurnitureDiscipline.JOINERY_CABINETRY;
   const signatureEntity = (entity: (typeof entities)[number]) => ({
     entityId: entity.id,
     status: "CONFIRMED" as const,
@@ -317,7 +318,14 @@ export function toBOQDTO(
 type DbClient = typeof prisma | Prisma.TransactionClient;
 
 export async function getBOQRecord(companyId: string, boqId: string, db: DbClient = prisma) {
-  const boq = await db.bOQ.findFirst({ where: { id: boqId, companyId }, include: boqInclude });
+  const boq = await db.bOQ.findFirst({
+    where: {
+      id: boqId,
+      companyId,
+      project: { industryEngine: { key: { not: RETIRED_COMBINED_INDUSTRY_KEY } } },
+    },
+    include: boqInclude,
+  });
   if (!boq) throw new NotFoundError("BOQ not found.");
   return boq;
 }

@@ -2,7 +2,10 @@ import { randomUUID } from "node:crypto";
 import { Prisma, ProjectStatus } from "@prisma/client";
 import { prisma } from "@/lib/db/prisma";
 import { NotFoundError } from "@/lib/errors/app-error";
-import { getEnabledIndustry } from "@/lib/repositories/industry-repository";
+import {
+  getEnabledIndustry,
+  RETIRED_COMBINED_INDUSTRY_KEY,
+} from "@/lib/repositories/industry-repository";
 import { createAuditLog } from "@/lib/repositories/audit-repository";
 
 type DbClient = typeof prisma | Prisma.TransactionClient;
@@ -135,6 +138,7 @@ export async function listProjects(companyId: string) {
     where: {
       companyId,
       status: { not: ProjectStatus.ARCHIVED },
+      industryEngine: { key: { not: RETIRED_COMBINED_INDUSTRY_KEY } },
     },
     include: projectInclude,
     orderBy: { updatedAt: "desc" },
@@ -144,7 +148,10 @@ export async function listProjects(companyId: string) {
 
 export async function getProjectRecord(companyId: string, identifier: string, db: DbClient = prisma) {
   const project = await db.project.findFirst({
-    where: isUuid(identifier) ? { companyId, id: identifier } : { companyId, slug: identifier },
+    where: {
+      ...(isUuid(identifier) ? { companyId, id: identifier } : { companyId, slug: identifier }),
+      industryEngine: { key: { not: RETIRED_COMBINED_INDUSTRY_KEY } },
+    },
     include: projectInclude,
   });
   if (!project) throw new NotFoundError("Project not found.");

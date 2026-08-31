@@ -25,11 +25,11 @@ import {
   FURNITURE_ORDER_ITEM_TECHNICAL_DATA_KIND,
   type FurnitureOrderItemCandidate,
 } from "@/lib/furniture/order-item-mapper";
-import { getFurnitureProjectDiscipline } from "@/lib/furniture/project-discipline";
 import {
-  FURNITURE_JOINERY_INDUSTRY_KEY,
   FURNITURE_MANAGED_ITEM_CODE_PREFIX,
   FURNITURE_MANAGED_SOURCE_PREFIX,
+  FurnitureDiscipline,
+  JOINERY_INDUSTRY_KEY,
   furnitureManagedItemCodeForKey,
   readStrictFurnitureManagedKey,
 } from "@/lib/furniture/types";
@@ -460,8 +460,8 @@ export function buildFurnitureManagedItemUpdate(
 }
 
 /**
- * Rebuilds only explicitly managed rows for one tenant-owned combined-
- * industry project/BOQ. The serializable transaction and version claim make
+ * Rebuilds only explicitly managed rows for one tenant-owned Joinery
+ * project/BOQ. The serializable transaction and version claim make
  * concurrent runs fail closed rather than creating duplicate rows.
  */
 export async function regenerateFurnitureManagedBOQ(
@@ -472,14 +472,14 @@ export async function regenerateFurnitureManagedBOQ(
   try {
     return await prisma.$transaction(async (tx) => {
     const project = await getProjectRecord(actor.companyId, input.projectIdentifier, tx);
-    if (project.industryEngine.key !== FURNITURE_JOINERY_INDUSTRY_KEY) {
+    if (project.industryEngine.key !== JOINERY_INDUSTRY_KEY) {
       throw new AppError(
         "FURNITURE_PROJECT_REQUIRED",
-        "Managed furniture output is available only for Furniture, Joinery & Cabinetry projects.",
+        "Managed cutting-list output is available only for Joinery projects.",
         400,
       );
     }
-    const discipline = await getFurnitureProjectDiscipline(actor.companyId, project.id, tx);
+    const discipline = FurnitureDiscipline.JOINERY_CABINETRY;
     const entities = await tx.extractedEntity.findMany({
       where: {
         companyId: actor.companyId,

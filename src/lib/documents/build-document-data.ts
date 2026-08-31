@@ -4,7 +4,7 @@ import {
   FURNITURE_CANONICAL_SECTIONS,
   type FurnitureCanonicalSectionCode,
 } from "@/lib/furniture/canonical-output";
-import { FURNITURE_JOINERY_INDUSTRY_KEY } from "@/lib/furniture/types";
+import { JOINERY_INDUSTRY_KEY } from "@/lib/furniture/types";
 
 export type DocumentAudienceValue = "INTERNAL" | "CLIENT";
 
@@ -100,7 +100,7 @@ export type DocumentFurnitureSectionData = Omit<DocumentBOQSectionData, "code" |
 };
 
 /**
- * Exact-industry-only payload consumed by every furniture document renderer.
+ * Exact-industry-only payload consumed by every specialized Joinery document renderer.
  * It is normalized once from the managed BOQ, so PDF, DOCX, XLSX and HTML
  * cannot independently rename, omit, or reorder the five output sections.
  */
@@ -233,7 +233,7 @@ function buildFurnitureDocumentData(
   showInternalFields: boolean,
   pricingMode: DocumentPricingMode,
 ): DocumentFurnitureData | null {
-  if (industryKey !== FURNITURE_JOINERY_INDUSTRY_KEY) return null;
+  if (industryKey !== JOINERY_INDUSTRY_KEY) return null;
 
   const sectionsByCode = new Map<string, BOQ["sections"][number]>();
   for (const section of sections) {

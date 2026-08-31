@@ -13,7 +13,6 @@ import {
   type FurnitureSourceKind,
   type FurnitureSourceTable,
 } from "@/lib/furniture/candidate-mapper";
-import { getFurnitureProjectDiscipline } from "@/lib/furniture/project-discipline";
 import {
   furnitureOrderItemCandidateEnvelope,
   FURNITURE_ORDER_ITEM_TECHNICAL_DATA_KIND,
@@ -22,7 +21,9 @@ import {
 } from "@/lib/furniture/order-item-mapper";
 import {
   FURNITURE_CANDIDATE_TECHNICAL_DATA_KIND,
-  FURNITURE_JOINERY_INDUSTRY_KEY,
+  FurnitureDiscipline,
+  JOINERY_CUTTING_LIST_SECTION_TITLE,
+  JOINERY_INDUSTRY_KEY,
 } from "@/lib/furniture/types";
 import { createAuditLog } from "@/lib/repositories/audit-repository";
 import { hasReviewedTableDerivedCandidates } from "@/lib/repositories/extracted-entity-repository";
@@ -198,7 +199,7 @@ function orderCandidateData(
 }
 
 /**
- * Maps already-stored structured rows for the combined furniture industry.
+ * Maps already-stored structured rows for the established Joinery industry.
  * It never reads the source again and never calls an AI/provider. Repeated
  * calls update the same deterministic, still-unreviewed candidate keys and
  * create only missing keys. Reviewed candidates cause a fail-safe no-op.
@@ -207,10 +208,10 @@ export async function generateFurnitureCandidatesFromStructuredTables(
   input: FurnitureCandidateGenerationInput,
 ): Promise<FurnitureCandidateGenerationResult> {
   const project = await getProjectRecord(input.companyId, input.projectId);
-  if (project.industryEngine.key !== FURNITURE_JOINERY_INDUSTRY_KEY) {
+  if (project.industryEngine.key !== JOINERY_INDUSTRY_KEY) {
     throw new AppError(
       "FURNITURE_PROJECT_REQUIRED",
-      "Furniture candidate mapping is available only for Furniture, Joinery & Cabinetry projects.",
+      "Joinery candidate mapping is available only for Joinery projects.",
       400,
     );
   }
@@ -231,10 +232,6 @@ export async function generateFurnitureCandidatesFromStructuredTables(
   }
 
   const tables = await listExtractedTablesForFile(input.companyId, file.id);
-  if (tables.length === 0) {
-    return { status: "generated", tablesConsidered: 0, rowsConsidered: 0, candidatesCreated: 0 };
-  }
-
   const drawingPageIds = tables.map((table) => table.drawingPageId).filter((id): id is string => Boolean(id));
   const drawingPages = drawingPageIds.length > 0
     ? await prisma.drawingPage.findMany({
@@ -243,7 +240,7 @@ export async function generateFurnitureCandidatesFromStructuredTables(
       })
     : [];
   const pageNumberById = new Map(drawingPages.map((page) => [page.id, page.pageNumber]));
-  const discipline = await getFurnitureProjectDiscipline(input.companyId, project.id);
+  const discipline = FurnitureDiscipline.JOINERY_CABINETRY;
   const sourceKind = resolveSourceKind(file.extension);
   const mappedTables = tables.map((table, tableIndex) => {
     const sourceTable = toSourceTable(table, pageNumberById, tableIndex);
@@ -261,10 +258,24 @@ export async function generateFurnitureCandidatesFromStructuredTables(
       sourceKind,
       sourceFileName: file.originalName,
       sourceFileId: file.id,
-      frontEdgeOrientationAssumption: null,
+      // Structured Joinery workbooks use the displayed width-edge
+      // interpretation as an editable assumption. It remains a REVIEW issue
+      // and must be acknowledged before the candidate can be locked. PDF and
+      // other table sources stay unresolved because they do not carry this
+      // workbook-specific acceptance convention.
+      frontEdgeOrientationAssumption: sourceKind === "WORKBOOK"
+        && sourceTable.title === JOINERY_CUTTING_LIST_SECTION_TITLE
+        ? "WIDTH"
+        : null,
     }) };
   });
   const rowsConsidered = tables.reduce((sum, table) => sum + table.rows.length, 0);
+  const desiredCandidateIds = new Set(mappedTables.flatMap((mapped) => {
+    if (mapped.kind === "ORDER_ITEMS") return mapped.result.items.map((candidate) => candidate.id);
+    return mapped.result.status === "mapped"
+      ? mapped.result.candidates.map((candidate) => candidate.candidateId)
+      : [];
+  }));
 
   let candidatesCreated = 0;
 
@@ -363,6 +374,30 @@ export async function generateFurnitureCandidatesFromStructuredTables(
       }
     }
 
+    const staleUnreviewedIds = existing.flatMap((entity) => {
+      const candidateId = readCandidateId(entity.technicalDataJson);
+      return candidateId && !desiredCandidateIds.has(candidateId) ? [entity.id] : [];
+    });
+    let candidatesRemoved = 0;
+    if (staleUnreviewedIds.length > 0) {
+      const removed = await tx.extractedEntity.deleteMany({
+        where: {
+          id: { in: staleUnreviewedIds },
+          companyId: input.companyId,
+          projectFileId: file.id,
+          categoryKey: {
+            in: [
+              FURNITURE_CANDIDATE_TECHNICAL_DATA_KIND,
+              FURNITURE_ORDER_ITEM_TECHNICAL_DATA_KIND,
+            ],
+          },
+          extractionMethod: ExtractionMethod.TABLE_PARSER,
+          status: { in: [ExtractedEntityStatus.EXTRACTED, ExtractedEntityStatus.NEEDS_REVIEW] },
+        },
+      });
+      candidatesRemoved = removed.count;
+    }
+
     await createAuditLog(input.companyId, {
       entityType: "ProjectFile",
       entityId: file.id,
@@ -375,6 +410,7 @@ export async function generateFurnitureCandidatesFromStructuredTables(
         tablesConsidered: tables.length,
         rowsConsidered,
         candidatesCreated,
+        candidatesRemoved,
       },
     }, tx);
 

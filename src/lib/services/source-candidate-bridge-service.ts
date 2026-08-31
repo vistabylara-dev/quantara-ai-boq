@@ -8,7 +8,7 @@ import { getProjectFileRecord, listProjectFiles } from "@/lib/repositories/proje
 import { listExtractedTablesForFile, type ExtractedTableRecord } from "@/lib/repositories/extracted-table-repository";
 import { hasReviewedTableDerivedCandidates } from "@/lib/repositories/extracted-entity-repository";
 import { createAuditLog } from "@/lib/repositories/audit-repository";
-import { FURNITURE_JOINERY_INDUSTRY_KEY } from "@/lib/furniture/types";
+import { JOINERY_INDUSTRY_KEY } from "@/lib/furniture/types";
 import { generateFurnitureCandidatesFromStructuredTables } from "@/lib/services/furniture-candidate-service";
 
 /**
@@ -212,7 +212,7 @@ export type GenerateCandidatesInput = {
  */
 export async function generateCandidatesFromStructuredTables(input: GenerateCandidatesInput): Promise<GenerateCandidatesResult> {
   const project = await getProjectRecord(input.companyId, input.projectId);
-  if (project.industryEngine.key === FURNITURE_JOINERY_INDUSTRY_KEY) {
+  if (project.industryEngine.key === JOINERY_INDUSTRY_KEY) {
     return generateFurnitureCandidatesFromStructuredTables(input);
   }
   const file = await getProjectFileRecord(input.companyId, input.projectFileId);

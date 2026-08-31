@@ -5,10 +5,6 @@ import {
   projectStatusSchema,
   projectUpdateSchema,
 } from "@/lib/validation/backend-schemas";
-import {
-  FURNITURE_JOINERY_INDUSTRY_KEY,
-  FurnitureDiscipline,
-} from "@/lib/furniture/types";
 
 const frontendStatusAliases: Record<string, string> = {
   REVIEW: "NEEDS_REVIEW",
@@ -41,7 +37,6 @@ export const projectCreateRequestSchema = z
     clientEmail: clientSchema.shape.email.optional(),
     industryEngineId: projectSchema.shape.industryEngineId.optional(),
     industryId: industryKeySchema.optional(),
-    discipline: z.nativeEnum(FurnitureDiscipline).optional(),
     reference: projectSchema.shape.reference,
     name: projectSchema.shape.name,
     description: projectSchema.shape.description,
@@ -71,31 +66,12 @@ export const projectCreateRequestSchema = z
         message: "Provide industryEngineId or industryId.",
       });
     }
-    // industryEngineId is a database UUID, so only the explicit key alias can
-    // be checked here. UUID callers are validated after tenant-scoped industry
-    // resolution in createProjectWithDefaultBoq.
-    const industryKey = value.industryId;
-    if (industryKey === FURNITURE_JOINERY_INDUSTRY_KEY && !value.discipline) {
-      context.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ["discipline"],
-        message: "Select Furniture or Joinery & Cabinetry.",
-      });
-    }
-    if (industryKey && industryKey !== FURNITURE_JOINERY_INDUSTRY_KEY && value.discipline) {
-      context.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ["discipline"],
-        message: "Furniture disciplines are not valid for this industry.",
-      });
-    }
   })
   .transform((value) => ({
     clientId: value.clientId,
     clientName: value.clientName,
     clientEmail: value.clientEmail,
     industryEngineId: value.industryEngineId ?? value.industryId!,
-    discipline: value.discipline,
     slug: value.slug ?? value.id,
     reference: value.reference,
     name: value.name,

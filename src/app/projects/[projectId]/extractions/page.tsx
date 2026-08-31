@@ -565,10 +565,10 @@ export default function ProjectExtractionsPage(props: { params: Promise<{ projec
               {furnitureCandidateCount} hierarchical furniture {furnitureCandidateCount === 1 ? "candidate is" : "candidates are"} available. Review dimensions, edge orientation and evidence in the dedicated workspace so the generic BOQ path cannot flatten or duplicate them.
             </p>
             <Link
-              href={`/projects/${encodedProjectId}/furniture`}
+              href={`/projects/${encodedProjectId}/joinery`}
               className="rounded-xl bg-amber-700 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-800"
             >
-              Open Furniture workspace
+              Open Joinery workspace
             </Link>
           </div>
         )}

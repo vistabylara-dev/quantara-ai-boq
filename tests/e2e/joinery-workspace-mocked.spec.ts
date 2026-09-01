@@ -711,13 +711,21 @@ test.describe("Joinery workspace mocked browser acceptance", () => {
 
     await falsePart.getByLabel("Correction or exclusion reason")
       .fill("Duplicate annotation, not a manufactured part");
-    page.once("dialog", (dialog) => dialog.accept());
     await excludePart.click();
+    await expect(falsePart.getByRole("button", { name: "Confirm exclusion" })).toBeVisible();
+    await expect(falsePart.getByRole("button", { name: "Cancel exclusion" })).toBeVisible();
+    expect(api.rejectionRequests).toEqual([]);
+    await falsePart.getByRole("button", { name: "Confirm exclusion" }).click();
+    await expect(falsePart.getByText("Excluded from BOQ and cutting-list generation.")).toBeVisible();
 
     await falseOrder.getByLabel("Correction or exclusion reason")
       .fill("Duplicate note, not a separately ordered item");
-    page.once("dialog", (dialog) => dialog.accept());
     await excludeOrder.click();
+    await expect(falseOrder.getByRole("button", { name: "Confirm exclusion" })).toBeVisible();
+    await expect(falseOrder.getByRole("button", { name: "Cancel exclusion" })).toBeVisible();
+    expect(api.rejectionRequests).toHaveLength(1);
+    await falseOrder.getByRole("button", { name: "Confirm exclusion" }).click();
+    await expect(falseOrder.getByText("Excluded from hardware/order output generation.")).toBeVisible();
 
     expect(api.rejectionRequests).toEqual([
       {

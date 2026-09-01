@@ -122,6 +122,11 @@ export type RegenerateFurnitureManagedBOQResult = {
   preservedManualItems: number;
 };
 
+// Large governed workbooks persist every managed row plus quantity provenance.
+// Keep the serializable transaction bounded while allowing the audited bulk
+// generation path to complete on managed Postgres.
+export const FURNITURE_MANAGED_BOQ_TRANSACTION_TIMEOUT_MS = 30_000;
+
 export function furnitureManagedItemCode(managedKey: string): string {
   return furnitureManagedItemCodeForKey(managedKey);
 }
@@ -757,7 +762,10 @@ export async function regenerateFurnitureManagedBOQ(
       removedManagedItems,
       preservedManualItems,
     };
-    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+    }, {
+      isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+      timeout: FURNITURE_MANAGED_BOQ_TRANSACTION_TIMEOUT_MS,
+    });
   } catch (error) {
     if (error && typeof error === "object" && "code" in error && error.code === "P2034") {
       throw new ConflictError(

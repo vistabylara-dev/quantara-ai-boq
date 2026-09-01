@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { CurrentActor } from "@/lib/auth/current-actor";
 import type { FurnitureCanonicalItem } from "@/lib/furniture/canonical-output";
 import {
+  confirmManualRateProvenance,
   confirmManualQuantityProvenance,
   recordReviewedExtractionQuantity,
 } from "@/lib/services/estimate-integrity-service";
@@ -16,6 +17,7 @@ import {
 } from "@/lib/services/furniture-boq-service";
 
 vi.mock("@/lib/services/estimate-integrity-service", () => ({
+  confirmManualRateProvenance: vi.fn(),
   confirmManualQuantityProvenance: vi.fn(),
   recordReviewedExtractionQuantity: vi.fn(),
 }));
@@ -65,6 +67,7 @@ function existing(
     id,
     sectionId: "section-brd",
     sectionCode: item.sectionCode,
+    sourceType: "IMPORT",
     itemCode: furnitureManagedItemCode(item.managedKey),
     sourceReference: furnitureManagedSourceReference(item),
     category: item.category,
@@ -171,6 +174,37 @@ describe("managed furniture BOQ hardening", () => {
       }),
     );
     expect(confirmManualQuantityProvenance).not.toHaveBeenCalled();
+    expect(confirmManualRateProvenance).not.toHaveBeenCalled();
+  });
+
+  it("records explicit zero-rate provenance for strict managed non-commercial rows", async () => {
+    const item = canonicalItem({
+      managedKey: "project:summary",
+      sectionCode: "PRJ",
+      category: "PROJECT_SUMMARY",
+      unit: "confirmed parts",
+    });
+    const persisted = {
+      ...persistedItem(),
+      itemCode: furnitureManagedItemCode(item.managedKey),
+      sourceReference: furnitureManagedSourceReference(item),
+      notes: furnitureManagedNotes(item),
+    };
+    await recordFurnitureManagedQuantityProvenance(
+      {} as Prisma.TransactionClient,
+      actor.companyId,
+      "66666666-6666-4666-8666-666666666666",
+      persisted as never,
+      item,
+      actor,
+    );
+    expect(confirmManualRateProvenance).toHaveBeenCalledWith(
+      {},
+      actor.companyId,
+      "66666666-6666-4666-8666-666666666666",
+      persisted,
+      { userId: actor.userId, name: actor.fullName },
+    );
   });
 
   it("uses manual quantity provenance only for the caller-owned wastage assumption", async () => {

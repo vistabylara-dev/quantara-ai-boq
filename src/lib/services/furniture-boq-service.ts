@@ -31,11 +31,13 @@ import {
   FurnitureDiscipline,
   JOINERY_INDUSTRY_KEY,
   furnitureManagedItemCodeForKey,
+  isStrictFurnitureManagedNonCommercialRow,
   readStrictFurnitureManagedKey,
 } from "@/lib/furniture/types";
 import { createAuditLog } from "@/lib/repositories/audit-repository";
 import { getProjectRecord } from "@/lib/repositories/project-repository";
 import {
+  confirmManualRateProvenance,
   confirmManualQuantityProvenance,
   recordReviewedExtractionQuantity,
 } from "@/lib/services/estimate-integrity-service";
@@ -59,6 +61,7 @@ export type ExistingFurnitureManagedBOQItem = {
   id: string;
   sectionId: string;
   sectionCode: string;
+  sourceType?: BoqItemSourceType;
   itemCode: string;
   sourceReference: string;
   category: string;
@@ -421,20 +424,30 @@ export async function recordFurnitureManagedQuantityProvenance(
       projectFileId,
       actor: integrityActor,
     });
-    return;
-  }
-  if (
+  } else if (
     canonicalItem.managedKey === CALLER_OWNED_WASTAGE_ASSUMPTION_KEY
     && canonicalItem.category === "ASSUMPTION"
   ) {
     await confirmManualQuantityProvenance(tx, companyId, projectId, persistedItem, integrityActor);
-    return;
+  } else {
+    throw new AppError(
+      "FURNITURE_QUANTITY_EVIDENCE_REQUIRED",
+      `Managed furniture row ${canonicalItem.managedKey} has no reviewed extraction evidence for its quantity.`,
+      409,
+    );
   }
-  throw new AppError(
-    "FURNITURE_QUANTITY_EVIDENCE_REQUIRED",
-    `Managed furniture row ${canonicalItem.managedKey} has no reviewed extraction evidence for its quantity.`,
-    409,
-  );
+
+  if (isStrictFurnitureManagedNonCommercialRow({
+    industryKey: JOINERY_INDUSTRY_KEY,
+    sectionCode: canonicalItem.sectionCode,
+    category: canonicalItem.category,
+    sourceType: BoqItemSourceType.IMPORT,
+    itemCode: furnitureManagedItemCode(canonicalItem.managedKey),
+    sourceReference: furnitureManagedSourceReference(canonicalItem),
+    notes: furnitureManagedNotes(canonicalItem),
+  })) {
+    await confirmManualRateProvenance(tx, companyId, projectId, persistedItem, integrityActor);
+  }
 }
 
 export function buildFurnitureManagedItemUpdate(
@@ -605,7 +618,22 @@ export async function regenerateFurnitureManagedBOQ(
     const updatedItems = plan.update.length;
     const removedManagedItems = plan.deleteIds.length;
     const preservedManualItems = plan.manualOrUnmarkedIds.length;
-    const changed = sectionChanges || createdItems > 0 || updatedItems > 0 || removedManagedItems > 0;
+    const nonCommercialRateBackfillItems = existingItems.filter((item) =>
+      plan.unchangedIds.includes(item.id)
+      && isStrictFurnitureManagedNonCommercialRow({
+        industryKey: JOINERY_INDUSTRY_KEY,
+        sectionCode: item.sectionCode,
+        category: item.category,
+        sourceType: item.sourceType ?? BoqItemSourceType.IMPORT,
+        itemCode: item.itemCode,
+        sourceReference: item.sourceReference,
+        notes: item.notes,
+      })
+      && (!item.rateProvenance
+        || item.rateProvenance.sourceType === "LEGACY_UNVERIFIED"
+        || item.rateProvenance.confirmedAt === null));
+    const changed = sectionChanges || createdItems > 0 || updatedItems > 0
+      || removedManagedItems > 0 || nonCommercialRateBackfillItems.length > 0;
     if (!changed) {
       return {
         changed: false,
@@ -735,6 +763,18 @@ export async function regenerateFurnitureManagedBOQ(
         actor,
       );
     }
+    for (const item of nonCommercialRateBackfillItems) {
+      const persistedItem = await tx.bOQItem.findFirstOrThrow({
+        where: { id: item.id, companyId: actor.companyId, sectionId: item.sectionId },
+      });
+      await confirmManualRateProvenance(
+        tx,
+        actor.companyId,
+        project.id,
+        persistedItem,
+        { userId: actor.userId, name: actor.fullName },
+      );
+    }
 
     await createAuditLog(actor.companyId, {
       entityType: "BOQ",
@@ -750,6 +790,7 @@ export async function regenerateFurnitureManagedBOQ(
         updatedItems,
         removedManagedItems,
         preservedManualItems,
+        nonCommercialRateProvenanceBackfillCount: nonCommercialRateBackfillItems.length,
       },
     }, tx);
     return {

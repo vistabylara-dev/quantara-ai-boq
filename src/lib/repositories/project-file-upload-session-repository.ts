@@ -44,14 +44,20 @@ export async function getUploadSessionForUpdate(
   sessionId: string,
   db: Prisma.TransactionClient,
 ): Promise<ProjectFileUploadSession> {
-  const locked = await db.$queryRaw<Array<{ id: string }>>(Prisma.sql`
-    SELECT "id"
+  // Fetch the row as part of the locking query. Running a Prisma findFirst
+  // immediately after SELECT ... FOR UPDATE starts a second query on the
+  // transaction's single pg client while the raw result is still being
+  // released by the driver. In Preview that leaves finalization hanging and
+  // emits pg's "client is already executing a query" warning. One query also
+  // closes the read-between-lock gap and returns the exact locked state.
+  const locked = await db.$queryRaw<ProjectFileUploadSession[]>(Prisma.sql`
+    SELECT *
     FROM "ProjectFileUploadSession"
     WHERE "id" = ${sessionId}::uuid AND "companyId" = ${companyId}::uuid
     FOR UPDATE
   `);
   if (locked.length === 0) throw new NotFoundError("Upload session not found.");
-  return getUploadSession(companyId, sessionId, db);
+  return locked[0];
 }
 
 export async function setUploadSessionStatus(

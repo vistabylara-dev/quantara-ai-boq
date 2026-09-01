@@ -41,6 +41,38 @@ import { createAuditLog } from "@/lib/repositories/audit-repository";
 export type PrefillSource = DimensionValue["source"];
 
 /**
+ * Resolves only explicit technical evidence into a calculator input. The
+ * direct key match remains the first choice. FLOOR_AREA additionally accepts
+ * the deterministic product of explicit length and width evidence because
+ * schedule parsers commonly preserve those two dimensions instead of a
+ * precomputed net-area column. No other missing dimension is inferred.
+ */
+export function resolveTechnicalDimensionValue(
+  calculationType: QuantityCalculationType,
+  inputKey: string,
+  technicalData: Record<string, unknown> | null,
+): number | null {
+  const direct = technicalData?.[inputKey];
+  if (typeof direct === "number" && Number.isFinite(direct)) return direct;
+
+  if (calculationType === QuantityCalculationType.FLOOR_AREA && inputKey === "netFloorArea") {
+    const length = technicalData?.length;
+    const width = technicalData?.width;
+    if (
+      typeof length === "number"
+      && Number.isFinite(length)
+      && length > 0
+      && typeof width === "number"
+      && Number.isFinite(width)
+      && width > 0
+    ) {
+      return length * width;
+    }
+  }
+  return null;
+}
+
+/**
  * Reads only evidence that actually exists — never invents a missing
  * numeric value merely because a formula needs it. Exactly two defensible
  * sources, in priority order:
@@ -136,8 +168,8 @@ export async function prefillDimensionValues(
       };
     }
 
-    const fromTechnicalData = technicalData?.[input.key];
-    if (typeof fromTechnicalData === "number" && Number.isFinite(fromTechnicalData)) {
+    const fromTechnicalData = resolveTechnicalDimensionValue(calculationType, input.key, technicalData);
+    if (fromTechnicalData !== null) {
       return {
         key: input.key,
         label: input.label,

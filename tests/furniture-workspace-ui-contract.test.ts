@@ -79,4 +79,14 @@ describe("Joinery workspace UI and navigation guard", () => {
     expect(page).toContain("[updated.id]: draftFrom(updated.candidate)");
     expect(page).toContain("[updated.id]: orderDraftFrom(updated.candidate)");
   });
+
+  it("bounds editable part rendering without changing the governed candidate set", () => {
+    const page = source("src/app/projects/[projectId]/joinery/page.tsx");
+
+    expect(page).toContain("const CANDIDATES_PER_PAGE = 20");
+    expect(page).toContain("candidates.slice((candidatePage - 1) * CANDIDATES_PER_PAGE");
+    expect(page).toContain("Showing parts");
+    expect(page).toContain("Page {candidatePage} of {candidatePageCount}");
+    expect(page).toContain("visibleCandidates.map((entry)");
+  });
 });

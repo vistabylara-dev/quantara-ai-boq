@@ -48,6 +48,7 @@ type OrderItemView = {
   rejectedAt: string | null;
 };
 const fieldClass = "mt-1 w-full rounded-xl border border-[#D9E2EC] bg-white px-3 py-2 text-sm text-[#0B1630] outline-none focus:border-[#009FE3] disabled:opacity-60 dark:border-[#1E2A42] dark:bg-[#0B1426] dark:text-white";
+const CANDIDATES_PER_PAGE = 20;
 
 function textNumber(value: number | null) { return value === null ? "" : String(value); }
 function candidateEdgeChoice(candidate: FurniturePartCandidate): EdgeChoice {
@@ -123,6 +124,7 @@ export default function JoineryWorkspacePage(props: { params: Promise<{ projectI
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [pending, setPending] = useState<string | null>(null);
+  const [candidatePage, setCandidatePage] = useState(1);
 
   const load = useCallback(async (signal?: AbortSignal) => {
     setLoading(true);
@@ -184,6 +186,14 @@ export default function JoineryWorkspacePage(props: { params: Promise<{ projectI
     () => calculateFurnitureEdgeBanding(activeCandidates.map((entry) => entry.candidate)).byMode.FRONT,
     [activeCandidates],
   );
+  const candidatePageCount = Math.max(1, Math.ceil(candidates.length / CANDIDATES_PER_PAGE));
+  const visibleCandidates = useMemo(
+    () => candidates.slice((candidatePage - 1) * CANDIDATES_PER_PAGE, candidatePage * CANDIDATES_PER_PAGE),
+    [candidatePage, candidates],
+  );
+  useEffect(() => {
+    setCandidatePage((current) => Math.min(current, candidatePageCount));
+  }, [candidatePageCount]);
 
   function updateDraft(id: string, patch: Partial<CandidateDraft>) {
     setDrafts((current) => ({ ...current, [id]: { ...current[id], ...patch } }));
@@ -366,7 +376,16 @@ export default function JoineryWorkspacePage(props: { params: Promise<{ projectI
 
     {(error || message) && <div role={error ? "alert" : "status"} className={`rounded-2xl border p-4 text-sm ${error ? "border-rose-300 bg-rose-50 text-rose-800 dark:border-rose-400/30 dark:bg-rose-400/10 dark:text-rose-200" : "border-emerald-300 bg-emerald-50 text-emerald-800 dark:border-emerald-400/30 dark:bg-emerald-400/10 dark:text-emerald-200"}`}>{error ?? message}</div>}
 
-    {candidates.length === 0 ? <section className="rounded-[32px] border border-dashed border-[#D9E2EC] bg-white p-8 text-[#536078] dark:border-[#1E2A42] dark:bg-[#0B1426] dark:text-[#B8C4D8]">No candidates yet. Upload a supported PDF or spreadsheet and run its existing extraction once.</section> : <section className="space-y-4">{candidates.map((entry) => {
+    {candidates.length === 0 ? <section className="rounded-[32px] border border-dashed border-[#D9E2EC] bg-white p-8 text-[#536078] dark:border-[#1E2A42] dark:bg-[#0B1426] dark:text-[#B8C4D8]">No candidates yet. Upload a supported PDF or spreadsheet and run its existing extraction once.</section> : <section className="space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[#D9E2EC] bg-white p-4 dark:border-[#1E2A42] dark:bg-[#0B1426]">
+        <p className="text-sm text-[#536078] dark:text-[#B8C4D8]">Showing parts {(candidatePage - 1) * CANDIDATES_PER_PAGE + 1}–{Math.min(candidatePage * CANDIDATES_PER_PAGE, candidates.length)} of {candidates.length}</p>
+        <div className="flex items-center gap-2">
+          <button type="button" disabled={candidatePage === 1} onClick={() => setCandidatePage((page) => Math.max(1, page - 1))} className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 disabled:opacity-40 dark:border-slate-700 dark:text-slate-200">Previous</button>
+          <span className="text-sm font-semibold text-[#0B1630] dark:text-white">Page {candidatePage} of {candidatePageCount}</span>
+          <button type="button" disabled={candidatePage === candidatePageCount} onClick={() => setCandidatePage((page) => Math.min(candidatePageCount, page + 1))} className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 disabled:opacity-40 dark:border-slate-700 dark:text-slate-200">Next</button>
+        </div>
+      </div>
+      {visibleCandidates.map((entry) => {
       const draft = drafts[entry.id] ?? draftFrom(entry.candidate);
       const locked = entry.status === "CONFIRMED";
       const imported = entry.status === "IMPORTED";

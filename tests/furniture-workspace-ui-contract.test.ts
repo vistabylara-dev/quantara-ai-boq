@@ -66,6 +66,9 @@ describe("Joinery workspace UI and navigation guard", () => {
     expect(page).toContain("/reject");
     expect(page).toContain("Excluded false positive");
     expect(page).toContain("entry.status !== \"REJECTED\"");
+    expect(page).toContain("Confirm exclusion");
+    expect(page).toContain("Cancel exclusion");
+    expect(page).not.toContain("window.confirm");
     expect(service).toContain("status: { not: ExtractedEntityStatus.REJECTED }");
   });
 

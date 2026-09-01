@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import { getUploadSessionForUpdate } from "../src/lib/repositories/project-file-upload-session-repository";
 
 describe("getUploadSessionForUpdate", () => {
-  it("returns the row from the locking query without starting a second query", async () => {
+  it("serializes through the tenant-scoped Prisma update path", async () => {
     const lockedSession = {
       id: "00000000-0000-0000-0000-000000000001",
       companyId: "00000000-0000-0000-0000-000000000002",
@@ -12,12 +12,17 @@ describe("getUploadSessionForUpdate", () => {
       fileId: "00000000-0000-0000-0000-000000000005",
       status: "PENDING",
     } as ProjectFileUploadSession;
-    const queryRaw = vi.fn().mockResolvedValue([lockedSession]);
-    const findFirst = vi.fn();
-    const db = { $queryRaw: queryRaw, projectFileUploadSession: { findFirst } } as unknown as Prisma.TransactionClient;
+    const updateMany = vi.fn().mockResolvedValue({ count: 1 });
+    const findFirst = vi.fn().mockResolvedValue(lockedSession);
+    const queryRaw = vi.fn();
+    const db = { $queryRaw: queryRaw, projectFileUploadSession: { updateMany, findFirst } } as unknown as Prisma.TransactionClient;
 
     await expect(getUploadSessionForUpdate(lockedSession.companyId, lockedSession.id, db)).resolves.toBe(lockedSession);
-    expect(queryRaw).toHaveBeenCalledTimes(1);
-    expect(findFirst).not.toHaveBeenCalled();
+    expect(updateMany).toHaveBeenCalledWith({
+      where: { id: lockedSession.id, companyId: lockedSession.companyId },
+      data: { updatedAt: expect.any(Date) },
+    });
+    expect(findFirst).toHaveBeenCalledTimes(1);
+    expect(queryRaw).not.toHaveBeenCalled();
   });
 });

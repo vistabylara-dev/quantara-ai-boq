@@ -523,6 +523,31 @@ async function syncSectionItems(
         !current.additionalCost.equals(data.additionalCost) ||
         current.marginMode !== data.marginMode ||
         !current.marginPercentage.equals(data.marginPercentage);
+      const itemChanged =
+        current.itemNumber !== data.itemNumber ||
+        current.itemCode !== data.itemCode ||
+        current.category !== data.category ||
+        current.description !== data.description ||
+        current.specification !== data.specification ||
+        quantityChanged ||
+        !current.unitCost.equals(data.unitCost) ||
+        !current.freightCost.equals(data.freightCost) ||
+        !current.installationCost.equals(data.installationCost) ||
+        !current.additionalCost.equals(data.additionalCost) ||
+        !current.landedCost.equals(data.landedCost) ||
+        current.marginMode !== data.marginMode ||
+        !current.marginPercentage.equals(data.marginPercentage) ||
+        !current.sellingRate.equals(data.sellingRate) ||
+        !current.totalAmount.equals(data.totalAmount) ||
+        !current.wastagePercentage.equals(data.wastagePercentage) ||
+        current.taxApplicable !== data.taxApplicable ||
+        current.sourceReference !== data.sourceReference ||
+        current.roomOrZone !== data.roomOrZone ||
+        current.drawingReference !== data.drawingReference ||
+        !current.confidenceScore.equals(data.confidenceScore) ||
+        current.notes !== data.notes ||
+        current.sortOrder !== data.sortOrder;
+      if (!itemChanged) continue;
       const updatedItem = await tx.bOQItem.update({ where: { id: current.id, companyId }, data });
       if (quantityChanged) {
         await confirmManualQuantityProvenance(tx, companyId, projectId, updatedItem);
@@ -570,6 +595,8 @@ export type BOQDocumentWriteInput = Omit<BOQ, "approvedBy" | "taxRate"> & {
   approvedBy?: string | null;
   taxRate?: Prisma.Decimal.Value;
 };
+
+export const BOQ_DOCUMENT_WRITE_TRANSACTION_TIMEOUT_MS = 30_000;
 
 export async function updateBOQ(companyId: string, boqId: string, input: BOQDocumentWriteInput) {
   const current = await getBOQRecord(companyId, boqId);
@@ -621,7 +648,7 @@ export async function updateBOQ(companyId: string, boqId: string, input: BOQDocu
       }
       await syncSectionItems(tx, companyId, current.id, current.projectId, sectionId, section.items, existingSection?.items ?? []);
     }
-  });
+  }, { timeout: BOQ_DOCUMENT_WRITE_TRANSACTION_TIMEOUT_MS });
   return getBOQ(companyId, current.id);
 }
 

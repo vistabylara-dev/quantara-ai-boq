@@ -23,6 +23,7 @@ import {
 } from "@/lib/repositories/project-file-upload-session-repository";
 import { buildDrawingStorageKey, computeChecksum } from "@/lib/files/file-security";
 import { createStorageAdapter, resolveStorageProvider } from "@/lib/storage/storage-factory";
+import { requireProjectStorageReady } from "@/lib/storage/storage-readiness";
 import type { DocumentStorageAdapter } from "@/lib/storage/document-storage-adapter";
 import { generateDrawingUploadToken } from "@/lib/storage/blob-client-upload";
 import { createAuditLog } from "@/lib/repositories/audit-repository";
@@ -484,7 +485,7 @@ export async function authorizeDrawingUpload(
   const project = await getProjectRecord(actor.companyId, projectId);
   const canonicalProjectId = project.id;
 
-  if (resolveStorageProvider() !== "vercel-blob") {
+  if (requireProjectStorageReady() !== "vercel-blob") {
     throw new AppError(
       "DIRECT_UPLOAD_NOT_SUPPORTED",
       "Direct upload requires STORAGE_PROVIDER=vercel-blob. This environment is not configured for it.",

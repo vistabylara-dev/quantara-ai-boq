@@ -3,6 +3,13 @@ import PDFDocument from "pdfkit";
 import type { CanonicalDocumentData } from "../build-document-data";
 import type { DocumentTemplateContentConfig, DocumentTemplateStyleConfig } from "../template-config";
 import { isArabicChar, splitScriptRuns, toVisualArabic } from "../arabic-text";
+import {
+  getDocumentItemSpecification,
+  getDocumentItemQuantity,
+  getDocumentOutputSections,
+  shouldRenderDocumentSection,
+  shouldRenderSpecification,
+} from "../furniture-document-output";
 import { fitLogoBox, loadLogoImage } from "../logo-image";
 
 function containsArabic(text: string): boolean {
@@ -283,11 +290,12 @@ export async function generatePdf(input: GeneratePdfInput): Promise<Buffer> {
 
     // ---------- BOQ table ----------
     const showInternal = data.boq.showInternalFields;
+    const showSpecification = shouldRenderSpecification(data, content.columns.specification);
     const baseColumns: Column[] = [
       { key: "itemNumber", label: "#", width: 26, align: "center" },
       { key: "itemCode", label: "Code", width: 64 },
       { key: "description", label: "Description", width: content.denseTechnicalTable ? 130 : 160 },
-      ...(content.columns.specification ? [{ key: "specification", label: "Spec", width: 90 } as Column] : []),
+      ...(showSpecification ? [{ key: "specification", label: data.furniture ? "Specification / Evidence" : "Spec", width: 90 } as Column] : []),
       { key: "unit", label: "Unit", width: 34, align: "center" as const },
       { key: "quantity", label: "Qty", width: 44, align: "right" as const },
       ...(showInternal ? [{ key: "landedCost", label: "Landed", width: 52, align: "right" as const }] : []),
@@ -324,8 +332,8 @@ export async function generatePdf(input: GeneratePdfInput): Promise<Buffer> {
 
     y = drawTableHeader();
 
-    for (const section of data.boq.sections) {
-      if (section.items.length === 0) continue;
+    for (const section of getDocumentOutputSections(data)) {
+      if (!shouldRenderDocumentSection(data, section)) continue;
       ensureSpace(18);
       doc.rect(PAGE_MARGIN, y, contentWidth, 16).fill([226, 232, 240]);
       writeText(`${section.code} — ${section.title}`, PAGE_MARGIN + 4, y + 4, contentWidth - 8, { bold: true, size: 9, color: [51, 65, 85] });
@@ -336,9 +344,9 @@ export async function generatePdf(input: GeneratePdfInput): Promise<Buffer> {
           itemNumber: String(item.itemNumber),
           itemCode: item.itemCode,
           description: item.description,
-          specification: item.specification,
+          specification: getDocumentItemSpecification(data, item),
           unit: item.unit,
-          quantity: item.quantity.toLocaleString("en-US", { maximumFractionDigits: 2 }),
+          quantity: getDocumentItemQuantity(data, item),
           landedCost: (item.landedCost ?? 0).toLocaleString("en-US", { maximumFractionDigits: 2 }),
           marginPercentage: (item.marginPercentage ?? 0).toLocaleString("en-US", { maximumFractionDigits: 1 }),
           sellingRate: (item.sellingRate ?? 0).toLocaleString("en-US", { maximumFractionDigits: 2 }),

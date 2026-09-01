@@ -6,6 +6,11 @@ import type { DocumentStorageAdapter } from "@/lib/storage/document-storage-adap
 import { hasReviewedRows, replaceExtractedTablesForFile } from "@/lib/repositories/extracted-table-repository";
 import { hasReviewedTableDerivedCandidates } from "@/lib/repositories/extracted-entity-repository";
 import { generateCandidatesFromStructuredTables } from "@/lib/services/source-candidate-bridge-service";
+import { JOINERY_INDUSTRY_KEY } from "@/lib/furniture/types";
+import {
+  parseFurnitureWorkbookTables,
+  UnsupportedFurnitureWorkbookError,
+} from "@/lib/furniture/workbook-reader";
 import { parseCsvTables } from "./table-extraction/csv-table-parser";
 import { parseXlsxTables } from "./table-extraction/xlsx-table-parser";
 import { parsePdfTables } from "./table-extraction/pdf-table-parser";
@@ -13,6 +18,26 @@ import { inferTableType } from "./table-extraction/infer-table-type";
 import type { ParsedTable } from "./table-extraction/types";
 
 export { TABLE_EXTRACTABLE_EXTENSIONS } from "./table-extraction/constants";
+
+/**
+ * Exact-industry dispatch only. Every other industry calls the existing XLSX
+ * parser directly. A Joinery project whose workbook does not implement the
+ * supported cutting-list fixture shape also falls back to that same parser.
+ */
+export async function parseXlsxTablesForIndustry(
+  buffer: Buffer,
+  industryKey: string,
+): Promise<ParsedTable[]> {
+  if (industryKey !== JOINERY_INDUSTRY_KEY) {
+    return parseXlsxTables(buffer);
+  }
+  try {
+    return await parseFurnitureWorkbookTables(buffer);
+  } catch (error) {
+    if (!(error instanceof UnsupportedFurnitureWorkbookError)) throw error;
+    return parseXlsxTables(buffer);
+  }
+}
 
 let cachedStorageAdapter: DocumentStorageAdapter | null = null;
 function getProjectFileStorageAdapter(): DocumentStorageAdapter {
@@ -23,7 +48,14 @@ function getProjectFileStorageAdapter(): DocumentStorageAdapter {
 }
 
 extractionJobQueue.registerHandler(ExtractionEngineType.TABLE_EXTRACTION, async (job, ctx) => {
-  const file = await prisma.projectFile.findUniqueOrThrow({ where: { id: job.projectFileId } });
+  const file = await prisma.projectFile.findUniqueOrThrow({
+    where: { id: job.projectFileId },
+    include: {
+      project: {
+        select: { industryEngine: { select: { key: true } } },
+      },
+    },
+  });
 
   if ((await hasReviewedRows(job.companyId, job.projectFileId)) || (await hasReviewedTableDerivedCandidates(job.companyId, job.projectFileId))) {
     return { status: ExtractionJobStatus.COMPLETED, resultSummary: { skipped: true, reason: "Reviewed rows or review candidates already exist for this file; re-extraction was skipped to avoid discarding confirmed work." } };
@@ -45,7 +77,7 @@ extractionJobQueue.registerHandler(ExtractionEngineType.TABLE_EXTRACTION, async 
       parsedTables = parseCsvTables(buffer);
       break;
     case "xlsx":
-      parsedTables = await parseXlsxTables(buffer);
+      parsedTables = await parseXlsxTablesForIndustry(buffer, file.project.industryEngine.key);
       break;
     case "pdf": {
       const result = await parsePdfTables(buffer);

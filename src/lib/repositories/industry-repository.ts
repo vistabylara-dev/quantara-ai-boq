@@ -1,13 +1,18 @@
 import { prisma } from "@/lib/db/prisma";
 import { NotFoundError } from "@/lib/errors/app-error";
 
+export const RETIRED_COMBINED_INDUSTRY_KEY = "furniture-joinery-cabinetry";
+
 function isUuid(value: string) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 }
 
 export async function listIndustryEngines(companyId: string) {
   const links = await prisma.companyIndustryEngine.findMany({
-    where: { companyId },
+    where: {
+      companyId,
+      industryEngine: { key: { not: RETIRED_COMBINED_INDUSTRY_KEY } },
+    },
     include: { industryEngine: true },
     orderBy: { industryEngine: { name: "asc" } },
   });
@@ -26,12 +31,19 @@ export async function listIndustryEngines(companyId: string) {
 }
 
 export async function setIndustryEnabled(companyId: string, industryId: string, enabled: boolean) {
+  if (industryId === RETIRED_COMBINED_INDUSTRY_KEY) {
+    throw new NotFoundError("Industry engine is not available for this company.");
+  }
+  const identifierFilter = isUuid(industryId)
+    ? {
+        OR: [{ id: industryId }, { industryEngineId: industryId }],
+        industryEngine: { key: { not: RETIRED_COMBINED_INDUSTRY_KEY } },
+      }
+    : { industryEngine: { key: industryId } };
   const link = await prisma.companyIndustryEngine.findFirst({
     where: {
       companyId,
-      ...(isUuid(industryId)
-        ? { OR: [{ id: industryId }, { industryEngineId: industryId }] }
-        : { industryEngine: { key: industryId } }),
+      ...identifierFilter,
     },
   });
   if (!link) throw new NotFoundError("Industry engine is not available for this company.");
@@ -44,13 +56,20 @@ export async function setIndustryEnabled(companyId: string, industryId: string, 
 }
 
 export async function getEnabledIndustry(companyId: string, identifier: string) {
+  if (identifier === RETIRED_COMBINED_INDUSTRY_KEY) {
+    throw new NotFoundError("Enabled industry engine not found.");
+  }
+  const identifierFilter = isUuid(identifier)
+    ? {
+        industryEngineId: identifier,
+        industryEngine: { key: { not: RETIRED_COMBINED_INDUSTRY_KEY } },
+      }
+    : { industryEngine: { key: identifier } };
   const link = await prisma.companyIndustryEngine.findFirst({
     where: {
       companyId,
       enabled: true,
-      ...(isUuid(identifier)
-        ? { industryEngineId: identifier }
-        : { industryEngine: { key: identifier } }),
+      ...identifierFilter,
     },
     include: { industryEngine: true },
   });

@@ -8,6 +8,8 @@ import { getProjectFileRecord, listProjectFiles } from "@/lib/repositories/proje
 import { listExtractedTablesForFile, type ExtractedTableRecord } from "@/lib/repositories/extracted-table-repository";
 import { hasReviewedTableDerivedCandidates } from "@/lib/repositories/extracted-entity-repository";
 import { createAuditLog } from "@/lib/repositories/audit-repository";
+import { JOINERY_INDUSTRY_KEY } from "@/lib/furniture/types";
+import { generateFurnitureCandidatesFromStructuredTables } from "@/lib/services/furniture-candidate-service";
 
 /**
  * Structured source → human-review candidate bridge (Release 1). Connects data Quantara
@@ -71,9 +73,13 @@ const DIMENSION_KEY_ALIASES: Record<string, string> = {
   ceiling_area: "ceilingArea",
   perimeter: "perimeter",
   length: "length",
+  length_m: "length",
   width: "width",
+  width_m: "width",
   depth: "depth",
+  depth_m: "depth",
   height: "height",
+  height_m: "height",
   route_length: "routeLength",
   verified_route_length: "verifiedRouteLength",
   wastage_percentage: "wastagePercentage",
@@ -140,7 +146,7 @@ function resolveQuantityAndUnit(cellsByKey: Map<string, string>): { quantity: nu
   return { quantity: parsed.value, unit };
 }
 
-function extractDimensionKeys(cellsByKey: Map<string, string>): Record<string, number> {
+export function extractDimensionKeys(cellsByKey: Map<string, string>): Record<string, number> {
   const out: Record<string, number> = {};
   for (const [columnKey, targetKey] of Object.entries(DIMENSION_KEY_ALIASES)) {
     const raw = cellsByKey.get(columnKey);
@@ -210,6 +216,9 @@ export type GenerateCandidatesInput = {
  */
 export async function generateCandidatesFromStructuredTables(input: GenerateCandidatesInput): Promise<GenerateCandidatesResult> {
   const project = await getProjectRecord(input.companyId, input.projectId);
+  if (project.industryEngine.key === JOINERY_INDUSTRY_KEY) {
+    return generateFurnitureCandidatesFromStructuredTables(input);
+  }
   const file = await getProjectFileRecord(input.companyId, input.projectFileId);
   if (file.projectId !== project.id) {
     throw new AppError("FILE_PROJECT_MISMATCH", "This file does not belong to the specified project.", 400);

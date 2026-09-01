@@ -1,5 +1,6 @@
 import { ImportJobStatus, ImportRowStatus, RateProvenanceSource } from "@prisma/client";
 import { prisma } from "@/lib/db/prisma";
+import { RETIRED_COMBINED_INDUSTRY_KEY } from "@/lib/repositories/industry-repository";
 import type { CurrentActor } from "@/lib/auth/current-actor";
 import { requireCapability } from "@/lib/auth/rbac";
 import { AppError, NotFoundError } from "@/lib/errors/app-error";
@@ -484,7 +485,14 @@ async function executeCompanyLibraryRow(actor: CurrentActor, normalized: Record<
 async function executeRateCatalogueRow(actor: CurrentActor, normalized: Record<string, string>, resolvedIndustryEngineId: string | null) {
   let industryEngineId = resolvedIndustryEngineId;
   if (!industryEngineId) {
-    const industry = await prisma.companyIndustryEngine.findFirst({ where: { companyId: actor.companyId, enabled: true }, include: { industryEngine: true } });
+    const industry = await prisma.companyIndustryEngine.findFirst({
+      where: {
+        companyId: actor.companyId,
+        enabled: true,
+        industryEngine: { key: { not: RETIRED_COMBINED_INDUSTRY_KEY } },
+      },
+      include: { industryEngine: true },
+    });
     if (!industry) throw new AppError("NO_INDUSTRY_AVAILABLE", "No enabled industry is available to attach this catalogue rate to.", 409);
     industryEngineId = industry.industryEngineId;
   }

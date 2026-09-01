@@ -2,6 +2,7 @@ import {
   BoqItemSourceType,
   BOQItemStatus,
   BOQStatus,
+  ExtractedEntityStatus,
   MarginMode,
   Prisma,
   RateProvenanceSource,
@@ -12,7 +13,23 @@ import { AppError, ConflictError, NotFoundError } from "@/lib/errors/app-error";
 import { assertBOQCanBeLocked, assertBOQEditable } from "@/lib/domain/boq-guards";
 import { calculateBOQItem, calculateBOQTotals } from "@/lib/calculations/boq-calculator";
 import { evaluateBOQFinalizationGate } from "@/lib/boq/finalization-gate";
+import {
+  computeFurnitureInputSignature,
+  FURNITURE_INPUT_SIGNATURE_SPECIFICATION_PREFIX,
+} from "@/lib/furniture/canonical-output";
+import type { FurnitureCandidateDiscipline } from "@/lib/furniture/candidate-mapper";
+import {
+  FURNITURE_CANDIDATE_TECHNICAL_DATA_KIND,
+  FURNITURE_MANAGED_ITEM_CODE_PREFIX,
+  FURNITURE_MANAGED_SOURCE_PREFIX,
+  FURNITURE_ORDER_ITEM_TECHNICAL_DATA_KIND,
+  FurnitureDiscipline,
+  JOINERY_INDUSTRY_KEY,
+  isStrictFurnitureManagedNonCommercialRow,
+  readStrictFurnitureManagedKey,
+} from "@/lib/furniture/types";
 import { createAuditLog } from "@/lib/repositories/audit-repository";
+import { RETIRED_COMBINED_INDUSTRY_KEY } from "@/lib/repositories/industry-repository";
 import { getProjectRecord } from "@/lib/repositories/project-repository";
 import type { BOQ, BOQItem, BOQItemPricingMetadata, BOQSection } from "@/types/boq";
 import {
@@ -64,6 +81,119 @@ function formatRevision(revisionNumber: number) {
   return `R${String(revisionNumber).padStart(2, "0")}`;
 }
 
+function managedIdentityFor(
+  industryKey: string,
+  sectionCode: string,
+  item: BOQRecord["sections"][number]["items"][number],
+) {
+  return {
+    industryKey,
+    sectionCode,
+    sourceType: item.sourceType,
+    itemCode: item.itemCode,
+    sourceReference: item.sourceReference,
+    notes: item.notes,
+    category: item.category,
+  };
+}
+
+async function assertFurnitureManagedInputsCurrent(
+  tx: Prisma.TransactionClient,
+  current: BOQRecord,
+): Promise<void> {
+  if (current.project.industryEngine.key !== JOINERY_INDUSTRY_KEY) return;
+
+  const rows = current.sections.flatMap((section) =>
+    section.items.map((item) => ({ sectionCode: section.code, item })));
+  const managedRows = rows.filter(({ item }) =>
+    item.itemCode.startsWith(FURNITURE_MANAGED_ITEM_CODE_PREFIX)
+      || item.sourceReference.startsWith(FURNITURE_MANAGED_SOURCE_PREFIX)
+      || item.notes.startsWith(FURNITURE_MANAGED_SOURCE_PREFIX));
+  if (managedRows.length === 0) return;
+
+  for (const { item } of managedRows) {
+    if (!readStrictFurnitureManagedKey(item)) {
+      throw new AppError(
+        "FURNITURE_MANAGED_IDENTITY_INVALID",
+        "A managed furniture row has incomplete identity markers. Regenerate the managed BOQ before locking.",
+        409,
+      );
+    }
+  }
+
+  const signatureRows = managedRows.filter(({ item }) =>
+    readStrictFurnitureManagedKey(item) === "integrity:input-signature");
+  if (signatureRows.length !== 1) {
+    throw new AppError(
+      "FURNITURE_REGENERATION_REQUIRED",
+      "The managed furniture source signature is missing or duplicated. Regenerate before locking.",
+      409,
+    );
+  }
+  const signatureRow = signatureRows[0].item;
+  if (!signatureRow.specification.startsWith(FURNITURE_INPUT_SIGNATURE_SPECIFICATION_PREFIX)) {
+    throw new AppError(
+      "FURNITURE_REGENERATION_REQUIRED",
+      "The managed furniture source signature is invalid. Regenerate before locking.",
+      409,
+    );
+  }
+  const persistedSignature = signatureRow.specification.slice(FURNITURE_INPUT_SIGNATURE_SPECIFICATION_PREFIX.length);
+  if (!/^[0-9a-f]{64}$/.test(persistedSignature)) {
+    throw new AppError(
+      "FURNITURE_REGENERATION_REQUIRED",
+      "The managed furniture source signature is invalid. Regenerate before locking.",
+      409,
+    );
+  }
+
+  const entities = await tx.extractedEntity.findMany({
+    where: {
+      companyId: current.companyId,
+      projectId: current.projectId,
+      categoryKey: {
+        in: [FURNITURE_CANDIDATE_TECHNICAL_DATA_KIND, FURNITURE_ORDER_ITEM_TECHNICAL_DATA_KIND],
+      },
+      status: { not: ExtractedEntityStatus.REJECTED },
+    },
+    select: { id: true, categoryKey: true, status: true, confirmedAt: true, updatedAt: true },
+    orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+  });
+  const partEntities = entities.filter((entity) => entity.categoryKey === FURNITURE_CANDIDATE_TECHNICAL_DATA_KIND);
+  if (
+    partEntities.length === 0
+    || entities.some((entity) => entity.status !== "CONFIRMED" || !entity.confirmedAt)
+  ) {
+    throw new AppError(
+      "FURNITURE_REGENERATION_REQUIRED",
+      "Furniture source candidates changed or require review. Confirm them and regenerate before locking.",
+      409,
+    );
+  }
+  const discipline = FurnitureDiscipline.JOINERY_CABINETRY;
+  const signatureEntity = (entity: (typeof entities)[number]) => ({
+    entityId: entity.id,
+    status: "CONFIRMED" as const,
+    confirmedAt: entity.confirmedAt!.toISOString(),
+    updatedAt: entity.updatedAt.toISOString(),
+  });
+  const currentSignature = computeFurnitureInputSignature({
+    discipline: discipline as FurnitureCandidateDiscipline,
+    wastagePercentage: signatureRow.wastagePercentage.toNumber(),
+    partEntities: partEntities.map(signatureEntity),
+    orderEntities: entities
+      .filter((entity) => entity.categoryKey === FURNITURE_ORDER_ITEM_TECHNICAL_DATA_KIND)
+      .map(signatureEntity),
+  });
+  if (currentSignature !== persistedSignature) {
+    throw new AppError(
+      "FURNITURE_REGENERATION_REQUIRED",
+      "Furniture source candidates changed after managed output generation. Regenerate before locking.",
+      409,
+    );
+  }
+}
+
 function toFrontendBOQStatus(status: BOQStatus): "draft" | "locked" | "approved" {
   if (status === BOQStatus.LOCKED || status === BOQStatus.ISSUED) return "locked";
   if (status === BOQStatus.APPROVED) return "approved";
@@ -73,7 +203,9 @@ function toFrontendBOQStatus(status: BOQStatus): "draft" | "locked" | "approved"
 export function toBOQDTO(
   boq: BOQRecord,
 ): BOQ & { databaseId: string; taxRate: number; version: number; revisionNumber: number } {
-  const items = boq.sections.flatMap((section) => section.items);
+  const itemRows = boq.sections.flatMap((section) =>
+    section.items.map((item) => ({ item, sectionCode: section.code })));
+  const items = itemRows.map(({ item }) => item);
   const totals = calculateBOQTotals(items, boq.discountPercentage, boq.taxRate);
   const unresolvedCritical = (boq.verificationExceptions ?? []).filter(
     (exception) => !exception.resolved && exception.severity === VerificationSeverity.CRITICAL,
@@ -84,10 +216,13 @@ export function toBOQDTO(
     verifiedVersion: boq.verifiedVersion,
     verifiedAt: boq.verifiedAt,
     unresolvedCritical,
-    items: items.map((item) => ({
+    items: itemRows.map(({ item, sectionCode }) => ({
       status: item.status,
       quantityConfirmed: Boolean(item.quantityProvenance?.confirmedAt) && item.quantityProvenance?.sourceType !== "LEGACY_UNVERIFIED",
       rateConfirmed: Boolean(item.rateProvenance?.confirmedAt) && item.rateProvenance?.sourceType !== "LEGACY_UNVERIFIED",
+      rateConfirmationRequired: !isStrictFurnitureManagedNonCommercialRow(
+        managedIdentityFor(boq.project.industryEngine.key, sectionCode, item),
+      ),
     })),
   });
 
@@ -185,7 +320,14 @@ export function toBOQDTO(
 type DbClient = typeof prisma | Prisma.TransactionClient;
 
 export async function getBOQRecord(companyId: string, boqId: string, db: DbClient = prisma) {
-  const boq = await db.bOQ.findFirst({ where: { id: boqId, companyId }, include: boqInclude });
+  const boq = await db.bOQ.findFirst({
+    where: {
+      id: boqId,
+      companyId,
+      project: { industryEngine: { key: { not: RETIRED_COMBINED_INDUSTRY_KEY } } },
+    },
+    include: boqInclude,
+  });
   if (!boq) throw new NotFoundError("BOQ not found.");
   return boq;
 }
@@ -381,6 +523,31 @@ async function syncSectionItems(
         !current.additionalCost.equals(data.additionalCost) ||
         current.marginMode !== data.marginMode ||
         !current.marginPercentage.equals(data.marginPercentage);
+      const itemChanged =
+        current.itemNumber !== data.itemNumber ||
+        current.itemCode !== data.itemCode ||
+        current.category !== data.category ||
+        current.description !== data.description ||
+        current.specification !== data.specification ||
+        quantityChanged ||
+        !current.unitCost.equals(data.unitCost) ||
+        !current.freightCost.equals(data.freightCost) ||
+        !current.installationCost.equals(data.installationCost) ||
+        !current.additionalCost.equals(data.additionalCost) ||
+        !current.landedCost.equals(data.landedCost) ||
+        current.marginMode !== data.marginMode ||
+        !current.marginPercentage.equals(data.marginPercentage) ||
+        !current.sellingRate.equals(data.sellingRate) ||
+        !current.totalAmount.equals(data.totalAmount) ||
+        !current.wastagePercentage.equals(data.wastagePercentage) ||
+        current.taxApplicable !== data.taxApplicable ||
+        current.sourceReference !== data.sourceReference ||
+        current.roomOrZone !== data.roomOrZone ||
+        current.drawingReference !== data.drawingReference ||
+        !current.confidenceScore.equals(data.confidenceScore) ||
+        current.notes !== data.notes ||
+        current.sortOrder !== data.sortOrder;
+      if (!itemChanged) continue;
       const updatedItem = await tx.bOQItem.update({ where: { id: current.id, companyId }, data });
       if (quantityChanged) {
         await confirmManualQuantityProvenance(tx, companyId, projectId, updatedItem);
@@ -428,6 +595,8 @@ export type BOQDocumentWriteInput = Omit<BOQ, "approvedBy" | "taxRate"> & {
   approvedBy?: string | null;
   taxRate?: Prisma.Decimal.Value;
 };
+
+export const BOQ_DOCUMENT_WRITE_TRANSACTION_TIMEOUT_MS = 30_000;
 
 export async function updateBOQ(companyId: string, boqId: string, input: BOQDocumentWriteInput) {
   const current = await getBOQRecord(companyId, boqId);
@@ -479,7 +648,7 @@ export async function updateBOQ(companyId: string, boqId: string, input: BOQDocu
       }
       await syncSectionItems(tx, companyId, current.id, current.projectId, sectionId, section.items, existingSection?.items ?? []);
     }
-  });
+  }, { timeout: BOQ_DOCUMENT_WRITE_TRANSACTION_TIMEOUT_MS });
   return getBOQ(companyId, current.id);
 }
 
@@ -673,13 +842,15 @@ export async function lockBOQ(companyId: string, boqId: string, actorName = "Dev
       throw new AppError("VERIFICATION_STALE", "The BOQ changed after verification. Re-run verification before locking.", 400);
     }
 
-    const allItems = current.sections.flatMap((s) => s.items);
+    const allItemRows = current.sections.flatMap((section) =>
+      section.items.map((item) => ({ item, sectionCode: section.code })));
+    const allItems = allItemRows.map(({ item }) => item);
     if (allItems.length === 0) {
       throw new AppError("BOQ_REVISION_EMPTY", "This revision contains no BOQ items. Add at least one item before locking.", 400);
     }
 
     let hasInvalidTotals = false;
-    for (const item of allItems) {
+    for (const { item, sectionCode } of allItemRows) {
       const displayId = item.itemCode || `Item ${item.itemNumber}`;
       if (!item.description || item.description.trim() === "") {
         throw new AppError("BOQ_ITEM_INVALID_DESCRIPTION", `${displayId} is missing a description.`, 400);
@@ -714,10 +885,15 @@ export async function lockBOQ(companyId: string, boqId: string, actorName = "Dev
         rateProvenance.additionalCostSnapshot.equals(item.additionalCost) &&
         rateProvenance.marginModeSnapshot === item.marginMode &&
         rateProvenance.marginPercentageSnapshot.equals(item.marginPercentage);
-      if (!quantityTraceable || !rateTraceable) {
+      const rateConfirmationRequired = !isStrictFurnitureManagedNonCommercialRow(
+        managedIdentityFor(current.project.industryEngine.key, sectionCode, item),
+      );
+      if (!quantityTraceable || (rateConfirmationRequired && !rateTraceable)) {
         throw new AppError(
           "ESTIMATE_INTEGRITY_REQUIRED",
-          `${displayId} needs confirmed quantity and rate provenance before this BOQ can be locked.`,
+          rateConfirmationRequired
+            ? `${displayId} needs confirmed quantity and rate provenance before this BOQ can be locked.`
+            : `${displayId} needs confirmed quantity provenance before this BOQ can be locked.`,
           400,
         );
       }
@@ -732,6 +908,8 @@ export async function lockBOQ(companyId: string, boqId: string, actorName = "Dev
     if (unresolvedCriticals.length > 0) {
       throw new AppError("BOQ_LOCK_BLOCKED", `BOQ cannot be locked while ${unresolvedCriticals.length} critical verification exception(s) remain unresolved.`, 400);
     }
+
+    await assertFurnitureManagedInputsCurrent(tx, current);
 
     const revisionSnapshot = await tx.bOQRevisionSnapshot.create({
       data: {

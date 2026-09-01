@@ -16,7 +16,8 @@ import {
 } from "@/lib/repositories/project-file-repository";
 import { toExtractionJobDTO } from "@/lib/repositories/extraction-job-repository";
 import { buildStorageKey, computeChecksum, validateUpload } from "@/lib/files/file-security";
-import { createStorageAdapter, resolveStorageProvider } from "@/lib/storage/storage-factory";
+import { createStorageAdapter } from "@/lib/storage/storage-factory";
+import { requireProjectStorageReady } from "@/lib/storage/storage-readiness";
 import type { DocumentStorageAdapter } from "@/lib/storage/document-storage-adapter";
 import { createAuditLog } from "@/lib/repositories/audit-repository";
 import { extractionJobQueue } from "@/lib/jobs/extraction-worker";
@@ -45,7 +46,7 @@ export type UploadProjectFileInput = {
 let cachedStorageAdapter: DocumentStorageAdapter | null = null;
 function getProjectFileStorageAdapter(): DocumentStorageAdapter {
   if (!cachedStorageAdapter) {
-    cachedStorageAdapter = createStorageAdapter({ provider: resolveStorageProvider(), purpose: "project-files" });
+    cachedStorageAdapter = createStorageAdapter({ provider: requireProjectStorageReady(), purpose: "project-files" });
   }
   return cachedStorageAdapter;
 }

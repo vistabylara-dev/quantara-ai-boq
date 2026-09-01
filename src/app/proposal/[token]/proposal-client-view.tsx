@@ -5,6 +5,10 @@ import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { apiClient, getApiErrorMessage } from "@/lib/api/client";
 import { formatCurrency } from "@/lib/formatting/currency";
+import {
+  formatFurnitureJoineryLinearEdgeQuantity,
+  isFurnitureJoineryLinearEdgeItem,
+} from "@/lib/furniture/linear-edge-format";
 
 type ViewOption = { id: string; label: string; description: string; specification: string; rate: number; isSelected: boolean };
 type ViewItem = {
@@ -245,7 +249,11 @@ export default function ProposalClientView({ token, initialView, initialProposal
                         </select>
                       )}
                     </td>
-                    <td className="py-3 pr-3">{item.quantity}</td>
+                    <td className="py-3 pr-3">
+                      {view.project.industry.trim().toLowerCase() === "joinery" && isFurnitureJoineryLinearEdgeItem(item)
+                        ? formatFurnitureJoineryLinearEdgeQuantity(item.quantity)
+                        : item.quantity}
+                    </td>
                     <td className="py-3 pr-3">{item.unit}</td>
                     {view.settings.showUnitRates && <td className="py-3 pr-3">{item.unitRate !== null ? formatCurrency(item.unitRate, currency) : "—"}</td>}
                     <td className="py-3 pr-3 font-medium text-slate-900">{formatCurrency(item.totalAmount, currency)}</td>

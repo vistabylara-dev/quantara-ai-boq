@@ -299,6 +299,7 @@ export async function generateDocument(actor: CurrentActor, projectIdentifier: s
       language: project.language,
     },
     industryName: project.industryEngine.name,
+    industryKey: project.industryEngine.key,
     boq: boqDto,
     revisionNumber: boqRecord.revisionNumber,
     audience: input.audience,

@@ -1,5 +1,12 @@
 import type { CanonicalDocumentData } from "../build-document-data";
 import type { DocumentTemplateContentConfig, DocumentTemplateStyleConfig } from "../template-config";
+import {
+  getDocumentItemSpecification,
+  getDocumentItemQuantity,
+  getDocumentOutputSections,
+  shouldRenderDocumentSection,
+  shouldRenderSpecification,
+} from "../furniture-document-output";
 import { logoImageToDataUri, type LoadedLogoImage } from "../logo-image";
 
 function escapeHtml(value: string): string {
@@ -47,10 +54,12 @@ export function generateHtml(input: GenerateHtmlInput): string {
   const { data, style, content } = input;
   const rtl = style.direction === "rtl";
   const showInternal = data.boq.showInternalFields;
+  const showSpecification = shouldRenderSpecification(data, content.columns.specification);
   const logoDataUri = logoImageToDataUri(input.logoImage);
+  const tableColumnCount = 7 + (showSpecification ? 1 : 0) + (showInternal ? 2 : 0);
 
-  const sectionsHtml = data.boq.sections
-    .filter((section) => section.items.length > 0)
+  const sectionsHtml = getDocumentOutputSections(data)
+    .filter((section) => shouldRenderDocumentSection(data, section))
     .map((section) => {
       const rows = section.items
         .map(
@@ -59,9 +68,9 @@ export function generateHtml(input: GenerateHtmlInput): string {
             <td class="num">${item.itemNumber}</td>
             <td>${escapeHtml(item.itemCode)}</td>
             <td>${escapeHtml(item.description)}</td>
-            ${content.columns.specification ? `<td>${escapeHtml(item.specification)}</td>` : ""}
+            ${showSpecification ? `<td class="specification">${escapeHtml(getDocumentItemSpecification(data, item))}</td>` : ""}
             <td class="num">${escapeHtml(item.unit)}</td>
-            <td class="num">${item.quantity.toLocaleString("en-US", { maximumFractionDigits: 2 })}</td>
+            <td class="num">${getDocumentItemQuantity(data, item)}</td>
             ${showInternal ? `<td class="num">${(item.landedCost ?? 0).toLocaleString("en-US", { maximumFractionDigits: 2 })}</td>` : ""}
             ${showInternal ? `<td class="num">${(item.marginPercentage ?? 0).toLocaleString("en-US", { maximumFractionDigits: 1 })}%</td>` : ""}
             <td class="num">${(item.sellingRate ?? 0).toLocaleString("en-US", { maximumFractionDigits: 2 })}</td>
@@ -70,7 +79,7 @@ export function generateHtml(input: GenerateHtmlInput): string {
         )
         .join("");
       return `
-        <tr class="section-row"><td colspan="10">${escapeHtml(section.code)} — ${escapeHtml(section.title)}</td></tr>
+        <tr class="section-row"><td colspan="${tableColumnCount}">${escapeHtml(section.code)} — ${escapeHtml(section.title)}</td></tr>
         ${rows}`;
     })
     .join("");
@@ -107,6 +116,7 @@ export function generateHtml(input: GenerateHtmlInput): string {
   table { width: 100%; border-collapse: collapse; margin-top: 16px; font-size: 12px; }
   th { background: ${style.primaryColor}; color: white; text-align: ${rtl ? "right" : "left"}; padding: 6px 8px; }
   td { padding: 6px 8px; border-bottom: 1px solid #e2e8f0; text-align: ${rtl ? "right" : "left"}; }
+  td.specification { white-space: pre-line; }
   td.num, th.num { text-align: ${rtl ? "left" : "right"}; }
   tr.section-row td { background: #e2e8f0; font-weight: 600; }
   .totals { margin-top: 16px; width: 280px; margin-${rtl ? "right" : "left"}: auto; }
@@ -148,7 +158,7 @@ export function generateHtml(input: GenerateHtmlInput): string {
         <th class="num">#</th>
         <th>Code</th>
         <th>Description</th>
-        ${content.columns.specification ? "<th>Spec</th>" : ""}
+        ${showSpecification ? `<th>${data.furniture ? "Specification / Evidence" : "Spec"}</th>` : ""}
         <th class="num">Unit</th>
         <th class="num">Qty</th>
         ${showInternal ? '<th class="num">Landed</th>' : ""}

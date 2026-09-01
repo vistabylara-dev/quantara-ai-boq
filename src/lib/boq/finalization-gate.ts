@@ -17,6 +17,8 @@ type FinalizationItem = {
   status?: string | null;
   quantityConfirmed: boolean;
   rateConfirmed: boolean;
+  /** Defaults to true. Strictly noncommercial managed rows set this false. */
+  rateConfirmationRequired?: boolean;
 };
 
 export function evaluateBOQFinalizationGate(input: {
@@ -29,7 +31,8 @@ export function evaluateBOQFinalizationGate(input: {
 }): BOQFinalizationGate {
   const freshlyVerified = input.verifiedAt !== null && input.verifiedVersion === input.version;
   const unconfirmedItemCount = (input.items ?? []).filter(
-    (item) => item.status?.toUpperCase() !== "REJECTED" && (!item.quantityConfirmed || !item.rateConfirmed),
+    (item) => item.status?.toUpperCase() !== "REJECTED"
+      && (!item.quantityConfirmed || (item.rateConfirmationRequired !== false && !item.rateConfirmed)),
   ).length;
   const lockReason: BOQFinalizationReason | null = input.isLocked
     ? "BOQ_LOCKED"

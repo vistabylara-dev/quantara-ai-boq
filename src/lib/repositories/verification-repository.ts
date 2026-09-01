@@ -9,6 +9,9 @@ import {
   runVerification,
   type VerificationConfig,
 } from "@/lib/verification/run-verification";
+import {
+  isStrictFurnitureManagedNonCommercialRow,
+} from "@/lib/furniture/types";
 
 function getVerificationConfig(configJson: Prisma.JsonValue): VerificationConfig {
   if (!configJson || typeof configJson !== "object" || Array.isArray(configJson)) {
@@ -66,17 +69,27 @@ function verificationPayload(boq: Awaited<ReturnType<typeof getBOQRecord>>) {
     (exception) => !exception.resolved && exception.severity === VerificationSeverity.WARNING,
   ).length;
   const resolved = boq.verificationExceptions.filter((exception) => exception.resolved).length;
-  const items = boq.sections.flatMap((section) => section.items);
+  const itemRows = boq.sections.flatMap((section) =>
+    section.items.map((item) => ({ item, sectionCode: section.code })));
   const gate = evaluateBOQFinalizationGate({
     isLocked: boq.isLocked,
     version: boq.version,
     verifiedVersion: boq.verifiedVersion,
     verifiedAt: boq.verifiedAt,
     unresolvedCritical,
-    items: items.map((item) => ({
+    items: itemRows.map(({ item, sectionCode }) => ({
       status: item.status,
       quantityConfirmed: Boolean(item.quantityProvenance?.confirmedAt) && item.quantityProvenance?.sourceType !== "LEGACY_UNVERIFIED",
       rateConfirmed: Boolean(item.rateProvenance?.confirmedAt) && item.rateProvenance?.sourceType !== "LEGACY_UNVERIFIED",
+      rateConfirmationRequired: !isStrictFurnitureManagedNonCommercialRow({
+        industryKey: boq.project.industryEngine.key,
+        sectionCode,
+        sourceType: item.sourceType,
+        itemCode: item.itemCode,
+        sourceReference: item.sourceReference,
+        notes: item.notes,
+        category: item.category,
+      }),
     })),
   });
 
@@ -109,7 +122,9 @@ export async function runBOQVerification(companyId: string, boqId: string, asOf 
       "Locked BOQ revisions are immutable. Create a new revision before running verification again.",
     );
   }
-  const items = boq.sections.flatMap((section) => section.items);
+  const itemRows = boq.sections.flatMap((section) =>
+    section.items.map((item) => ({ item, sectionCode: section.code })));
+  const items = itemRows.map(({ item }) => item);
   const itemCodes = [...new Set(items.map((item) => item.itemCode).filter(Boolean))];
   const catalogueRates = itemCodes.length
     ? await prisma.rateCatalogueItem.findMany({
@@ -134,7 +149,7 @@ export async function runBOQVerification(companyId: string, boqId: string, asOf 
     config: getVerificationConfig(boq.project.industryEngine.configJson),
     boqIsLocked: boq.isLocked,
     hasPendingChanges: false,
-    items: items.map((item) => {
+    items: itemRows.map(({ item, sectionCode }) => {
       const rate = latestRateByCode.get(item.itemCode);
       return {
         id: item.id,
@@ -159,6 +174,15 @@ export async function runBOQVerification(companyId: string, boqId: string, asOf 
           (item.pricingMetadataJson as { manuallyOverriddenFields?: string[] } | null)?.manuallyOverriddenFields ??
           undefined,
         status: item.status,
+        commercialPricingRequired: !isStrictFurnitureManagedNonCommercialRow({
+          industryKey: boq.project.industryEngine.key,
+          sectionCode,
+          sourceType: item.sourceType,
+          itemCode: item.itemCode,
+          sourceReference: item.sourceReference,
+          notes: item.notes,
+          category: item.category,
+        }),
       };
     }),
   });

@@ -1,6 +1,7 @@
 import { apiSuccess, apiFailure } from "@/lib/http/api-response";
 import { prisma } from "@/lib/db/prisma";
 import { validateProductionSecuritySecrets } from "@/lib/config/security-secrets";
+import { requireProjectStorageReady } from "@/lib/storage/storage-readiness";
 
 export const dynamic = "force-dynamic";
 
@@ -18,6 +19,17 @@ export async function GET() {
     return apiFailure(
       "SECURITY_CONFIGURATION_UNAVAILABLE",
       "Required production security configuration is unavailable.",
+      503,
+    );
+  }
+
+  try {
+    requireProjectStorageReady();
+  } catch (error) {
+    console.error("[ready] production storage configuration check failed:", error instanceof Error ? error.message : error);
+    return apiFailure(
+      "STORAGE_CONFIGURATION_UNAVAILABLE",
+      "Required production storage configuration is unavailable.",
       503,
     );
   }

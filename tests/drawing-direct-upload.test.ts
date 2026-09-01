@@ -122,6 +122,11 @@ describe("Direct-to-Blob drawing upload (integration, real local Postgres, fake 
 
   beforeAll(async () => {
     requireIsolatedLocalTestDatabase();
+    // This suite replaces Blob with the in-memory adapter above. Declare the
+    // same provider contract the production service now requires, using an
+    // obviously non-secret test token that never reaches Vercel Blob.
+    vi.stubEnv("STORAGE_PROVIDER", "vercel-blob");
+    vi.stubEnv("BLOB_READ_WRITE_TOKEN", "test-only-fake-blob-token");
     const construction = await prisma.industryEngine.findUniqueOrThrow({ where: { key: "construction" } });
 
     const companyA = await prisma.company.create({ data: { legalName: `Direct Upload Co A ${RUN_ID}`, tradeName: "Direct A", email: `direct-a-${RUN_ID}@example.com` } });
@@ -175,6 +180,7 @@ describe("Direct-to-Blob drawing upload (integration, real local Postgres, fake 
     await prisma.user.deleteMany({ where: { companyId: { in: [companyAId, companyBId] } } });
     await prisma.company.deleteMany({ where: { id: { in: [companyAId, companyBId] } } });
     await prisma.$disconnect();
+    vi.unstubAllEnvs();
   });
 
   describe("authorization", () => {

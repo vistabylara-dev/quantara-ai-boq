@@ -81,23 +81,48 @@ describe("TAYQAN-2A global companion — mounted once from the shared layout, no
     expect(offenders).toEqual([]);
   });
 
-  it("is hidden specifically on /projects/[projectId]/tayqan, and only that route", () => {
+  it("is hidden on the dedicated TAYQAN page and extraction review, while remaining available elsewhere", () => {
     const source = readSource("src", "components", "tayqan", "tayqan-global-companion.tsx");
-    const match = source.match(/const DEDICATED_TAYQAN_PAGE = (\/.*\/);/);
-    expect(match).not.toBeNull();
-    const pattern = new RegExp(match![1].slice(1, -1));
-    expect(pattern.test("/projects/abc-123/tayqan")).toBe(true);
-    expect(pattern.test("/projects/abc-123/tayqan/")).toBe(true);
-    expect(pattern.test("/projects/abc-123/boq")).toBe(false);
-    expect(pattern.test("/projects/abc-123/files")).toBe(false);
-    expect(pattern.test("/dashboard")).toBe(false);
-    expect(pattern.test("/")).toBe(false);
-    // Confirms the check actually gates rendering, not just an unused constant.
+    const dedicatedMatch = source.match(/const DEDICATED_TAYQAN_PAGE = (\/.*\/);/);
+    const extractionMatch = source.match(/const EXTRACTION_REVIEW_PAGE = (\/.*\/);/);
+    expect(dedicatedMatch).not.toBeNull();
+    expect(extractionMatch).not.toBeNull();
+
+    const dedicatedPattern = new RegExp(dedicatedMatch![1].slice(1, -1));
+    const extractionPattern = new RegExp(extractionMatch![1].slice(1, -1));
+
+    expect(dedicatedPattern.test("/projects/abc-123/tayqan")).toBe(true);
+    expect(dedicatedPattern.test("/projects/abc-123/tayqan/")).toBe(true);
+    expect(extractionPattern.test("/projects/abc-123/extractions")).toBe(true);
+    expect(extractionPattern.test("/projects/abc-123/extractions/")).toBe(true);
+    expect(extractionPattern.test("/projects/abc-123/extractions/review")).toBe(true);
+
+    for (const pathname of [
+      "/projects/abc-123/boq",
+      "/projects/abc-123/files",
+      "/projects/abc-123/verification",
+      "/projects/abc-123/documents",
+      "/projects/abc-123/extraction",
+      "/projects/abc-123/extractions-archive",
+      "/dashboard",
+      "/",
+    ]) {
+      expect(dedicatedPattern.test(pathname)).toBe(false);
+      expect(extractionPattern.test(pathname)).toBe(false);
+    }
+
+    // Confirms both route checks actually gate rendering, rather than being unused constants.
     expect(source).toContain(
       "DEDICATED_TAYQAN_PAGE.test(pathname)",
     );
     expect(source).toContain(
+      "EXTRACTION_REVIEW_PAGE.test(pathname)",
+    );
+    expect(source).toContain(
       "adminLoginRoute",
+    );
+    expect(source).toContain(
+      "const companionHidden =",
     );
     expect(source).toContain(
       "return null;",

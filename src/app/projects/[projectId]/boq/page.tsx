@@ -417,20 +417,28 @@ export default function ProjectBOQPage(props: PageProps) {
     [activeRevision],
   );
   const showAiDraftReview = aiDraftMode || hasAiDraftItems;
+  const missingRateCount = useMemo(
+    () => activeRevision?.sections.reduce(
+      (total, section) => total + section.items.filter((item) => item.sellingRate <= 0).length,
+      0,
+    ) ?? 0,
+    [activeRevision],
+  );
   const allRatesEntered = useMemo(
     () => Boolean(activeRevision)
       && activeRevision!.sections.some((section) => section.items.length > 0)
       && activeRevision!.sections.every((section) => section.items.every((item) => item.sellingRate > 0)),
     [activeRevision],
   );
+  const verificationBlocked = (activeRevision?.finalization?.unresolvedCritical ?? 0) > 0;
 
   const generateFinalBoq = useCallback(async () => {
-    if (!activeRevision || hasUnsavedChanges || !allRatesEntered) return;
+    if (!activeRevision || hasUnsavedChanges || !allRatesEntered || verificationBlocked) return;
     const locked = await lockRevisionAndReturn(activeRevision);
     if (locked) {
       router.push(`/projects/${encodeURIComponent(params.projectId)}/documents`);
     }
-  }, [activeRevision, allRatesEntered, hasUnsavedChanges, lockRevisionAndReturn, params.projectId, router]);
+  }, [activeRevision, allRatesEntered, hasUnsavedChanges, lockRevisionAndReturn, params.projectId, router, verificationBlocked]);
 
   const confirmRemainingAiDraftQuantities = useCallback(async () => {
     if (!activeRevision || isReadOnlyBOQ(activeRevision) || isConfirmingAiDraft) return;
@@ -838,12 +846,14 @@ export default function ProjectBOQPage(props: PageProps) {
             <div>
               <h3 className="text-xl font-semibold text-white">Quantara prepared the measured BOQ</h3>
               <p className="mt-1 text-sm text-slate-300">Enter every unit rate, then generate the verified final BOQ. Quantities and source evidence remain read-only.</p>
+              {missingRateCount > 0 ? <p className="mt-2 text-sm font-semibold text-amber-200">Finalization is blocked: {missingRateCount} zero or missing {missingRateCount === 1 ? "rate" : "rates"} remain.</p> : null}
+              {verificationBlocked ? <p className="mt-2 text-sm font-semibold text-rose-200">Finalization is blocked by critical verification findings. Resolve only the affected evidence before locking.</p> : null}
             </div>
             <button
               type="button"
               onClick={() => void generateFinalBoq()}
-              disabled={actionInProgress || hasUnsavedChanges || !allRatesEntered}
-              title={hasUnsavedChanges ? "Save every rate before generating the final BOQ." : !allRatesEntered ? "Enter a rate greater than zero for every item." : ""}
+              disabled={actionInProgress || hasUnsavedChanges || !allRatesEntered || verificationBlocked}
+              title={hasUnsavedChanges ? "Save every rate before generating the final BOQ." : !allRatesEntered ? "Enter a rate greater than zero for every item." : verificationBlocked ? "Resolve critical verification findings before finalization." : ""}
               className="shrink-0 rounded-2xl bg-blue-600 px-5 py-3 text-sm font-semibold text-white hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-50"
             >
               {pendingAction === "lock" ? "Verifying…" : "Generate final BOQ"}

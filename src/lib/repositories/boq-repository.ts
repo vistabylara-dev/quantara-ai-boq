@@ -281,6 +281,7 @@ export function toBOQDTO(
           quantity: {
             sourceType: item.quantityProvenance?.sourceType ?? null,
             confirmed: Boolean(item.quantityProvenance?.confirmedAt) && item.quantityProvenance?.sourceType !== "LEGACY_UNVERIFIED",
+            quantityCalculationId: item.quantityProvenance?.quantityCalculationId ?? null,
           },
           rate: {
             sourceType: item.rateProvenance?.sourceType ?? null,

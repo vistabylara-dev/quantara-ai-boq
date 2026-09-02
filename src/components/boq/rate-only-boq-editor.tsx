@@ -16,6 +16,15 @@ type RateDraft = {
   error: string | null;
 };
 
+type QuantityOverrideReceipt = {
+  originalSystemQuantity: string;
+  quantity: string;
+  unit: string;
+  reason: string;
+  actorName: string;
+  overriddenAt: string;
+};
+
 export type RateOnlyBOQEditorProps = {
   boq: BOQ;
   currency?: string;
@@ -41,6 +50,10 @@ function itemFromBOQ(boq: BOQ, itemId: string): BOQItem | undefined {
   return boq.sections.flatMap((section) => section.items).find((item) => item.id === itemId);
 }
 
+function categoryPathFromNotes(notes: string): string | null {
+  return notes.split("\n").find((line) => line.startsWith("Category path: "))?.slice("Category path: ".length) ?? null;
+}
+
 export function RateOnlyBOQEditor({
   boq,
   currency = "AED",
@@ -49,6 +62,13 @@ export function RateOnlyBOQEditor({
   onDirtyChange,
 }: RateOnlyBOQEditorProps) {
   const [drafts, setDrafts] = useState<Record<string, RateDraft>>(() => initialDrafts(boq));
+  const [overrideItemId, setOverrideItemId] = useState<string | null>(null);
+  const [overrideQuantity, setOverrideQuantity] = useState("");
+  const [overrideReason, setOverrideReason] = useState("");
+  const [overrideError, setOverrideError] = useState<string | null>(null);
+  const [overrideSaving, setOverrideSaving] = useState(false);
+  const [overrideOriginalQuantity, setOverrideOriginalQuantity] = useState<number | null>(null);
+  const [overrideReceipts, setOverrideReceipts] = useState<Record<string, QuantityOverrideReceipt>>({});
   const items = useMemo(
     () => boq.sections.flatMap((section) => section.items),
     [boq.sections],
@@ -61,6 +81,15 @@ export function RateOnlyBOQEditor({
     }).length,
     [drafts, items],
   );
+  const draftStorageKey = `quantara:rate-drafts:${boq.id}`;
+  const missingRateCount = useMemo(() => items.filter((item) => {
+    const parsed = parseUnitRateInput(drafts[item.id]?.value ?? rateText(item));
+    return !parsed.ok || parsed.value <= 0;
+  }).length, [drafts, items]);
+  const estimatedTotal = useMemo(() => items.reduce((total, item) => {
+    const parsed = parseUnitRateInput(drafts[item.id]?.value ?? rateText(item));
+    return parsed.ok ? total + calculateRateOnlyAmount(item.quantity, parsed.value) : total;
+  }, 0), [drafts, items]);
 
   // Server refreshes update clean rows while preserving anything the user has
   // typed but not saved. Switching to a different revision naturally resets
@@ -79,6 +108,31 @@ export function RateOnlyBOQEditor({
       return next;
     });
   }, [items]);
+
+  useEffect(() => {
+    try {
+      const serialized = window.sessionStorage.getItem(draftStorageKey);
+      if (!serialized) return;
+      const recovered = JSON.parse(serialized) as Record<string, string>;
+      setDrafts((current) => Object.fromEntries(Object.entries(current).map(([itemId, draft]) => [
+        itemId,
+        typeof recovered[itemId] === "string" ? { ...draft, value: recovered[itemId], error: null } : draft,
+      ])));
+    } catch {
+      window.sessionStorage.removeItem(draftStorageKey);
+    }
+  }, [draftStorageKey]);
+
+  useEffect(() => {
+    const unsaved = Object.fromEntries(Object.entries(drafts)
+      .filter(([, draft]) => draft.value !== draft.savedValue)
+      .map(([itemId, draft]) => [itemId, draft.value]));
+    if (Object.keys(unsaved).length === 0) {
+      window.sessionStorage.removeItem(draftStorageKey);
+      return;
+    }
+    window.sessionStorage.setItem(draftStorageKey, JSON.stringify(unsaved));
+  }, [draftStorageKey, drafts]);
 
   useEffect(() => {
     onDirtyChange?.(dirtyCount > 0);
@@ -150,6 +204,50 @@ export function RateOnlyBOQEditor({
     }
   }
 
+  function openQuantityOverride(item: BOQItem) {
+    setOverrideItemId(item.id);
+    setOverrideOriginalQuantity(item.quantity);
+    setOverrideQuantity(String(item.quantity));
+    setOverrideReason("");
+    setOverrideError(null);
+  }
+
+  async function submitQuantityOverride(item: BOQItem) {
+    const quantityCalculationId = item.integrity?.quantity.quantityCalculationId;
+    if (!quantityCalculationId || !boq.version || !boq.revisionNumber || overrideSaving) return;
+    if (!overrideReason.trim()) {
+      setOverrideError("A reason is required for an audited quantity override.");
+      return;
+    }
+    setOverrideSaving(true);
+    setOverrideError(null);
+    try {
+      const result = await apiClient.post<{ override: QuantityOverrideReceipt; boq: BOQ }>(
+        `/api/items/${encodeURIComponent(item.id)}/quantity-override`,
+        {
+          quantityCalculationId,
+          quantity: overrideQuantity,
+          reason: overrideReason,
+          expected: {
+            boqId: boq.id,
+            boqVersion: boq.version,
+            boqRevisionNumber: boq.revisionNumber,
+            itemQuantity: item.quantity,
+            itemUnit: item.unit,
+            calculationResultValue: item.quantity,
+          },
+        },
+      );
+      setOverrideReceipts((current) => ({ ...current, [item.id]: result.override }));
+      setOverrideItemId(null);
+      onBoqUpdated?.(result.boq);
+    } catch (error) {
+      setOverrideError(getApiErrorMessage(error));
+    } finally {
+      setOverrideSaving(false);
+    }
+  }
+
   if (items.length === 0) {
     return (
       <section aria-labelledby="rate-only-heading" className="rounded-3xl border border-slate-800 bg-slate-950 p-6">
@@ -168,13 +266,17 @@ export function RateOnlyBOQEditor({
             Quantara generated the scope, descriptions, units and quantities. Enter only your rate for each item.
           </p>
         </div>
-        <p className="text-sm text-slate-300" role="status" aria-live="polite">
-          {immutable
-            ? "This revision is read-only."
-            : dirtyCount > 0
-              ? `${dirtyCount} unsaved rate ${dirtyCount === 1 ? "change" : "changes"}`
-              : "All rate changes saved"}
-        </p>
+        <div className="text-end text-sm text-slate-300" role="status" aria-live="polite">
+          <p>{missingRateCount} zero or missing rates remaining</p>
+          <p className="mt-1 font-semibold text-white">Estimated total from entered rates: {formatCurrency(estimatedTotal, currency)}</p>
+          <p className="mt-1 text-xs text-slate-400">
+            {immutable
+              ? "This revision is read-only."
+              : dirtyCount > 0
+                ? `${dirtyCount} unsaved rate ${dirtyCount === 1 ? "change" : "changes"}`
+                : "All rate changes saved"}
+          </p>
+        </div>
       </div>
 
       <div className="overflow-x-auto rounded-3xl border border-slate-800 bg-slate-950">
@@ -203,6 +305,10 @@ export function RateOnlyBOQEditor({
               const inputId = `unit-rate-${item.id}`;
               const errorId = `${inputId}-error`;
               const dirty = draft.value !== draft.savedValue;
+              const categoryPath = categoryPathFromNotes(item.notes);
+              const quantityCalculationId = item.integrity?.quantity.quantityCalculationId;
+              const canRequestOverride = !immutable && Boolean(quantityCalculationId && boq.version && boq.revisionNumber);
+              const overrideReceipt = overrideReceipts[item.id];
 
               return (
                 <tr key={item.id} className="align-top text-slate-200">
@@ -225,7 +331,60 @@ export function RateOnlyBOQEditor({
                         <dd>{item.sourceReference || "Not provided"}</dd>
                         <dt>Room or zone</dt>
                         <dd>{item.roomOrZone || "Not provided"}</dd>
+                        <dt>Category path</dt>
+                        <dd>{categoryPath ?? "Not available"}</dd>
                       </dl>
+                      {overrideReceipt ? (
+                        <div className="mt-3 rounded-xl border border-amber-700/50 bg-amber-950/30 p-3 text-amber-100" role="status">
+                          <p className="font-semibold">Quantity override recorded</p>
+                          <p className="mt-1">Original AI quantity: {overrideReceipt.originalSystemQuantity} {overrideReceipt.unit}</p>
+                          <p>Replacement quantity: {overrideReceipt.quantity} {overrideReceipt.unit}</p>
+                          <p>Audit: {overrideReceipt.actorName} · {new Date(overrideReceipt.overriddenAt).toLocaleString()}</p>
+                          <p>Reason: {overrideReceipt.reason}</p>
+                        </div>
+                      ) : null}
+                      {canRequestOverride ? (
+                        <div className="mt-3 border-t border-slate-700 pt-3">
+                          {overrideItemId === item.id ? (
+                            <div className="space-y-3">
+                              <p className="font-semibold text-slate-200">Original AI quantity: {overrideOriginalQuantity} {item.unit}</p>
+                              <label className="block">
+                                <span className="text-slate-300">Replacement quantity</span>
+                                <input
+                                  name={`overrideQuantity-${item.id}`}
+                                  type="text"
+                                  inputMode="decimal"
+                                  value={overrideQuantity}
+                                  onChange={(event) => setOverrideQuantity(event.target.value)}
+                                  className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-white outline-none focus:ring-2 focus:ring-blue-500"
+                                />
+                              </label>
+                              <label className="block">
+                                <span className="text-slate-300">Mandatory reason</span>
+                                <textarea
+                                  name={`overrideReason-${item.id}`}
+                                  value={overrideReason}
+                                  onChange={(event) => setOverrideReason(event.target.value)}
+                                  aria-invalid={Boolean(overrideError)}
+                                  aria-describedby={overrideError ? `override-error-${item.id}` : undefined}
+                                  className="mt-1 min-h-20 w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-white outline-none focus:ring-2 focus:ring-blue-500"
+                                />
+                              </label>
+                              {overrideError ? <p id={`override-error-${item.id}`} role="alert" className="text-red-300">{overrideError}</p> : null}
+                              <div className="flex flex-wrap gap-2">
+                                <button type="button" onClick={() => void submitQuantityOverride(item)} disabled={overrideSaving} className="rounded-lg bg-amber-600 px-3 py-2 font-semibold text-white focus:outline-none focus:ring-2 focus:ring-amber-400 disabled:opacity-50">
+                                  {overrideSaving ? "Saving override…" : "Save audited override"}
+                                </button>
+                                <button type="button" onClick={() => setOverrideItemId(null)} className="rounded-lg border border-slate-700 px-3 py-2 font-semibold text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500">Cancel</button>
+                              </div>
+                            </div>
+                          ) : (
+                            <button type="button" onClick={() => openQuantityOverride(item)} className="font-semibold text-amber-300 underline decoration-amber-500/60 underline-offset-4 focus:outline-none focus:ring-2 focus:ring-amber-400">
+                              Request quantity override
+                            </button>
+                          )}
+                        </div>
+                      ) : null}
                     </details>
                   </td>
                   <td className="whitespace-nowrap px-4 py-4 text-right tabular-nums">{item.quantity}</td>

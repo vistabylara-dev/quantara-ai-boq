@@ -5,12 +5,18 @@ import {
 } from "@/lib/guidance/guide-registry";
 import {
   getProjectBoqHref,
+  getProjectDocumentsHref,
   getProjectExtractionsHref,
   getProjectFilesHref,
+  getProjectVerificationHref,
 } from "@/lib/guidance/guide-navigation";
 import type { ProjectWorkflowSnapshot } from "@/lib/guidance/project-workflow-snapshot";
+import type {
+  NextStepAction,
+  WorkflowStepStatus,
+} from "@/lib/workflow/boq-workflow-state";
 
-export type ProjectWorkflowStageState = "COMPLETE" | "CURRENT" | "NEEDS_ATTENTION" | "NOT_STARTED";
+export type ProjectWorkflowStageState = "COMPLETE" | "CURRENT" | "NEEDS_ATTENTION" | "NOT_STARTED" | "NOT_REQUIRED";
 export type ProjectWorkflowStageId = GuideStageId;
 
 export type ProjectWorkflowStage = {
@@ -73,6 +79,8 @@ export type ProjectWorkflowResult = {
   extractionSummary: ProjectWorkflowExtractionSummary;
   factualSummary: string[];
   completedStageCount: number;
+  notRequiredStageCount: number;
+  satisfiedStageCount: number;
   progressPercentage: number;
   snapshot: ProjectWorkflowSnapshot;
 };
@@ -125,6 +133,51 @@ function pluralize(count: number, singular: string, plural = `${singular}s`): st
 
 function countStatuses(statuses: readonly string[], accepted: ReadonlySet<string>): number {
   return statuses.filter((status) => accepted.has(status)).length;
+}
+
+function mapBoqWorkflowStatus(status: WorkflowStepStatus): ProjectWorkflowStageState {
+  return status;
+}
+
+function getBoqWorkflowActionHref(
+  action: NonNullable<NextStepAction["ctaAction"]>,
+  projectId: string,
+): string {
+  switch (action) {
+    case "open_files":
+      return getProjectFilesHref(projectId);
+    case "review_extractions":
+      return getProjectExtractionsHref(projectId);
+    case "review_dimensions":
+      return getProjectBoqHref(projectId, "review_dimensions");
+    case "review_calculations":
+      return getProjectBoqHref(projectId, "review_calculations");
+    case "view_boq":
+      return getProjectBoqHref(projectId, "view_boq");
+    case "open_boq":
+    case "lock_boq":
+      return getProjectBoqHref(projectId);
+    case "run_validation":
+      return getProjectVerificationHref(projectId);
+    case "view_output":
+      return getProjectDocumentsHref(projectId);
+    default: {
+      const unreachableAction: never = action;
+      return unreachableAction;
+    }
+  }
+}
+
+function mapBoqWorkflowNextStep(
+  action: NextStepAction,
+  projectId: string,
+): ProjectWorkflowNextStep | null {
+  if (action.ctaAction === null) return null;
+  return {
+    message: action.message,
+    ctaLabel: action.ctaLabel,
+    href: getBoqWorkflowActionHref(action.ctaAction, projectId),
+  };
 }
 
 function legacySnapshot(input: ProjectWorkflowInput): ProjectWorkflowSnapshot {
@@ -367,12 +420,43 @@ export function deriveProjectWorkflow(input: ProjectWorkflowInput): ProjectWorkf
     states.BOQ = "CURRENT";
   }
 
+  if (input.projectExists && snapshot.boqWorkflow) {
+    const boqSteps = new Map(
+      snapshot.boqWorkflow.steps.map((step) => [step.id, step.status]),
+    );
+    const laterStageMappings = [
+      ["dimensions", "DIMENSIONS"],
+      ["calculation", "CALCULATIONS"],
+      ["boq_review", "REVIEW"],
+      ["validation", "VALIDATION"],
+      ["output", "OUTPUT"],
+    ] as const;
+
+    for (const [boqStepId, projectStageId] of laterStageMappings) {
+      const status = boqSteps.get(boqStepId);
+      if (status) states[projectStageId] = mapBoqWorkflowStatus(status);
+    }
+
+    if (snapshot.boq.isLocked === true) {
+      states.BOQ = "COMPLETE";
+    }
+
+    // The richer BOQ model may recommend a later action only after the
+    // detailed source/extraction model has proved those earlier stages done.
+    // Source failures and pending professional review always retain priority.
+    if (states.SOURCES === "COMPLETE" && states.EXTRACTION === "COMPLETE") {
+      nextStep = mapBoqWorkflowNextStep(snapshot.boqWorkflow.nextAction, input.projectId);
+    }
+  }
+
   const stages = GUIDE_STAGE_IDS.map((stageId) => ({
     id: stageId,
     label: getGuideStageDefinition(stageId).title,
     state: states[stageId],
   }));
   const completedStageCount = stages.filter((stage) => stage.state === "COMPLETE").length;
+  const notRequiredStageCount = stages.filter((stage) => stage.state === "NOT_REQUIRED").length;
+  const satisfiedStageCount = completedStageCount + notRequiredStageCount;
 
   return {
     projectExists: input.projectExists,
@@ -383,7 +467,9 @@ export function deriveProjectWorkflow(input: ProjectWorkflowInput): ProjectWorkf
     extractionSummary,
     factualSummary: buildFactualSummary(snapshot, input.projectExists),
     completedStageCount,
-    progressPercentage: Math.round((completedStageCount / GUIDE_STAGE_IDS.length) * 100),
+    notRequiredStageCount,
+    satisfiedStageCount,
+    progressPercentage: Math.round((satisfiedStageCount / GUIDE_STAGE_IDS.length) * 100),
     snapshot,
   };
 }

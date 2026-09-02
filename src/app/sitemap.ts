@@ -9,12 +9,23 @@ import {
 export default function sitemap(): MetadataRoute.Sitemap {
   const registeredPages = PUBLIC_SEARCH_PAGES
     .filter((entry) => entry.indexable !== false)
-    .map((entry) => ({
-      url: `${PUBLIC_SITE_ORIGIN}${entry.path === "/" ? "" : entry.path}`,
-      lastModified: new Date(PUBLIC_CONTENT_REVIEW_DATE),
-      changeFrequency: entry.changeFrequency ?? "monthly",
-      priority: entry.priority ?? 0.8,
-    }));
+    .map((entry) => {
+      const enUrl = `${PUBLIC_SITE_ORIGIN}${entry.path === "/" ? "" : entry.path}`;
+      const arUrl = `${PUBLIC_SITE_ORIGIN}/ar${entry.path === "/" ? "" : entry.path}`;
+      return {
+        url: enUrl,
+        lastModified: new Date(PUBLIC_CONTENT_REVIEW_DATE),
+        changeFrequency: entry.changeFrequency ?? "monthly",
+        priority: entry.priority ?? 0.8,
+        alternates: {
+          languages: {
+            "en-AE": enUrl,
+            "ar-AE": arUrl,
+            "x-default": enUrl,
+          }
+        }
+      };
+    });
 
   const integrationPages = PUBLIC_INTEGRATION_PATHS.map((path) => ({
     url: `${PUBLIC_SITE_ORIGIN}${path}`,

@@ -16,7 +16,10 @@ import {
 } from "@/lib/public-site/search-registry";
 import { buildPublicPageGraph } from "@/lib/public-site/schema";
 
-export const metadata = createPublicPageMetadata("/boq-integrations");
+export async function generateMetadata() {
+  const locale = await getServerLocale();
+  return createPublicPageMetadata("/boq-integrations", locale);
+}
 
 const copy = {
   en: {

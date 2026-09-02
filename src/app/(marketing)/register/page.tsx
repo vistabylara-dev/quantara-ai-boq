@@ -1,3 +1,4 @@
+import { getServerLocale } from "@/lib/i18n/server-locale";
 "use client";
 
 import Link from "next/link";

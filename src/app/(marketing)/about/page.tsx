@@ -10,7 +10,10 @@ import { getDictionary } from "@/lib/i18n/dictionaries";
 import { getServerLocale } from "@/lib/i18n/server-locale";
 import { createTranslator, translateStructuredContent } from "@/lib/i18n/translate";
 
-export const metadata = createPublicPageMetadata("/about");
+export async function generateMetadata() {
+  const locale = await getServerLocale();
+  return createPublicPageMetadata("/about", locale);
+}
 
 const searchEntry = getPublicSearchPage("/about");
 const pageSchema = buildPublicPageGraph({

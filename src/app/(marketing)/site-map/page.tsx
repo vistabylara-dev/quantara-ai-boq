@@ -11,7 +11,10 @@ import {
 } from "@/lib/public-site/search-registry";
 import { buildPublicPageGraph } from "@/lib/public-site/schema";
 
-export const metadata = createPublicPageMetadata("/site-map");
+export async function generateMetadata() {
+  const locale = await getServerLocale();
+  return createPublicPageMetadata("/site-map", locale);
+}
 
 export default async function SiteMapPage() {
   const locale = await getServerLocale();

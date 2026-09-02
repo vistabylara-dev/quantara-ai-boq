@@ -171,7 +171,7 @@ export default function PublicHeader() {
                     id={panelId}
                     role="region"
                     aria-labelledby={buttonId}
-                    className="absolute top-full left-0 mt-2 w-[600px] max-w-[90vw] -translate-x-1/4 bg-slate-950 rounded-xl shadow-xl border border-slate-800 p-6 grid grid-cols-2 gap-8 z-50"
+                    className="absolute top-full start-0 mt-2 w-[600px] max-w-[90vw] -translate-x-1/4 bg-slate-950 rounded-xl shadow-xl border border-slate-800 p-6 grid grid-cols-2 gap-8 z-50"
                   >
                     {section.groups.map((group, gIndex) => (
                       <div key={gIndex} className={section.groups.length === 1 ? "col-span-2" : "col-span-1"}>
@@ -231,7 +231,7 @@ export default function PublicHeader() {
             aria-expanded={mobileMenuOpen}
             aria-controls="mobile-navigation"
             aria-label={mobileMenuOpen ? t("publicSite.header.closeMenu") : t("publicSite.header.openMenu")}
-            className="lg:hidden p-2 -mr-2 text-slate-300 hover:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 rounded-md"
+            className="lg:hidden p-2 -me-2 text-slate-300 hover:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 rounded-md"
             onClick={() => {
               if (mobileMenuOpen) closeMobileMenu();
               else setMobileMenuOpen(true);
@@ -250,7 +250,7 @@ export default function PublicHeader() {
           role="dialog"
           aria-modal="true"
           aria-label={t("publicSite.header.mobileNavigation")}
-          className="absolute left-0 right-0 top-full z-40 h-[calc(100vh-4rem)] overflow-y-auto bg-slate-950"
+          className="absolute start-0 end-0 top-full z-40 h-[calc(100vh-4rem)] overflow-y-auto bg-slate-950"
         >
           <div className="px-4 py-6 space-y-2">
             {navigation.map((section) => {
@@ -265,7 +265,7 @@ export default function PublicHeader() {
                     aria-expanded={isOpen}
                     aria-controls={panelId}
                     onClick={() => toggleMobileSection(section.label)}
-                    className="flex items-center justify-between w-full py-3 text-left text-lg font-medium text-white focus:outline-none focus:ring-2 focus:ring-blue-500 rounded-md px-2 -mx-2"
+                    className="flex items-center justify-between w-full py-3 text-start text-lg font-medium text-white focus:outline-none focus:ring-2 focus:ring-blue-500 rounded-md px-2 -mx-2"
                   >
                     {section.label}
                     <ChevronDown className={`w-5 h-5 text-slate-400 transition-transform duration-200 ${isOpen ? "rotate-180" : ""}`} aria-hidden="true" />
@@ -286,7 +286,7 @@ export default function PublicHeader() {
                                 >
                                   <span>{item.label}</span>
                                   {item.status ? (
-                                    <span className="ml-2 rounded-full bg-blue-950 px-2 py-0.5 text-[10px] font-bold text-blue-200">
+                                    <span className="ms-2 rounded-full bg-blue-950 px-2 py-0.5 text-[10px] font-bold text-blue-200">
                                       {item.status}
                                     </span>
                                   ) : null}

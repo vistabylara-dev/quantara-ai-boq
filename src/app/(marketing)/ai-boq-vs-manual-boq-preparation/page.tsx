@@ -1,7 +1,11 @@
+import { getServerLocale } from "@/lib/i18n/server-locale";
 import { createPublicPageMetadata } from "@/lib/public-site/search-registry";
 import { ComparisonPage } from '@/components/layout/comparison-page';
 
-export const metadata = createPublicPageMetadata("/ai-boq-vs-manual-boq-preparation");
+export async function generateMetadata() {
+  const locale = await getServerLocale();
+  return createPublicPageMetadata("/ai-boq-vs-manual-boq-preparation", locale);
+}
 
 
 

@@ -1,3 +1,4 @@
+import { getServerLocale } from "@/lib/i18n/server-locale";
 "use client";
 
 import React, { useEffect, useRef, useState } from "react";

@@ -1,3 +1,4 @@
+import { getServerLocale } from "@/lib/i18n/server-locale";
 import Link from "next/link";
 import {
   AlertTriangle,
@@ -19,7 +20,10 @@ import {
 import { buildPublicPageGraph } from "@/lib/public-site/schema";
 import { getPublicCapability } from "@/lib/public-site/product-truth";
 
-export const metadata = createPublicPageMetadata("/boq-software-comparison-uae");
+export async function generateMetadata() {
+  const locale = await getServerLocale();
+  return createPublicPageMetadata("/boq-software-comparison-uae", locale);
+}
 
 const REVIEW_DATE = "20 August 2026";
 
@@ -414,7 +418,7 @@ export default function BoqSoftwareComparisonUaePage() {
                 href="#comparison-matrix"
                 className="inline-flex h-12 items-center justify-center rounded-lg bg-blue-600 px-6 font-semibold text-white transition-colors hover:bg-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-300"
               >
-                Compare the software <ArrowRight className="ml-2 h-4 w-4" aria-hidden="true" />
+                Compare the software <ArrowRight className="ms-2 h-4 w-4" aria-hidden="true" />
               </a>
               <Link
                 href="/features"
@@ -515,11 +519,11 @@ export default function BoqSoftwareComparisonUaePage() {
                 </dl>
                 {vendor.sourceUrl.startsWith("/") ? (
                   <Link href={vendor.sourceUrl} className="mt-6 inline-flex items-center text-sm font-semibold text-blue-300 hover:text-blue-200">
-                    {vendor.sourceLabel} <ArrowRight className="ml-2 h-4 w-4" aria-hidden="true" />
+                    {vendor.sourceLabel} <ArrowRight className="ms-2 h-4 w-4" aria-hidden="true" />
                   </Link>
                 ) : (
                   <a href={vendor.sourceUrl} target="_blank" rel="noopener noreferrer" className="mt-6 inline-flex items-center text-sm font-semibold text-blue-300 hover:text-blue-200">
-                    {vendor.sourceLabel}<span className="sr-only"> (opens in a new tab)</span> <ExternalLink className="ml-2 h-4 w-4" aria-hidden="true" />
+                    {vendor.sourceLabel}<span className="sr-only"> (opens in a new tab)</span> <ExternalLink className="ms-2 h-4 w-4" aria-hidden="true" />
                   </a>
                 )}
               </article>
@@ -532,11 +536,11 @@ export default function BoqSoftwareComparisonUaePage() {
             tabIndex={0}
             className="hidden overflow-x-auto rounded-2xl border border-slate-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950 lg:block"
           >
-            <table className="min-w-[1500px] border-collapse text-left text-sm">
+            <table className="min-w-[1500px] border-collapse text-start text-sm">
               <caption className="sr-only">Comparison of Quantara, RIB CostX, RIB Candy, Procore Estimating, Autodesk Forma Takeoff, STACK and PlanSwift</caption>
               <thead className="bg-slate-900 text-slate-200">
                 <tr>
-                  <th scope="col" className="sticky left-0 z-10 w-44 border-r border-slate-800 bg-slate-900 px-5 py-4">Product</th>
+                  <th scope="col" className="sticky start-0 z-10 w-44 border-r border-slate-800 bg-slate-900 px-5 py-4">Product</th>
                   <th scope="col" className="w-56 px-5 py-4">Best fit</th>
                   <th scope="col" className="w-48 px-5 py-4">Inputs</th>
                   <th scope="col" className="w-60 px-5 py-4">BOQ / estimate workflow</th>
@@ -550,16 +554,16 @@ export default function BoqSoftwareComparisonUaePage() {
               <tbody className="divide-y divide-slate-800 bg-slate-950/70">
                 {vendors.map((vendor) => (
                   <tr key={vendor.name} className="align-top hover:bg-slate-900/60">
-                    <th scope="row" className="sticky left-0 z-10 border-r border-slate-800 bg-slate-950 px-5 py-5">
+                    <th scope="row" className="sticky start-0 z-10 border-r border-slate-800 bg-slate-950 px-5 py-5">
                       <span className="block font-bold text-white">{vendor.name}</span>
                       <span className="mt-2 block text-xs font-medium text-cyan-300">{vendor.category}</span>
                       {vendor.sourceUrl.startsWith("/") ? (
                         <Link href={vendor.sourceUrl} className="mt-3 inline-flex items-center text-xs font-semibold text-blue-300 hover:text-blue-200">
-                          Quantara capability register <ArrowRight className="ml-1 h-3 w-3" aria-hidden="true" />
+                          Quantara capability register <ArrowRight className="ms-1 h-3 w-3" aria-hidden="true" />
                         </Link>
                       ) : (
                         <a href={vendor.sourceUrl} target="_blank" rel="noopener noreferrer" className="mt-3 inline-flex items-center text-xs font-semibold text-blue-300 hover:text-blue-200">
-                          Official source<span className="sr-only"> for {vendor.name} (opens in a new tab)</span> <ExternalLink className="ml-1 h-3 w-3" aria-hidden="true" />
+                          Official source<span className="sr-only"> for {vendor.name} (opens in a new tab)</span> <ExternalLink className="ms-1 h-3 w-3" aria-hidden="true" />
                         </a>
                       )}
                     </th>
@@ -647,7 +651,7 @@ export default function BoqSoftwareComparisonUaePage() {
             </div>
           </div>
           <Link href="/features" className="mt-6 inline-flex items-center text-sm font-semibold text-blue-300 hover:text-blue-200">
-            Read every Quantara capability status and dependency <ArrowRight className="ml-2 h-4 w-4" aria-hidden="true" />
+            Read every Quantara capability status and dependency <ArrowRight className="ms-2 h-4 w-4" aria-hidden="true" />
           </Link>
         </section>
 
@@ -709,11 +713,11 @@ export default function BoqSoftwareComparisonUaePage() {
               <li key={vendor.name}>
                 {vendor.sourceUrl.startsWith("/") ? (
                   <Link href={vendor.sourceUrl} className="inline-flex items-center text-sm font-semibold text-blue-300 hover:text-blue-200">
-                    {vendor.sourceLabel} <ArrowRight className="ml-2 h-4 w-4" aria-hidden="true" />
+                    {vendor.sourceLabel} <ArrowRight className="ms-2 h-4 w-4" aria-hidden="true" />
                   </Link>
                 ) : (
                   <a href={vendor.sourceUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center text-sm font-semibold text-blue-300 hover:text-blue-200">
-                    {vendor.sourceLabel}<span className="sr-only"> (opens in a new tab)</span> <ExternalLink className="ml-2 h-4 w-4" aria-hidden="true" />
+                    {vendor.sourceLabel}<span className="sr-only"> (opens in a new tab)</span> <ExternalLink className="ms-2 h-4 w-4" aria-hidden="true" />
                   </a>
                 )}
               </li>
@@ -724,7 +728,7 @@ export default function BoqSoftwareComparisonUaePage() {
             {supportingSources.map((source) => (
               <li key={source.url}>
                 <a href={source.url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center text-sm font-semibold text-blue-300 hover:text-blue-200">
-                  {source.label}<span className="sr-only"> (opens in a new tab)</span> <ExternalLink className="ml-2 h-4 w-4" aria-hidden="true" />
+                  {source.label}<span className="sr-only"> (opens in a new tab)</span> <ExternalLink className="ms-2 h-4 w-4" aria-hidden="true" />
                 </a>
               </li>
             ))}
@@ -738,7 +742,7 @@ export default function BoqSoftwareComparisonUaePage() {
           </p>
           <div className="flex flex-col justify-center gap-3 sm:flex-row">
             <Link href="/pricing" className="inline-flex h-12 items-center justify-center rounded-lg bg-white px-6 font-semibold text-blue-800 hover:bg-blue-50">
-              View published pricing <ArrowRight className="ml-2 h-4 w-4" aria-hidden="true" />
+              View published pricing <ArrowRight className="ms-2 h-4 w-4" aria-hidden="true" />
             </Link>
             <a href="https://wa.me/971507994292" className="inline-flex h-12 items-center justify-center rounded-lg border border-blue-300 px-6 font-semibold text-white hover:bg-blue-800">
               Discuss on WhatsApp

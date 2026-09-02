@@ -1,9 +1,13 @@
+import { getServerLocale } from "@/lib/i18n/server-locale";
 import { createPublicPageMetadata } from "@/lib/public-site/search-registry";
 import React from "react";
 import Link from "next/link";
 import SeoLandingPage, { SeoLandingPageContent } from "@/components/layout/seo-landing-page";
 
-export const metadata = createPublicPageMetadata("/ai-boq-software");
+export async function generateMetadata() {
+  const locale = await getServerLocale();
+  return createPublicPageMetadata("/ai-boq-software", locale);
+}
 
 const content: SeoLandingPageContent = {
   breadcrumbLabel: "AI BOQ Software",

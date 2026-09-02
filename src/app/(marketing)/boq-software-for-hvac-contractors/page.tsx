@@ -1,7 +1,11 @@
+import { getServerLocale } from "@/lib/i18n/server-locale";
 import { createPublicPageMetadata } from "@/lib/public-site/search-registry";
 import IndustryLandingPage, { IndustryLandingPageContent } from "@/components/layout/industry-landing-page";
 
-export const metadata = createPublicPageMetadata("/boq-software-for-hvac-contractors");
+export async function generateMetadata() {
+  const locale = await getServerLocale();
+  return createPublicPageMetadata("/boq-software-for-hvac-contractors", locale);
+}
 
 
 

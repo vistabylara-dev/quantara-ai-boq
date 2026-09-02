@@ -4,7 +4,10 @@ import { getDictionary } from "@/lib/i18n/dictionaries";
 import { getServerLocale } from "@/lib/i18n/server-locale";
 import { createTranslator } from "@/lib/i18n/translate";
 
-export const metadata = createPublicPageMetadata("/boq-software-uae");
+export async function generateMetadata() {
+  const locale = await getServerLocale();
+  return createPublicPageMetadata("/boq-software-uae", locale);
+}
 
 
 

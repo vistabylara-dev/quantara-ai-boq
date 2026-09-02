@@ -38,10 +38,16 @@ function isPublicPage(pathname: string): boolean {
  * and to bounce already-signed-in-looking users away from /login.
  */
 export function middleware(request: NextRequest) {
-  const { pathname } = request.nextUrl;
+  let { pathname } = request.nextUrl;
 
   if (pathname.startsWith("/api/") || pathname.startsWith("/_next/")) {
     return NextResponse.next();
+  }
+
+  let localeToSet = "";
+  if (pathname === "/ar" || pathname.startsWith("/ar/")) {
+    localeToSet = "ar";
+    pathname = pathname === "/ar" ? "/" : pathname.substring(3);
   }
 
   const hasSessionCookie = Boolean(request.cookies.get(SESSION_COOKIE_NAME)?.value);
@@ -59,6 +65,14 @@ export function middleware(request: NextRequest) {
 
   const requestHeaders = new Headers(request.headers);
   requestHeaders.set(PUBLIC_PATHNAME_HEADER, pathname);
+  if (localeToSet) {
+    requestHeaders.set("x-quantara-locale", localeToSet);
+    return NextResponse.rewrite(new URL(pathname, request.url), {
+      request: {
+        headers: requestHeaders,
+      },
+    });
+  }
 
   return NextResponse.next({
     request: {

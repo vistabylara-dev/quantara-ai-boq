@@ -4066,6 +4066,20 @@ const ar: Dictionary = {
     emailDeliveryFailed: "تعذّر تسليم البريد الإلكتروني — تحقق من إعدادات مزوّد البريد.",
     reportEmailSent: "تم إرسال بريد التقرير.",
   },
+  leadCapture: {
+    title: "ابحث عن باقة Quantara المناسبة",
+    description: "أخبرنا عن شركتك وسنساعدك في تحديد باقة Quantara الأنسب، والكتالوج القطاعي، والتكاملات المتاحة.",
+    success: "شكراً لك. تم استلام طلبك.",
+    fullName: "الاسم الكامل",
+    email: "البريد الإلكتروني للعمل",
+    mobile: "واتساب / هاتف محمول",
+    company: "الشركة",
+    industry: "القطاع",
+    marketingConsent: "أوافق على تلقي تحديثات منتجات Quantara والعروض عبر البريد الإلكتروني أو واتساب.",
+    submit: "احصل على خيارات Quantara الخاصة بي",
+    submitting: "جاري الإرسال...",
+    packageInterest: "الباقة المهتم بها:"
+  },
 };
 
 export default ar;

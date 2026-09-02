@@ -1,6 +1,11 @@
 import type { CurrentActor } from "@/lib/auth/current-actor";
 import { prisma } from "@/lib/db/prisma";
 import { getProjectRecord } from "@/lib/repositories/project-repository";
+import {
+  computeBoqWorkflowState,
+  type NextStepAction,
+  type WorkflowStep,
+} from "@/lib/workflow/boq-workflow-state";
 
 export type ProvenCount = number | null;
 
@@ -65,11 +70,18 @@ export type ProjectWorkflowSnapshot = {
   };
   boq: {
     exists: boolean | null;
+    itemCount?: ProvenCount;
+    isLocked?: boolean | null;
+    completedDocumentCount?: ProvenCount;
   };
   quantityCalculations?: {
     total: ProvenCount;
     confirmed: ProvenCount;
   };
+  boqWorkflow?: {
+    steps: Array<Pick<WorkflowStep, "id" | "status">>;
+    nextAction: NextStepAction;
+  } | null;
   sources: ProjectSourceSnapshot[];
 };
 
@@ -96,6 +108,27 @@ export type ProjectWorkflowSnapshotJobRecord = {
   resultSummary?: unknown;
 };
 
+export type ProjectWorkflowSnapshotEntityRecord = {
+  id: string;
+  status: string | null | undefined;
+  quantity: number | null;
+  unit: string | null;
+};
+
+export type ProjectWorkflowSnapshotCalculationRecord = {
+  id: string;
+  extractedEntityId: string | null;
+  status: string | null | undefined;
+  inputValues?: Record<string, number> | null;
+};
+
+export type ProjectWorkflowSnapshotActiveBoqRecord = {
+  itemCount: number;
+  isLocked: boolean;
+  completedDocumentCount: number | null;
+  validationWarningCount?: number | null;
+};
+
 export type ProjectWorkflowSnapshotRecords = {
   projectId: string;
   projectSlug: string;
@@ -103,6 +136,9 @@ export type ProjectWorkflowSnapshotRecords = {
   jobs?: readonly ProjectWorkflowSnapshotJobRecord[] | null;
   entityStatuses?: readonly (string | null | undefined)[] | null;
   calculationStatuses?: readonly (string | null | undefined)[] | null;
+  entities?: readonly ProjectWorkflowSnapshotEntityRecord[] | null;
+  calculations?: readonly ProjectWorkflowSnapshotCalculationRecord[] | null;
+  activeBoq?: ProjectWorkflowSnapshotActiveBoqRecord | null;
   hasBoq?: boolean | null;
 };
 
@@ -180,6 +216,35 @@ function toTimestamp(value: Date | string): number {
 function nullableStatusCount(statusCounts: Record<string, number> | null, ...statuses: string[]): number | null {
   if (statusCounts === null) return null;
   return statuses.reduce((total, status) => total + (statusCounts[status] ?? 0), 0);
+}
+
+function normalizeProvenCount(value: number | null | undefined): ProvenCount {
+  return typeof value === "number" && Number.isInteger(value) && value >= 0 ? value : null;
+}
+
+function toFiniteNumber(value: unknown): number | null {
+  if (typeof value === "number") return Number.isFinite(value) ? value : null;
+  if (value === null || typeof value !== "object") return null;
+
+  const decimal = value as { toNumber?: unknown };
+  if (typeof decimal.toNumber !== "function") return null;
+  try {
+    const numberValue = decimal.toNumber();
+    return typeof numberValue === "number" && Number.isFinite(numberValue) ? numberValue : null;
+  } catch {
+    return null;
+  }
+}
+
+function normalizeNumericInputValues(value: unknown): Record<string, number> | null {
+  if (!isRecord(value)) return null;
+
+  return Object.fromEntries(
+    Object.entries(value).flatMap(([key, input]) => {
+      const numericInput = toFiniteNumber(input);
+      return numericInput === null ? [] : [[key, numericInput]];
+    }),
+  );
 }
 
 export function buildProjectWorkflowSnapshot(
@@ -286,9 +351,12 @@ export function buildProjectWorkflowSnapshot(
   const pageCount = sumKnown(sources.map((source) => source.pageCount));
   const tableCount = sumKnown(sources.map((source) => source.tableCount));
 
-  const entityStatuses = records.entityStatuses === null || records.entityStatuses === undefined
+  const rawEntityStatuses = records.entities === undefined
+    ? records.entityStatuses
+    : records.entities?.map((entity) => entity.status);
+  const entityStatuses = rawEntityStatuses === null || rawEntityStatuses === undefined
     ? null
-    : records.entityStatuses.map(normalizeStatus);
+    : rawEntityStatuses.map(normalizeStatus);
   const entityStatusCounts = entityStatuses === null ? null : countByStatus(entityStatuses);
   const reviewedEntityCount = entityStatuses === null
     ? null
@@ -299,10 +367,48 @@ export function buildProjectWorkflowSnapshot(
   const unknownEntityCount = entityStatuses === null
     ? null
     : entityStatuses.length - (reviewedEntityCount ?? 0) - (reviewableEntityCount ?? 0);
-  const calculationStatuses = records.calculationStatuses === null || records.calculationStatuses === undefined
+  const rawCalculationStatuses = records.calculations === undefined
+    ? records.calculationStatuses
+    : records.calculations?.map((calculation) => calculation.status);
+  const calculationStatuses = rawCalculationStatuses === null || rawCalculationStatuses === undefined
     ? null
-    : records.calculationStatuses.map(normalizeStatus);
+    : rawCalculationStatuses.map(normalizeStatus);
   const calculationStatusCounts = calculationStatuses === null ? null : countByStatus(calculationStatuses);
+  const activeBoqProvided = records.activeBoq !== undefined;
+  const activeBoq = records.activeBoq ?? null;
+  const itemCount = activeBoqProvided
+    ? activeBoq === null ? 0 : normalizeProvenCount(activeBoq.itemCount)
+    : null;
+  const completedDocumentCount = activeBoqProvided
+    ? activeBoq === null ? 0 : normalizeProvenCount(activeBoq.completedDocumentCount)
+    : null;
+  const boqWorkflow = activeBoq
+    && records.entities !== null
+    && records.entities !== undefined
+    && records.calculations !== null
+    && records.calculations !== undefined
+    && itemCount !== null
+    && completedDocumentCount !== null
+    ? computeBoqWorkflowState({
+        fileCount: sources.length,
+        extractedEntities: records.entities.map((entity) => ({
+          id: entity.id,
+          status: normalizeStatus(entity.status),
+          quantity: toFiniteNumber(entity.quantity),
+          unit: entity.unit,
+        })),
+        calculations: records.calculations.map((calculation) => ({
+          id: calculation.id,
+          extractedEntityId: calculation.extractedEntityId,
+          status: normalizeStatus(calculation.status),
+          inputValues: calculation.inputValues ?? null,
+        })),
+        boqItemCount: itemCount,
+        validationWarningCount: normalizeProvenCount(activeBoq.validationWarningCount),
+        generatedDocumentCount: completedDocumentCount,
+        isLocked: activeBoq.isLocked,
+      })
+    : null;
 
   return {
     projectId: records.projectId,
@@ -344,11 +450,22 @@ export function buildProjectWorkflowSnapshot(
       imported: nullableStatusCount(entityStatusCounts, "IMPORTED"),
       unknown: unknownEntityCount,
     },
-    boq: { exists: records.hasBoq ?? null },
+    boq: {
+      exists: activeBoqProvided ? activeBoq !== null : (records.hasBoq ?? null),
+      itemCount,
+      isLocked: activeBoqProvided ? activeBoq?.isLocked ?? false : null,
+      completedDocumentCount,
+    },
     quantityCalculations: {
       total: calculationStatuses?.length ?? null,
       confirmed: nullableStatusCount(calculationStatusCounts, "CONFIRMED"),
     },
+    boqWorkflow: boqWorkflow
+      ? {
+          steps: boqWorkflow.steps.map(({ id, status }) => ({ id, status })),
+          nextAction: boqWorkflow.nextAction,
+        }
+      : null,
     sources,
   };
 }
@@ -390,15 +507,36 @@ export async function getProjectWorkflowSnapshot(
     }),
     prisma.extractedEntity.findMany({
       where: { companyId: actor.companyId, projectId: project.id },
-      select: { status: true },
+      select: { id: true, status: true, quantity: true, unit: true },
     }),
     prisma.quantityCalculation.findMany({
       where: { companyId: actor.companyId, projectId: project.id },
-      select: { status: true },
+      select: {
+        id: true,
+        extractedEntityId: true,
+        status: true,
+        inputValuesJson: true,
+      },
     }),
     prisma.bOQ.findFirst({
       where: { companyId: actor.companyId, projectId: project.id },
-      select: { id: true },
+      orderBy: [{ revisionNumber: "desc" }, { createdAt: "desc" }],
+      select: {
+        id: true,
+        isLocked: true,
+        sections: {
+          select: { _count: { select: { items: true } } },
+        },
+        generatedDocuments: {
+          where: {
+            companyId: actor.companyId,
+            projectId: project.id,
+            status: "COMPLETED",
+            isDraft: false,
+          },
+          select: { id: true },
+        },
+      },
     }),
   ]);
 
@@ -428,6 +566,25 @@ export async function getProjectWorkflowSnapshot(
     })),
     entityStatuses: entities.map((entity) => entity.status),
     calculationStatuses: calculations.map((calculation) => calculation.status),
+    entities: entities.map((entity) => ({
+      id: entity.id,
+      status: entity.status,
+      quantity: toFiniteNumber(entity.quantity),
+      unit: entity.unit,
+    })),
+    calculations: calculations.map((calculation) => ({
+      id: calculation.id,
+      extractedEntityId: calculation.extractedEntityId,
+      status: calculation.status,
+      inputValues: normalizeNumericInputValues(calculation.inputValuesJson),
+    })),
+    activeBoq: boq
+      ? {
+          itemCount: boq.sections.reduce((total, section) => total + section._count.items, 0),
+          isLocked: boq.isLocked,
+          completedDocumentCount: boq.generatedDocuments.length,
+        }
+      : null,
     hasBoq: Boolean(boq),
   });
 }

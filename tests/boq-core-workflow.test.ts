@@ -15,6 +15,7 @@ import { runBOQVerification } from "../src/lib/repositories/verification-reposit
 import { createTemplate } from "../src/lib/repositories/document-template-repository";
 import { generateDocument, getDocumentForDownload } from "../src/lib/services/document-generation-service";
 import { getGeneratedDocumentRecord } from "../src/lib/repositories/generated-document-repository";
+import { getProjectWorkflowSnapshot } from "../src/lib/guidance/project-workflow-snapshot";
 import { localDocumentStorageAdapter } from "../src/lib/storage/local-document-storage-adapter";
 import { LockedBOQError } from "../src/lib/domain/boq-guards";
 import { NotFoundError } from "../src/lib/errors/app-error";
@@ -256,10 +257,22 @@ describe("BOQ core end-to-end workflow (integration, real local Postgres)", () =
     expect(download.buffer.byteLength).toBeGreaterThan(0);
     expect(download.buffer.subarray(0, 5).toString()).toBe("%PDF-");
 
-    // 13. Cross-tenant denial: another company cannot download this
-    // document, and cannot see this project by its slug either.
+    // 13. The project guide must read the newest R02 revision, not the older
+    // locked/documented R01. Its output therefore remains unfinished.
+    const workflowSnapshot = await getProjectWorkflowSnapshot(ownerActor(), project.databaseId);
+    expect(workflowSnapshot.boq).toMatchObject({
+      exists: true,
+      itemCount: 2,
+      isLocked: false,
+      completedDocumentCount: 0,
+    });
+    expect(workflowSnapshot.boqWorkflow?.steps).toContainEqual({ id: "output", status: "NOT_STARTED" });
+
+    // 14. Cross-tenant denial: another company cannot download this
+    // document, see the BOQ, or obtain the project workflow snapshot.
     await expect(getDocumentForDownload(otherCompanyActor(), pdfResult.id)).rejects.toThrow(NotFoundError);
     await expect(getBOQ(companyBId, boqId)).rejects.toThrow(NotFoundError);
+    await expect(getProjectWorkflowSnapshot(otherCompanyActor(), project.databaseId)).rejects.toThrow(NotFoundError);
   });
 
   it("refuses to lock a revision with no items", async () => {

@@ -7,7 +7,10 @@ import { getDictionary } from "@/lib/i18n/dictionaries";
 import { getServerLocale } from "@/lib/i18n/server-locale";
 import { createTranslator, translateStructuredContent } from "@/lib/i18n/translate";
 
-export const metadata = createPublicPageMetadata("/industries");
+export async function generateMetadata() {
+  const locale = await getServerLocale();
+  return createPublicPageMetadata("/industries", locale);
+}
 
 
 

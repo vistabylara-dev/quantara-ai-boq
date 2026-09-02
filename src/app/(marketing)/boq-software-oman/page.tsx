@@ -1,7 +1,11 @@
+import { getServerLocale } from "@/lib/i18n/server-locale";
 import { createPublicPageMetadata } from "@/lib/public-site/search-registry";
 import SeoLandingPage, { SeoLandingPageContent } from "@/components/layout/seo-landing-page";
 
-export const metadata = createPublicPageMetadata("/boq-software-oman");
+export async function generateMetadata() {
+  const locale = await getServerLocale();
+  return createPublicPageMetadata("/boq-software-oman", locale);
+}
 
 export default function Page() {
   const content: SeoLandingPageContent = {

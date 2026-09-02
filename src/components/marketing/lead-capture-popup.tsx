@@ -10,6 +10,7 @@ import {
   type FormEvent,
 } from "react";
 import { apiClient, getApiErrorMessage } from "@/lib/api/client";
+import { useTranslations } from "@/lib/i18n/locale-provider";
 import {
   hasActiveLeadDismissal,
   hasDashboardLeadSessionBeenShown,
@@ -71,6 +72,7 @@ export default function LeadCapturePopup({
   mode: "public" | "dashboard";
 }) {
   const pathname = usePathname() || "/";
+  const t = useTranslations();
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState<LeadForm>(INITIAL_FORM);
   const [packageInterest, setPackageInterest] = useState("");
@@ -323,32 +325,32 @@ export default function LeadCapturePopup({
         aria-labelledby="marketing-lead-capture-title"
         aria-describedby="marketing-lead-capture-description"
         dir="ltr"
-        className="relative max-h-[calc(100dvh-2rem)] w-full max-w-xl overflow-y-auto rounded-3xl border border-blue-400/25 bg-[#07101f] p-5 text-left text-white shadow-2xl shadow-blue-950/50 sm:p-7"
+        className="relative max-h-[calc(100dvh-2rem)] w-full max-w-xl overflow-y-auto rounded-3xl border border-blue-400/25 bg-[#07101f] p-5 text-start text-white shadow-2xl shadow-blue-950/50 sm:p-7"
       >
         <button
           ref={closeRef}
           type="button"
           onClick={dismiss}
           aria-label="Close lead form"
-          className="absolute right-4 top-4 inline-flex h-11 w-11 items-center justify-center rounded-xl border border-slate-700 text-slate-300 transition-colors hover:bg-slate-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-400"
+          className="absolute end-4 top-4 inline-flex h-11 w-11 items-center justify-center rounded-xl border border-slate-700 text-slate-300 transition-colors hover:bg-slate-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-400"
         >
           <X className="h-5 w-5" aria-hidden="true" />
         </button>
 
-        <div className="pr-14">
+        <div className="pe-14">
           <p className="text-xs font-bold uppercase tracking-[0.2em] text-blue-300">Quantara</p>
           <h2 id="marketing-lead-capture-title" className="mt-2 text-2xl font-bold sm:text-3xl">
-            Find the Right Quantara Package
+            {t("leadCapture.title")}
           </h2>
           <p id="marketing-lead-capture-description" className="mt-3 text-sm leading-6 text-slate-300">
-            Tell us about your company and we&apos;ll help you identify the most suitable Quantara package, industry catalogue and available integrations.
+            {t("leadCapture.description")}
           </p>
         </div>
 
         {status === "success" ? (
           <div className="mt-7 rounded-2xl border border-emerald-400/30 bg-emerald-400/10 p-5 text-emerald-100" role="status" aria-live="polite">
             <p ref={successRef} tabIndex={-1} className="font-semibold outline-none">
-              Thank you. Your request has been received.
+              {t("leadCapture.success")}
             </p>
           </div>
         ) : (
@@ -356,7 +358,7 @@ export default function LeadCapturePopup({
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="sm:col-span-2">
                 <label htmlFor="lead-full-name" className="mb-1.5 block text-sm font-medium text-slate-200">
-                  Full Name <span aria-hidden="true">*</span>
+                  {t("leadCapture.fullName")} <span aria-hidden="true">*</span>
                 </label>
                 <input
                   id="lead-full-name"
@@ -372,7 +374,7 @@ export default function LeadCapturePopup({
 
               <div>
                 <label htmlFor="lead-email" className="mb-1.5 block text-sm font-medium text-slate-200">
-                  Business Email <span aria-hidden="true">*</span>
+                  {t("leadCapture.email")} <span aria-hidden="true">*</span>
                 </label>
                 <input
                   id="lead-email"
@@ -389,7 +391,7 @@ export default function LeadCapturePopup({
 
               <div>
                 <label htmlFor="lead-mobile" className="mb-1.5 block text-sm font-medium text-slate-200">
-                  WhatsApp / Mobile <span aria-hidden="true">*</span>
+                  {t("leadCapture.mobile")} <span aria-hidden="true">*</span>
                 </label>
                 <input
                   id="lead-mobile"
@@ -422,7 +424,7 @@ export default function LeadCapturePopup({
 
               <div>
                 <label htmlFor="lead-industry" className="mb-1.5 block text-sm font-medium text-slate-200">
-                  Industry <span aria-hidden="true">*</span>
+                  {t("leadCapture.industry")} <span aria-hidden="true">*</span>
                 </label>
                 <input
                   id="lead-industry"
@@ -448,11 +450,11 @@ export default function LeadCapturePopup({
 
             {packageInterest ? (
               <p className="rounded-xl border border-blue-400/15 bg-blue-400/5 px-3 py-2 text-xs text-blue-100">
-                Package interest: <span className="font-semibold">{packageInterest}</span>
+                {t("leadCapture.packageInterest")} <span className="font-semibold">{packageInterest}</span>
               </p>
             ) : null}
 
-            <div className="absolute -left-[10000px] top-auto h-px w-px overflow-hidden" aria-hidden="true">
+            <div className="absolute -start-[10000px] top-auto h-px w-px overflow-hidden" aria-hidden="true">
               <label htmlFor="lead-website">Website</label>
               <input
                 id="lead-website"
@@ -475,7 +477,7 @@ export default function LeadCapturePopup({
                 className="mt-1 h-4 w-4 rounded border-slate-600 bg-[#030508] text-blue-500 focus:ring-blue-400"
               />
               <label htmlFor="lead-marketing-consent" className="text-xs leading-5 text-slate-300">
-                I agree to receive Quantara product updates and offers by email or WhatsApp.
+                {t("leadCapture.marketingConsent")}
               </label>
             </div>
 
@@ -490,7 +492,7 @@ export default function LeadCapturePopup({
               disabled={status === "submitting"}
               className="min-h-12 w-full rounded-xl bg-blue-600 px-5 py-3 text-sm font-bold text-white transition-colors hover:bg-blue-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-400 disabled:cursor-not-allowed disabled:opacity-60"
             >
-              {status === "submitting" ? "Sending..." : "Get My Quantara Options"}
+              {status === "submitting" ? t("leadCapture.submitting") : t("leadCapture.submit")}
             </button>
           </form>
         )}

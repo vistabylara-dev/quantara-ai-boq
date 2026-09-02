@@ -1,7 +1,11 @@
+import { getServerLocale } from "@/lib/i18n/server-locale";
 import { createPublicPageMetadata, PUBLIC_CONTENT_REVIEW_DATE } from "@/lib/public-site/search-registry";
 import KnowledgePage, { KnowledgePageContent } from "@/components/layout/knowledge-page";
 
-export const metadata = createPublicPageMetadata("/text-pdf-vs-scanned-pdf");
+export async function generateMetadata() {
+  const locale = await getServerLocale();
+  return createPublicPageMetadata("/text-pdf-vs-scanned-pdf", locale);
+}
 
 
 

@@ -1,8 +1,12 @@
+import { getServerLocale } from "@/lib/i18n/server-locale";
 import { createPublicPageMetadata } from "@/lib/public-site/search-registry";
 import React from "react";
 import SeoLandingPage, { SeoLandingPageContent } from "@/components/layout/seo-landing-page";
 
-export const metadata = createPublicPageMetadata("/boq-document-generation");
+export async function generateMetadata() {
+  const locale = await getServerLocale();
+  return createPublicPageMetadata("/boq-document-generation", locale);
+}
 
 
 

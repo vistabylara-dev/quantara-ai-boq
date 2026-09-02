@@ -16,7 +16,10 @@ import { CATALOGUE_LIBRARIES } from "@/config/libraries";
 import { MARKETPLACE_CONTENT } from "@/config/marketplace-content";
 import PricingPlans, { type PricingPlan } from "./pricing-plans";
 
-export const metadata = createPublicPageMetadata("/pricing");
+export async function generateMetadata() {
+  const locale = await getServerLocale();
+  return createPublicPageMetadata("/pricing", locale);
+}
 
 const searchEntry = getPublicSearchPage("/pricing");
 const pageSchema = buildPublicPageGraph({

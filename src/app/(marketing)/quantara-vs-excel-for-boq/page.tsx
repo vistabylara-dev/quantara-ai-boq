@@ -1,8 +1,12 @@
+import { getServerLocale } from "@/lib/i18n/server-locale";
 import { createPublicPageMetadata } from "@/lib/public-site/search-registry";
 import { ComparisonPage } from '@/components/layout/comparison-page';
 import { QUANTARA_ENTITY_DEFINITION } from "@/lib/public-site/product-truth";
 
-export const metadata = createPublicPageMetadata("/quantara-vs-excel-for-boq");
+export async function generateMetadata() {
+  const locale = await getServerLocale();
+  return createPublicPageMetadata("/quantara-vs-excel-for-boq", locale);
+}
 
 
 

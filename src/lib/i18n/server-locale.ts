@@ -1,4 +1,4 @@
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { DEFAULT_LOCALE, isSupportedLocale, LOCALE_COOKIE_NAME, type Locale } from "./config";
 
 /**
@@ -8,6 +8,12 @@ import { DEFAULT_LOCALE, isSupportedLocale, LOCALE_COOKIE_NAME, type Locale } fr
  * the FIRST server-rendered response, never a post-hydration flip.
  */
 export async function getServerLocale(): Promise<Locale> {
+  const reqHeaders = await headers();
+  const headerLocale = reqHeaders.get("x-quantara-locale");
+  if (isSupportedLocale(headerLocale)) {
+    return headerLocale;
+  }
+  
   const store = await cookies();
   const raw = store.get(LOCALE_COOKIE_NAME)?.value;
   return isSupportedLocale(raw) ? raw : DEFAULT_LOCALE;

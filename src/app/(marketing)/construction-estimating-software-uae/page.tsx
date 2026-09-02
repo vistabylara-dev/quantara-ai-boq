@@ -1,7 +1,11 @@
+import { getServerLocale } from "@/lib/i18n/server-locale";
 import { createPublicPageMetadata } from "@/lib/public-site/search-registry";
 import RegionalLandingPage, { RegionalLandingPageContent } from "@/components/layout/regional-landing-page";
 
-export const metadata = createPublicPageMetadata("/construction-estimating-software-uae");
+export async function generateMetadata() {
+  const locale = await getServerLocale();
+  return createPublicPageMetadata("/construction-estimating-software-uae", locale);
+}
 
 
 

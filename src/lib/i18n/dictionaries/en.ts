@@ -2854,6 +2854,20 @@ const en = {
     emailDeliveryFailed: "The email could not be delivered — check the email provider configuration.",
     reportEmailSent: "Report email sent.",
   },
+  leadCapture: {
+    title: "Find the Right Quantara Package",
+    description: "Tell us about your company and we'll help you identify the most suitable Quantara package, industry catalogue and available integrations.",
+    success: "Thank you. Your request has been received.",
+    fullName: "Full Name",
+    email: "Business Email",
+    mobile: "WhatsApp / Mobile",
+    company: "Company",
+    industry: "Industry",
+    marketingConsent: "I agree to receive Quantara product updates and offers by email or WhatsApp.",
+    submit: "Get My Quantara Options",
+    submitting: "Sending...",
+    packageInterest: "Package interest:"
+  },
 } as const;
 
 export default en;

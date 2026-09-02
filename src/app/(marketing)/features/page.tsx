@@ -28,7 +28,10 @@ import { createPublicPageMetadata } from "@/lib/public-site/search-registry";
 import { getPublicFeatureSales } from "@/lib/public-site/feature-sales";
 import { getPublicSalesTruth } from "@/lib/public-site/sales-truth";
 
-export const metadata = createPublicPageMetadata("/features");
+export async function generateMetadata() {
+  const locale = await getServerLocale();
+  return createPublicPageMetadata("/features", locale);
+}
 
 const statusPresentation: Record<
   PublicCapabilityStatus,

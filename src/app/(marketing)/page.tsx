@@ -33,7 +33,10 @@ import {
 } from "@/lib/public-site/search-registry";
 import { getPublicSalesTruth } from "@/lib/public-site/sales-truth";
 
-export const metadata = createPublicPageMetadata("/");
+export async function generateMetadata() {
+  const locale = await getServerLocale();
+  return createPublicPageMetadata("/", locale);
+}
 
 type HomepageFaq = {
   question: string;

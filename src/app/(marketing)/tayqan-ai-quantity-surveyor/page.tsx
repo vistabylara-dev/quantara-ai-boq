@@ -21,7 +21,10 @@ import { getPublicSalesTruth } from "@/lib/public-site/sales-truth";
 import { buildPublicPageGraph } from "@/lib/public-site/schema";
 import { TAYQAN_HIRE_PLANS } from "@/lib/tayqan/tayqan-commerce";
 
-export const metadata = createPublicPageMetadata("/tayqan-ai-quantity-surveyor");
+export async function generateMetadata() {
+  const locale = await getServerLocale();
+  return createPublicPageMetadata("/tayqan-ai-quantity-surveyor", locale);
+}
 
 const landingCopy = {
   en: {

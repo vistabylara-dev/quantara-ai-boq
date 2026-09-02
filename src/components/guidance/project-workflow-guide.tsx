@@ -16,6 +16,7 @@ const stateLabel: Record<ProjectWorkflowStageState, string> = {
   CURRENT: "Current",
   NEEDS_ATTENTION: "Needs attention",
   NOT_STARTED: "Not started",
+  NOT_REQUIRED: "Not required",
 };
 
 const stateClasses: Record<ProjectWorkflowStageState, string> = {
@@ -23,6 +24,7 @@ const stateClasses: Record<ProjectWorkflowStageState, string> = {
   CURRENT: "border-[#009FE3]/40 bg-[#009FE3]/10 text-[#0077B6] dark:border-[#21C7F3]/40 dark:bg-[#21C7F3]/10 dark:text-[#21C7F3]",
   NEEDS_ATTENTION: "border-amber-300 bg-amber-50 text-amber-700 dark:border-amber-400/30 dark:bg-amber-400/10 dark:text-amber-300",
   NOT_STARTED: "border-[#D5E0EC] bg-[#EAF1F8] text-[#7B879C] dark:border-[#20304D] dark:bg-[#101D34] dark:text-[#7F8DA6]",
+  NOT_REQUIRED: "border-slate-300 bg-slate-50 text-slate-600 dark:border-slate-500/40 dark:bg-slate-500/10 dark:text-slate-300",
 };
 
 function getCurrentStage(stages: ProjectWorkflowStage[]): ProjectWorkflowStage | null {
@@ -43,6 +45,12 @@ function focusProjectOverview() {
 export function ProjectWorkflowGuide({ workflow }: { workflow: ProjectWorkflowResult }) {
   const currentStage = getCurrentStage(workflow.stages);
   const totalStages = workflow.stages.length;
+  const progressSummary = workflow.notRequiredStageCount > 0
+    ? `${workflow.completedStageCount} complete · ${workflow.notRequiredStageCount} not required`
+    : `${workflow.completedStageCount} of ${totalStages} stages complete`;
+  const progressAriaText = workflow.notRequiredStageCount > 0
+    ? `${workflow.satisfiedStageCount} of ${totalStages} stages complete or not required`
+    : progressSummary;
 
   return (
     <section
@@ -61,7 +69,7 @@ export function ProjectWorkflowGuide({ workflow }: { workflow: ProjectWorkflowRe
           </p>
         </div>
         <p className="text-sm font-medium text-[#536078] dark:text-[#8CA0BE]">
-          {workflow.completedStageCount} of {totalStages} stages complete
+          {progressSummary}
         </p>
       </div>
 
@@ -72,7 +80,7 @@ export function ProjectWorkflowGuide({ workflow }: { workflow: ProjectWorkflowRe
         aria-valuemin={0}
         aria-valuemax={100}
         aria-valuenow={workflow.progressPercentage}
-        aria-valuetext={`${workflow.completedStageCount} of ${totalStages} stages complete`}
+        aria-valuetext={progressAriaText}
       >
         <div
           className="h-full rounded-full bg-[#009FE3] transition-[width] dark:bg-[#21C7F3]"

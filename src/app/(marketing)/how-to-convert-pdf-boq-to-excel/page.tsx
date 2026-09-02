@@ -1,7 +1,11 @@
+import { getServerLocale } from "@/lib/i18n/server-locale";
 import { createPublicPageMetadata, PUBLIC_CONTENT_REVIEW_DATE } from "@/lib/public-site/search-registry";
 import KnowledgePage, { KnowledgePageContent } from "@/components/layout/knowledge-page";
 
-export const metadata = createPublicPageMetadata("/how-to-convert-pdf-boq-to-excel");
+export async function generateMetadata() {
+  const locale = await getServerLocale();
+  return createPublicPageMetadata("/how-to-convert-pdf-boq-to-excel", locale);
+}
 
 
 

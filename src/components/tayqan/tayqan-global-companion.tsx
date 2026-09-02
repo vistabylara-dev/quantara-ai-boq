@@ -14,6 +14,7 @@ const TayqanRobotCanvas = dynamic(() => import("./tayqan-robot-canvas"), {
 });
 
 const DEDICATED_TAYQAN_PAGE = /^\/projects\/[^/]+\/tayqan(\/|$)/;
+const EXTRACTION_REVIEW_PAGE = /^\/projects\/[^/]+\/extractions(\/|$)/;
 
 type CompanionPlatformRole =
   | "PLATFORM_OWNER"
@@ -94,7 +95,10 @@ export function TayqanGlobalCompanion() {
 
   const [bubbleVisible, setBubbleVisible] = useState(false);
 
-  const dedicatedPage = DEDICATED_TAYQAN_PAGE.test(pathname);
+  const companionHidden =
+    adminLoginRoute
+    || DEDICATED_TAYQAN_PAGE.test(pathname)
+    || EXTRACTION_REVIEW_PAGE.test(pathname);
 
   useEffect(() => {
     if (
@@ -139,7 +143,7 @@ export function TayqanGlobalCompanion() {
   };
 
   useEffect(() => {
-    if (dedicatedPage) return;
+    if (companionHidden) return;
 
     const clearHideTimer = () => {
       if (hideTimerRef.current !== null) {
@@ -192,12 +196,9 @@ export function TayqanGlobalCompanion() {
       window.removeEventListener("pointermove", onPointerMove);
       clearHideTimer();
     };
-  }, [dedicatedPage]);
+  }, [companionHidden]);
 
-  if (
-    adminLoginRoute
-    || DEDICATED_TAYQAN_PAGE.test(pathname)
-  ) {
+  if (companionHidden) {
     return null;
   }
 

@@ -12,7 +12,10 @@ import { getDictionary } from "@/lib/i18n/dictionaries";
 import { getServerLocale } from "@/lib/i18n/server-locale";
 import { createTranslator, translateStructuredContent } from "@/lib/i18n/translate";
 
-export const metadata = createPublicPageMetadata("/boq-calculation-formulas");
+export async function generateMetadata() {
+  const locale = await getServerLocale();
+  return createPublicPageMetadata("/boq-calculation-formulas", locale);
+}
 
 const formulaFaqs = [
   {
@@ -232,13 +235,13 @@ export default async function BOQCalculationFormulasPage() {
         <div className="flex-1 py-12 md:py-20 lg:py-24 max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 w-full">
           <header className="mb-12">
             <div className="inline-flex items-center rounded-full border border-blue-200 bg-blue-50 px-3 py-1 text-sm font-medium text-blue-800 dark:border-blue-900 dark:bg-blue-900/30 dark:text-blue-300 mb-6">
-              <BookOpen className="mr-2 h-4 w-4" />
+              <BookOpen className="me-2 h-4 w-4" />
               Educational Resource
             </div>
             <h1 className="text-4xl md:text-5xl font-bold tracking-tight mb-6 text-slate-900 dark:text-white">
               BOQ Calculation Formulas for Construction Quantities and Costs
             </h1>
-            <div className="text-xl text-slate-600 dark:text-slate-300 leading-relaxed border-l-4 border-blue-500 pl-6 my-8">
+            <div className="text-xl text-slate-600 dark:text-slate-300 leading-relaxed border-s-4 border-blue-500 ps-6 my-8">
               <p>
                 A Bill of Quantities is not calculated with one geometric equation. Quantity surveyors and estimators measure each construction element using the appropriate length, area, volume, weight or count formula, then multiply the reviewed quantity by its approved unit rate. The final BOQ total is the sum of all measured item amounts.
               </p>
@@ -399,7 +402,7 @@ export default async function BOQCalculationFormulasPage() {
                     <div className="font-mono text-sm bg-white dark:bg-slate-950 p-3 rounded-lg text-center mb-4 border border-slate-200 dark:border-slate-800">
                       A<sub>plaster</sub> = (L × H) - A<sub>excluded openings</sub>
                     </div>
-                    <ul className="text-sm space-y-2 m-0 p-0 pl-4">
+                    <ul className="text-sm space-y-2 m-0 p-0 ps-4">
                       <li>measure each applicable face;</li>
                       <li>distinguish internal and external finishes;</li>
                       <li>apply opening deductions according to the project measurement method;</li>
@@ -557,13 +560,13 @@ export default async function BOQCalculationFormulasPage() {
                     </div>
                     <div>
                       <h4 className="font-semibold mb-2 mt-0">Illustrative Pitch Factors</h4>
-                      <table className="w-full text-sm text-left border-collapse">
+                      <table className="w-full text-sm text-start border-collapse">
                         <caption className="sr-only">Illustrative roof pitch factors</caption>
                         <tbody>
-                          <tr className="border-b border-slate-200 dark:border-slate-800"><th scope="row" className="py-2 font-medium">Flat</th><td className="py-2 text-right font-mono">1.00</td></tr>
-                          <tr className="border-b border-slate-200 dark:border-slate-800"><th scope="row" className="py-2 font-medium">15°</th><td className="py-2 text-right font-mono">approx. 1.04</td></tr>
-                          <tr className="border-b border-slate-200 dark:border-slate-800"><th scope="row" className="py-2 font-medium">30°</th><td className="py-2 text-right font-mono">approx. 1.15</td></tr>
-                          <tr><th scope="row" className="py-2 font-medium">45°</th><td className="py-2 text-right font-mono">approx. 1.41</td></tr>
+                          <tr className="border-b border-slate-200 dark:border-slate-800"><th scope="row" className="py-2 font-medium">Flat</th><td className="py-2 text-end font-mono">1.00</td></tr>
+                          <tr className="border-b border-slate-200 dark:border-slate-800"><th scope="row" className="py-2 font-medium">15°</th><td className="py-2 text-end font-mono">approx. 1.04</td></tr>
+                          <tr className="border-b border-slate-200 dark:border-slate-800"><th scope="row" className="py-2 font-medium">30°</th><td className="py-2 text-end font-mono">approx. 1.15</td></tr>
+                          <tr><th scope="row" className="py-2 font-medium">45°</th><td className="py-2 text-end font-mono">approx. 1.41</td></tr>
                         </tbody>
                       </table>
                     </div>
@@ -589,7 +592,7 @@ export default async function BOQCalculationFormulasPage() {
                       </div>
                     </div>
                   </div>
-                  <ul className="text-sm space-y-1 mb-4 p-0 list-none pl-2">
+                  <ul className="text-sm space-y-1 mb-4 p-0 list-none ps-2">
                     <li><strong>T</strong> = compacted thickness in m</li>
                     <li><strong>ρ</strong> = approved mix density in t/m³</li>
                   </ul>
@@ -608,7 +611,7 @@ export default async function BOQCalculationFormulasPage() {
                     Q<sub>pipe</sub> = measured pipe length
                   </div>
                   <h4 className="font-semibold mb-2 mt-0 text-sm">Accessories should be counted separately where required:</h4>
-                  <ul className="text-sm columns-2 md:columns-3 m-0 list-disc pl-5">
+                  <ul className="text-sm columns-2 md:columns-3 m-0 list-disc ps-5">
                     <li>elbows</li>
                     <li>tees</li>
                     <li>valves</li>
@@ -748,51 +751,51 @@ export default async function BOQCalculationFormulasPage() {
 
             <h2 className="text-3xl mt-16 mb-8 border-b border-slate-200 dark:border-slate-800 pb-2">Worked BOQ Example</h2>
             <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-800 mb-4">
-              <table className="w-full text-sm text-left m-0 border-collapse">
+              <table className="w-full text-sm text-start m-0 border-collapse">
                 <caption className="sr-only">Illustrative worked BOQ item and amount example</caption>
                 <thead className="bg-slate-50 dark:bg-slate-900 text-slate-700 dark:text-slate-300">
                   <tr>
                     <th scope="col" className="px-6 py-3 font-semibold border-b border-slate-200 dark:border-slate-800">Item</th>
-                    <th scope="col" className="px-6 py-3 font-semibold border-b border-slate-200 dark:border-slate-800 text-right">Quantity</th>
+                    <th scope="col" className="px-6 py-3 font-semibold border-b border-slate-200 dark:border-slate-800 text-end">Quantity</th>
                     <th scope="col" className="px-6 py-3 font-semibold border-b border-slate-200 dark:border-slate-800">Unit</th>
-                    <th scope="col" className="px-6 py-3 font-semibold border-b border-slate-200 dark:border-slate-800 text-right">Illustrative Rate</th>
-                    <th scope="col" className="px-6 py-3 font-semibold border-b border-slate-200 dark:border-slate-800 text-right">Amount</th>
+                    <th scope="col" className="px-6 py-3 font-semibold border-b border-slate-200 dark:border-slate-800 text-end">Illustrative Rate</th>
+                    <th scope="col" className="px-6 py-3 font-semibold border-b border-slate-200 dark:border-slate-800 text-end">Amount</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
                   <tr className="bg-white dark:bg-slate-950">
-                    <th scope="row" className="px-6 py-4 text-left font-medium">Excavation</th>
-                    <td className="px-6 py-4 text-right font-mono">48</td>
+                    <th scope="row" className="px-6 py-4 text-start font-medium">Excavation</th>
+                    <td className="px-6 py-4 text-end font-mono">48</td>
                     <td className="px-6 py-4">m³</td>
-                    <td className="px-6 py-4 text-right font-mono">AED 20</td>
-                    <td className="px-6 py-4 text-right font-mono">AED 960</td>
+                    <td className="px-6 py-4 text-end font-mono">AED 20</td>
+                    <td className="px-6 py-4 text-end font-mono">AED 960</td>
                   </tr>
                   <tr className="bg-slate-50 dark:bg-slate-900/50">
-                    <th scope="row" className="px-6 py-4 text-left font-medium">Concrete</th>
-                    <td className="px-6 py-4 text-right font-mono">18</td>
+                    <th scope="row" className="px-6 py-4 text-start font-medium">Concrete</th>
+                    <td className="px-6 py-4 text-end font-mono">18</td>
                     <td className="px-6 py-4">m³</td>
-                    <td className="px-6 py-4 text-right font-mono">AED 140</td>
-                    <td className="px-6 py-4 text-right font-mono">AED 2,520</td>
+                    <td className="px-6 py-4 text-end font-mono">AED 140</td>
+                    <td className="px-6 py-4 text-end font-mono">AED 2,520</td>
                   </tr>
                   <tr className="bg-white dark:bg-slate-950">
-                    <th scope="row" className="px-6 py-4 text-left font-medium">Reinforcement</th>
-                    <td className="px-6 py-4 text-right font-mono">3,200</td>
+                    <th scope="row" className="px-6 py-4 text-start font-medium">Reinforcement</th>
+                    <td className="px-6 py-4 text-end font-mono">3,200</td>
                     <td className="px-6 py-4">kg</td>
-                    <td className="px-6 py-4 text-right font-mono">AED 1.50</td>
-                    <td className="px-6 py-4 text-right font-mono">AED 4,800</td>
+                    <td className="px-6 py-4 text-end font-mono">AED 1.50</td>
+                    <td className="px-6 py-4 text-end font-mono">AED 4,800</td>
                   </tr>
                   <tr className="bg-slate-50 dark:bg-slate-900/50">
-                    <th scope="row" className="px-6 py-4 text-left font-medium">Blockwork</th>
-                    <td className="px-6 py-4 text-right font-mono">240</td>
+                    <th scope="row" className="px-6 py-4 text-start font-medium">Blockwork</th>
+                    <td className="px-6 py-4 text-end font-mono">240</td>
                     <td className="px-6 py-4">m²</td>
-                    <td className="px-6 py-4 text-right font-mono">AED 35</td>
-                    <td className="px-6 py-4 text-right font-mono">AED 8,400</td>
+                    <td className="px-6 py-4 text-end font-mono">AED 35</td>
+                    <td className="px-6 py-4 text-end font-mono">AED 8,400</td>
                   </tr>
                 </tbody>
                 <tfoot className="bg-slate-100 dark:bg-slate-900 font-bold">
                   <tr>
-                    <th scope="row" colSpan={4} className="px-6 py-4 text-right text-base">Total:</th>
-                    <td className="px-6 py-4 text-right text-base text-blue-600 dark:text-blue-400 font-mono">AED 16,680</td>
+                    <th scope="row" colSpan={4} className="px-6 py-4 text-end text-base">Total:</th>
+                    <td className="px-6 py-4 text-end text-base text-blue-600 dark:text-blue-400 font-mono">AED 16,680</td>
                   </tr>
                 </tfoot>
               </table>
@@ -803,7 +806,7 @@ export default async function BOQCalculationFormulasPage() {
 
             <h2 className="text-3xl mt-16 mb-6 border-b border-slate-200 dark:border-slate-800 pb-2">Professional Measurement Workflow</h2>
             <div className="bg-slate-50 dark:bg-slate-900 p-8 rounded-xl border border-slate-200 dark:border-slate-800 mb-12">
-              <ol className="space-y-3 m-0 pl-5 text-slate-700 dark:text-slate-300">
+              <ol className="space-y-3 m-0 ps-5 text-slate-700 dark:text-slate-300">
                 <li>Review the project drawings, specifications, schedules and revisions.</li>
                 <li>Identify the relevant construction elements and measurement units.</li>
                 <li>Apply the correct length, area, volume, weight or count method.</li>
@@ -833,7 +836,7 @@ export default async function BOQCalculationFormulasPage() {
                   className="inline-flex items-center justify-center px-8 py-4 text-base font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-lg shadow transition-colors duration-200 no-underline group"
                 >
                   Open the Free BOQ Calculator
-                  <ArrowRight className="ml-2 w-5 h-5 transition-transform group-hover:translate-x-1" />
+                  <ArrowRight className="ms-2 w-5 h-5 transition-transform group-hover:translate-x-1" />
                 </a>
                 <span className="text-sm text-slate-500 dark:text-slate-400">External tool by Vista By Lara</span>
               </div>

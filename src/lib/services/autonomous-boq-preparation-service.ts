@@ -177,12 +177,14 @@ export type AutonomousPreparationExceptionDTO = {
   code: string;
   message: string;
   sourceFileIds: string[];
+  pageIds: string[];
 };
 
 export type AutonomousPreparationStage =
   | "QUEUED"
   | "SOURCE_VALIDATION"
   | "SOURCE_PROCESSING"
+  | "CATEGORIZING"
   | "SOURCE_INPUT_REQUIRED"
   | "MEASURING"
   | "ASSEMBLING_BOQ"
@@ -222,7 +224,10 @@ function preparationExceptions(value: unknown): AutonomousPreparationExceptionDT
     const sourceFileIds = Array.isArray(row.sourceFileIds)
       ? row.sourceFileIds.filter((id): id is string => typeof id === "string")
       : [];
-    return [{ code: row.code, message: row.message, sourceFileIds }];
+    const pageIds = Array.isArray(row.pageIds)
+      ? row.pageIds.filter((id): id is string => typeof id === "string")
+      : [];
+    return [{ code: row.code, message: row.message, sourceFileIds, pageIds }];
   });
 }
 
@@ -249,6 +254,7 @@ const stages = new Set<AutonomousPreparationStage>([
   "QUEUED",
   "SOURCE_VALIDATION",
   "SOURCE_PROCESSING",
+  "CATEGORIZING",
   "SOURCE_INPUT_REQUIRED",
   "MEASURING",
   "ASSEMBLING_BOQ",
@@ -284,11 +290,7 @@ export function toAutonomousPreparationStatus(job: ExtractionJob): AutonomousPre
     stage,
     progressPercentage: job.progressPercentage,
     readyForRates,
-    retryable: (new Set<ExtractionJobStatus>([
-      ExtractionJobStatus.FAILED,
-      ExtractionJobStatus.NEEDS_INPUT,
-      ExtractionJobStatus.NEEDS_REVIEW,
-    ])).has(job.status),
+    retryable: job.status === ExtractionJobStatus.FAILED,
     exceptions: preparationExceptions(summary.exceptions),
     error: job.errorCode || job.errorMessage
       ? { code: job.errorCode, message: job.errorMessage }

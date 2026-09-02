@@ -147,19 +147,22 @@ describe("autonomous preparation handler", () => {
 
     const result = await handler(job(), ctx);
 
-    expect(deps.checkpoint).toHaveBeenNthCalledWith(1, IDS.company, IDS.job, {
+    const providerCheckpoints = (deps.checkpoint as ReturnType<typeof vi.fn>).mock.calls.filter(
+      ([, , patch]) => patch.providerAttempt || patch.providerResult,
+    );
+    expect(providerCheckpoints[0]).toEqual([IDS.company, IDS.job, {
       providerAttempt: {
         operationHash: configuration().operationHash,
         startedAt: "2026-01-01T00:00:00.000Z",
       },
-    });
-    expect(deps.checkpoint).toHaveBeenNthCalledWith(2, IDS.company, IDS.job, {
+    }]);
+    expect(providerCheckpoints[1]).toEqual([IDS.company, IDS.job, {
       providerResult: {
         operationHash: configuration().operationHash,
         checkpointedAt: "2026-01-01T00:01:00.000Z",
         value: providerResult,
       },
-    });
+    }]);
     expect(deps.measure).toHaveBeenCalledWith(
       expect.objectContaining({ companyId: IDS.company }),
       "project-q-001",
@@ -208,7 +211,10 @@ describe("autonomous preparation handler", () => {
     expect(options.replayReasonerResult).toEqual(providerResult);
     expect(options.onReasonerStart).toBeUndefined();
     expect(options.onReasonerResult).toBeUndefined();
-    expect(deps.checkpoint).not.toHaveBeenCalled();
+    const providerCheckpoints = (deps.checkpoint as ReturnType<typeof vi.fn>).mock.calls.filter(
+      ([, , patch]) => patch.providerAttempt || patch.providerResult,
+    );
+    expect(providerCheckpoints).toHaveLength(0);
   });
 
   it("refuses a second paid request after an uncertain provider attempt", async () => {

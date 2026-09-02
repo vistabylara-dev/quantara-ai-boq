@@ -7,6 +7,7 @@ import {
   type TayqanMeasurementPlan,
   type TayqanMeasurementSubject,
 } from "@/lib/tayqan/tayqan-measurement-contract";
+import type { DrawingSheetClassification } from "@/lib/autonomous-boq/drawing-categorizer";
 
 export type TayqanMeasurementPageRole =
   | "PLAN"
@@ -74,6 +75,8 @@ export type TayqanMeasurementPageEvidence = {
   drawingUnit: string | null;
   realWorldUnit: string | null;
   hasImage: boolean;
+  /** Controlled, persisted sheet categorization produced before measurement. */
+  classification?: DrawingSheetClassification;
 };
 
 export type TayqanMeasurementExistingEntityEvidence = {

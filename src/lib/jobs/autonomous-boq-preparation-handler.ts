@@ -20,6 +20,8 @@ import type { JobHandler, JobHandlerContext, JobHandlerResult } from "@/lib/jobs
 import { checkpointAutonomousPreparationJob } from "@/lib/repositories/autonomous-boq-preparation-repository";
 import { getExtractionJobRecord } from "@/lib/repositories/extraction-job-repository";
 import { generateAiDraftBoq } from "@/lib/services/ai-draft-boq-service";
+import { regenerateFurnitureManagedBOQ } from "@/lib/services/furniture-boq-service";
+import { DEFAULT_FURNITURE_WASTAGE_PERCENTAGE } from "@/lib/furniture/canonical-output";
 import {
   prepareTayqanMeasurementProposals,
   type PrepareTayqanMeasurementsInput,
@@ -35,6 +37,7 @@ type PreparationException = {
   code: string;
   message: string;
   sourceFileIds: string[];
+  pageIds?: string[];
 };
 
 type IndustryPolicyContext = NonNullable<TayqanMeasurementGoverningContext["industryPolicy"]>;
@@ -386,17 +389,39 @@ async function defaultAssemble(
   _measurement: PrepareTayqanMeasurementsResult,
 ): Promise<AssemblyResult> {
   if (scope.assemblyMode === "SPECIALIZED_JOINERY") {
-    return {
-      state: "NEEDS_REVIEW",
-      boqId: configuration.targetBoqId,
-      addedItemCount: 0,
-      duplicateItemCount: 0,
-      exceptions: [{
-        code: "SPECIALIZED_JOINERY_ASSEMBLY_REQUIRED",
-        message: "Joinery cutting-list, board, edge and hardware quantities remain owned by the protected specialized Joinery engine.",
-        sourceFileIds: configuration.frozenSources.map((source) => source.id),
-      }],
-    };
+    try {
+      const generated = await regenerateFurnitureManagedBOQ(actor, {
+        projectIdentifier: scope.projectSlug,
+        boqId: configuration.targetBoqId,
+        wastagePercentage: DEFAULT_FURNITURE_WASTAGE_PERCENTAGE,
+      });
+      return {
+        state: "READY_FOR_RATES",
+        boqId: generated.boqId,
+        addedItemCount: generated.createdItems + generated.updatedItems,
+        duplicateItemCount: generated.changed ? 0 : generated.output.sections.reduce((total, section) => total + section.items.length, 0),
+        exceptions: [],
+      };
+    } catch (error) {
+      if (error instanceof AppError && [
+        "FURNITURE_CONFIRMED_CANDIDATES_REQUIRED",
+        "FURNITURE_CANDIDATES_REQUIRE_REVIEW",
+        "FURNITURE_ORDER_ITEMS_REQUIRE_REVIEW",
+      ].includes(error.code)) {
+        return {
+          state: "NEEDS_REVIEW",
+          boqId: configuration.targetBoqId,
+          addedItemCount: 0,
+          duplicateItemCount: 0,
+          exceptions: [{
+            code: "JOINERY_ENGINEERING_REVIEW_REQUIRED",
+            message: error.message,
+            sourceFileIds: configuration.frozenSources.map((source) => source.id),
+          }],
+        };
+      }
+      throw error;
+    }
   }
 
   const draft = await generateAiDraftBoq(actor, configuration.projectId, {
@@ -460,10 +485,12 @@ export function createAutonomousBoqPreparationHandler(
     };
 
     const actor = await dependencies.loadActor(job.companyId, job.createdByUserId);
+    await checkpoint({ stage: "SOURCE_VALIDATION", readyForRates: false });
     await ctx.updateProgress(5, "validating frozen project scope");
     const scope = await dependencies.validateFrozenScope(configuration);
     await assertNotCancelled(ctx);
 
+    await checkpoint({ stage: "SOURCE_PROCESSING", readyForRates: false });
     await ctx.updateProgress(15, "processing drawing sources");
     const processing = await dependencies.ensureSourcesProcessed(actor, configuration);
     if (processing.state === "NEEDS_INPUT") {
@@ -479,6 +506,7 @@ export function createAutonomousBoqPreparationHandler(
     }
     await assertNotCancelled(ctx);
 
+    await checkpoint({ stage: "CATEGORIZING", readyForRates: false });
     await ctx.updateProgress(45, "measuring and reconciling drawing evidence");
     const execution = resolveAutonomousProviderExecution(summary);
     const measurementInput: PrepareTayqanMeasurementsInput = {
@@ -512,6 +540,7 @@ export function createAutonomousBoqPreparationHandler(
         const total = Math.max(1, progress.total);
         await ctx.updateProgress(45 + Math.min(35, Math.round((completed / total) * 35)), "measuring drawing clusters");
       },
+      onEvidencePrepared: () => checkpoint({ stage: "MEASURING", readyForRates: false }),
     };
     if (execution.kind === "REPLAY_RESULT") {
       measurementOptions.replayReasonerResult = execution.result;
@@ -539,12 +568,14 @@ export function createAutonomousBoqPreparationHandler(
     );
     await assertNotCancelled(ctx);
 
+    await checkpoint({ stage: "ASSEMBLING_BOQ", readyForRates: false });
     await ctx.updateProgress(85, "assembling unpriced BOQ");
     const assembly = await dependencies.assemble(actor, configuration, scope, measurement);
     const measurementExceptions: PreparationException[] = measurement.exceptions.map((exception) => ({
       code: exception.kind,
       message: exception.message,
       sourceFileIds: configuration.frozenSources.map((source) => source.id),
+      pageIds: exception.pageIds,
     }));
     const exceptions = [...measurementExceptions, ...assembly.exceptions];
     const ready = assembly.state === "READY_FOR_RATES" && exceptions.length === 0;

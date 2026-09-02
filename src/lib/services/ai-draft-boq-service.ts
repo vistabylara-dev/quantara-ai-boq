@@ -64,6 +64,22 @@ function jsonRecord(value: unknown): Record<string, unknown> | null {
     : null;
 }
 
+function formatAutonomousCategoryPath(value: unknown): string | null {
+  const path = jsonRecord(value);
+  if (!path) return null;
+  const segments = [
+    path.industry,
+    path.discipline,
+    path.drawingType,
+    path.workPackage,
+    path.boqSectionTitle,
+    path.boqItemClassification,
+    path.measurementRuleId,
+    path.unit,
+  ].filter((segment): segment is string => typeof segment === "string" && segment.trim().length > 0);
+  return segments.length === 8 ? `Category path: ${segments.join(" → ")}` : null;
+}
+
 function toMeasurementEvidencePage(row: {
   projectFileId: string;
   pageNumber: number;
@@ -633,6 +649,10 @@ export async function generateAiDraftBoq(
         methodMarker,
       ].filter((value): value is string => Boolean(value)).join(" | ");
 
+      const categoryPath = formatAutonomousCategoryPath(
+        jsonRecord(row.technicalDataJson)?.categoryPath,
+      );
+
       const specification = [
         row.sourceText?.trim() || null,
         suggestion?.evidenceSummary
@@ -674,7 +694,10 @@ export async function generateAiDraftBoq(
           confidenceScore: row.confidence,
           status: BOQItemStatus.DRAFT,
           notes: autonomousMode
-            ? "Quantara system-validated this quantity against the frozen project drawing scope and deterministic industry rule. Only the unit rate is awaiting user input."
+            ? [
+                "Quantara system-validated this quantity against the frozen project drawing scope and deterministic industry rule. Only the unit rate is awaiting user input.",
+                categoryPath,
+              ].filter(Boolean).join("\n")
             : calculatedMeasurement
               ? "TAYQAN measured this draft quantity from project drawing evidence using the deterministic quantity engine. Professional review is still required; unit price is intentionally left for the engineer."
             : measurementComplete
@@ -817,6 +840,7 @@ export async function generateAiDraftBoq(
           autonomousOperationHash:
             autonomousMode ? options.autonomousPolicy?.operationHash ?? null : null,
           autonomousRuleId: autonomousRule?.id ?? null,
+          autonomousCategoryPath: categoryPath,
           systemValidated: autonomousMode,
           ...(suggestion
             ? {

@@ -12,6 +12,12 @@ import {
   AutonomousMeasurementPolicyBindingError,
   resolveAutonomousMeasurementPolicyRule,
 } from "@/lib/autonomous-boq/measurement-policy";
+import {
+  AutonomousCategorizationBindingError,
+  categorizeDrawingSheets,
+  requireMeasurementCategoryBinding,
+  type ControlledCategoryPath,
+} from "@/lib/autonomous-boq/drawing-categorizer";
 import { createAuditLog } from "@/lib/repositories/audit-repository";
 import { getProjectRecord } from "@/lib/repositories/project-repository";
 import { createStorageAdapter, resolveStorageProvider } from "@/lib/storage/storage-factory";
@@ -202,6 +208,8 @@ export type PrepareTayqanMeasurementsOptions = {
   env?: NodeJS.ProcessEnv;
   /** Used by the persisted TAYQAN work order to keep its execution lease fresh. */
   onProgress?: (progress: TayqanMeasurementReasonerProgress) => Promise<void>;
+  /** Optional durable checkpoint after categorization/evidence preparation and before AI measurement. */
+  onEvidencePrepared?: () => Promise<void>;
   /**
    * A validated, durably checkpointed provider result. When supplied the paid
    * reasoner is never constructed or invoked; only deterministic validation
@@ -313,7 +321,7 @@ async function buildEvidenceBundle(
     }
   }
 
-  const pageEvidence: TayqanMeasurementPageEvidence[] = pages.map((page) => {
+  let pageEvidence: TayqanMeasurementPageEvidence[] = pages.map((page) => {
     const file = fileById.get(page.projectFileId);
     if (!file) throw new Error("TAYQAN page resolved to a source file outside its frozen scope.");
     const metadata = jsonRecord(file.metadataJson);
@@ -355,6 +363,29 @@ async function buildEvidenceBundle(
       hasImage: Boolean(page.imageStorageKey),
     };
   });
+
+  const industryPolicy = input.governingContext?.industryPolicy;
+  if (industryPolicy) {
+    const classifications = categorizeDrawingSheets({
+      engineId: industryPolicy.engineId,
+      pages: pageEvidence,
+      rules: industryPolicy.rules,
+    });
+    const classificationByPageId = new Map(classifications.map((classification) => [classification.pageId, classification] as const));
+    await prisma.$transaction(pages.map((page) => prisma.drawingPage.update({
+      where: { id: page.id, companyId: actor.companyId },
+      data: {
+        titleBlockJson: {
+          ...(jsonRecord(page.titleBlockJson) ?? {}),
+          autonomousClassification: classificationByPageId.get(page.id)!,
+        } as Prisma.InputJsonObject,
+      },
+    })));
+    pageEvidence = pageEvidence.map((page) => ({
+      ...page,
+      classification: classificationByPageId.get(page.id),
+    }));
+  }
 
   const entities = await prisma.extractedEntity.findMany({
     where: {
@@ -463,11 +494,13 @@ async function buildEvidenceBundle(
   };
 }
 
+type CategorizedMeasurement = EvaluatedTayqanMeasurement & { categoryPath?: ControlledCategoryPath };
+
 async function resolveOrCreateMeasurementEntity(
   db: Prisma.TransactionClient,
   actor: CurrentActor,
   projectId: string,
-  evaluated: EvaluatedTayqanMeasurement,
+  evaluated: CategorizedMeasurement,
   pageById: ReadonlyMap<string, { projectFileId: string; originalName: string }>,
   fingerprint: string,
 ) {
@@ -486,6 +519,15 @@ async function resolveOrCreateMeasurementEntity(
         "An extracted entity changed while TAYQAN was preparing measurements. Restart the work order against the current evidence.",
         409,
       );
+    }
+    if (evaluated.categoryPath) {
+      return {
+        entity: await db.extractedEntity.update({
+          where: { id: existing.id, companyId: actor.companyId },
+          data: { technicalDataJson: { ...(jsonRecord(existing.technicalDataJson) ?? {}), categoryPath: evaluated.categoryPath } as Prisma.InputJsonObject },
+        }),
+        created: false,
+      };
     }
     return { entity: existing, created: false };
   }
@@ -506,7 +548,18 @@ async function resolveOrCreateMeasurementEntity(
       sourceReference: { contains: marker },
     },
   });
-  if (existing) return { entity: existing, created: false };
+  if (existing) {
+    if (evaluated.categoryPath) {
+      return {
+        entity: await db.extractedEntity.update({
+          where: { id: existing.id, companyId: actor.companyId },
+          data: { technicalDataJson: { ...(jsonRecord(existing.technicalDataJson) ?? {}), categoryPath: evaluated.categoryPath } as Prisma.InputJsonObject },
+        }),
+        created: false,
+      };
+    }
+    return { entity: existing, created: false };
+  }
 
   const entity = await db.extractedEntity.create({
     data: {
@@ -537,6 +590,7 @@ async function resolveOrCreateMeasurementEntity(
         supportingChecks: evaluated.supportingChecks,
         rationale: evaluated.subject.rationale,
         sourceSummary: evaluated.subject.sourceSummary,
+        categoryPath: evaluated.categoryPath ?? null,
       },
       status: ExtractedEntityStatus.NEEDS_REVIEW,
     },
@@ -575,6 +629,7 @@ export async function prepareTayqanMeasurementProposals(
     "TAYQAN could not prepare the processed source evidence for measurement. Retry this same assignment; completed work remains preserved.",
     () => buildEvidenceBundle(actor, projectIdentifier, input),
   );
+  await options.onEvidencePrepared?.();
 
   let result: TayqanMeasurementReasonerResult;
   if (options.replayReasonerResult) {
@@ -710,7 +765,7 @@ export async function prepareTayqanMeasurementProposals(
   // proposal into a visible, dangerous measurement exception. The work order
   // can therefore continue to the review document, but BOQ acceptance remains
   // blocked until a professional resolves the invalid proposal.
-  const evaluated: EvaluatedTayqanMeasurement[] = [];
+  const evaluated: CategorizedMeasurement[] = [];
   const validationExceptions: TayqanMeasurementException[] = [];
   for (const subject of result.plan.subjects) {
     try {
@@ -731,7 +786,12 @@ export async function prepareTayqanMeasurementProposals(
           boqUnit: rule.resultUnit,
         })),
       });
-      evaluated.push({ ...measurement, resultUnit: policyBinding.resultUnit });
+      const categoryPath = requireMeasurementCategoryBinding({
+        workPackage: policyBinding.ruleId,
+        evidencePageIds: measurement.subject.evidencePageIds,
+        classificationsByPageId: new Map(bundle.pages.flatMap((page) => page.classification ? [[page.id, page.classification] as const] : [])),
+      });
+      evaluated.push({ ...measurement, resultUnit: policyBinding.resultUnit, categoryPath });
     } catch (error) {
       if (error instanceof TayqanRevisionConflictError) {
         validationExceptions.push(error.exception);
@@ -740,6 +800,15 @@ export async function prepareTayqanMeasurementProposals(
       if (error instanceof AutonomousMeasurementPolicyBindingError) {
         validationExceptions.push({
           kind: "UNSUPPORTED_FORMULA",
+          message: error.message,
+          pageIds: [...new Set(subject.evidencePageIds)],
+          relatedEntityId: subject.existingEntityId,
+        });
+        continue;
+      }
+      if (error instanceof AutonomousCategorizationBindingError) {
+        validationExceptions.push({
+          kind: "METHOD_SELECTION_UNCERTAIN",
           message: error.message,
           pageIds: [...new Set(subject.evidencePageIds)],
           relatedEntityId: subject.existingEntityId,
@@ -836,6 +905,7 @@ export async function prepareTayqanMeasurementProposals(
             evidencePageIds: measurement.subject.evidencePageIds,
             evidenceInputs: measurement.subject.inputs,
             workPackage: measurement.subject.workPackage,
+            categoryPath: measurement.categoryPath ?? null,
             location: measurement.subject.location,
             normalizedInputValues: measurement.normalizedInputValues,
             formula: measurement.formula,

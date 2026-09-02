@@ -374,6 +374,7 @@ function clusterContext(
       drawingUnit: page.drawingUnit,
       realWorldUnit: page.realWorldUnit,
       hasImage: page.hasImage,
+      classification: page.classification,
     }));
 
   const fileIds = new Set(pages.map((page) => page.projectFileId));
@@ -425,6 +426,7 @@ function compactProjectContext(bundle: TayqanMeasurementEvidenceBundle) {
       scaleVerified: page.scaleVerified,
       technicalLines: page.technicalLines.slice(0, 20),
       text: page.text?.slice(0, 1_200) ?? null,
+      classification: page.classification,
     })),
     // PR2 gap 1: the final cross-cluster reconciliation pass explicitly
     // checks for duplicate scope and schedule-plan mismatches (see
@@ -637,6 +639,7 @@ function measurementInstruction(): string {
   return [
     "Act as the measurement engineer inside a senior quantity-surveying team.",
     "Treat the project as a coordinated drawing/specification set, not isolated pages.",
+    "Every page may include a persisted controlled classification. Use only VERIFIED categoryPaths for autonomous payable measurements; UNCERTAIN, UNRESOLVED, SUPERSEDED, existing, optional or excluded scope must become a scoped exception instead of a quantity.",
     "Follow plan call-outs into sections, elevations, details and schedules before proposing a measurement.",
     "Respect the frozen source scope, revision identifiers, customer exclusions and authoritative-source policy supplied in governingContext.",
     "When governingContext.industryPolicy is present, treat its selected project industry, supported units, sections, rules and calculation types as mandatory governing context. Drawing titles or inferred disciplines may refine scope inside that policy but must never switch the project to another industry engine.",

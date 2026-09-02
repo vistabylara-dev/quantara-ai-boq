@@ -104,10 +104,8 @@ export default function NewProjectPage() {
         language: data.language,
       });
       emitOnboardingActionComplete("PROJECT_CREATED", { projectId: result.project.id });
-      emitOnboardingActionComplete("BOQ_PREPARED", { projectId: result.project.id });
       trackFirstConversionEvent("first_project_created", { industry: data.industryEngineId });
-      trackFirstConversionEvent("first_boq_created", { source: "project_creation" });
-      router.push(`/projects/${encodeURIComponent(result.project.id)}/boq`);
+      router.push(`/projects/${encodeURIComponent(result.project.id)}/drawings`);
     } catch (submitError) {
       setFormError(getApiErrorMessage(submitError));
       if (submitError instanceof ApiClientError && submitError.code === "PROJECT_REFERENCE_EXISTS") {
@@ -124,8 +122,8 @@ export default function NewProjectPage() {
           <p className="text-sm uppercase tracking-[0.3em] text-slate-500">Create project</p>
           <h1 className="mt-2 text-3xl font-semibold text-white">New project workspace</h1>
           <p className="mt-2 text-slate-400">
-            Create a project against an enabled industry engine. A default R01 BOQ with the
-            engine&apos;s standard sections is created automatically.
+            Select the project industry, then upload the drawings. Quantara will prepare the
+            measured BOQ so you only need to add unit rates.
           </p>
         </div>
 

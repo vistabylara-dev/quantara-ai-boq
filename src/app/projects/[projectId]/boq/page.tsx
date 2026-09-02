@@ -9,6 +9,7 @@ import { formatCurrency } from "@/lib/formatting/currency";
 import { formatDate } from "@/lib/formatting/dates";
 import { withCalculatedBOQTotals } from "@/lib/calculations/boq-totals";
 import BoqEditor from "@/components/boq/boq-editor";
+import { RateOnlyBOQEditor } from "@/components/boq/rate-only-boq-editor";
 import AddItemFromSourceModal, { type AddItemTab } from "@/components/boq/add-item-from-source-modal";
 import { BoqStartWizard, type BoqCreationMethod } from "@/components/boq/boq-start-wizard";
 import { BoqWorkflowStepper } from "@/components/boq/boq-workflow-stepper";
@@ -67,6 +68,7 @@ export default function ProjectBOQPage(props: PageProps) {
   const params = use(props.params);
   const searchParams = useSearchParams();
   const router = useRouter();
+  const rateOnlyMode = searchParams.get("mode") === "rates";
   const [project, setProject] = useState<Project | null>(null);
   const [revisions, setRevisions] = useState<BOQ[]>([]);
   const [activeBoq, setActiveBoq] = useState<BOQ | null>(null);
@@ -366,8 +368,8 @@ export default function ProjectBOQPage(props: PageProps) {
     t,
   ]);
 
-  const lockRevision = useCallback(async (draft: BOQ) => {
-    if (isReadOnlyBOQ(draft) || pendingAction) return;
+  const lockRevisionAndReturn = useCallback(async (draft: BOQ): Promise<BOQ | null> => {
+    if (isReadOnlyBOQ(draft) || pendingAction) return null;
     setPendingAction("lock");
     setActionError(null);
     try {
@@ -376,12 +378,18 @@ export default function ProjectBOQPage(props: PageProps) {
         `/api/boqs/${encodeURIComponent(saved.id)}/lock`
       );
       replaceRevision(locked);
+      return locked;
     } catch (error) {
       setActionError(getLocalizedApiErrorMessage(error, t, locale));
+      return null;
     } finally {
       setPendingAction(null);
     }
   }, [locale, pendingAction, persistDraft, replaceRevision, t]);
+
+  const lockRevision = useCallback(async (draft: BOQ): Promise<void> => {
+    await lockRevisionAndReturn(draft);
+  }, [lockRevisionAndReturn]);
 
   const activeRevision = useMemo(() => activeBoq ?? revisions[0] ?? null, [activeBoq, revisions]);
 
@@ -409,6 +417,20 @@ export default function ProjectBOQPage(props: PageProps) {
     [activeRevision],
   );
   const showAiDraftReview = aiDraftMode || hasAiDraftItems;
+  const allRatesEntered = useMemo(
+    () => Boolean(activeRevision)
+      && activeRevision!.sections.some((section) => section.items.length > 0)
+      && activeRevision!.sections.every((section) => section.items.every((item) => item.sellingRate > 0)),
+    [activeRevision],
+  );
+
+  const generateFinalBoq = useCallback(async () => {
+    if (!activeRevision || hasUnsavedChanges || !allRatesEntered) return;
+    const locked = await lockRevisionAndReturn(activeRevision);
+    if (locked) {
+      router.push(`/projects/${encodeURIComponent(params.projectId)}/documents`);
+    }
+  }, [activeRevision, allRatesEntered, hasUnsavedChanges, lockRevisionAndReturn, params.projectId, router]);
 
   const confirmRemainingAiDraftQuantities = useCallback(async () => {
     if (!activeRevision || isReadOnlyBOQ(activeRevision) || isConfirmingAiDraft) return;
@@ -682,7 +704,7 @@ export default function ProjectBOQPage(props: PageProps) {
             <h2 className="mt-2 text-3xl font-semibold text-white">{t("boqEditor.pageTitle", { name: project.name })}</h2>
             <p className="mt-2 text-sm text-slate-400">{t("boqEditor.pageSubtitle")}</p>
           </div>
-          <div className="flex flex-wrap gap-3">
+          {!rateOnlyMode && <div className="flex flex-wrap gap-3">
             <button
               type="button"
               onClick={() => {
@@ -728,11 +750,11 @@ export default function ProjectBOQPage(props: PageProps) {
                     ? t("boqEditor.revisionLocked")
                     : t("boqEditor.lockRevision")}
             </button>
-          </div>
+          </div>}
         </div>
       </div>
 
-      {showAiDraftReview && activeRevision && !isReadOnly && (
+      {!rateOnlyMode && showAiDraftReview && activeRevision && !isReadOnly && (
         <section className="rounded-[28px] border border-blue-500/40 bg-blue-500/10 p-5 text-slate-200">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
             <div className="max-w-3xl">
@@ -794,7 +816,7 @@ export default function ProjectBOQPage(props: PageProps) {
         </section>
       )}
 
-      {workflowFactsWarning ? (
+      {!rateOnlyMode && (workflowFactsWarning ? (
         <div
           role="status"
           className="rounded-[28px] border border-amber-900/60 bg-amber-950/20 p-5 text-sm text-amber-200"
@@ -807,7 +829,28 @@ export default function ProjectBOQPage(props: PageProps) {
           nextAction={workflowState.nextAction}
           onAction={handleWorkflowAction}
         />
-      )}
+      ))}
+
+      {rateOnlyMode && activeRevision && !isReadOnly ? (
+        <section className="rounded-[28px] border border-blue-500/40 bg-blue-500/10 p-5 text-slate-200">
+          <p className="text-xs font-semibold uppercase tracking-[0.22em] text-blue-300">Final pricing</p>
+          <div className="mt-2 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h3 className="text-xl font-semibold text-white">Quantara prepared the measured BOQ</h3>
+              <p className="mt-1 text-sm text-slate-300">Enter every unit rate, then generate the verified final BOQ. Quantities and source evidence remain read-only.</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => void generateFinalBoq()}
+              disabled={actionInProgress || hasUnsavedChanges || !allRatesEntered}
+              title={hasUnsavedChanges ? "Save every rate before generating the final BOQ." : !allRatesEntered ? "Enter a rate greater than zero for every item." : ""}
+              className="shrink-0 rounded-2xl bg-blue-600 px-5 py-3 text-sm font-semibold text-white hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {pendingAction === "lock" ? "Verifying…" : "Generate final BOQ"}
+            </button>
+          </div>
+        </section>
+      ) : null}
 
       {validationPreviewError && (
         <div
@@ -848,7 +891,15 @@ export default function ProjectBOQPage(props: PageProps) {
             </div>
           ) : activeRevision ? (
             <div id="boq-editor-section" tabIndex={-1} className="min-w-0 rounded-[32px] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-blue-500">
-            <BoqEditor
+            {rateOnlyMode ? (
+              <RateOnlyBOQEditor
+                boq={activeRevision}
+                currency={project.currency}
+                readOnly={isReadOnly}
+                onBoqUpdated={replaceRevision}
+                onDirtyChange={setHasUnsavedChanges}
+              />
+            ) : <BoqEditor
               boq={activeRevision}
               projectId={params.projectId}
               currency={project.currency}
@@ -870,7 +921,7 @@ export default function ProjectBOQPage(props: PageProps) {
               }}
               hasUnsavedChanges={hasUnsavedChanges}
               onVoiceApplied={replaceRevision}
-            />
+            />}
             </div>
           ) : (
             <div className="rounded-[32px] border border-slate-800 bg-slate-950 p-8 text-slate-300">
@@ -890,6 +941,10 @@ export default function ProjectBOQPage(props: PageProps) {
                   type="button"
                   onClick={() => {
                     if (boq.id !== activeRevision?.id) {
+                      if (hasUnsavedChanges) {
+                        setActionError("Save the current rate changes before opening another revision.");
+                        return;
+                      }
                       setActiveBoq(boq);
                       setHasUnsavedChanges(false);
                     }
@@ -919,7 +974,7 @@ export default function ProjectBOQPage(props: PageProps) {
         </aside>
       </div>
 
-      {showAddItem && activeRevision && (
+      {!rateOnlyMode && showAddItem && activeRevision && (
         <AddItemFromSourceModal
           projectId={params.projectId}
           boqId={activeRevision.id}

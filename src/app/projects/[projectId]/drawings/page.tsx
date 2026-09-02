@@ -26,10 +26,42 @@ import {
   isDrawingExtensionPreviewable,
   type DrawingMetadataInput,
 } from "@/lib/validation/drawing-schema";
+import { emitOnboardingActionComplete } from "@/lib/onboarding/onboarding-state";
+import { trackFirstConversionEvent } from "@/lib/marketing/conversion-events";
 
 type UploadStage = "preparing" | "uploading" | "finalizing" | "failed";
 
 type ProjectView = { id: string; name: string; reference: string };
+
+type PreparationStatus = {
+  id: string;
+  targetBoqId: string | null;
+  sourceFileIds: string[];
+  status: "QUEUED" | "RUNNING" | "NEEDS_INPUT" | "NEEDS_REVIEW" | "COMPLETED" | "FAILED" | "CANCELLED";
+  stage: string;
+  progressPercentage: number;
+  readyForRates: boolean;
+  retryable: boolean;
+  exceptions: Array<{ code: string; message: string; sourceFileIds: string[] }>;
+  error: { code: string | null; message: string | null } | null;
+  updatedAt: string;
+};
+
+function preparationStageLabel(stage: string): string {
+  return ({
+    QUEUED: "Queued",
+    SOURCE_VALIDATION: "Checking drawings",
+    SOURCE_PROCESSING: "Reading all drawings",
+    SOURCE_INPUT_REQUIRED: "Drawing input required",
+    MEASURING: "Calculating quantities",
+    ASSEMBLING_BOQ: "Structuring the BOQ",
+    ASSEMBLY_PENDING: "BOQ assembly pending",
+    READY_FOR_RATES: "BOQ ready for rates",
+    NEEDS_REVIEW: "Review required",
+    FAILED: "Preparation failed",
+    CANCELLED: "Preparation cancelled",
+  } as Record<string, string>)[stage] ?? "Preparing BOQ";
+}
 
 const panel = "rounded-[28px] border border-[#D5E0EC] dark:border-[#20304D] bg-white dark:bg-[#091326] p-6 sm:p-8";
 const inputClass =
@@ -101,17 +133,22 @@ export default function ProjectDrawingsPage(props: { params: Promise<{ projectId
 
   const [previewDrawing, setPreviewDrawing] = useState<DrawingView | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [preparation, setPreparation] = useState<PreparationStatus | null>(null);
+  const [preparationAction, setPreparationAction] = useState<"start" | "retry" | null>(null);
+  const preparedEventRef = useRef<string | null>(null);
 
   const load = useCallback(async (signal?: AbortSignal) => {
     setIsLoading(true);
     setLoadError(null);
     try {
-      const [projectData, drawingsData] = await Promise.all([
+      const [projectData, drawingsData, preparationData] = await Promise.all([
         apiClient.get<ProjectView>(`/api/projects/${encodeURIComponent(params.projectId)}`, signal),
         apiClient.get<DrawingView[]>(`/api/projects/${encodeURIComponent(params.projectId)}/drawings`, signal),
+        apiClient.get<PreparationStatus | null>(`/api/projects/${encodeURIComponent(params.projectId)}/boq-preparation`, signal),
       ]);
       setProject(projectData);
       setDrawings(drawingsData);
+      setPreparation(preparationData);
     } catch (error) {
       if (error instanceof DOMException && error.name === "AbortError") return;
       setLoadError(getApiErrorMessage(error));
@@ -125,6 +162,65 @@ export default function ProjectDrawingsPage(props: { params: Promise<{ projectId
     void load(controller.signal);
     return () => controller.abort();
   }, [load]);
+
+  useEffect(() => {
+    if (!preparation || !["QUEUED", "RUNNING"].includes(preparation.status)) return;
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => {
+      apiClient.get<PreparationStatus | null>(
+        `/api/projects/${encodeURIComponent(params.projectId)}/boq-preparation`,
+        controller.signal,
+      ).then(setPreparation).catch((error) => {
+        if (error instanceof DOMException && error.name === "AbortError") return;
+        setActionError(getApiErrorMessage(error));
+      });
+    }, 2500);
+    return () => {
+      controller.abort();
+      window.clearTimeout(timer);
+    };
+  }, [params.projectId, preparation]);
+
+  useEffect(() => {
+    if (!preparation?.readyForRates || preparedEventRef.current === preparation.id) return;
+    preparedEventRef.current = preparation.id;
+    emitOnboardingActionComplete("BOQ_PREPARED", { projectId: params.projectId });
+    trackFirstConversionEvent("first_boq_created", { source: "autonomous_drawing_preparation" });
+  }, [params.projectId, preparation]);
+
+  const startPreparation = useCallback(async () => {
+    if (!drawings?.length || preparationAction) return;
+    setPreparationAction("start");
+    setActionError(null);
+    try {
+      const status = await apiClient.post<PreparationStatus>(
+        `/api/projects/${encodeURIComponent(params.projectId)}/boq-preparation`,
+        { sourceFileIds: drawings.map((drawing) => drawing.id) },
+      );
+      setPreparation(status);
+    } catch (error) {
+      setActionError(getApiErrorMessage(error));
+    } finally {
+      setPreparationAction(null);
+    }
+  }, [drawings, params.projectId, preparationAction]);
+
+  const retryPreparation = useCallback(async () => {
+    if (!preparation?.retryable || preparationAction) return;
+    setPreparationAction("retry");
+    setActionError(null);
+    try {
+      const status = await apiClient.post<PreparationStatus>(
+        `/api/projects/${encodeURIComponent(params.projectId)}/boq-preparation/${encodeURIComponent(preparation.id)}/retry`,
+        {},
+      );
+      setPreparation(status);
+    } catch (error) {
+      setActionError(getApiErrorMessage(error));
+    } finally {
+      setPreparationAction(null);
+    }
+  }, [params.projectId, preparation, preparationAction]);
 
   const stageFile = useCallback((file: File) => {
     setValidationError(null);
@@ -269,7 +365,7 @@ export default function ProjectDrawingsPage(props: { params: Promise<{ projectId
         <p className="mt-3 text-xs uppercase tracking-[0.28em] text-[#7B879C] dark:text-[#8CA0BE]">{project.reference} · Drawing intake</p>
         <h1 className="mt-1 text-3xl font-semibold text-[#08152E] dark:text-white">Project Drawings</h1>
         <p className="mt-2 max-w-2xl text-sm text-[#536078] dark:text-[#8CA0BE]">
-          Upload, classify, and securely store drawings for this project in private, tenant-isolated Blob storage. Continue to Source Processing when you are ready to review or process the uploaded source.
+          Upload one or more project drawings. Quantara will analyse the selected industry scope, reconcile the drawing set, and prepare a measured BOQ for unit rates.
         </p>
       </div>
 
@@ -430,22 +526,68 @@ export default function ProjectDrawingsPage(props: { params: Promise<{ projectId
         )}
       </div>
 
-      {/* Source processing is a separate, user-controlled workflow. */}
+      {/* Autonomous preparation is explicit so a multi-file drawing set can be uploaded first. */}
       <div className="rounded-[28px] border border-[#009FE3]/30 dark:border-[#21C7F3]/30 bg-[#009FE3]/[0.04] dark:bg-[#21C7F3]/[0.06] p-5">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div className="flex items-start gap-3">
             <Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-[#0077B6] dark:text-[#21C7F3]" aria-hidden="true" />
-            <p className="text-sm text-[#536078] dark:text-[#8CA0BE]">
-              <span className="font-semibold text-[#08152E] dark:text-white">Processing starts only when you request it.</span>{" "}
-              Drawing intake stores the source securely; it does not automatically classify, render, extract, or spend processing credits. Open Source Processing to inspect the file and run supported actions once.
-            </p>
+            <div className="text-sm text-[#536078] dark:text-[#8CA0BE]">
+              <p className="font-semibold text-[#08152E] dark:text-white">
+                {preparation ? preparationStageLabel(preparation.stage) : "Let Quantara prepare the BOQ"}
+              </p>
+              <p className="mt-1">
+                {preparation?.readyForRates
+                  ? "Scope, descriptions, units and quantities are complete. Add only the unit rates to finish the priced BOQ."
+                  : preparation && ["QUEUED", "RUNNING"].includes(preparation.status)
+                    ? `Quantara is processing the frozen drawing set (${Math.max(0, Math.min(100, preparation.progressPercentage))}%). You may leave this page and return without losing the job.`
+                    : "Upload the full drawing set first, then start one durable preparation across every active drawing."}
+              </p>
+              {preparation?.exceptions.length ? (
+                <ul className="mt-3 list-disc space-y-1 pl-5 text-[#D98A16] dark:text-amber-300">
+                  {preparation.exceptions.map((exception, index) => (
+                    <li key={`${exception.code}-${index}`}>{exception.message}</li>
+                  ))}
+                </ul>
+              ) : null}
+              {preparation?.error?.message ? (
+                <p className="mt-3 text-[#D84A4A] dark:text-rose-300" role="alert">{preparation.error.message}</p>
+              ) : null}
+            </div>
           </div>
-          <Link
-            href={`/projects/${encodeURIComponent(project.id)}/files`}
-            className="inline-flex shrink-0 items-center justify-center rounded-2xl bg-[#009FE3] px-4 py-2 text-sm font-semibold text-white hover:opacity-90 dark:bg-[#21C7F3] dark:text-[#040A16]"
-          >
-            View Source Processing
-          </Link>
+          <div className="flex shrink-0 flex-wrap gap-2">
+            {preparation?.readyForRates ? (
+              <Link
+                href={`/projects/${encodeURIComponent(project.id)}/boq?mode=rates&preparationId=${encodeURIComponent(preparation.id)}`}
+                className="inline-flex items-center justify-center rounded-2xl bg-[#009FE3] px-4 py-2 text-sm font-semibold text-white hover:opacity-90 dark:bg-[#21C7F3] dark:text-[#040A16]"
+              >
+                Add unit rates
+              </Link>
+            ) : preparation?.retryable ? (
+              <button
+                type="button"
+                onClick={() => void retryPreparation()}
+                disabled={preparationAction !== null}
+                className="rounded-2xl bg-[#009FE3] px-4 py-2 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-50 dark:bg-[#21C7F3] dark:text-[#040A16]"
+              >
+                {preparationAction === "retry" ? "Retrying…" : "Retry preparation"}
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => void startPreparation()}
+                disabled={!drawings?.length || preparationAction !== null || Boolean(preparation && ["QUEUED", "RUNNING"].includes(preparation.status))}
+                className="rounded-2xl bg-[#009FE3] px-4 py-2 text-sm font-semibold text-white hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-[#21C7F3] dark:text-[#040A16]"
+              >
+                {preparationAction === "start" ? "Starting…" : "Prepare BOQ from all drawings"}
+              </button>
+            )}
+            <Link
+              href={`/projects/${encodeURIComponent(project.id)}/files`}
+              className="inline-flex items-center justify-center rounded-2xl border border-[#D5E0EC] px-4 py-2 text-sm font-semibold text-[#08152E] hover:bg-white dark:border-[#20304D] dark:text-white dark:hover:bg-[#101D34]"
+            >
+              Source details
+            </Link>
+          </div>
         </div>
       </div>
 

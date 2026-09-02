@@ -163,6 +163,7 @@ const nextConfig = {
     "pdfkit",
     "pdf-parse",
     "pdfjs-dist",
+    "@napi-rs/canvas",
   ],
 };
 

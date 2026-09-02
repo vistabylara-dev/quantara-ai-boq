@@ -364,7 +364,15 @@ const defaultDependencies: AutonomousPreparationServiceDependencies = {
   getJob: getAutonomousPreparationJob,
   getLatestJob: getLatestAutonomousPreparationJob,
   requeueJob: requeueAutonomousPreparationJob,
-  registerHandlers: () => import("@/lib/jobs/register-handlers"),
+  registerHandlers: async () => {
+    // Vercel cannot trace pdfjs-dist's createRequire("@napi-rs/canvas").
+    // Import it directly before pdf-parse loads so the Node function contains
+    // the DOMMatrix/ImageData/Path2D provider used by drawing extraction.
+    if (process.env.VERCEL === "1") {
+      await import("@napi-rs/canvas");
+    }
+    return import("@/lib/jobs/register-handlers");
+  },
   scheduleJob: schedulePersistedPreparation,
 };
 

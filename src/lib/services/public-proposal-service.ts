@@ -81,6 +81,8 @@ async function buildViewData(record: ProposalAccessRecord): Promise<ProposalView
     email: record.company.email,
     phone: record.company.phone,
     website: record.company.website,
+    logoUrl: record.company.logoUrl,
+    taxRegistrationNumber: record.company.taxRegistrationNumber,
   };
   const projectInput = {
     name: record.project.name,

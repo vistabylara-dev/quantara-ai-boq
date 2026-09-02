@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { apiClient, getApiErrorMessage } from "@/lib/api/client";
 
 type ReportView = {
-  company: { legalName: string; tradeName: string; address: string | null; email: string; phone: string | null; website: string | null };
+  company: { legalName: string; tradeName: string; logoUrl: string | null; address: string | null; email: string; phone: string | null; website: string | null; taxRegistrationNumber: string | null };
   client: { name: string; companyName: string | null };
   project: { name: string; reference: string; location: string; currency: string; industry: string };
   report: { id: string; name: string; templateName: string; documentType: string | null; fileName: string | null; fileSize: number | null; completedAt: string | null };
@@ -114,15 +114,43 @@ export default function TechnicalReportClientView({ token, initialView, initialP
     );
   }
 
+  const companyDetailLines = [
+    view.company.address,
+    view.company.email,
+    view.company.phone,
+    view.company.website,
+    view.company.taxRegistrationNumber ? `TRN: ${view.company.taxRegistrationNumber}` : null,
+  ].filter((line): line is string => Boolean(line));
+
   return (
     <div className="space-y-6">
       <section className="rounded-2xl border border-slate-200 bg-white p-6 sm:p-8">
-        <p className="text-xs uppercase tracking-[0.2em] text-slate-400">Technical Report</p>
-        <h1 className="mt-2 text-2xl font-semibold text-slate-900">{view.project.name}</h1>
-        <p className="mt-1 text-sm text-slate-500">{view.project.reference} · {view.project.location} · {view.project.industry}</p>
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <p className="text-xs uppercase tracking-[0.2em] text-slate-400">Technical Report</p>
+            <h1 className="mt-2 text-2xl font-semibold text-slate-900">{view.project.name}</h1>
+            <p className="mt-1 text-sm text-slate-500">{view.project.reference} · {view.project.location} · {view.project.industry}</p>
+          </div>
+          {view.company.logoUrl && (
+            <img
+              src={view.company.logoUrl}
+              alt={`${view.company.tradeName || view.company.legalName} logo`}
+              className="h-14 w-auto max-w-[160px] shrink-0 object-contain"
+              onError={(e) => {
+                e.currentTarget.style.display = "none";
+              }}
+            />
+          )}
+        </div>
         <div className="mt-4 grid grid-cols-2 gap-4 text-sm text-slate-600 sm:grid-cols-3">
           <div><p className="text-slate-400">Prepared for</p><p className="text-slate-900">{view.client.companyName ?? view.client.name}</p></div>
-          <div><p className="text-slate-400">Prepared by</p><p className="text-slate-900">{view.company.tradeName || view.company.legalName}</p></div>
+          <div>
+            <p className="text-slate-400">Prepared by</p>
+            <p className="text-slate-900">{view.company.tradeName || view.company.legalName}</p>
+            {companyDetailLines.length > 0 && (
+              <p className="mt-0.5 text-xs text-slate-500">{companyDetailLines.join(" · ")}</p>
+            )}
+          </div>
           <div><p className="text-slate-400">Report template</p><p className="text-slate-900">{view.report.templateName}</p></div>
         </div>
       </section>

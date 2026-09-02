@@ -6,6 +6,7 @@ import {
   Footer,
   Header,
   HeadingLevel,
+  ImageRun,
   PageNumber,
   Packer,
   Paragraph,
@@ -17,6 +18,9 @@ import {
 } from "docx";
 import type { CanonicalDocumentData } from "../build-document-data";
 import type { DocumentTemplateContentConfig, DocumentTemplateStyleConfig } from "../template-config";
+import { fitLogoBox, loadLogoImage, type LogoImageFormat } from "../logo-image";
+
+const DOCX_IMAGE_TYPE: Record<LogoImageFormat, "jpg" | "png" | "gif"> = { png: "png", jpeg: "jpg", gif: "gif" };
 
 export type GenerateDocxInput = {
   data: CanonicalDocumentData;
@@ -82,6 +86,7 @@ export async function generateDocx(input: GenerateDocxInput): Promise<Buffer> {
   const rtl = style.direction === "rtl";
   const showInternal = data.boq.showInternalFields;
   const quantitiesOnly = data.boq.pricingMode === "QUANTITIES_ONLY";
+  const logo = await loadLogoImage(data.company.logoUrl);
 
   const headerCells = [
     "#",
@@ -200,8 +205,35 @@ export async function generateDocx(input: GenerateDocxInput): Promise<Buffer> {
   );
 
   if (content.showCompanyInfo) {
+    if (logo) {
+      try {
+        const box = fitLogoBox(logo.width, logo.height, 160, 70);
+        children.push(
+          new Paragraph({
+            alignment: rtl ? AlignmentType.RIGHT : AlignmentType.LEFT,
+            spacing: { after: 80 },
+            children: [
+              new ImageRun({
+                type: DOCX_IMAGE_TYPE[logo.format],
+                data: logo.buffer,
+                transformation: { width: box.width, height: box.height },
+              }),
+            ],
+          }),
+        );
+      } catch {
+        // Corrupt/undecodable image bytes must never block document generation.
+      }
+    }
     children.push(paragraph("From", rtl, { bold: true, size: 18, spacingAfter: 40 }));
-    for (const line of [data.company.legalName, data.company.address ?? "", data.company.email, data.company.phone ?? ""].filter(Boolean)) {
+    for (const line of [
+      data.company.legalName,
+      data.company.address ?? "",
+      data.company.email,
+      data.company.phone ?? "",
+      data.company.website ?? "",
+      data.company.taxRegistrationNumber ? `TRN: ${data.company.taxRegistrationNumber}` : "",
+    ].filter(Boolean)) {
       children.push(paragraph(line, rtl, { size: 18, spacingAfter: 40 }));
     }
   }

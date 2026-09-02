@@ -167,7 +167,30 @@ export default function CompanySettingsPage() {
             <label className={labelClass}><span className={sublabelClass}>Default currency</span><input value={profile.defaultCurrency} onChange={(e) => setProfile({ ...profile, defaultCurrency: e.target.value })} className={inputClass} /></label>
             <label className={labelClass}><span className={sublabelClass}>VAT rate (%)</span><input type="number" value={profile.vatRate} onChange={(e) => setProfile({ ...profile, vatRate: Number(e.target.value) })} className={inputClass} /></label>
             <label className={labelClass}><span className={sublabelClass}>Default language</span><input value={profile.defaultLanguage} onChange={(e) => setProfile({ ...profile, defaultLanguage: e.target.value })} className={inputClass} /></label>
-            <label className={labelClass}><span className={sublabelClass}>Logo URL</span><input value={profile.logoUrl ?? ""} onChange={(e) => setProfile({ ...profile, logoUrl: e.target.value })} className={inputClass} /></label>
+            <label className={`${labelClass} sm:col-span-2`}>
+              <span className={sublabelClass}>Company logo URL</span>
+              <input value={profile.logoUrl ?? ""} onChange={(e) => setProfile({ ...profile, logoUrl: e.target.value })} className={inputClass} placeholder="https://example.com/logo.png" />
+              <span className="mt-1 block text-xs text-slate-500">Provide a public PNG, JPG, or GIF image URL. It will appear on your generated BOQs and client proposals.</span>
+              {profile.logoUrl && (
+                <span className="mt-3 flex items-center gap-3 rounded-2xl border border-slate-800 bg-slate-900 p-3">
+                  <img
+                    src={profile.logoUrl}
+                    alt="Company logo preview"
+                    className="h-12 w-auto max-w-[160px] rounded-lg border border-slate-800 bg-white object-contain p-1"
+                    onError={(e) => {
+                      e.currentTarget.style.display = "none";
+                      const fallback = e.currentTarget.nextElementSibling as HTMLElement | null;
+                      if (fallback) fallback.style.display = "block";
+                    }}
+                    onLoad={(e) => {
+                      const fallback = e.currentTarget.nextElementSibling as HTMLElement | null;
+                      if (fallback) fallback.style.display = "none";
+                    }}
+                  />
+                  <span className="hidden text-xs text-rose-300">Could not load this image — check the URL is public and points directly to a PNG, JPG, or GIF file.</span>
+                </span>
+              )}
+            </label>
             <label className={labelClass}><span className={sublabelClass}>Authorized signatory name</span><input value={profile.authorizedSignatoryName ?? ""} onChange={(e) => setProfile({ ...profile, authorizedSignatoryName: e.target.value })} className={inputClass} /></label>
             <label className={labelClass}><span className={sublabelClass}>Authorized signatory title</span><input value={profile.authorizedSignatoryTitle ?? ""} onChange={(e) => setProfile({ ...profile, authorizedSignatoryTitle: e.target.value })} className={inputClass} /></label>
             <label className={labelClass}><span className={sublabelClass}>Stamp image URL</span><input value={profile.stampUrl ?? ""} onChange={(e) => setProfile({ ...profile, stampUrl: e.target.value })} className={inputClass} /></label>

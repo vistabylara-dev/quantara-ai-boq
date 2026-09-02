@@ -67,6 +67,7 @@ async function GETHandler(request: Request, context: RouteContext) {
         address: company.address,
         taxRegistrationNumber: company.taxRegistrationNumber,
         defaultCurrency: company.defaultCurrency,
+        logoUrl: company.logoUrl,
       },
       client: {
         name: project.client.name,

@@ -212,6 +212,17 @@ export type UploadProjectDrawingInput = {
  */
 export async function uploadProjectDrawing(actor: CurrentActor, projectId: string, input: UploadProjectDrawingInput) {
   requireCapability(actor, "files:manage");
+  // This buffered, single-request path is a local-development convenience
+  // only (STORAGE_PROVIDER not configured for vercel-blob). Production must
+  // always use the direct-to-Blob authorize/finalize flow below — PDF bytes
+  // must never pass through a Vercel Function there.
+  if (process.env.NODE_ENV === "production") {
+    throw new AppError(
+      "BUFFERED_UPLOAD_NOT_SUPPORTED",
+      "Buffered drawing uploads are not available in production. Use the direct-to-Blob upload flow.",
+      409,
+    );
+  }
   // The route param may be the project's slug (e.g. "project-00") or its
   // database UUID. getProjectRecord resolves either, but every operation
   // after this point must use the canonical UUID it returns — ProjectFile.

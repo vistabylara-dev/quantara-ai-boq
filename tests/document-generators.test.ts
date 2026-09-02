@@ -1,6 +1,6 @@
 import ExcelJS from "exceljs";
 import JSZip from "jszip";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { buildDocumentData, type BuildDocumentDataInput } from "@/lib/documents/build-document-data";
 import { generateCsv } from "@/lib/documents/generators/csv-generator";
 import { generateXlsx } from "@/lib/documents/generators/xlsx-generator";
@@ -148,6 +148,20 @@ describe("buildDocumentData (canonical document data)", () => {
     expect(data.boq.showInternalFields).toBe(true);
     expect(data.boq.sections[0].items[0].unitCost).toBe(320);
   });
+
+  it("preserves the company logo URL when provided", () => {
+    const data = buildDocumentData({
+      ...baseInput,
+      audience: "CLIENT",
+      company: { ...baseInput.company, logoUrl: "https://cdn.example.com/logo.png" },
+    });
+    expect(data.company.logoUrl).toBe("https://cdn.example.com/logo.png");
+  });
+
+  it("defaults the company logo URL to null when not configured", () => {
+    const data = buildDocumentData({ ...baseInput, audience: "CLIENT" });
+    expect(data.company.logoUrl).toBeNull();
+  });
 });
 
 describe("CSV generator", () => {
@@ -272,5 +286,70 @@ describe("HTML generator", () => {
     const internalData = buildDocumentData({ ...baseInput, audience: "INTERNAL" });
     expect(generateHtml({ data: clientData, style, content })).not.toContain(">Landed<");
     expect(generateHtml({ data: internalData, style, content })).toContain(">Landed<");
+  });
+
+  it("includes the company logo image when a logo URL is configured", () => {
+    const data = buildDocumentData({
+      ...baseInput,
+      audience: "CLIENT",
+      company: { ...baseInput.company, logoUrl: "https://cdn.example.com/logo.png" },
+    });
+    const html = generateHtml({ data, style, content });
+    expect(html).toContain('<img class="company-logo" src="https://cdn.example.com/logo.png"');
+  });
+
+  it("omits the logo <img> entirely when no logo URL is configured", () => {
+    const data = buildDocumentData({ ...baseInput, audience: "CLIENT" });
+    expect(generateHtml({ data, style, content })).not.toContain("<img");
+  });
+
+  it("escapes a logo URL containing HTML-significant characters", () => {
+    const data = buildDocumentData({
+      ...baseInput,
+      audience: "CLIENT",
+      company: { ...baseInput.company, logoUrl: 'https://cdn.example.com/logo.png?a="><script>alert(1)</script>' },
+    });
+    const html = generateHtml({ data, style, content });
+    expect(html).not.toContain("<script>alert(1)</script>");
+  });
+
+  it("shows company website and tax registration number when available", () => {
+    const data = buildDocumentData({ ...baseInput, audience: "CLIENT" });
+    const html = generateHtml({ data, style, content });
+    expect(html).toContain(baseInput.company.website);
+    expect(html).toContain(`TRN: ${baseInput.company.taxRegistrationNumber}`);
+  });
+});
+
+describe("Logo resilience across generators", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("PDF, DOCX, and XLSX generation succeed when the logo fetch fails", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("logo host unreachable")));
+    const data = buildDocumentData({
+      ...baseInput,
+      audience: "CLIENT",
+      company: { ...baseInput.company, logoUrl: "https://unreachable.example.com/logo.png" },
+    });
+
+    const pdf = await generatePdf({ data, style, content });
+    expect(pdf.subarray(0, 5).toString()).toBe("%PDF-");
+
+    const docx = await generateDocx({ data, style, content });
+    expect(docx.subarray(0, 2).toString()).toBe("PK");
+
+    const xlsx = await generateXlsx(data);
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.load(xlsx);
+    expect(workbook.getWorksheet("BOQ")).toBeDefined();
+  });
+
+  it("PDF, DOCX, and XLSX generation succeed when no logo is configured at all", async () => {
+    const data = buildDocumentData({ ...baseInput, audience: "CLIENT" });
+    expect((await generatePdf({ data, style, content })).byteLength).toBeGreaterThan(500);
+    expect((await generateDocx({ data, style, content })).byteLength).toBeGreaterThan(500);
+    expect((await generateXlsx(data)).byteLength).toBeGreaterThan(500);
   });
 });

@@ -5,6 +5,7 @@ import { AlertTriangle, ArrowLeft, Sparkles, Upload, X } from "lucide-react";
 import Link from "next/link";
 import { use, useCallback, useEffect, useRef, useState } from "react";
 import { apiClient, getApiErrorMessage } from "@/lib/api/client";
+import { shouldFallBackToBufferedUpload } from "@/lib/drawings/upload-routing";
 import SectionHeader from "@/components/dashboard/section-header";
 import EmptyState from "@/components/dashboard/empty-state";
 import LoadingSkeleton from "@/components/dashboard/loading-skeleton";
@@ -29,10 +30,6 @@ const inputClass =
 const labelClass = "block text-xs font-medium text-[#536078] dark:text-[#8CA0BE]";
 
 const EMPTY_METADATA: DrawingMetadataInput = {};
-// Keep comfortably below Vercel's buffered request-body ceiling. Small files
-// are more reliable through the single-request route; large drawings retain
-// the direct-to-Blob path so they never pass through function memory.
-const SERVER_BUFFERED_UPLOAD_MAX_BYTES = 3 * 1024 * 1024;
 
 function formatLabel(value: string): string {
   return value.replace(/_/g, " ").toLowerCase().replace(/\b\w/g, (letter) => letter.toUpperCase());
@@ -51,7 +48,7 @@ type AuthorizeUploadResponse = {
   expiresAt: string;
 };
 
-/** Server-buffered fallback path — only reachable when STORAGE_PROVIDER isn't vercel-blob (local dev without a Blob token). Never used in production, where direct upload is always available. */
+/** Server-buffered fallback path — only reachable in development when STORAGE_PROVIDER isn't vercel-blob (local dev without a Blob token). Never used in production: PDF bytes must never pass through a Vercel Function there. */
 function uploadDrawingViaLegacyRoute(
   url: string,
   file: File,
@@ -159,26 +156,6 @@ export default function ProjectDrawingsPage(props: { params: Promise<{ projectId
     setUploadStage("preparing");
     setUploadProgress(0);
     try {
-      if (stagedFile.size <= SERVER_BUFFERED_UPLOAD_MAX_BYTES) {
-        setUploadStage("uploading");
-        const response = await uploadDrawingViaLegacyRoute(
-          `/api/projects/${encodeURIComponent(params.projectId)}/drawings`,
-          stagedFile,
-          metadata,
-          setUploadProgress,
-        );
-        const body = response.body as { ok?: boolean; error?: { message?: string } } | null;
-        if (response.status < 200 || response.status >= 300 || !body?.ok) {
-          throw new Error(body?.error?.message ?? "The upload could not be completed.");
-        }
-        setStagedFile(null);
-        setUploadStage(null);
-        setUploadProgress(null);
-        setMetadata(EMPTY_METADATA);
-        await load();
-        return;
-      }
-
       const authorization = await apiClient.post<AuthorizeUploadResponse | { directUploadUnsupported: true }>(
         `/api/projects/${encodeURIComponent(params.projectId)}/drawings/upload-authorization`,
         {
@@ -187,8 +164,10 @@ export default function ProjectDrawingsPage(props: { params: Promise<{ projectId
           declaredByteSize: stagedFile.size,
         },
       ).catch((error) => {
-        // DIRECT_UPLOAD_NOT_SUPPORTED (local dev without vercel-blob configured) — fall back to the legacy server-buffered path.
-        if (getApiErrorMessage(error).includes("STORAGE_PROVIDER=vercel-blob")) {
+        // DIRECT_UPLOAD_NOT_SUPPORTED (local dev without vercel-blob configured) — fall back to the legacy
+        // server-buffered path. Only ever in development: in production this must surface as a real,
+        // visible configuration error, never a silent fallback that routes PDF bytes through a Function.
+        if (shouldFallBackToBufferedUpload(getApiErrorMessage(error), process.env.NODE_ENV === "production")) {
           return { directUploadUnsupported: true as const };
         }
         throw error;

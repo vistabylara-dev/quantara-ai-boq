@@ -280,6 +280,7 @@ export async function generateDocument(actor: CurrentActor, projectIdentifier: s
       address: company.address,
       taxRegistrationNumber: company.taxRegistrationNumber,
       defaultCurrency: company.defaultCurrency,
+      logoUrl: company.logoUrl,
     },
     client: {
       name: project.client.name,

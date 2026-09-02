@@ -237,6 +237,25 @@ describe("Drawing upload & intake pipeline (integration, real local Postgres)", 
     });
   });
 
+  describe("production guard — the buffered route is a local-development convenience only", () => {
+    it("refuses a buffered upload in production, before touching storage or the database, with a clear configuration error rather than accepting PDF bytes through this route", async () => {
+      const originalNodeEnv = process.env.NODE_ENV;
+      // @ts-expect-error — NODE_ENV is normally readonly-by-convention; this test restores it in `finally`.
+      process.env.NODE_ENV = "production";
+      try {
+        const beforeCount = await prisma.projectFile.count({ where: { companyId: companyAId } });
+        await expect(
+          uploadProjectDrawing(ownerActorA, projectAId, { originalName: "prod-buffered.pdf", mimeType: "application/pdf", buffer: pdfBuffer("x"), metadata: {} }),
+        ).rejects.toMatchObject({ code: "BUFFERED_UPLOAD_NOT_SUPPORTED" });
+        const afterCount = await prisma.projectFile.count({ where: { companyId: companyAId } });
+        expect(afterCount).toBe(beforeCount);
+      } finally {
+        // @ts-expect-error — see above.
+        process.env.NODE_ENV = originalNodeEnv;
+      }
+    });
+  });
+
   describe("classification metadata", () => {
     it("persists discipline, drawing type, and optional metadata exactly as submitted — never inferred from the filename", async () => {
       const result = await uploadProjectDrawing(ownerActorA, projectAId, {

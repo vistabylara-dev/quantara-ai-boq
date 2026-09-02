@@ -3,6 +3,7 @@ import PDFDocument from "pdfkit";
 import type { CanonicalDocumentData } from "../build-document-data";
 import type { DocumentTemplateContentConfig, DocumentTemplateStyleConfig } from "../template-config";
 import { isArabicChar, splitScriptRuns, toVisualArabic } from "../arabic-text";
+import { fitLogoBox, loadLogoImage } from "../logo-image";
 
 function containsArabic(text: string): boolean {
   for (const char of text) {
@@ -142,12 +143,29 @@ export async function generatePdf(input: GeneratePdfInput): Promise<Buffer> {
   const [pr, pg, pb] = hexToRgbArray(style.primaryColor);
   const [ar, ag, ab] = hexToRgbArray(style.accentColor);
 
+  // pdfkit only decodes PNG/JPEG — a GIF logo (or any format it can't decode)
+  // is treated the same as no logo at all rather than blocking generation.
+  const rawLogo = await loadLogoImage(data.company.logoUrl);
+  const logo = rawLogo && rawLogo.format !== "gif" ? rawLogo : null;
+
   return new Promise((resolve, reject) => {
     const doc = new PDFDocument({ size: "A4", margin: PAGE_MARGIN, bufferPages: true, autoFirstPage: false });
     const chunks: Buffer[] = [];
     doc.on("data", (chunk: Buffer) => chunks.push(chunk));
     doc.on("end", () => resolve(Buffer.concat(chunks)));
     doc.on("error", reject);
+
+    function drawLogoSafely(x: number, y: number, maxWidth: number, maxHeight: number): number {
+      if (!logo) return 0;
+      try {
+        const box = fitLogoBox(logo.width, logo.height, maxWidth, maxHeight);
+        doc.image(logo.buffer, x, y, { width: box.width, height: box.height });
+        return box.height;
+      } catch {
+        // Corrupt/undecodable image bytes must never block document generation.
+        return 0;
+      }
+    }
 
     // Registered unconditionally: even an LTR/Helvetica-only template can
     // encounter a description or note containing Arabic characters, and
@@ -186,6 +204,7 @@ export async function generatePdf(input: GeneratePdfInput): Promise<Buffer> {
       } else {
         doc.fillColor([pr, pg, pb]);
       }
+      drawLogoSafely(PAGE_MARGIN, 90, 150, 90);
       const coverY = 260;
       writeText(data.company.tradeName || data.company.legalName, PAGE_MARGIN, coverY, contentWidth, {
         bold: true,
@@ -229,6 +248,10 @@ export async function generatePdf(input: GeneratePdfInput): Promise<Buffer> {
       let leftY = y;
       let rightY = y;
       if (content.showCompanyInfo) {
+        if (!content.showCoverPage) {
+          const logoHeight = drawLogoSafely(leftX, leftY, Math.min(colWidth, 110), 40);
+          if (logoHeight > 0) leftY += logoHeight + 6;
+        }
         writeText("From", leftX, leftY, colWidth, { bold: true, size: 9, color: [ar, ag, ab] });
         leftY += 14;
         const companyLines = [
@@ -236,6 +259,7 @@ export async function generatePdf(input: GeneratePdfInput): Promise<Buffer> {
           data.company.address ?? "",
           data.company.email,
           data.company.phone ?? "",
+          data.company.website ?? "",
           data.company.taxRegistrationNumber ? `TRN: ${data.company.taxRegistrationNumber}` : "",
         ].filter(Boolean);
         for (const line of companyLines) {

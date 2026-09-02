@@ -40,7 +40,7 @@ function deriveLifecycle(project: IntelligenceProject, t: TranslateFn) {
 
 function recommendedAction(project: IntelligenceProject, t: TranslateFn): { text: string; href: string } | null {
   if (project.fileCount === 0) {
-    return { text: t("dashboardComponents.projectIntelligencePanel.actionUploadFirstDrawing"), href: `/projects/${project.id}/files` };
+    return { text: t("dashboardComponents.projectIntelligencePanel.actionUploadFirstDrawing"), href: `/projects/${project.id}/drawings` };
   }
   if (project.boqCount === 0) {
     return { text: t("dashboardComponents.projectIntelligencePanel.actionCreateBoq"), href: `/projects/${project.id}/boq` };

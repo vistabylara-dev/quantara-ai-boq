@@ -207,6 +207,17 @@ describe("Direct-to-Blob drawing upload (integration, real local Postgres, fake 
       expect(result.sessionId).toBeTruthy();
     });
 
+    it("authorizes a PDF above the 4.5MB serverless function body-size ceiling — proving these uploads go direct-to-Blob and never depend on a buffered route that would 413", async () => {
+      const aboveFunctionBodyLimit = Math.ceil(4.5 * 1024 * 1024) + 1;
+      const result = await authorizeDrawingUpload(ownerActorA, projectAId, {
+        originalName: "above-4-5mb.pdf",
+        declaredMimeType: "application/pdf",
+        declaredByteSize: aboveFunctionBodyLimit,
+      });
+      expect(result.sessionId).toBeTruthy();
+      expect(result.pathname).toContain(`companies/${companyAId}/projects/${projectAId}/drawings/`);
+    });
+
     it("scopes the session to the authenticated actor's own company/project — a cross-tenant project id is rejected", async () => {
       await expect(
         authorizeDrawingUpload(ownerActorB, projectAId, {

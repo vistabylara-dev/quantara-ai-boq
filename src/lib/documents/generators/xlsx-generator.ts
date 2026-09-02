@@ -1,5 +1,6 @@
 import ExcelJS from "exceljs";
 import type { CanonicalDocumentData } from "../build-document-data";
+import { fitLogoBox, loadLogoImage } from "../logo-image";
 
 const TITLE_FONT = { bold: true, size: 16, color: { argb: "FF0B1D3A" } };
 const SUBTITLE_FONT = { bold: true, size: 11, color: { argb: "FF334155" } };
@@ -20,6 +21,7 @@ export async function generateXlsx(data: CanonicalDocumentData): Promise<Buffer>
   const workbook = new ExcelJS.Workbook();
   workbook.creator = data.company.tradeName || data.company.legalName;
   workbook.created = new Date(data.meta.generatedAt);
+  const logo = await loadLogoImage(data.company.logoUrl);
 
   const sheet = workbook.addWorksheet("BOQ", {
     views: [{ state: "frozen", ySplit: 0 }],
@@ -61,7 +63,19 @@ export async function generateXlsx(data: CanonicalDocumentData): Promise<Buffer>
   const totalColLetter = sheet.getColumn(totalColIndex).letter;
 
   // --- Title block (rows 1-5, pushed above the table by inserting later) ---
-  sheet.spliceRows(1, 0, [data.company.legalName]);
+  // Company details are appended as a second wrapped line inside row 1 itself
+  // (rather than as a separate spliced row) so the header row number stays
+  // fixed regardless of whether a logo/company profile is configured.
+  const companyDetailLine = [
+    data.company.address,
+    data.company.email,
+    data.company.phone ? `Tel: ${data.company.phone}` : null,
+    data.company.website,
+    data.company.taxRegistrationNumber ? `TRN: ${data.company.taxRegistrationNumber}` : null,
+  ]
+    .filter(Boolean)
+    .join("  ·  ");
+  sheet.spliceRows(1, 0, [companyDetailLine ? `${data.company.legalName}\n${companyDetailLine}` : data.company.legalName]);
   sheet.spliceRows(2, 0, [`${data.project.name} (${data.project.reference})`]);
   sheet.spliceRows(3, 0, [`Client: ${data.client.companyName ?? data.client.name}`]);
   sheet.spliceRows(4, 0, [`Revision ${data.boq.revision} · ${data.boq.status.toUpperCase()}${data.meta.isDraft ? " · DRAFT" : ""} · Generated ${new Date(data.meta.generatedAt).toLocaleDateString()}`]);
@@ -69,12 +83,26 @@ export async function generateXlsx(data: CanonicalDocumentData): Promise<Buffer>
 
   sheet.mergeCells(1, 1, 1, columns.length);
   sheet.getCell(1, 1).font = TITLE_FONT;
+  if (companyDetailLine) {
+    sheet.getCell(1, 1).alignment = { wrapText: true, vertical: "top" };
+    sheet.getRow(1).height = 30;
+  }
   sheet.mergeCells(2, 1, 2, columns.length);
   sheet.getCell(2, 1).font = SUBTITLE_FONT;
   sheet.mergeCells(3, 1, 3, columns.length);
   sheet.getCell(3, 1).font = SUBTITLE_FONT;
   sheet.mergeCells(4, 1, 4, columns.length);
   sheet.getCell(4, 1).font = { italic: true, size: 10, color: { argb: "FF64748B" } };
+
+  if (logo) {
+    try {
+      const imageId = workbook.addImage({ buffer: logo.buffer, extension: logo.format });
+      const box = fitLogoBox(logo.width, logo.height, 140, 50);
+      sheet.addImage(imageId, { tl: { col: Math.max(columns.length - 2, 0), row: 0.1 }, ext: { width: box.width, height: box.height } });
+    } catch {
+      // Corrupt/undecodable image bytes must never block document generation.
+    }
+  }
 
   let watermarkRowOffset = 0;
   if (data.meta.watermarkText) {

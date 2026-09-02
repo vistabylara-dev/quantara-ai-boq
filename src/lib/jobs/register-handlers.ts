@@ -9,3 +9,4 @@
 import "@/lib/files/classification-handler";
 import "@/lib/files/table-extraction-handler";
 import "@/lib/files/preprocessing-handler";
+import "@/lib/jobs/autonomous-boq-preparation-handler";

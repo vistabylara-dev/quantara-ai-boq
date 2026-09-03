@@ -1,5 +1,4 @@
 import { ExtractionEngineType, ExtractionJobStatus } from "@prisma/client";
-import { PDFParse } from "pdf-parse";
 import { prisma } from "@/lib/db/prisma";
 import { extractionJobQueue } from "@/lib/jobs/extraction-worker";
 import { createStorageAdapter, resolveStorageProvider } from "@/lib/storage/storage-factory";
@@ -7,6 +6,7 @@ import type { DocumentStorageAdapter } from "@/lib/storage/document-storage-adap
 import { buildStorageKey } from "@/lib/files/file-security";
 import { replaceDrawingPagesForFile, type CreateDrawingPageInput } from "@/lib/repositories/drawing-page-repository";
 import { buildPageTextExtraction } from "@/lib/files/pdf-text-extraction";
+import { loadPdfParse } from "@/lib/files/pdf-parse-runtime";
 
 const IMAGE_EXTENSIONS = new Set(["png", "jpg", "jpeg", "tif", "tiff"]);
 
@@ -54,6 +54,7 @@ extractionJobQueue.registerHandler(ExtractionEngineType.FILE_PREPROCESSING, asyn
 
   const storage = getProjectFileStorageAdapter();
   const buffer = await storage.getObject(file.storageKey);
+  const { PDFParse } = await loadPdfParse();
   const parser = new PDFParse({ data: buffer });
   try {
     await ctx.updateProgress(30, "rasterizing pages");

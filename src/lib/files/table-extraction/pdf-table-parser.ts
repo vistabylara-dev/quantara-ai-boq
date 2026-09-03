@@ -1,4 +1,4 @@
-import { PDFParse } from "pdf-parse";
+import { loadPdfParse } from "@/lib/files/pdf-parse-runtime";
 import type { ParsedTable } from "./types";
 import { parsePdfGridTable } from "./pdf-table-grid-normalization";
 import { parseStructuralScheduleTextFallback } from "./pdf-text-schedule-fallback";
@@ -22,6 +22,7 @@ function isKnownPdfTableGeometryError(error: unknown): boolean {
 }
 
 export async function parsePdfTables(buffer: Buffer): Promise<PdfExtractionResult> {
+  const { PDFParse } = await loadPdfParse();
   const parser = new PDFParse({ data: buffer });
   try {
     const textResult = await parser.getText({ pageJoiner: "" });

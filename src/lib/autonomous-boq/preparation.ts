@@ -142,11 +142,24 @@ const providerRecoverySchema = z.object({
   credentialFailure: providerFailureCheckpointSchema.optional(),
 }).strict();
 
+export const PREVIEW_PROVIDER_KEY_CORRECTED_RECOVERY_REASON =
+  "PREVIEW_PROVIDER_KEY_CORRECTED_AFTER_CREDIT_EXHAUSTION" as const;
+
+const previewProviderKeyRecoverySchema = z.object({
+  reason: z.literal(PREVIEW_PROVIDER_KEY_CORRECTED_RECOVERY_REASON),
+  jobId: z.string().uuid(),
+  authorizedAt: z.string().datetime(),
+  consumedAt: z.string().datetime(),
+  providerProjectId: z.string().trim().min(1).max(160),
+  providerRequestId: z.string().trim().min(1).max(160).nullable(),
+}).strict();
+
 export const autonomousPreparationCheckpointSchema = z.object({
   providerAttempt: providerAttemptSchema.nullable().optional(),
   providerResult: providerResultCheckpointSchema.nullable().optional(),
   providerFailure: providerFailureCheckpointSchema.nullable().optional(),
   providerRecovery: providerRecoverySchema.nullable().optional(),
+  previewProviderKeyRecovery: previewProviderKeyRecoverySchema.nullable().optional(),
 }).passthrough();
 
 export type AutonomousPreparationCheckpoint = z.infer<
@@ -156,6 +169,56 @@ export type AutonomousPreparationCheckpoint = z.infer<
 export type AutonomousProviderExecution =
   | { kind: "CALL_PROVIDER" }
   | { kind: "REPLAY_RESULT"; result: TayqanMeasurementReasonerResult };
+
+export function isPreviewProviderKeyRecoveryEligible(rawCheckpoint: unknown): boolean {
+  const parsed = autonomousPreparationCheckpointSchema.safeParse(rawCheckpoint ?? {});
+  if (!parsed.success) return false;
+  const checkpoint = parsed.data;
+  return Boolean(
+    checkpoint.providerAttempt
+    && !checkpoint.providerResult
+    && checkpoint.providerFailure
+    && checkpoint.providerFailure.operationHash === checkpoint.providerAttempt.operationHash
+    && checkpoint.providerFailure.providerDiagnostic?.providerCode === "credit_balance_exhausted"
+    && checkpoint.providerRecovery?.reason === "FUNDED_PROJECT_KEY_RETRY"
+    && checkpoint.providerRecovery.attemptCount === 3
+    && !checkpoint.previewProviderKeyRecovery,
+  );
+}
+
+export function authorizePreviewProviderKeyRecovery(
+  rawCheckpoint: unknown,
+  input: {
+    jobId: string;
+    authorizedAt: string;
+    providerProjectId: string;
+    providerRequestId: string | null;
+  },
+): AutonomousPreparationCheckpoint {
+  const checkpoint = autonomousPreparationCheckpointSchema.parse(rawCheckpoint ?? {});
+  if (!isPreviewProviderKeyRecoveryEligible(checkpoint)) {
+    throw new AppError(
+      "AUTONOMOUS_PREVIEW_PROVIDER_KEY_RECOVERY_NOT_ELIGIBLE",
+      "This job-specific Preview provider-key recovery is unavailable or already consumed.",
+      409,
+    );
+  }
+  const consumedAt = input.authorizedAt;
+  return {
+    ...checkpoint,
+    providerAttempt: null,
+    providerResult: null,
+    providerFailure: null,
+    previewProviderKeyRecovery: {
+      reason: PREVIEW_PROVIDER_KEY_CORRECTED_RECOVERY_REASON,
+      jobId: input.jobId,
+      authorizedAt: input.authorizedAt,
+      consumedAt,
+      providerProjectId: input.providerProjectId,
+      providerRequestId: input.providerRequestId,
+    },
+  };
+}
 
 export function authorizeSingle429ProviderRecovery(
   rawCheckpoint: unknown,

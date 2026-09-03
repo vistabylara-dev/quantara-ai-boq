@@ -542,6 +542,51 @@ async function providerDiagnostic(response: Response): Promise<OpenAIProviderDia
   };
 }
 
+export async function verifyOpenAIProviderProject(
+  input: {
+    apiKey: string;
+    model: string;
+    expectedProjectPrefix: string;
+    timeoutMs?: number;
+  },
+  fetchImpl: typeof fetch = fetch,
+): Promise<{ projectId: string; requestId: string | null }> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), input.timeoutMs ?? 10_000);
+  try {
+    const response = await fetchImpl(
+      `https://api.openai.com/v1/models/${encodeURIComponent(input.model)}`,
+      {
+        method: "GET",
+        headers: { Authorization: `Bearer ${input.apiKey}` },
+        signal: controller.signal,
+      },
+    );
+    if (!response.ok) {
+      const diagnostic = await providerDiagnostic(response);
+      console.warn("[tayqan-provider-preflight-rejection]", diagnostic);
+      throw new AppError(
+        "TAYQAN_PREVIEW_PROVIDER_PREFLIGHT_REJECTED",
+        `The configured Preview provider key failed its non-billable readiness check (HTTP ${response.status}). No recovery authorization was consumed.`,
+        503,
+      );
+    }
+    const metadata = providerResponseMetadata(response);
+    if (!metadata.projectId?.startsWith(input.expectedProjectPrefix)) {
+      console.warn("[tayqan-provider-preflight-project-mismatch]", metadata);
+      throw new AppError(
+        "TAYQAN_PREVIEW_PROVIDER_PROJECT_MISMATCH",
+        "The configured Preview provider key does not belong to the authorized funded project. No recovery authorization was consumed.",
+        503,
+      );
+    }
+    console.info("[tayqan-provider-preflight-ready]", metadata);
+    return { projectId: metadata.projectId, requestId: metadata.requestId };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 async function sleep(milliseconds: number) {
   await new Promise((resolve) => setTimeout(resolve, milliseconds));
 }

@@ -23,6 +23,7 @@ import {
   classifyProviderFailure,
   createOpenAITayqanMeasurementReasoner,
   providerResponseMetadata,
+  verifyOpenAIProviderProject,
 } from "../src/lib/tayqan/openai-tayqan-measurement-reasoner";
 
 const PAGE_PLAN = "11111111-1111-4111-8111-111111111111";
@@ -48,6 +49,42 @@ it("retains only sanitized provider readiness headers", () => {
     tokenLimit: "500000",
   });
   expect(JSON.stringify(metadata)).not.toContain("must-never-be-recorded");
+});
+
+it("preflights the funded project without sending a billable response request", async () => {
+  const fakeFetch = vi.fn(async () => new Response(JSON.stringify({ id: "gpt-5.6" }), {
+    status: 200,
+    headers: {
+      "Content-Type": "application/json",
+      "x-request-id": "req_preflight",
+      "openai-project": "proj_qnek_funded",
+    },
+  })) as typeof fetch;
+  await expect(verifyOpenAIProviderProject({
+    apiKey: "test-key",
+    model: "gpt-5.6",
+    expectedProjectPrefix: "proj_qnek",
+  }, fakeFetch)).resolves.toEqual({
+    projectId: "proj_qnek_funded",
+    requestId: "req_preflight",
+  });
+  expect(fakeFetch).toHaveBeenCalledTimes(1);
+  expect(fakeFetch.mock.calls[0]?.[0]).toBe("https://api.openai.com/v1/models/gpt-5.6");
+  expect(fakeFetch.mock.calls[0]?.[1]).toMatchObject({ method: "GET" });
+});
+
+it("rejects a mismatched project before consuming job recovery", async () => {
+  const fakeFetch = vi.fn(async () => new Response(null, {
+    status: 200,
+    headers: { "openai-project": "proj_wrong" },
+  })) as typeof fetch;
+  await expect(verifyOpenAIProviderProject({
+    apiKey: "test-key",
+    model: "gpt-5.6",
+    expectedProjectPrefix: "proj_qnek",
+  }, fakeFetch)).rejects.toMatchObject({
+    code: "TAYQAN_PREVIEW_PROVIDER_PROJECT_MISMATCH",
+  });
 });
 
 function page(overrides: Partial<TayqanMeasurementPageEvidence>): TayqanMeasurementPageEvidence {

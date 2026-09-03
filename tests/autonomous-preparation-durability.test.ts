@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
   AUTONOMOUS_BOQ_PREPARATION_VERSION,
+  authorizePreviewProviderKeyRecovery,
   authorizeSingle429ProviderRecovery,
   autonomousPreparationConfigurationSchema,
   createAutonomousBOQOperationHash,
+  isPreviewProviderKeyRecoveryEligible,
   resolveAutonomousProviderExecution,
 } from "@/lib/autonomous-boq/preparation";
 
@@ -252,6 +254,68 @@ describe("autonomous provider replay safety", () => {
         },
       },
     });
+  });
+
+  it("consumes one job-specific Preview key recovery without increasing the global limit", () => {
+    const operationHash = "a".repeat(64);
+    const checkpoint = {
+      providerAttempt: { operationHash, startedAt: "2026-09-03T02:00:00.000Z" },
+      providerResult: null,
+      providerFailure: {
+        operationHash,
+        failedAt: "2026-09-03T02:00:01.000Z",
+        code: "TAYQAN_MEASUREMENT_AI_REQUEST_REJECTED",
+        message: "Provider rejected the request (HTTP 429; credit_balance_exhausted).",
+        status: 503,
+        providerDiagnostic: {
+          classification: "credit_balance_exhausted",
+          providerCode: "credit_balance_exhausted",
+          providerType: "insufficient_quota",
+          httpStatus: 429,
+          requestId: "req_old_project",
+          organizationId: "user_old",
+          projectId: "proj_old",
+          retryAfter: null,
+          requestLimit: null,
+          remainingRequests: null,
+          requestReset: null,
+          tokenLimit: null,
+          remainingTokens: null,
+          tokenReset: null,
+        },
+      },
+      providerRecovery: {
+        authorizedAt: "2026-09-03T01:00:00.000Z",
+        reason: "FUNDED_PROJECT_KEY_RETRY" as const,
+        attemptCount: 3,
+      },
+    };
+    expect(isPreviewProviderKeyRecoveryEligible(checkpoint)).toBe(true);
+    const recovered = authorizePreviewProviderKeyRecovery(checkpoint, {
+      jobId: "60000000-0000-4000-8000-000000000001",
+      authorizedAt: "2026-09-03T02:10:00.000Z",
+      providerProjectId: "proj_qnek_funded",
+      providerRequestId: "req_preflight",
+    });
+    expect(recovered).toMatchObject({
+      providerAttempt: null,
+      providerResult: null,
+      providerFailure: null,
+      providerRecovery: { attemptCount: 3 },
+      previewProviderKeyRecovery: {
+        reason: "PREVIEW_PROVIDER_KEY_CORRECTED_AFTER_CREDIT_EXHAUSTION",
+        jobId: "60000000-0000-4000-8000-000000000001",
+        consumedAt: "2026-09-03T02:10:00.000Z",
+        providerProjectId: "proj_qnek_funded",
+      },
+    });
+    expect(isPreviewProviderKeyRecoveryEligible(recovered)).toBe(false);
+    expect(() => authorizePreviewProviderKeyRecovery(recovered, {
+      jobId: "60000000-0000-4000-8000-000000000001",
+      authorizedAt: "2026-09-03T02:11:00.000Z",
+      providerProjectId: "proj_qnek_funded",
+      providerRequestId: "req_second",
+    })).toThrow(/already consumed/i);
   });
 
   it("rejects a result checkpoint from another operation", () => {

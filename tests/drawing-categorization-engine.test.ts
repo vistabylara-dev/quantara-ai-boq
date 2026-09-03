@@ -9,6 +9,7 @@ import {
   type CategorizerPageInput,
   type CategorizerPolicyRule,
 } from "../src/lib/autonomous-boq/drawing-categorizer";
+import { buildPreliminaryConceptSchedule } from "../src/lib/autonomous-boq/concept-schedule";
 
 const fixture = JSON.parse(readFileSync(path.resolve(__dirname, "fixtures/autonomous-boq/drawing-categorization.json"), "utf8")) as Record<string, CategorizerPageInput[]>;
 
@@ -62,7 +63,7 @@ describe("drawing and BOQ categorization engine", () => {
     }];
     const [sheet] = categorizeDrawingSheets({
       engineId: "joinery",
-      pages: [{ ...fixture.joinery![0]!, text: "CABINET UNIT / JOINERY UNIT SCHEDULE / UNIT MULTIPLICITY" }],
+      pages: [{ ...fixture.joinery![0]!, text: "ISSUED FOR CONSTRUCTION / CABINET UNIT / JOINERY UNIT SCHEDULE / UNIT MULTIPLICITY" }],
       rules: joineryRules,
     });
     expect(requireMeasurementCategoryBinding({
@@ -75,5 +76,28 @@ describe("drawing and BOQ categorization engine", () => {
   it("does not use filenames as a substitute for drawing understanding", () => {
     const [sheet] = categorizeDrawingSheets({ engineId: "mep", pages: [{ ...fixture.mep![0]!, drawingTitle: null, sheetName: null, drawingTitles: [], technicalLines: [], text: null, projectFileId: "lighting-layout-file-name-only.pdf" }], rules });
     expect(sheet).toMatchObject({ status: "UNRESOLVED", confidence: 0, categoryPaths: [] });
+  });
+
+  it("keeps a verified architectural category separate from non-payable concept maturity", () => {
+    const conceptRules: CategorizerPolicyRule[] = [{ id: "gross-floor-area", sectionCode: "ARE", title: "Measured Areas", calculationType: QuantityCalculationType.FLOOR_AREA, resultUnit: "m2" }];
+    const [sheet] = categorizeDrawingSheets({
+      engineId: "construction",
+      rules: conceptRules,
+      pages: [{ ...fixture.construction![1]!, drawingTitle: "Concept Area Schedule", text: "NOT FOR CONSTRUCTION. GROSS FLOOR AREA: 1,250 m2. OPTION T. OPTION L.", drawingTitles: ["ARCHITECTURAL GROSS FLOOR AREA"] }],
+    });
+    expect(sheet).toMatchObject({ status: "VERIFIED", maturity: "CONCEPT_BASIS_OF_DESIGN", payableStatus: "NOT_PAYABLE_CONCEPT" });
+    expect(sheet?.categoryPaths[0]).toMatchObject({ discipline: "Architectural", measurementRuleId: "gross-floor-area" });
+    expect(() => requireMeasurementCategoryBinding({ workPackage: "gross-floor-area", evidencePageIds: [sheet!.pageId], classificationsByPageId: new Map([[sheet!.pageId, sheet!]]) })).toThrow(/not eligible for a payable BOQ/);
+
+    const schedule = buildPreliminaryConceptSchedule([{ ...sheet!, id: sheet!.pageId, classification: sheet, originalName: "concept.pdf", revisionNumber: sheet!.revision, drawingTitle: "Concept Area Schedule", sheetName: "A-001", role: "PLAN", width: null, height: null, dpi: null, text: "NOT FOR CONSTRUCTION. GROSS FLOOR AREA: 1,250 m2. OPTION T. OPTION L.", drawingTitles: ["ARCHITECTURAL GROSS FLOOR AREA"], technicalLines: [], detectedScale: null, scaleVerified: false, scaleRatio: null, drawingUnit: null, realWorldUnit: null, hasImage: true } as never]);
+    expect(schedule).toMatchObject({ payable: false, alternatives: ["Scheme L", "Scheme T"] });
+    expect(schedule?.metrics).toEqual([expect.objectContaining({ label: "GROSS FLOOR AREA", value: 1250, unit: "m2" })]);
+  });
+
+  it("classifies an explicit IFC architectural schedule as payable and rate-ready eligible", () => {
+    const architecturalRules: CategorizerPolicyRule[] = [{ id: "door-window-count", sectionCode: "OPN", title: "Doors and Windows", calculationType: QuantityCalculationType.COUNT, resultUnit: "nos" }];
+    const [sheet] = categorizeDrawingSheets({ engineId: "construction", rules: architecturalRules, pages: [{ ...fixture.construction![1]!, drawingTitle: "Door Schedule", text: "ISSUED FOR CONSTRUCTION. DOOR SCHEDULE. DOOR AND WINDOW SCHEDULE.", drawingTitles: ["ARCHITECTURAL DOOR SCHEDULE"] }] });
+    expect(sheet).toMatchObject({ status: "VERIFIED", maturity: "IFC_CONSTRUCTION", payableStatus: "PAYABLE_ELIGIBLE" });
+    expect(requireMeasurementCategoryBinding({ workPackage: "door-window-count", evidencePageIds: [sheet!.pageId], classificationsByPageId: new Map([[sheet!.pageId, sheet!]]) })).toMatchObject({ unit: "nos" });
   });
 });

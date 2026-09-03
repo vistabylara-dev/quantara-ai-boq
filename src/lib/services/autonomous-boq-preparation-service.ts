@@ -29,6 +29,7 @@ import {
 } from "@/lib/repositories/autonomous-boq-preparation-repository";
 import { getEnabledIndustry } from "@/lib/repositories/industry-repository";
 import { getProjectRecord } from "@/lib/repositories/project-repository";
+import type { PreliminaryConceptSchedule } from "@/lib/autonomous-boq/concept-schedule";
 
 export const autonomousBoqPreparationRequestSchema = z.object({
   sourceFileIds: z.array(z.string().uuid("Every drawing requires a valid file ID."))
@@ -178,6 +179,9 @@ export type AutonomousPreparationExceptionDTO = {
   message: string;
   sourceFileIds: string[];
   pageIds: string[];
+  sourceSheets: string[];
+  discipline: string | null;
+  workPackage: string | null;
 };
 
 export type AutonomousPreparationStage =
@@ -205,6 +209,10 @@ export type AutonomousPreparationStatusDTO = {
   readyForRates: boolean;
   retryable: boolean;
   exceptions: AutonomousPreparationExceptionDTO[];
+  drawingMaturity: string[];
+  payableEligibility: "PAYABLE_ELIGIBLE" | "NOT_PAYABLE_CONCEPT" | null;
+  categoryStatus: "VERIFIED" | "REVIEW_REQUIRED" | null;
+  conceptSchedule: PreliminaryConceptSchedule | null;
   error: { code: string | null; message: string | null } | null;
   createdAt: string;
   updatedAt: string;
@@ -227,8 +235,23 @@ function preparationExceptions(value: unknown): AutonomousPreparationExceptionDT
     const pageIds = Array.isArray(row.pageIds)
       ? row.pageIds.filter((id): id is string => typeof id === "string")
       : [];
-    return [{ code: row.code, message: row.message, sourceFileIds, pageIds }];
+    const sourceSheets = Array.isArray(row.sourceSheets) ? row.sourceSheets.filter((id): id is string => typeof id === "string") : [];
+    return [{
+      code: row.code,
+      message: row.message,
+      sourceFileIds,
+      pageIds,
+      sourceSheets,
+      discipline: typeof row.discipline === "string" ? row.discipline : null,
+      workPackage: typeof row.workPackage === "string" ? row.workPackage : null,
+    }];
   });
+}
+
+function conceptSchedule(value: unknown): PreliminaryConceptSchedule | null {
+  const row = objectRecord(value);
+  if (row.title !== "Preliminary Concept Quantity Schedule — Not for Contract/Payment" || row.payable !== false || !Array.isArray(row.metrics)) return null;
+  return row as unknown as PreliminaryConceptSchedule;
 }
 
 function fallbackStage(job: ExtractionJob): AutonomousPreparationStage {
@@ -296,6 +319,10 @@ export function toAutonomousPreparationStatus(job: ExtractionJob): AutonomousPre
     readyForRates,
     retryable,
     exceptions,
+    drawingMaturity: Array.isArray(summary.drawingMaturity) ? summary.drawingMaturity.filter((value): value is string => typeof value === "string") : [],
+    payableEligibility: summary.payableEligibility === "PAYABLE_ELIGIBLE" || summary.payableEligibility === "NOT_PAYABLE_CONCEPT" ? summary.payableEligibility : null,
+    categoryStatus: summary.categoryStatus === "VERIFIED" || summary.categoryStatus === "REVIEW_REQUIRED" ? summary.categoryStatus : null,
+    conceptSchedule: conceptSchedule(summary.conceptSchedule),
     error: job.errorCode || job.errorMessage
       ? { code: job.errorCode, message: job.errorMessage }
       : null,

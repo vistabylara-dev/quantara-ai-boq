@@ -11,6 +11,7 @@ import {
   type AutonomousPreparationConfiguration,
 } from "@/lib/autonomous-boq/preparation";
 import { stableAutonomousHash } from "@/lib/autonomous-boq/contract";
+import { consolidatePreparationFindings } from "@/lib/autonomous-boq/review-findings";
 import { resolveAutonomousIndustry } from "@/lib/autonomous-boq/industry-policy";
 import { prisma } from "@/lib/db/prisma";
 import { AppError, ConflictError } from "@/lib/errors/app-error";
@@ -38,6 +39,10 @@ type PreparationException = {
   message: string;
   sourceFileIds: string[];
   pageIds?: string[];
+  sourceSheets?: string[];
+  projectRevision?: string | null;
+  discipline?: string | null;
+  workPackage?: string | null;
 };
 
 type IndustryPolicyContext = NonNullable<TayqanMeasurementGoverningContext["industryPolicy"]>;
@@ -598,14 +603,35 @@ export function createAutonomousBoqPreparationHandler(
     await checkpoint({ stage: "ASSEMBLING_BOQ", readyForRates: false });
     await ctx.updateProgress(85, "assembling unpriced BOQ");
     const assembly = await dependencies.assemble(actor, configuration, scope, measurement);
-    const measurementExceptions: PreparationException[] = measurement.exceptions.map((exception) => ({
-      code: exception.kind,
-      message: exception.message,
-      sourceFileIds: configuration.frozenSources.map((source) => source.id),
-      pageIds: exception.pageIds,
-    }));
-    const exceptions = [...measurementExceptions, ...assembly.exceptions];
-    const ready = assembly.state === "READY_FOR_RATES" && exceptions.length === 0;
+    const classifications = measurement.classifications ?? [];
+    const classificationsByPageId = new Map(classifications.map((classification) => [classification.pageId, classification] as const));
+    const measurementExceptions: PreparationException[] = measurement.exceptions.map((exception) => {
+      const related = (exception.pageIds ?? []).flatMap((pageId) => classificationsByPageId.get(pageId) ?? []);
+      const category = related.flatMap((classification) => classification.categoryPaths)[0];
+      return {
+        code: exception.kind,
+        message: exception.message,
+        sourceFileIds: configuration.frozenSources.map((source) => source.id),
+        pageIds: exception.pageIds,
+        sourceSheets: related.map((classification) => classification.drawingNumber || classification.sheetNumber || `Page ${classification.pageNumber}`),
+        projectRevision: related.map((classification) => classification.revision).find(Boolean) ?? null,
+        discipline: category?.discipline ?? null,
+        workPackage: category?.workPackage ?? null,
+      };
+    });
+    const exceptions = consolidatePreparationFindings([...measurementExceptions, ...assembly.exceptions]);
+    const conceptClassifications = classifications.filter((classification) => classification.maturity === "CONCEPT_BASIS_OF_DESIGN");
+    const payableEligibility = conceptClassifications.length > 0 ? "NOT_PAYABLE_CONCEPT" : "PAYABLE_ELIGIBLE";
+    if (conceptClassifications.length > 0 && !exceptions.some((exception) => exception.code === "CONCEPT_DRAWING_NOT_PAYABLE")) {
+      exceptions.push(...consolidatePreparationFindings([{
+        code: "CONCEPT_DRAWING_NOT_PAYABLE",
+        message: "NOT FOR CONSTRUCTION concept drawings cannot support a payable BOQ.",
+        sourceFileIds: [...new Set(conceptClassifications.map((classification) => classification.projectFileId))],
+        pageIds: conceptClassifications.map((classification) => classification.pageId),
+        sourceSheets: conceptClassifications.map((classification) => classification.drawingNumber || classification.sheetNumber || `Page ${classification.pageNumber}`),
+      }]));
+    }
+    const ready = assembly.state === "READY_FOR_RATES" && exceptions.length === 0 && payableEligibility === "PAYABLE_ELIGIBLE";
 
     return {
       status: ready ? ExtractionJobStatus.COMPLETED : ExtractionJobStatus.NEEDS_REVIEW,
@@ -620,6 +646,10 @@ export function createAutonomousBoqPreparationHandler(
         provider: measurement.provider,
         model: measurement.model,
         exceptions,
+        drawingMaturity: [...new Set(classifications.map((classification) => classification.maturity))],
+        payableEligibility,
+        categoryStatus: classifications.some((classification) => classification.status === "VERIFIED") ? "VERIFIED" : "REVIEW_REQUIRED",
+        conceptSchedule: measurement.conceptSchedule,
       },
       usageMetadata: {
         provider: measurement.provider,

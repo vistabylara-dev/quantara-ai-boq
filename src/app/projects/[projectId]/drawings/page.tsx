@@ -46,7 +46,11 @@ type PreparationStatus = {
   progressPercentage: number;
   readyForRates: boolean;
   retryable: boolean;
-  exceptions: Array<{ code: string; message: string; sourceFileIds: string[]; pageIds: string[] }>;
+  exceptions: Array<{ code: string; message: string; sourceFileIds: string[]; pageIds: string[]; sourceSheets: string[]; discipline: string | null; workPackage: string | null }>;
+  drawingMaturity: string[];
+  payableEligibility: "PAYABLE_ELIGIBLE" | "NOT_PAYABLE_CONCEPT" | null;
+  categoryStatus: "VERIFIED" | "REVIEW_REQUIRED" | null;
+  conceptSchedule: { title: string; payable: false; metrics: Array<{ label: string; value: number; unit: string; sheetReference: string }>; alternatives: string[]; conflicts: Array<{ label: string; values: string[]; sheetReferences: string[] }> } | null;
   error: { code: string | null; message: string | null } | null;
   updatedAt: string;
 };
@@ -134,6 +138,22 @@ export default function ProjectDrawingsPage(props: { params: Promise<{ projectId
   const [preparationAction, setPreparationAction] = useState<"start" | "retry" | null>(null);
   const preparedEventRef = useRef<string | null>(null);
   const readyRedirectRef = useRef<string | null>(null);
+
+  const downloadConceptSchedule = useCallback(() => {
+    if (!preparation?.conceptSchedule) return;
+    const rows = [
+      ["Schedule", preparation.conceptSchedule.title, "", ""],
+      ["Metric", "Value", "Unit", "Drawing/sheet"],
+      ...preparation.conceptSchedule.metrics.map((metric) => [metric.label, String(metric.value), metric.unit, metric.sheetReference]),
+    ];
+    const csv = rows.map((row) => row.map((cell) => `"${cell.replace(/"/g, '""')}"`).join(",")).join("\r\n");
+    const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "preliminary-concept-quantity-schedule.csv";
+    link.click();
+    URL.revokeObjectURL(url);
+  }, [preparation]);
 
   const load = useCallback(async (signal?: AbortSignal) => {
     setIsLoading(true);
@@ -515,18 +535,39 @@ export default function ProjectDrawingsPage(props: { params: Promise<{ projectId
                   ? "Scope, descriptions, units and quantities are complete. Add only the unit rates to finish the priced BOQ."
                   : preparation && ["QUEUED", "RUNNING"].includes(preparation.status)
                     ? `Quantara is processing the frozen drawing set (${Math.max(0, Math.min(100, preparation.progressPercentage))}%). You may leave this page and return without losing the job.`
-                    : "Upload the full drawing set first, then start one durable preparation across every active drawing."}
+                    : drawings?.length
+                      ? "Start one durable preparation across the uploaded active drawings. Quantara will identify any specific missing evidence."
+                      : "Upload project drawings, then let Quantara categorize and measure the supported evidence."}
               </p>
+              {preparation?.payableEligibility === "NOT_PAYABLE_CONCEPT" ? (
+                <div className="mt-3 rounded-xl border border-[#D98A16]/40 bg-[#D98A16]/10 p-3" role="status">
+                  <p className="font-semibold text-[#9A5B00] dark:text-amber-200">Concept / Basis of Design — not eligible for contract or payment</p>
+                  <p className="mt-1 text-xs">Recognizable categories remain verified, but payable verification and lock require coordinated Tender or IFC drawings.</p>
+                </div>
+              ) : null}
               {preparation?.exceptions.length ? (
                 <ul className="mt-3 space-y-2 text-[#D98A16] dark:text-amber-300">
-                  {preparation.exceptions.map((exception, index) => (
-                    <li key={`${exception.code}-${index}`} className="rounded-xl border border-[#D98A16]/30 bg-[#D98A16]/5 p-3">
-                      <p className="font-semibold">Affected scope: {exception.message}</p>
-                      <p className="mt-1 text-xs">Drawing evidence: {exception.pageIds.length > 0 ? `${exception.pageIds.length} affected page(s)` : exception.sourceFileIds.length > 0 ? `${exception.sourceFileIds.length} referenced source file(s)` : "No supporting source resolved"}</p>
-                      <p className="mt-1 text-xs">Required action: replace the affected drawing or open engineering review. Verified items remain preserved.</p>
+                  {preparation.exceptions.map((exception) => (
+                    <li key={`${exception.code}-${exception.discipline ?? "all"}-${exception.workPackage ?? "all"}`} className="rounded-xl border border-[#D98A16]/30 bg-[#D98A16]/5 p-3">
+                      <p className="font-semibold">{exception.code.replace(/_/g, " ")}</p>
+                      <p className="mt-1 text-xs">{exception.message}</p>
+                      <p className="mt-1 text-xs">Affected sheets: {exception.sourceSheets.length > 0 ? exception.sourceSheets.join(", ") : exception.pageIds.length > 0 ? `${exception.pageIds.length} referenced page(s)` : `${exception.sourceFileIds.length} referenced drawing(s)`}</p>
                     </li>
                   ))}
                 </ul>
+              ) : null}
+              {preparation?.conceptSchedule ? (
+                <div className="mt-3 rounded-xl border border-[#D5E0EC] bg-white/70 p-3 dark:border-[#20304D] dark:bg-[#091326]/70">
+                  <p className="font-semibold text-[#08152E] dark:text-white">{preparation.conceptSchedule.title}</p>
+                  {preparation.conceptSchedule.metrics.length > 0 ? (
+                    <ul className="mt-2 grid gap-1 text-xs sm:grid-cols-2">
+                      {preparation.conceptSchedule.metrics.map((metric) => <li key={`${metric.label}-${metric.value}-${metric.sheetReference}`}>{metric.label}: {metric.value} {metric.unit} — {metric.sheetReference}</li>)}
+                    </ul>
+                  ) : <p className="mt-2 text-xs">No explicit reconciled concept metrics were found.</p>}
+                  {preparation.conceptSchedule.alternatives.length > 0 ? <p className="mt-2 text-xs">Preserved alternatives: {preparation.conceptSchedule.alternatives.join(", ")}. No governing scheme was selected.</p> : null}
+                  {preparation.conceptSchedule.conflicts.length > 0 ? <p className="mt-2 text-xs text-[#D98A16]">Conflicting printed values remain for engineering review.</p> : null}
+                  <button type="button" onClick={downloadConceptSchedule} className="mt-3 rounded-xl border border-[#D5E0EC] px-3 py-2 text-xs font-semibold text-[#08152E] dark:border-[#20304D] dark:text-white">Download preliminary schedule</button>
+                </div>
               ) : null}
               {preparation?.error?.message ? (
                 <p className="mt-3 text-[#D84A4A] dark:text-rose-300" role="alert">{preparation.error.message}</p>
@@ -566,13 +607,13 @@ export default function ProjectDrawingsPage(props: { params: Promise<{ projectId
                   href="#drawing-upload"
                   className="inline-flex items-center justify-center rounded-2xl bg-[#009FE3] px-4 py-2 text-sm font-semibold text-white hover:opacity-90 dark:bg-[#21C7F3] dark:text-[#040A16]"
                 >
-                  Replace or upload drawing
+                  Upload coordinated drawings
                 </a>
                 <Link
                   href={`/projects/${encodeURIComponent(project.id)}/${project.industryId === "joinery" ? "joinery" : "extractions"}`}
                   className="inline-flex items-center justify-center rounded-2xl border border-[#D98A16]/60 px-4 py-2 text-sm font-semibold text-[#9A5B00] hover:bg-[#D98A16]/10 dark:text-amber-200"
                 >
-                  Open engineering review
+                  Engineering review
                 </Link>
               </>
             ) : (

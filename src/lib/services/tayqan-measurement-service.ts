@@ -17,7 +17,9 @@ import {
   categorizeDrawingSheets,
   requireMeasurementCategoryBinding,
   type ControlledCategoryPath,
+  type DrawingSheetClassification,
 } from "@/lib/autonomous-boq/drawing-categorizer";
+import { buildPreliminaryConceptSchedule, type PreliminaryConceptSchedule } from "@/lib/autonomous-boq/concept-schedule";
 import { createAuditLog } from "@/lib/repositories/audit-repository";
 import { getProjectRecord } from "@/lib/repositories/project-repository";
 import { createStorageAdapter, resolveStorageProvider } from "@/lib/storage/storage-factory";
@@ -201,6 +203,8 @@ export type PrepareTayqanMeasurementsResult = {
   provider: string;
   model: string;
   seniorReview: TayqanSeniorReviewSummary;
+  classifications?: DrawingSheetClassification[];
+  conceptSchedule?: PreliminaryConceptSchedule | null;
 };
 
 export type PrepareTayqanMeasurementsOptions = {
@@ -1025,5 +1029,7 @@ export async function prepareTayqanMeasurementProposals(
     provider: result.provider,
     model: result.model,
     seniorReview: result.seniorReview,
+    classifications: bundle.pages.flatMap((page) => page.classification ? [page.classification] : []),
+    conceptSchedule: buildPreliminaryConceptSchedule(bundle.pages),
   };
 }

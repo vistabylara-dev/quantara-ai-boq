@@ -1,6 +1,8 @@
 import type { QuantityCalculationType } from "@prisma/client";
 
 export type DrawingScopeDisposition = "PROPOSED" | "EXISTING" | "DEMOLITION" | "OPTIONAL" | "EXCLUDED" | "UNSPECIFIED";
+export type DrawingMaturity = "IFC_CONSTRUCTION" | "TENDER" | "DESIGN_DEVELOPMENT" | "CONCEPT_BASIS_OF_DESIGN" | "AS_BUILT" | "UNKNOWN";
+export type DrawingPayableStatus = "PAYABLE_ELIGIBLE" | "NOT_PAYABLE_CONCEPT" | "NOT_PAYABLE_AS_BUILT" | "REVIEW_REQUIRED";
 
 export type ControlledCategoryPath = {
   industry: string;
@@ -26,6 +28,8 @@ export type DrawingSheetClassification = {
   revision: string | null;
   levelOrLocation: string | null;
   scopeDisposition: DrawingScopeDisposition;
+  maturity: DrawingMaturity;
+  payableStatus: DrawingPayableStatus;
   status: "VERIFIED" | "UNCERTAIN" | "UNRESOLVED" | "SUPERSEDED";
   confidence: number;
   categoryPaths: ControlledCategoryPath[];
@@ -73,6 +77,15 @@ const DEFINITIONS: readonly Definition[] = [
   { engines: ["construction"], discipline: "Structural", drawingType: "Reinforcement schedule", workPackage: "Reinforcement", sectionHints: ["concrete"], item: "Reinforcement steel", ruleHints: ["structural-reinforcement"], signals: ["bar bending schedule", "reinforcement", "rebar", "bar mark"], method: "WEIGHT" },
   { engines: ["construction"], discipline: "Structural", drawingType: "Concrete detail", workPackage: "Formwork", sectionHints: ["formwork"], item: "Exposed concrete formwork", ruleHints: ["structural-formwork"], signals: ["formwork", "shuttering", "concrete face"], method: "AREA" },
   { engines: ["construction"], discipline: "Architectural", drawingType: "Wall layout", workPackage: "Masonry", sectionHints: ["blockwork"], item: "Measured blockwork", ruleHints: ["measured-blockwork"], signals: ["blockwork", "masonry", "wall type"], method: "AREA" },
+  { engines: ["construction"], discipline: "Architectural", drawingType: "Area schedule", workPackage: "Area schedules", sectionHints: ["area-schedules"], item: "Gross floor area", ruleHints: ["gross-floor-area"], signals: ["gross floor area", "gross area", "gfa"], method: "AREA" },
+  { engines: ["construction"], discipline: "Architectural", drawingType: "Area schedule", workPackage: "Area schedules", sectionHints: ["area-schedules"], item: "Net floor area", ruleHints: ["net-floor-area"], signals: ["net floor area", "net area", "nfa"], method: "AREA" },
+  { engines: ["construction"], discipline: "Architectural", drawingType: "Room schedule", workPackage: "Space schedules", sectionHints: ["space-schedules"], item: "Scheduled room", ruleHints: ["room-schedule-count"], signals: ["room schedule", "room count", "space schedule"], method: "COUNT" },
+  { engines: ["construction"], discipline: "Architectural", drawingType: "Floor-finish plan", workPackage: "Floor finishes", sectionHints: ["floor-finishes"], item: "Floor finish", ruleHints: ["construction-floor-finish-area"], signals: ["floor finish plan", "floor finish schedule", "floor finish"], method: "AREA" },
+  { engines: ["construction"], discipline: "Architectural", drawingType: "Reflected ceiling plan", workPackage: "Ceilings", sectionHints: ["ceilings"], item: "Ceiling finish", ruleHints: ["construction-ceiling-area"], signals: ["reflected ceiling plan", "ceiling schedule", "ceiling finish"], method: "AREA" },
+  { engines: ["construction"], discipline: "Architectural", drawingType: "Wall-finish plan", workPackage: "Wall finishes", sectionHints: ["wall-finishes"], item: "Wall finish", ruleHints: ["construction-wall-finish-area"], signals: ["wall finish plan", "wall finish schedule", "wall finish"], method: "AREA" },
+  { engines: ["construction"], discipline: "Architectural", drawingType: "Door/window schedule", workPackage: "Doors and windows", sectionHints: ["openings"], item: "Scheduled door or window", ruleHints: ["door-window-count"], signals: ["door schedule", "window schedule", "door and window schedule"], method: "COUNT" },
+  { engines: ["construction"], discipline: "Architectural", drawingType: "Partition layout", workPackage: "Partitions", sectionHints: ["partitions"], item: "Partition", ruleHints: ["construction-partition-area"], signals: ["partition layout", "partition schedule", "partition type"], method: "AREA" },
+  { engines: ["construction"], discipline: "Civil", drawingType: "External-works plan", workPackage: "External works", sectionHints: ["external-works"], item: "Measured external works", ruleHints: ["external-works-area"], signals: ["external works plan", "paving schedule", "hardscape plan"], method: "AREA" },
   { engines: ["interior-fitout"], discipline: "Architectural", drawingType: "Floor-finish plan", workPackage: "Finishes", sectionHints: ["floor"], item: "Floor finish", ruleHints: ["floor-finish-area"], signals: ["floor finish", "porcelain tile", "flooring", "tile finish"], method: "AREA" },
   { engines: ["interior-fitout"], discipline: "Architectural", drawingType: "Reflected ceiling plan", workPackage: "Ceilings", sectionHints: ["ceiling"], item: "Ceiling finish", ruleHints: ["ceiling-finish-area"], signals: ["reflected ceiling", "ceiling finish", "rcp"], method: "AREA" },
   { engines: ["interior-fitout"], discipline: "Architectural", drawingType: "Floor-finish plan", workPackage: "Finishes", sectionHints: ["floor"], item: "Skirting", ruleHints: ["skirting-length"], signals: ["skirting", "baseboard"], method: "LINEAR" },
@@ -123,6 +136,23 @@ function scopeDisposition(text: string): DrawingScopeDisposition {
   return "UNSPECIFIED";
 }
 
+export function classifyDrawingMaturity(textValue: string): DrawingMaturity {
+  const text = normalized(textValue);
+  if (/\b(as built|record drawing)\b/.test(text)) return "AS_BUILT";
+  if (/\b(not for construction|concept|basis of design|schematic design|feasibility)\b/.test(text)) return "CONCEPT_BASIS_OF_DESIGN";
+  if (/\b(issued for construction|ifc|construction issue)\b/.test(text)) return "IFC_CONSTRUCTION";
+  if (/\b(issued for tender|tender issue|tender drawing)\b/.test(text)) return "TENDER";
+  if (/\b(design development|issued for coordination|coordination drawing)\b/.test(text)) return "DESIGN_DEVELOPMENT";
+  return "UNKNOWN";
+}
+
+function payableStatus(maturity: DrawingMaturity): DrawingPayableStatus {
+  if (maturity === "CONCEPT_BASIS_OF_DESIGN") return "NOT_PAYABLE_CONCEPT";
+  if (maturity === "AS_BUILT") return "NOT_PAYABLE_AS_BUILT";
+  if (maturity === "IFC_CONSTRUCTION" || maturity === "TENDER") return "PAYABLE_ELIGIBLE";
+  return "REVIEW_REQUIRED";
+}
+
 function revisionCompare(left: string | null, right: string | null): number {
   return (left ?? "").localeCompare(right ?? "", undefined, { numeric: true, sensitivity: "base" });
 }
@@ -170,6 +200,7 @@ export function categorizeDrawingSheets(input: {
 
   return input.pages.map((page) => {
     const text = sourceText(page);
+    const maturity = classifyDrawingMaturity(text);
     const ranked = definitions.map((definition) => {
       const matched = definition.signals.filter((signal) => text.includes(normalized(signal)));
       const rule = input.rules.find((candidate) => definition.ruleHints.includes(candidate.id))
@@ -179,13 +210,14 @@ export function categorizeDrawingSheets(input: {
     }).filter((candidate) => candidate.score > 0 && (candidate.rule !== null || input.engineId === "joinery"))
       .sort((left, right) => right.score - left.score || left.path.measurementRuleId.localeCompare(right.path.measurementRuleId));
     const topScore = ranked[0]?.score ?? 0;
-    const primary = ranked.filter((candidate) => candidate.score === topScore && topScore >= 2);
+    const minimumScore = maturity === "CONCEPT_BASIS_OF_DESIGN" ? 1 : 2;
+    const primary = ranked.filter((candidate) => candidate.score === topScore && topScore >= minimumScore);
     const alternatives = ranked.filter((candidate) => candidate.score > 0 && !primary.includes(candidate)).slice(0, 4);
     const drawingKey = normalized(page.drawingNumber);
     const superseding = drawingKey ? latestByDrawingNumber.get(drawingKey) : null;
     const supersededByPageId = superseding && superseding.id !== page.id ? superseding.id : null;
     const disposition = scopeDisposition(text);
-    const confidence = Math.min(99, topScore === 0 ? 0 : 55 + (topScore * 12));
+    const confidence = Math.min(99, topScore === 0 ? 0 : maturity === "CONCEPT_BASIS_OF_DESIGN" && topScore === 1 ? 80 : 55 + (topScore * 12));
     const ambiguous = primary.length === 0 || confidence < 79;
 
     return {
@@ -198,6 +230,8 @@ export function categorizeDrawingSheets(input: {
       revision: page.revisionNumber,
       levelOrLocation: null,
       scopeDisposition: disposition,
+      maturity,
+      payableStatus: payableStatus(maturity),
       status: supersededByPageId ? "SUPERSEDED" : topScore === 0 ? "UNRESOLVED" : ambiguous ? "UNCERTAIN" : "VERIFIED",
       confidence,
       categoryPaths: ambiguous || supersededByPageId ? [] : primary.map((candidate) => candidate.path),
@@ -218,6 +252,9 @@ export function requireMeasurementCategoryBinding(input: {
   const classifications = input.evidencePageIds.map((pageId) => input.classificationsByPageId.get(pageId)).filter(Boolean) as DrawingSheetClassification[];
   if (classifications.some((classification) => classification.status === "SUPERSEDED")) {
     throw new AutonomousCategorizationBindingError("Measurement evidence includes a superseded drawing revision.");
+  }
+  if (classifications.some((classification) => classification.payableStatus !== "PAYABLE_ELIGIBLE")) {
+    throw new AutonomousCategorizationBindingError("Measurement evidence is not eligible for a payable BOQ at its classified drawing maturity.");
   }
   if (classifications.some((classification) => ["EXISTING", "OPTIONAL", "EXCLUDED"].includes(classification.scopeDisposition))) {
     throw new AutonomousCategorizationBindingError("Measurement evidence is existing, optional or excluded scope and cannot enter the payable BOQ automatically.");

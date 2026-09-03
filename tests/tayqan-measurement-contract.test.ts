@@ -52,14 +52,15 @@ it("retains only sanitized provider readiness headers", () => {
 });
 
 it("preflights the funded project without sending a billable response request", async () => {
-  const fakeFetch = vi.fn(async () => new Response(JSON.stringify({ id: "gpt-5.6" }), {
+  const fetchMock = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => new Response(JSON.stringify({ id: "gpt-5.6" }), {
     status: 200,
     headers: {
       "Content-Type": "application/json",
       "x-request-id": "req_preflight",
       "openai-project": "proj_qnek_funded",
     },
-  })) as typeof fetch;
+  }));
+  const fakeFetch = fetchMock as unknown as typeof fetch;
   await expect(verifyOpenAIProviderProject({
     apiKey: "test-key",
     model: "gpt-5.6",
@@ -68,9 +69,9 @@ it("preflights the funded project without sending a billable response request", 
     projectId: "proj_qnek_funded",
     requestId: "req_preflight",
   });
-  expect(fakeFetch).toHaveBeenCalledTimes(1);
-  expect(fakeFetch.mock.calls[0]?.[0]).toBe("https://api.openai.com/v1/models/gpt-5.6");
-  expect(fakeFetch.mock.calls[0]?.[1]).toMatchObject({
+  expect(fetchMock).toHaveBeenCalledTimes(1);
+  expect(fetchMock.mock.calls[0]?.[0]).toBe("https://api.openai.com/v1/models/gpt-5.6");
+  expect(fetchMock.mock.calls[0]?.[1]).toMatchObject({
     method: "GET",
     headers: {
       Authorization: "Bearer test-key",

@@ -499,6 +499,22 @@ function sanitizedProviderToken(value: unknown): string | null {
     : null;
 }
 
+export function providerResponseMetadata(response: Pick<Response, "headers">) {
+  const header = (name: string) => sanitizedProviderToken(response.headers.get(name));
+  return {
+    requestId: header("x-request-id"),
+    organizationId: header("openai-organization"),
+    projectId: header("openai-project"),
+    retryAfter: header("retry-after"),
+    requestLimit: header("x-ratelimit-limit-requests"),
+    remainingRequests: header("x-ratelimit-remaining-requests"),
+    requestReset: header("x-ratelimit-reset-requests"),
+    tokenLimit: header("x-ratelimit-limit-tokens"),
+    remainingTokens: header("x-ratelimit-remaining-tokens"),
+    tokenReset: header("x-ratelimit-reset-tokens"),
+  };
+}
+
 export function classifyProviderFailure(status: number, providerCode: string | null): string {
   if (providerCode === "rate_limit_exceeded") return "rate_limit_exceeded";
   if (providerCode === "credit_balance_exhausted") return "credit_balance_exhausted";
@@ -517,22 +533,12 @@ async function providerDiagnostic(response: Response): Promise<OpenAIProviderDia
   }
   const providerError = record(body?.error);
   const providerCode = sanitizedProviderToken(providerError?.code);
-  const header = (name: string) => sanitizedProviderToken(response.headers.get(name));
   return {
     classification: classifyProviderFailure(response.status, providerCode),
     providerCode,
     providerType: sanitizedProviderToken(providerError?.type),
     httpStatus: response.status,
-    requestId: header("x-request-id"),
-    organizationId: header("openai-organization"),
-    projectId: header("openai-project"),
-    retryAfter: header("retry-after"),
-    requestLimit: header("x-ratelimit-limit-requests"),
-    remainingRequests: header("x-ratelimit-remaining-requests"),
-    requestReset: header("x-ratelimit-reset-requests"),
-    tokenLimit: header("x-ratelimit-limit-tokens"),
-    remainingTokens: header("x-ratelimit-remaining-tokens"),
-    tokenReset: header("x-ratelimit-reset-tokens"),
+    ...providerResponseMetadata(response),
   };
 }
 
@@ -610,6 +616,8 @@ async function requestStructuredJson(
         }
         throw new NonRetryableOpenAIError(diagnostic);
       }
+
+      console.info("[tayqan-provider-ready]", providerResponseMetadata(response));
 
       const raw = await response.json() as Record<string, unknown>;
       if (raw.status === "incomplete") {

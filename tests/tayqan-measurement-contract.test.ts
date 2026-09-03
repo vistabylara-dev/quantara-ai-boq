@@ -22,12 +22,33 @@ import type { TayqanMeasurementSubject } from "../src/lib/tayqan/tayqan-measurem
 import {
   classifyProviderFailure,
   createOpenAITayqanMeasurementReasoner,
+  providerResponseMetadata,
 } from "../src/lib/tayqan/openai-tayqan-measurement-reasoner";
 
 const PAGE_PLAN = "11111111-1111-4111-8111-111111111111";
 const PAGE_SECTION = "22222222-2222-4222-8222-222222222222";
 const PAGE_SCHEDULE = "33333333-3333-4333-8333-333333333333";
 const PAGE_DETAIL = "44444444-4444-4444-8444-444444444444";
+
+it("retains only sanitized provider readiness headers", () => {
+  const metadata = providerResponseMetadata(new Response(null, {
+    headers: {
+      "x-request-id": "req_funded_preview",
+      "openai-organization": "org_funded",
+      "openai-project": "proj_Osq_funded",
+      "x-ratelimit-limit-tokens": "500000",
+      "authorization": "Bearer must-never-be-recorded",
+    },
+  }));
+
+  expect(metadata).toMatchObject({
+    requestId: "req_funded_preview",
+    organizationId: "org_funded",
+    projectId: "proj_Osq_funded",
+    tokenLimit: "500000",
+  });
+  expect(JSON.stringify(metadata)).not.toContain("must-never-be-recorded");
+});
 
 function page(overrides: Partial<TayqanMeasurementPageEvidence>): TayqanMeasurementPageEvidence {
   return {

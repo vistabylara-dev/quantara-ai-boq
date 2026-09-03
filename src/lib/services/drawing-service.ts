@@ -802,7 +802,6 @@ async function enqueueInitialDrawingWorkflow(
   });
   if (existing) return existing.id;
 
-  await import("@/lib/jobs/register-handlers");
   const job = await extractionJobQueue.enqueue({
     companyId: actor.companyId,
     projectId: row.projectId,

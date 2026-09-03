@@ -17,9 +17,14 @@ describe("drawing finalization route contract", () => {
     const preprocessing = readFileSync(path.join(process.cwd(), "src/lib/files/preprocessing-handler.ts"), "utf8");
 
     expect(service).not.toContain("computeStreamedChecksum");
+    expect(service).not.toContain('await import("@/lib/jobs/register-handlers")');
     expect(service).toContain('const checksum = `pending:');
     expect(preprocessing).toContain("computeDurableChecksum");
     expect(preprocessing).toContain("data: { checksum }");
+
+    const queue = readFileSync(path.join(process.cwd(), "src/lib/jobs/local-job-queue.ts"), "utf8");
+    expect(queue).toContain('after(async () =>');
+    expect(queue).toContain('await import("@/lib/jobs/register-handlers")');
   });
 
   it("discovers server-owned incomplete uploads after browser refresh", () => {

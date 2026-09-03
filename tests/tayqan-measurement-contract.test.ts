@@ -63,14 +63,20 @@ it("preflights the funded project without sending a billable response request", 
   await expect(verifyOpenAIProviderProject({
     apiKey: "test-key",
     model: "gpt-5.6",
-    expectedProjectPrefix: "proj_qnek",
+    expectedProjectId: "proj_qnek_funded",
   }, fakeFetch)).resolves.toEqual({
     projectId: "proj_qnek_funded",
     requestId: "req_preflight",
   });
   expect(fakeFetch).toHaveBeenCalledTimes(1);
   expect(fakeFetch.mock.calls[0]?.[0]).toBe("https://api.openai.com/v1/models/gpt-5.6");
-  expect(fakeFetch.mock.calls[0]?.[1]).toMatchObject({ method: "GET" });
+  expect(fakeFetch.mock.calls[0]?.[1]).toMatchObject({
+    method: "GET",
+    headers: {
+      Authorization: "Bearer test-key",
+      "OpenAI-Project": "proj_qnek_funded",
+    },
+  });
 });
 
 it("rejects a mismatched project before consuming job recovery", async () => {
@@ -81,7 +87,7 @@ it("rejects a mismatched project before consuming job recovery", async () => {
   await expect(verifyOpenAIProviderProject({
     apiKey: "test-key",
     model: "gpt-5.6",
-    expectedProjectPrefix: "proj_qnek",
+    expectedProjectId: "proj_qnek_funded",
   }, fakeFetch)).rejects.toMatchObject({
     code: "TAYQAN_PREVIEW_PROVIDER_PROJECT_MISMATCH",
   });

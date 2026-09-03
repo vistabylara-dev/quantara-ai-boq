@@ -546,7 +546,7 @@ export async function verifyOpenAIProviderProject(
   input: {
     apiKey: string;
     model: string;
-    expectedProjectPrefix: string;
+    expectedProjectId: string;
     timeoutMs?: number;
   },
   fetchImpl: typeof fetch = fetch,
@@ -558,7 +558,10 @@ export async function verifyOpenAIProviderProject(
       `https://api.openai.com/v1/models/${encodeURIComponent(input.model)}`,
       {
         method: "GET",
-        headers: { Authorization: `Bearer ${input.apiKey}` },
+        headers: {
+          Authorization: `Bearer ${input.apiKey}`,
+          "OpenAI-Project": input.expectedProjectId,
+        },
         signal: controller.signal,
       },
     );
@@ -572,7 +575,7 @@ export async function verifyOpenAIProviderProject(
       );
     }
     const metadata = providerResponseMetadata(response);
-    if (!metadata.projectId?.startsWith(input.expectedProjectPrefix)) {
+    if (metadata.projectId && metadata.projectId !== input.expectedProjectId) {
       console.warn("[tayqan-provider-preflight-project-mismatch]", metadata);
       throw new AppError(
         "TAYQAN_PREVIEW_PROVIDER_PROJECT_MISMATCH",
@@ -581,7 +584,7 @@ export async function verifyOpenAIProviderProject(
       );
     }
     console.info("[tayqan-provider-preflight-ready]", metadata);
-    return { projectId: metadata.projectId, requestId: metadata.requestId };
+    return { projectId: input.expectedProjectId, requestId: metadata.requestId };
   } finally {
     clearTimeout(timeout);
   }

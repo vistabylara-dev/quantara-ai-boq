@@ -1,4 +1,6 @@
 import {
+  ExtractedEntityType,
+  ExtractionMethod,
   ExtractionEngineType,
   ExtractionJobStatus,
   type ExtractionJob,
@@ -11,6 +13,7 @@ import {
   type AutonomousPreparationConfiguration,
 } from "@/lib/autonomous-boq/preparation";
 import { stableAutonomousHash } from "@/lib/autonomous-boq/contract";
+import { evaluateAiDraftEntityCoverage } from "@/lib/guidance/ai-draft-coverage";
 import { consolidatePreparationFindings } from "@/lib/autonomous-boq/review-findings";
 import { resolveAutonomousIndustry } from "@/lib/autonomous-boq/industry-policy";
 import { prisma } from "@/lib/db/prisma";
@@ -21,6 +24,7 @@ import type { JobHandler, JobHandlerContext, JobHandlerResult } from "@/lib/jobs
 import { checkpointAutonomousPreparationJob } from "@/lib/repositories/autonomous-boq-preparation-repository";
 import { getExtractionJobRecord } from "@/lib/repositories/extraction-job-repository";
 import { generateAiDraftBoq } from "@/lib/services/ai-draft-boq-service";
+import { getBOQRecord } from "@/lib/repositories/boq-repository";
 import { regenerateFurnitureManagedBOQ } from "@/lib/services/furniture-boq-service";
 import { DEFAULT_FURNITURE_WASTAGE_PERCENTAGE } from "@/lib/furniture/canonical-output";
 import {
@@ -64,6 +68,75 @@ type AssemblyResult = {
   duplicateItemCount: number;
   exceptions: PreparationException[];
 };
+
+async function ensureConceptScheduleEntities(
+  actor: CurrentActor,
+  configuration: AutonomousPreparationConfiguration,
+  measurement: PrepareTayqanMeasurementsResult,
+): Promise<void> {
+  const schedule = measurement.conceptSchedule;
+  if (!schedule) return;
+  const sourceFileIds = configuration.frozenSources.map((source) => source.id);
+  const pages = await prisma.drawingPage.findMany({
+    where: {
+      companyId: actor.companyId,
+      projectFileId: { in: sourceFileIds },
+      id: { in: schedule.metrics.map((metric) => metric.pageId) },
+    },
+    select: { id: true, projectFileId: true },
+  });
+  const pageById = new Map(pages.map((page) => [page.id, page] as const));
+
+  for (const metric of schedule.metrics) {
+    const page = pageById.get(metric.pageId);
+    if (!page || !Number.isFinite(metric.value) || metric.value <= 0) continue;
+    const fingerprint = stableAutonomousHash({
+      projectFileId: page.projectFileId,
+      pageId: page.id,
+      label: metric.label.trim().toLocaleLowerCase(),
+      value: metric.value,
+      unit: metric.unit,
+    });
+    const marker = `CONCEPT_SCHEDULE_METRIC:${fingerprint}`;
+    const existing = await prisma.extractedEntity.findFirst({
+      where: {
+        companyId: actor.companyId,
+        projectId: configuration.projectId,
+        projectFileId: page.projectFileId,
+        drawingPageId: page.id,
+        sourceReference: { contains: marker },
+      },
+      select: { id: true },
+    });
+    if (existing) continue;
+
+    await prisma.extractedEntity.create({
+      data: {
+        companyId: actor.companyId,
+        projectId: configuration.projectId,
+        projectFileId: page.projectFileId,
+        drawingPageId: page.id,
+        entityType: ExtractedEntityType.SCHEDULE_ROW,
+        categoryKey: "PRELIMINARY_CONCEPT_METRIC",
+        label: metric.label.trim(),
+        normalizedLabel: metric.label.trim().toLocaleLowerCase(),
+        quantity: metric.value,
+        unit: metric.unit,
+        confidence: metric.confidence,
+        extractionMethod: ExtractionMethod.TEXT_LAYER,
+        sourceText: `${metric.label}: ${metric.value} ${metric.unit}`,
+        sourceReference: `${metric.sheetReference} | ${marker}`,
+        technicalDataJson: {
+          conceptSchedule: true,
+          payable: false,
+          sheetReference: metric.sheetReference,
+          sourcePageId: metric.pageId,
+        },
+        status: "NEEDS_REVIEW",
+      },
+    });
+  }
+}
 
 export type AutonomousBoqPreparationHandlerDependencies = {
   loadActor(companyId: string, userId: string): Promise<CurrentActor>;
@@ -391,7 +464,7 @@ async function defaultAssemble(
   actor: CurrentActor,
   configuration: AutonomousPreparationConfiguration,
   scope: ValidatedFrozenScope,
-  _measurement: PrepareTayqanMeasurementsResult,
+  measurement: PrepareTayqanMeasurementsResult,
 ): Promise<AssemblyResult> {
   if (scope.assemblyMode === "SPECIALIZED_JOINERY") {
     try {
@@ -429,23 +502,64 @@ async function defaultAssemble(
     }
   }
 
+  const conceptReview = measurement.conceptSchedule !== null
+    && measurement.conceptSchedule !== undefined;
+  if (conceptReview) {
+    await ensureConceptScheduleEntities(actor, configuration, measurement);
+  }
+
   const draft = await generateAiDraftBoq(actor, configuration.projectId, {
     targetBoqId: configuration.targetBoqId,
     projectFileIds: configuration.frozenSources.map((source) => source.id),
-    quantityMode: "AUTONOMOUS_SYSTEM_VALIDATED",
-    autonomousPolicy: {
-      operationHash: configuration.operationHash,
-      rules: scope.industryContext.rules.map((rule) => ({
-        id: rule.id,
-        calculationType: rule.calculationType,
-        boqUnit: rule.resultUnit,
-        sectionCode: rule.sectionCode,
-        title: rule.title,
-      })),
-    },
+    quantityMode: conceptReview ? "EXTRACTION_ONLY" : "AUTONOMOUS_SYSTEM_VALIDATED",
+    ...(conceptReview
+      ? {
+          reviewSection: {
+            code: "CONCEPT-REVIEW",
+            title: "Preliminary Concept Quantity Schedule — Not for Contract/Payment",
+            description: "Only explicitly printed and reconcilable concept quantities. Not eligible for payable verification or lock.",
+          },
+        }
+      : {
+          autonomousPolicy: {
+            operationHash: configuration.operationHash,
+            rules: scope.industryContext.rules.map((rule) => ({
+              id: rule.id,
+              calculationType: rule.calculationType,
+              boqUnit: rule.resultUnit,
+              sectionCode: rule.sectionCode,
+              title: rule.title,
+            })),
+          },
+        }),
   });
+
+  const [activeEntities, boq] = await Promise.all([
+    prisma.extractedEntity.findMany({
+      where: {
+        companyId: actor.companyId,
+        projectId: configuration.projectId,
+        projectFileId: { in: configuration.frozenSources.map((source) => source.id) },
+        status: { in: ["EXTRACTED", "NEEDS_REVIEW", "CONFIRMED", "CORRECTED"] },
+      },
+      select: { id: true, label: true, status: true },
+    }),
+    getBOQRecord(actor.companyId, draft.boqId),
+  ]);
+  const coverage = evaluateAiDraftEntityCoverage(
+    activeEntities,
+    boq.sections.flatMap((section) => section.items),
+  );
+  if (coverage.missingEntityIds.length > 0) {
+    throw new AppError(
+      "SCOPE_COVERAGE_INCOMPLETE",
+      `eligible entity count: ${coverage.eligibleEntityCount}, represented entity count: ${coverage.representedEntityCount}, missing count: ${coverage.missingEntityIds.length}`,
+      500,
+    );
+  }
+
   return {
-    state: draft.readyForRates ? "READY_FOR_RATES" : "NEEDS_REVIEW",
+    state: !conceptReview && draft.readyForRates ? "READY_FOR_RATES" : "NEEDS_REVIEW",
     boqId: draft.boqId,
     addedItemCount: draft.addedCount,
     duplicateItemCount: draft.alreadyPresentCount,

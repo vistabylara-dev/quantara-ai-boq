@@ -82,3 +82,22 @@ export async function listOrphanUploadSessions(companyId: string, limit = 100): 
     take: Math.min(Math.max(limit, 1), 500),
   });
 }
+
+/** Active actor/project sessions are discoverable after refresh without ever returning their scoped Blob token. */
+export async function listRecoverableUploadSessions(
+  companyId: string,
+  projectId: string,
+  actorUserId: string,
+  limit = 20,
+): Promise<ProjectFileUploadSession[]> {
+  return prisma.projectFileUploadSession.findMany({
+    where: {
+      companyId,
+      projectId,
+      actorUserId,
+      status: { in: ["PENDING", "FINALIZED"] },
+    },
+    orderBy: { createdAt: "desc" },
+    take: Math.min(Math.max(limit, 1), 100),
+  });
+}

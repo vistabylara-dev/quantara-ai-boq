@@ -94,7 +94,11 @@ vi.mock("@/lib/repositories/project-file-upload-session-repository", async (impo
 import { prisma } from "../src/lib/db/prisma";
 import { createClient } from "../src/lib/repositories/client-repository";
 import { createProjectWithDefaultBoq } from "../src/lib/services/project-service";
-import { authorizeDrawingUpload, finalizeDrawingUpload } from "../src/lib/services/drawing-service";
+import {
+  authorizeDrawingUpload,
+  finalizeDrawingUpload,
+  listRecoverableDrawingUploads,
+} from "../src/lib/services/drawing-service";
 import { createProjectFile } from "../src/lib/repositories/project-file-repository";
 import { computeChecksum } from "../src/lib/files/file-security";
 import {
@@ -346,6 +350,13 @@ describe("Direct-to-Blob drawing upload (integration, real local Postgres, fake 
       });
       fakeAdapter.seed(auth.pathname, body, "application/pdf");
 
+      const recoverable = await listRecoverableDrawingUploads(ownerActorA, projectAId);
+      expect(recoverable).toContainEqual(expect.objectContaining({
+        uploadId: auth.sessionId,
+        state: "BLOB_UPLOADED",
+        canResumeFinalization: true,
+      }));
+
       const startedAt = Date.now();
       const first = await finalizeDrawingUpload(ownerActorA, projectAId, { sessionId: auth.sessionId, metadata: {} });
       const elapsedMs = Date.now() - startedAt;
@@ -364,6 +375,14 @@ describe("Direct-to-Blob drawing upload (integration, real local Postgres, fake 
       expect(second.alreadyFinalized).toBe(true);
       expect(second.drawing.id).toBe(first.drawing.id);
       expect(second.workflowId).toBe(first.workflowId);
+      const finalized = await listRecoverableDrawingUploads(ownerActorA, projectAId);
+      expect(finalized).toContainEqual(expect.objectContaining({
+        uploadId: auth.sessionId,
+        drawingId: first.drawing.id,
+        workflowId: first.workflowId,
+        state: "JOB_QUEUED",
+        canResumeFinalization: false,
+      }));
       const countAfterSecond = await prisma.projectFile.count({ where: { id: first.drawing.id } });
       expect(countAfterSecond).toBe(1);
     });

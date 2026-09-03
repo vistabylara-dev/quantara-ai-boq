@@ -55,6 +55,20 @@ type PreparationStatus = {
   updatedAt: string;
 };
 
+type RecoverableDrawingUpload = {
+  uploadId: string;
+  drawingId: string;
+  workflowId: string | null;
+  originalName: string;
+  declaredMimeType: string;
+  declaredByteSize: number;
+  revision: string | null;
+  state: "AUTHORIZED" | "BLOB_UPLOADED" | "FINALIZING" | "DRAWING_CREATED" | "JOB_QUEUED" | "EXPIRED";
+  expiresAt: string;
+  updatedAt: string;
+  canResumeFinalization: boolean;
+};
+
 function preparationStageLabel(stage: string): string {
   return ({
     QUEUED: "Queued",
@@ -119,6 +133,8 @@ export default function ProjectDrawingsPage(props: { params: Promise<{ projectId
   const [drawings, setDrawings] = useState<DrawingView[] | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [recoverableUploads, setRecoverableUploads] = useState<RecoverableDrawingUpload[]>([]);
+  const [resumingUploadId, setResumingUploadId] = useState<string | null>(null);
 
   const [isDragging, setIsDragging] = useState(false);
   const [stagedFile, setStagedFile] = useState<File | null>(null);
@@ -159,14 +175,16 @@ export default function ProjectDrawingsPage(props: { params: Promise<{ projectId
     setIsLoading(true);
     setLoadError(null);
     try {
-      const [projectData, drawingsData, preparationData] = await Promise.all([
+      const [projectData, drawingsData, preparationData, recoverableUploadData] = await Promise.all([
         apiClient.get<ProjectView>(`/api/projects/${encodeURIComponent(params.projectId)}`, signal),
         apiClient.get<DrawingView[]>(`/api/projects/${encodeURIComponent(params.projectId)}/drawings`, signal),
         apiClient.get<PreparationStatus | null>(`/api/projects/${encodeURIComponent(params.projectId)}/boq-preparation`, signal),
+        apiClient.get<RecoverableDrawingUpload[]>(`/api/projects/${encodeURIComponent(params.projectId)}/drawings/upload-authorization`, signal),
       ]);
       setProject(projectData);
       setDrawings(drawingsData);
       setPreparation(preparationData);
+      setRecoverableUploads(recoverableUploadData);
     } catch (error) {
       if (error instanceof DOMException && error.name === "AbortError") return;
       setLoadError(getApiErrorMessage(error));
@@ -174,6 +192,23 @@ export default function ProjectDrawingsPage(props: { params: Promise<{ projectId
       if (!signal?.aborted) setIsLoading(false);
     }
   }, [params.projectId]);
+
+  const resumeUploadFinalization = useCallback(async (upload: RecoverableDrawingUpload) => {
+    if (!upload.canResumeFinalization || resumingUploadId) return;
+    setResumingUploadId(upload.uploadId);
+    setUploadError(null);
+    try {
+      await apiClient.post(
+        `/api/projects/${encodeURIComponent(params.projectId)}/drawings/upload-authorization/${encodeURIComponent(upload.uploadId)}/finalize`,
+        { metadata: {} },
+      );
+      await load();
+    } catch (error) {
+      setUploadError(getApiErrorMessage(error));
+    } finally {
+      setResumingUploadId(null);
+    }
+  }, [load, params.projectId, resumingUploadId]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -505,6 +540,42 @@ export default function ProjectDrawingsPage(props: { params: Promise<{ projectId
           </div>
         )}
       </div>
+
+      {recoverableUploads.some((upload) => upload.state !== "JOB_QUEUED") ? (
+        <div className={panel} aria-live="polite">
+          <SectionHeader
+            title="Incomplete drawing uploads"
+            description="Quantara found server-owned upload records from an earlier browser session. Uploaded Blob files can be finalized without selecting or uploading them again."
+          />
+          <ul className="mt-4 space-y-3">
+            {recoverableUploads.filter((upload) => upload.state !== "JOB_QUEUED").map((upload) => (
+              <li key={upload.uploadId} className="flex flex-col gap-3 rounded-2xl border border-[#D5E0EC] p-4 dark:border-[#20304D] sm:flex-row sm:items-center sm:justify-between">
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-semibold text-[#08152E] dark:text-white">{upload.originalName}</p>
+                  <p className="mt-1 text-xs text-[#7B879C] dark:text-[#8CA0BE]">
+                    {upload.state === "EXPIRED"
+                      ? "The authorized upload expired and no Blob object was found."
+                      : upload.state === "AUTHORIZED"
+                        ? "Authorization exists, but the Blob upload has not completed."
+                        : `Recovery state: ${upload.state.replace(/_/g, " ").toLocaleLowerCase()}.`}
+                  </p>
+                </div>
+                {upload.canResumeFinalization ? (
+                  <button
+                    type="button"
+                    onClick={() => void resumeUploadFinalization(upload)}
+                    disabled={resumingUploadId !== null}
+                    className="shrink-0 rounded-2xl bg-[#009FE3] px-4 py-2 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-50 dark:bg-[#21C7F3] dark:text-[#040A16]"
+                  >
+                    {resumingUploadId === upload.uploadId ? "Finalizing…" : "Resume upload finalization"}
+                  </button>
+                ) : null}
+              </li>
+            ))}
+          </ul>
+          {uploadError ? <p className="mt-3 text-sm text-[#D84A4A] dark:text-rose-300" role="alert">{uploadError}</p> : null}
+        </div>
+      ) : null}
 
       {/* Autonomous preparation is explicit so a multi-file drawing set can be uploaded first. */}
       <div className="rounded-[28px] border border-[#009FE3]/30 dark:border-[#21C7F3]/30 bg-[#009FE3]/[0.04] dark:bg-[#21C7F3]/[0.06] p-5">

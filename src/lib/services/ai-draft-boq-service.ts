@@ -164,6 +164,12 @@ export type AiDraftGenerationOptions = {
       title: string;
     }>;
   };
+  /** Forces a non-payable review schedule into one clearly labelled section. */
+  reviewSection?: {
+    code: string;
+    title: string;
+    description: string;
+  };
 };
 
 export async function generateAiDraftBoq(
@@ -528,9 +534,11 @@ export async function generateAiDraftBoq(
       );
     }
 
-    const needsFallbackSection = !autonomousMode && toAdd.some(({ candidate }) =>
-      chooseAiDraftSection(businessSections, candidate) === null,
-    );
+    const fallbackSectionCode = options.reviewSection?.code ?? AI_DRAFT_FALLBACK_CODE;
+    const needsFallbackSection = Boolean(options.reviewSection)
+      || (!autonomousMode && toAdd.some(({ candidate }) =>
+        chooseAiDraftSection(businessSections, candidate) === null,
+      ));
 
     const claimed = await tx.bOQ.updateMany({
       where: {
@@ -555,7 +563,7 @@ export async function generateAiDraftBoq(
     }
 
     let fallbackSectionId = current.sections.find(
-      (section) => section.code === AI_DRAFT_FALLBACK_CODE,
+      (section) => section.code === fallbackSectionCode,
     )?.id ?? null;
 
     if (needsFallbackSection && !fallbackSectionId) {
@@ -563,10 +571,10 @@ export async function generateAiDraftBoq(
         data: {
           companyId: actor.companyId,
           boqId: current.id,
-          code: AI_DRAFT_FALLBACK_CODE,
-          title: "AI Draft - Review",
-          description:
-            "Extracted project items that could not be matched safely to an existing industry BOQ section. Professional review required.",
+          code: fallbackSectionCode,
+          title: options.reviewSection?.title ?? "AI Draft - Review",
+          description: options.reviewSection?.description
+            ?? "Extracted project items that could not be matched safely to an existing industry BOQ section. Professional review required.",
           sortOrder:
             Math.max(0, ...current.sections.map((section) => section.sortOrder)) + 1,
         },
@@ -600,7 +608,9 @@ export async function generateAiDraftBoq(
       autonomousRule,
       methodRecommendation,
     } of toAdd) {
-      const matchedSectionId = autonomousRule
+      const matchedSectionId = options.reviewSection
+        ? null
+        : autonomousRule
         ? businessSections.find((section) => section.code === autonomousRule.sectionCode)?.id ?? null
         : chooseAiDraftSection(businessSections, candidate);
       const sectionId = matchedSectionId ?? fallbackSectionId;
@@ -693,7 +703,9 @@ export async function generateAiDraftBoq(
           sourceReference,
           confidenceScore: row.confidence,
           status: BOQItemStatus.DRAFT,
-          notes: autonomousMode
+          notes: options.reviewSection
+            ? "Preliminary concept quantity schedule only. Not for contract or payment. The source quantity remains linked to its extracted drawing evidence and cannot pass payable lock while concept blockers remain."
+            : autonomousMode
             ? [
                 "Quantara system-validated this quantity against the frozen project drawing scope and deterministic industry rule. Only the unit rate is awaiting user input.",
                 categoryPath,

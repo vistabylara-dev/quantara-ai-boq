@@ -19,6 +19,7 @@ import {
 import {
   createUploadSession,
   getUploadSession,
+  listRecoverableUploadSessions,
   setUploadSessionStatus,
 } from "@/lib/repositories/project-file-upload-session-repository";
 import { buildDrawingStorageKey, computeChecksum } from "@/lib/files/file-security";
@@ -556,6 +557,112 @@ export type FinalizeDrawingUploadInput = {
   metadata: DrawingMetadataInput;
 };
 
+export type RecoverableDrawingUploadState =
+  | "AUTHORIZED"
+  | "BLOB_UPLOADED"
+  | "FINALIZING"
+  | "DRAWING_CREATED"
+  | "JOB_QUEUED"
+  | "EXPIRED";
+
+export type RecoverableDrawingUpload = {
+  uploadId: string;
+  drawingId: string;
+  workflowId: string | null;
+  originalName: string;
+  declaredMimeType: string;
+  declaredByteSize: number;
+  revision: string | null;
+  state: RecoverableDrawingUploadState;
+  expiresAt: string;
+  updatedAt: string;
+  canResumeFinalization: boolean;
+};
+
+/**
+ * Server-owned recovery projection. It deliberately exposes neither the Blob
+ * pathname nor its scoped upload token. Blob existence is verified by the
+ * server, so a refreshed browser can finish an already-completed direct PUT.
+ */
+export async function listRecoverableDrawingUploads(
+  actor: CurrentActor,
+  projectId: string,
+): Promise<RecoverableDrawingUpload[]> {
+  requireCapability(actor, "files:manage");
+  const project = await getProjectRecord(actor.companyId, projectId);
+  const sessions = await listRecoverableUploadSessions(
+    actor.companyId,
+    project.id,
+    actor.userId,
+  );
+  const storage = getDrawingStorageAdapter();
+
+  const rows: RecoverableDrawingUpload[] = [];
+  for (const session of sessions) {
+    const drawing = await findProjectFileRecord(actor.companyId, session.fileId);
+    const workflow = drawing
+      ? await prisma.extractionJob.findFirst({
+          where: {
+            companyId: actor.companyId,
+            projectId: project.id,
+            projectFileId: drawing.id,
+            engineType: {
+              in: [ExtractionEngineType.FILE_PREPROCESSING, ExtractionEngineType.DOCUMENT_CLASSIFICATION],
+            },
+          },
+          orderBy: { createdAt: "asc" },
+          select: { id: true },
+        })
+      : null;
+
+    let state: RecoverableDrawingUploadState;
+    if (workflow) state = "JOB_QUEUED";
+    else if (drawing) state = "DRAWING_CREATED";
+    else {
+      const blob = await storage.getMetadata(session.storageKey);
+      if (blob) {
+        const finalizingAudit = await prisma.auditLog.findFirst({
+          where: {
+            companyId: actor.companyId,
+            entityType: "ProjectFile",
+            entityId: session.fileId,
+            action: "DRAWING_UPLOAD_FINALIZING",
+          },
+          select: { id: true },
+        });
+        state = finalizingAudit ? "FINALIZING" : "BLOB_UPLOADED";
+      } else if (session.expiresAt.getTime() <= Date.now()) {
+        state = "EXPIRED";
+        await setUploadSessionStatus(session.id, "EXPIRED");
+        await ensureUploadLifecycleAudit(
+          actor.companyId,
+          actor,
+          session.fileId,
+          "DRAWING_UPLOAD_EXPIRED",
+          { projectId: project.id, uploadId: session.id, reason: "BLOB_OBJECT_MISSING_AFTER_EXPIRY" },
+        );
+      }
+      else state = "AUTHORIZED";
+    }
+
+    rows.push({
+      uploadId: session.id,
+      drawingId: session.fileId,
+      workflowId: workflow?.id ?? null,
+      originalName: session.originalName,
+      declaredMimeType: session.declaredMimeType,
+      declaredByteSize: session.declaredByteSize,
+      revision: null,
+      state,
+      expiresAt: session.expiresAt.toISOString(),
+      updatedAt: session.updatedAt.toISOString(),
+      canResumeFinalization: ["BLOB_UPLOADED", "FINALIZING", "DRAWING_CREATED"].includes(state),
+    });
+  }
+
+  return rows;
+}
+
 type ExistingUploadResolution =
   | { kind: "missing"; session: ProjectFileUploadSession }
   | { kind: "existing"; row: ProjectFileRecord }
@@ -668,6 +775,27 @@ async function resolveExistingUpload(
   return { kind: "missing", session };
 }
 
+async function ensureUploadLifecycleAudit(
+  companyId: string,
+  actor: CurrentActor,
+  fileId: string,
+  action: "DRAWING_UPLOAD_BLOB_VERIFIED" | "DRAWING_UPLOAD_FINALIZING" | "DRAWING_UPLOAD_JOB_QUEUED" | "DRAWING_UPLOAD_EXPIRED",
+  payload: Prisma.InputJsonValue,
+): Promise<void> {
+  const existing = await prisma.auditLog.findFirst({
+    where: { companyId, entityType: "ProjectFile", entityId: fileId, action },
+    select: { id: true },
+  });
+  if (existing) return;
+  await createAuditLog(companyId, {
+    entityType: "ProjectFile",
+    entityId: fileId,
+    action,
+    actorName: actor.fullName,
+    payload,
+  });
+}
+
 async function enqueueInitialDrawingWorkflow(
   actor: CurrentActor,
   row: ProjectFileRecord,
@@ -721,6 +849,13 @@ export async function finalizeDrawingUpload(actor: CurrentActor, projectId: stri
   );
   if (resolution.kind === "existing") {
     const workflowId = await enqueueInitialDrawingWorkflow(actor, resolution.row);
+    await ensureUploadLifecycleAudit(
+      actor.companyId,
+      actor,
+      resolution.row.id,
+      "DRAWING_UPLOAD_JOB_QUEUED",
+      { projectId: canonicalProjectId, uploadId: input.sessionId, workflowId },
+    );
     return { drawing: toDrawingDTO(resolution.row), workflowId, duplicateOfFileId: null, alreadyFinalized: true };
   }
   if (resolution.kind === "cancelled") {
@@ -854,7 +989,29 @@ export async function finalizeDrawingUpload(actor: CurrentActor, projectId: stri
     }
   }
 
+  await ensureUploadLifecycleAudit(
+    actor.companyId,
+    actor,
+    session.fileId,
+    "DRAWING_UPLOAD_BLOB_VERIFIED",
+    { projectId: canonicalProjectId, uploadId: session.id, fileSize: metadata.size },
+  );
+  await ensureUploadLifecycleAudit(
+    actor.companyId,
+    actor,
+    session.fileId,
+    "DRAWING_UPLOAD_FINALIZING",
+    { projectId: canonicalProjectId, uploadId: session.id },
+  );
+
   const workflowId = await enqueueInitialDrawingWorkflow(actor, committed.row);
+  await ensureUploadLifecycleAudit(
+    actor.companyId,
+    actor,
+    session.fileId,
+    "DRAWING_UPLOAD_JOB_QUEUED",
+    { projectId: canonicalProjectId, uploadId: session.id, workflowId },
+  );
 
   return {
     drawing: toDrawingDTO(committed.row),

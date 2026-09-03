@@ -280,6 +280,10 @@ export function toAutonomousPreparationStatus(job: ExtractionJob): AutonomousPre
   const readyForRates = job.status === ExtractionJobStatus.COMPLETED
     && stage === "READY_FOR_RATES"
     && summary.readyForRates === true;
+  const exceptions = preparationExceptions(summary.exceptions);
+  const retryable = job.status === ExtractionJobStatus.FAILED
+    || (job.status === ExtractionJobStatus.NEEDS_INPUT
+      && exceptions.some((exception) => exception.code === "SOURCE_PREPROCESSING_INCOMPLETE"));
 
   return {
     id: job.id,
@@ -290,8 +294,8 @@ export function toAutonomousPreparationStatus(job: ExtractionJob): AutonomousPre
     stage,
     progressPercentage: job.progressPercentage,
     readyForRates,
-    retryable: job.status === ExtractionJobStatus.FAILED,
-    exceptions: preparationExceptions(summary.exceptions),
+    retryable,
+    exceptions,
     error: job.errorCode || job.errorMessage
       ? { code: job.errorCode, message: job.errorMessage }
       : null,

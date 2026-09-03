@@ -232,4 +232,32 @@ describe("autonomous preparation start and refresh", () => {
       sourceFileIds: [IDS.fileR2],
     }));
   });
+
+  it("allows safe retry after transient page preprocessing without making genuine missing evidence retryable", () => {
+    const base = {
+      id: IDS.job,
+      companyId: IDS.company,
+      projectId: IDS.project,
+      projectFileId: IDS.fileR2,
+      engineType: "QUANTITY_CALCULATION",
+      provider: "local",
+      status: ExtractionJobStatus.NEEDS_INPUT,
+      progressPercentage: 35,
+      currentStep: "SOURCE_PROCESSING",
+      startedAt: new Date(), completedAt: null, failedAt: null,
+      attempts: 1, maximumAttempts: 3,
+      configurationJson: { targetBoqId: IDS.boq, frozenSources: [{ id: IDS.fileR2 }] },
+      usageMetadataJson: null, errorCode: null, errorMessage: null,
+      createdByUserId: IDS.user, createdAt: new Date(), updatedAt: new Date(),
+    };
+
+    expect(toAutonomousPreparationStatus({
+      ...base,
+      resultSummaryJson: { stage: "SOURCE_INPUT_REQUIRED", exceptions: [{ code: "SOURCE_PREPROCESSING_INCOMPLETE", message: "Still rendering" }] },
+    } as never).retryable).toBe(true);
+    expect(toAutonomousPreparationStatus({
+      ...base,
+      resultSummaryJson: { stage: "SOURCE_INPUT_REQUIRED", exceptions: [{ code: "OCR_REQUIRED", message: "Better drawing required" }] },
+    } as never).retryable).toBe(false);
+  });
 });

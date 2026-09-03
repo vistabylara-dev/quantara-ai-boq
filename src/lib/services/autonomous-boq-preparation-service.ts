@@ -369,7 +369,12 @@ const defaultDependencies: AutonomousPreparationServiceDependencies = {
     // Import it directly before pdf-parse loads so the Node function contains
     // the DOMMatrix/ImageData/Path2D provider used by drawing extraction.
     if (process.env.VERCEL === "1") {
-      await import("@napi-rs/canvas");
+      const canvas = await import("@napi-rs/canvas");
+      Object.assign(globalThis, {
+        DOMMatrix: globalThis.DOMMatrix ?? canvas.DOMMatrix,
+        ImageData: globalThis.ImageData ?? canvas.ImageData,
+        Path2D: globalThis.Path2D ?? canvas.Path2D,
+      });
     }
     return import("@/lib/jobs/register-handlers");
   },

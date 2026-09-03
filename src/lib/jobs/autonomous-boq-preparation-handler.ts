@@ -584,6 +584,9 @@ export function createAutonomousBoqPreparationHandler(
             code: appError.code,
             message: appError.message.slice(0, 500),
             status: appError.status,
+            ...("providerDiagnostic" in appError
+              ? { providerDiagnostic: appError.providerDiagnostic }
+              : {}),
           },
         });
         throw appError;

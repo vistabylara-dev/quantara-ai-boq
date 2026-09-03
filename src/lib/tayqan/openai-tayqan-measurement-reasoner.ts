@@ -40,16 +40,36 @@ type OpenAITayqanMeasurementConfig = {
   useSeniorProMode?: boolean;
 };
 
+export type OpenAIProviderDiagnostic = {
+  classification: string;
+  providerCode: string | null;
+  providerType: string | null;
+  httpStatus: number;
+  requestId: string | null;
+  organizationId: string | null;
+  projectId: string | null;
+  retryAfter: string | null;
+  requestLimit: string | null;
+  remainingRequests: string | null;
+  requestReset: string | null;
+  tokenLimit: string | null;
+  remainingTokens: string | null;
+  tokenReset: string | null;
+};
+
 class NonRetryableOpenAIError extends AppError {
-  constructor(status: number, requestId: string | null) {
-    const providerReference = requestId
-      ? ` Provider request: ${requestId}.`
+  readonly providerDiagnostic: OpenAIProviderDiagnostic;
+
+  constructor(diagnostic: OpenAIProviderDiagnostic) {
+    const providerReference = diagnostic.requestId
+      ? ` Provider request: ${diagnostic.requestId}.`
       : "";
     super(
       "TAYQAN_MEASUREMENT_AI_REQUEST_REJECTED",
-      `TAYQAN's AI measurement request was rejected by the configured provider (HTTP ${status}).${providerReference} Verify model access and request compatibility, then retry this same assignment.`,
+      `TAYQAN's AI measurement request was rejected by the configured provider (HTTP ${diagnostic.httpStatus}; ${diagnostic.classification}).${providerReference} Retry this same assignment only after the classified provider constraint is resolved.`,
       503,
     );
+    this.providerDiagnostic = diagnostic;
   }
 }
 
@@ -473,6 +493,48 @@ function shouldRetryStatus(status: number): boolean {
   return status === 408 || status === 409 || status === 429 || status >= 500;
 }
 
+function sanitizedProviderToken(value: unknown): string | null {
+  return typeof value === "string" && /^[a-zA-Z0-9_.:-]{1,160}$/.test(value)
+    ? value
+    : null;
+}
+
+function classifyProviderFailure(status: number, providerCode: string | null): string {
+  if (providerCode === "rate_limit_exceeded") return "rate_limit_exceeded";
+  if (providerCode === "insufficient_quota") return "insufficient_quota";
+  if (providerCode === "context_length_exceeded") return "context_length_exceeded";
+  if (providerCode === "model_not_found") return "model_or_project_access";
+  return status === 429 ? "unclassified_429" : "provider_request_rejected";
+}
+
+async function providerDiagnostic(response: Response): Promise<OpenAIProviderDiagnostic> {
+  let body: Record<string, unknown> | null = null;
+  try {
+    body = record(await response.json());
+  } catch {
+    // Non-JSON failures still retain safe headers and HTTP status.
+  }
+  const providerError = record(body?.error);
+  const providerCode = sanitizedProviderToken(providerError?.code);
+  const header = (name: string) => sanitizedProviderToken(response.headers.get(name));
+  return {
+    classification: classifyProviderFailure(response.status, providerCode),
+    providerCode,
+    providerType: sanitizedProviderToken(providerError?.type),
+    httpStatus: response.status,
+    requestId: header("x-request-id"),
+    organizationId: header("openai-organization"),
+    projectId: header("openai-project"),
+    retryAfter: header("retry-after"),
+    requestLimit: header("x-ratelimit-limit-requests"),
+    remainingRequests: header("x-ratelimit-remaining-requests"),
+    requestReset: header("x-ratelimit-reset-requests"),
+    tokenLimit: header("x-ratelimit-limit-tokens"),
+    remainingTokens: header("x-ratelimit-remaining-tokens"),
+    tokenReset: header("x-ratelimit-reset-tokens"),
+  };
+}
+
 async function sleep(milliseconds: number) {
   await new Promise((resolve) => setTimeout(resolve, milliseconds));
 }
@@ -534,16 +596,18 @@ async function requestStructuredJson(
       });
 
       if (!response.ok) {
+        const diagnostic = await providerDiagnostic(response);
+        console.warn("[tayqan-provider-rejection]", diagnostic);
+        if (response.status === 429) {
+          throw new NonRetryableOpenAIError(diagnostic);
+        }
         const message = `OpenAI TAYQAN request failed with status ${response.status}.`;
         if (attempt + 1 < REQUEST_RETRY_COUNT && shouldRetryStatus(response.status)) {
           lastError = new Error(message);
           await sleep(700 * (attempt + 1));
           continue;
         }
-        throw new NonRetryableOpenAIError(
-          response.status,
-          response.headers.get("x-request-id"),
-        );
+        throw new NonRetryableOpenAIError(diagnostic);
       }
 
       const raw = await response.json() as Record<string, unknown>;

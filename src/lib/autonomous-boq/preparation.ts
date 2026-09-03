@@ -110,12 +110,37 @@ const providerFailureCheckpointSchema = z.object({
   code: z.string().trim().min(1).max(120),
   message: z.string().trim().min(1).max(500),
   status: z.number().int().min(400).max(599),
+  providerDiagnostic: z.object({
+    classification: z.string().trim().min(1).max(80),
+    providerCode: z.string().trim().min(1).max(160).nullable(),
+    providerType: z.string().trim().min(1).max(160).nullable(),
+    httpStatus: z.number().int().min(400).max(599),
+    requestId: z.string().trim().min(1).max(160).nullable(),
+    organizationId: z.string().trim().min(1).max(160).nullable(),
+    projectId: z.string().trim().min(1).max(160).nullable(),
+    retryAfter: z.string().trim().min(1).max(160).nullable(),
+    requestLimit: z.string().trim().min(1).max(160).nullable(),
+    remainingRequests: z.string().trim().min(1).max(160).nullable(),
+    requestReset: z.string().trim().min(1).max(160).nullable(),
+    tokenLimit: z.string().trim().min(1).max(160).nullable(),
+    remainingTokens: z.string().trim().min(1).max(160).nullable(),
+    tokenReset: z.string().trim().min(1).max(160).nullable(),
+  }).strict().optional(),
+}).strict();
+
+const providerRecoverySchema = z.object({
+  authorizedAt: z.string().datetime(),
+  reason: z.literal("SANITIZED_429_DIAGNOSTIC_RETRY"),
+  attemptCount: z.literal(1),
+  originalAttempt: providerAttemptSchema.optional(),
+  originalFailure: providerFailureCheckpointSchema.optional(),
 }).strict();
 
 export const autonomousPreparationCheckpointSchema = z.object({
   providerAttempt: providerAttemptSchema.nullable().optional(),
   providerResult: providerResultCheckpointSchema.nullable().optional(),
   providerFailure: providerFailureCheckpointSchema.nullable().optional(),
+  providerRecovery: providerRecoverySchema.nullable().optional(),
 }).passthrough();
 
 export type AutonomousPreparationCheckpoint = z.infer<
@@ -125,6 +150,52 @@ export type AutonomousPreparationCheckpoint = z.infer<
 export type AutonomousProviderExecution =
   | { kind: "CALL_PROVIDER" }
   | { kind: "REPLAY_RESULT"; result: TayqanMeasurementReasonerResult };
+
+export function authorizeSingle429ProviderRecovery(
+  rawCheckpoint: unknown,
+  authorizedAt: string,
+): AutonomousPreparationCheckpoint {
+  const checkpoint = autonomousPreparationCheckpointSchema.parse(rawCheckpoint ?? {});
+  const attempt = checkpoint.providerAttempt ?? null;
+  const result = checkpoint.providerResult ?? null;
+  const failure = checkpoint.providerFailure ?? null;
+  if (!attempt || result || !failure || failure.operationHash !== attempt.operationHash) {
+    throw new AppError(
+      "AUTONOMOUS_PROVIDER_RECOVERY_NOT_ELIGIBLE",
+      "Only a preserved failed provider attempt can receive controlled recovery.",
+      409,
+    );
+  }
+  if (checkpoint.providerRecovery) {
+    throw new AppError(
+      "AUTONOMOUS_PROVIDER_RECOVERY_ALREADY_USED",
+      "The one controlled provider recovery attempt has already been used.",
+      409,
+    );
+  }
+  const is429 = failure.providerDiagnostic?.httpStatus === 429
+    || /HTTP 429/i.test(failure.message);
+  if (!is429) {
+    throw new AppError(
+      "AUTONOMOUS_PROVIDER_RECOVERY_NOT_ELIGIBLE",
+      "The preserved provider failure is not an HTTP 429 and cannot receive this recovery.",
+      409,
+    );
+  }
+  return {
+    ...checkpoint,
+    providerAttempt: null,
+    providerResult: null,
+    providerFailure: null,
+    providerRecovery: {
+      authorizedAt,
+      reason: "SANITIZED_429_DIAGNOSTIC_RETRY",
+      attemptCount: 1,
+      originalAttempt: attempt,
+      originalFailure: failure,
+    },
+  };
+}
 
 /**
  * Paid-call fail-closed rule shared by fresh execution and every retry.

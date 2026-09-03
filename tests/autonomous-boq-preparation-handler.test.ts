@@ -230,14 +230,29 @@ describe("autonomous preparation handler", () => {
   });
 
   it("durably preserves a sanitized provider failure before the queue retries", async () => {
+    const providerDiagnostic = {
+      classification: "rate_limit_exceeded",
+      providerCode: "rate_limit_exceeded",
+      providerType: "tokens",
+      httpStatus: 429,
+      requestId: "req_rate_limit",
+      organizationId: "org_funded",
+      projectId: "proj_funded",
+      retryAfter: "3",
+      tokenLimit: "30000",
+      remainingTokens: "0",
+      tokenReset: "3s",
+    };
     const deps = dependencies();
     deps.measure = vi.fn().mockImplementation(async (_actor, _project, _input, options) => {
       await options.onReasonerStart?.();
-      throw new AppError(
+      const error = new AppError(
         "TAYQAN_MEASUREMENT_AI_REQUEST_REJECTED",
-        "Provider rejected the configured model (HTTP 400).",
+        "Provider rejected the configured model (HTTP 429; rate_limit_exceeded).",
         503,
       );
+      Object.assign(error, { providerDiagnostic });
+      throw error;
     });
     const handler = createAutonomousBoqPreparationHandler(deps);
 
@@ -251,6 +266,7 @@ describe("autonomous preparation handler", () => {
         providerFailure: expect.objectContaining({
           code: "TAYQAN_MEASUREMENT_AI_REQUEST_REJECTED",
           status: 503,
+          providerDiagnostic,
         }),
       }),
     );

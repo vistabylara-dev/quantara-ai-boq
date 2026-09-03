@@ -8,6 +8,7 @@ import { prisma } from "@/lib/db/prisma";
 import { AppError, ConflictError, NotFoundError } from "@/lib/errors/app-error";
 import { createAuditLog } from "@/lib/repositories/audit-repository";
 import {
+  authorizeSingle429ProviderRecovery,
   autonomousPreparationConfigurationSchema,
   type AutonomousPreparationConfiguration,
 } from "@/lib/autonomous-boq/preparation";
@@ -258,41 +259,55 @@ export async function requeueAutonomousPreparationJob(
   }
 
   const checkpoint = jsonRecord(current.resultSummaryJson);
+  let retryCheckpoint: Record<string, unknown> | null = null;
   if (checkpoint.providerAttempt && !checkpoint.providerResult) {
-    throw new ConflictError(
-      "AUTONOMOUS_PROVIDER_ATTEMPT_INCOMPLETE",
-      "Quantara found an uncertain provider attempt and will not make another provider request. Safe recovery is required.",
+    retryCheckpoint = authorizeSingle429ProviderRecovery(
+      checkpoint,
+      new Date().toISOString(),
     );
   }
 
-  const updated = await prisma.extractionJob.updateMany({
-    where: {
-      id: jobId,
-      companyId,
-      engineType: ExtractionEngineType.QUANTITY_CALCULATION,
-      status: {
-        in: [
-          ExtractionJobStatus.FAILED,
-          ExtractionJobStatus.NEEDS_INPUT,
-          ExtractionJobStatus.NEEDS_REVIEW,
-        ],
+  return prisma.$transaction(async (tx) => {
+    const updated = await tx.extractionJob.updateMany({
+      where: {
+        id: jobId,
+        companyId,
+        engineType: ExtractionEngineType.QUANTITY_CALCULATION,
+        status: {
+          in: [
+            ExtractionJobStatus.FAILED,
+            ExtractionJobStatus.NEEDS_INPUT,
+            ExtractionJobStatus.NEEDS_REVIEW,
+          ],
+        },
       },
-    },
-    data: {
-      status: ExtractionJobStatus.QUEUED,
-      attempts: 0,
-      failedAt: null,
-      completedAt: null,
-      errorCode: null,
-      errorMessage: null,
-      currentStep: "RETRY_QUEUED",
-    },
+      data: {
+        status: ExtractionJobStatus.QUEUED,
+        attempts: 0,
+        failedAt: null,
+        completedAt: null,
+        errorCode: null,
+        errorMessage: null,
+        currentStep: "RETRY_QUEUED",
+        ...(retryCheckpoint
+          ? { resultSummaryJson: retryCheckpoint as Prisma.InputJsonValue }
+          : {}),
+      },
+    });
+    if (updated.count !== 1) {
+      throw new ConflictError(
+        "AUTONOMOUS_PREPARATION_RETRY_CONFLICT",
+        "The preparation changed while the retry was requested.",
+      );
+    }
+    if (retryCheckpoint) {
+      await createAuditLog(companyId, {
+        entityType: "ExtractionJob",
+        entityId: jobId,
+        action: "AUTONOMOUS_PROVIDER_429_RECOVERY_AUTHORIZED",
+        payload: { attemptCount: 1 },
+      }, tx);
+    }
+    return tx.extractionJob.findFirstOrThrow({ where: { id: jobId, companyId } });
   });
-  if (updated.count !== 1) {
-    throw new ConflictError(
-      "AUTONOMOUS_PREPARATION_RETRY_CONFLICT",
-      "The preparation changed while the retry was requested.",
-    );
-  }
-  return getAutonomousPreparationJob(companyId, jobId);
 }

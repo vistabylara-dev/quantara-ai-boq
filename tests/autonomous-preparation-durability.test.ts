@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   AUTONOMOUS_BOQ_PREPARATION_VERSION,
+  authorizeSingle429ProviderRecovery,
   autonomousPreparationConfigurationSchema,
   createAutonomousBOQOperationHash,
   resolveAutonomousProviderExecution,
@@ -134,6 +135,43 @@ describe("autonomous provider replay safety", () => {
         status: 503,
       },
     })).toThrow(/configured model/);
+  });
+
+  it("allows a single explicitly checkpointed 429 recovery call", () => {
+    expect(resolveAutonomousProviderExecution({
+      providerAttempt: null,
+      providerResult: null,
+      providerFailure: null,
+      providerRecovery: {
+        authorizedAt: "2026-09-03T00:00:00.000Z",
+        reason: "SANITIZED_429_DIAGNOSTIC_RETRY",
+        attemptCount: 1,
+      },
+    })).toEqual({ kind: "CALL_PROVIDER" });
+  });
+
+  it("authorizes exactly one recovery from a preserved HTTP 429", () => {
+    const initial = {
+      providerAttempt: { operationHash: "a".repeat(64), startedAt: "2026-09-02T00:00:00.000Z" },
+      providerResult: null,
+      providerFailure: {
+        operationHash: "a".repeat(64),
+        failedAt: "2026-09-02T00:00:01.000Z",
+        code: "TAYQAN_MEASUREMENT_AI_REQUEST_REJECTED",
+        message: "Provider rejected the request (HTTP 429).",
+        status: 503,
+      },
+    };
+    const recovered = authorizeSingle429ProviderRecovery(initial, "2026-09-03T00:00:00.000Z");
+    expect(recovered).toMatchObject({
+      providerAttempt: null,
+      providerFailure: null,
+      providerRecovery: { attemptCount: 1, originalFailure: initial.providerFailure },
+    });
+    expect(() => authorizeSingle429ProviderRecovery({
+      ...initial,
+      providerRecovery: recovered.providerRecovery,
+    }, "2026-09-03T00:01:00.000Z")).toThrow(/already been used/i);
   });
 
   it("rejects a result checkpoint from another operation", () => {

@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { ExtractedEntityType, QuantityCalculationType } from "@prisma/client";
 import {
   derivationConfidenceCap,
@@ -762,6 +762,71 @@ describe("TAYQAN senior OpenAI orchestration — mocked, zero network", () => {
     await expect(reasoner(input)).rejects.toThrow(
       "Provider request: req_tayqan_diagnostic",
     );
+  });
+
+  it("classifies a 429 from its sanitized provider body and preserves project rate-limit metadata", async () => {
+    const fakeFetch = vi.fn(async () => new Response(JSON.stringify({
+      error: {
+        type: "tokens",
+        code: "rate_limit_exceeded",
+        message: "Sensitive provider wording must not be persisted.",
+      },
+    }), {
+      status: 429,
+      headers: {
+        "Content-Type": "application/json",
+        "x-request-id": "req_tayqan_rate_limit",
+        "openai-organization": "org_funded",
+        "openai-project": "proj_funded",
+        "retry-after": "3",
+        "x-ratelimit-limit-tokens": "30000",
+        "x-ratelimit-remaining-tokens": "0",
+        "x-ratelimit-reset-tokens": "3s",
+      },
+    })) as typeof fetch;
+
+    const reasoner = createOpenAITayqanMeasurementReasoner({
+      apiKey: "test-key",
+      model: "gpt-5.6",
+    }, fakeFetch);
+
+    let captured: unknown;
+    try {
+      await reasoner({
+        bundle: {
+          project: { id: "project-1", slug: "project-1", name: "Test", reference: "Q-001" },
+          governingContext: null,
+          sourceFileIds: ["aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"],
+          pages: [page({})],
+          existingEntities: [],
+          existingBoqItems: [],
+          rooms: [],
+        },
+        loadPageImageDataUrl: async () => null,
+      });
+    } catch (error) {
+      captured = error;
+    }
+
+    expect(fakeFetch).toHaveBeenCalledTimes(1);
+    expect(captured).toMatchObject({
+      code: "TAYQAN_MEASUREMENT_AI_REQUEST_REJECTED",
+      message: expect.stringContaining("rate_limit_exceeded"),
+      providerDiagnostic: {
+        classification: "rate_limit_exceeded",
+        providerCode: "rate_limit_exceeded",
+        providerType: "tokens",
+        httpStatus: 429,
+        requestId: "req_tayqan_rate_limit",
+        organizationId: "org_funded",
+        projectId: "proj_funded",
+        retryAfter: "3",
+        tokenLimit: "30000",
+        remainingTokens: "0",
+        tokenReset: "3s",
+      },
+    });
+    expect((captured as Error).message).not.toContain("Sensitive provider wording");
   });
 
   it("surfaces an incomplete structured response as a safe retryable TAYQAN error", async () => {

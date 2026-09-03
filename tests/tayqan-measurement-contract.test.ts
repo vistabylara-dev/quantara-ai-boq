@@ -1254,7 +1254,7 @@ describe("TAYQAN senior work-order governance wiring", () => {
       "src/lib/services/tayqan-measurement-service.ts",
       "utf8",
     );
-    expect(service).toContain('|| "gpt-5.6"');
+    expect(service).toContain('|| "gpt-5.6-sol"');
     expect(service).toContain(
       'env.TAYQAN_SENIOR_PRO_MODE?.trim() === "1"',
     );

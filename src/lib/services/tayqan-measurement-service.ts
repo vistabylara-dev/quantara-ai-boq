@@ -648,7 +648,7 @@ export async function prepareTayqanMeasurementProposals(
     const env = options.env ?? process.env;
     const apiKey = env.OPENAI_API_KEY?.trim();
     const model = env.TAYQAN_MEASUREMENT_MODEL?.trim()
-      || "gpt-5.6";
+      || "gpt-5.6-sol";
     const safetyIdentifier = `tayqan_${createHash("sha256")
       .update(actor.userId)
       .digest("hex")

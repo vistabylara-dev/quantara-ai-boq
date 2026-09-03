@@ -287,7 +287,7 @@ export async function requeueAutonomousPreparationJob(
       }
       const proof = await verifyOpenAIProviderProject({
         apiKey,
-        model: process.env.TAYQAN_MEASUREMENT_MODEL?.trim() || "gpt-5.6",
+        model: process.env.TAYQAN_MEASUREMENT_MODEL?.trim() || "gpt-5.6-sol",
         expectedProjectPrefix: "proj_qnek",
       });
       retryCheckpoint = authorizePreviewProviderKeyRecovery(checkpoint, {

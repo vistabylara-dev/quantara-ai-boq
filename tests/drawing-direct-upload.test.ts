@@ -169,6 +169,8 @@ describe("Direct-to-Blob drawing upload (integration, real local Postgres, fake 
 
   afterAll(async () => {
     await prisma.auditLog.deleteMany({ where: { companyId: { in: [companyAId, companyBId] } } });
+    await prisma.drawingPage.deleteMany({ where: { companyId: { in: [companyAId, companyBId] } } });
+    await prisma.extractionJob.deleteMany({ where: { companyId: { in: [companyAId, companyBId] } } });
     await prisma.projectFile.deleteMany({ where: { companyId: { in: [companyAId, companyBId] } } });
     await prisma.projectFileUploadSession.deleteMany({ where: { companyId: { in: [companyAId, companyBId] } } });
     await prisma.bOQItem.deleteMany({ where: { companyId: { in: [companyAId, companyBId] } } });
@@ -344,8 +346,12 @@ describe("Direct-to-Blob drawing upload (integration, real local Postgres, fake 
       });
       fakeAdapter.seed(auth.pathname, body, "application/pdf");
 
+      const startedAt = Date.now();
       const first = await finalizeDrawingUpload(ownerActorA, projectAId, { sessionId: auth.sessionId, metadata: {} });
+      const elapsedMs = Date.now() - startedAt;
       expect(first.alreadyFinalized).toBe(false);
+      expect(elapsedMs).toBeLessThan(10_000);
+      expect(first.workflowId).toMatch(/^[0-9a-f-]{36}$/i);
       expect(first.drawing.fileSize).toBe(body.byteLength);
       expect(first.drawing.checksum).toMatch(/^[0-9a-f]{64}$/);
       expect(first.drawing.pageCount).toBeNull();
@@ -357,6 +363,7 @@ describe("Direct-to-Blob drawing upload (integration, real local Postgres, fake 
       const second = await finalizeDrawingUpload(ownerActorA, projectAId, { sessionId: auth.sessionId, metadata: {} });
       expect(second.alreadyFinalized).toBe(true);
       expect(second.drawing.id).toBe(first.drawing.id);
+      expect(second.workflowId).toBe(first.workflowId);
       const countAfterSecond = await prisma.projectFile.count({ where: { id: first.drawing.id } });
       expect(countAfterSecond).toBe(1);
     });
@@ -454,11 +461,44 @@ describe("Direct-to-Blob drawing upload (integration, real local Postgres, fake 
       ]);
 
       expect(results.map((result) => result.drawing.id)).toEqual([session.fileId, session.fileId]);
+      expect(new Set(results.map((result) => result.workflowId))).toEqual(new Set([results[0].workflowId]));
       expect(results.map((result) => result.alreadyFinalized).sort()).toEqual([false, true]);
       expect(await prisma.projectFile.count({ where: { id: session.fileId } })).toBe(1);
       expect(await prisma.auditLog.count({
         where: { companyId: companyAId, entityId: session.fileId, action: "DRAWING_UPLOADED" },
       })).toBe(1);
+      expect(await prisma.extractionJob.count({
+        where: {
+          companyId: companyAId,
+          projectFileId: session.fileId,
+          engineType: "FILE_PREPROCESSING",
+        },
+      })).toBe(1);
+    });
+
+    it("reconciles an expired authorization when its verified Blob already exists", async () => {
+      const body = pdfBuffer("expired but uploaded");
+      const auth = await authorizeDrawingUpload(ownerActorA, projectAId, {
+        originalName: "expired-uploaded.pdf",
+        declaredMimeType: "application/pdf",
+        declaredByteSize: body.byteLength,
+      });
+      fakeAdapter.seed(auth.pathname, body, "application/pdf");
+      await prisma.projectFileUploadSession.update({
+        where: { id: auth.sessionId },
+        data: { status: "EXPIRED", expiresAt: new Date(Date.now() - 60_000) },
+      });
+
+      const result = await finalizeDrawingUpload(ownerActorA, projectAId, {
+        sessionId: auth.sessionId,
+        metadata: {},
+      });
+
+      expect(result.drawing.originalName).toBe("expired-uploaded.pdf");
+      expect(result.workflowId).toMatch(/^[0-9a-f-]{36}$/i);
+      expect((await prisma.projectFileUploadSession.findUniqueOrThrow({
+        where: { id: auth.sessionId },
+      })).status).toBe("FINALIZED");
     });
 
     it("rejects finalize when the actual stored size does not match the declared size", async () => {

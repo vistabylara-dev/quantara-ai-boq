@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import type { Prisma, ProjectFileUploadSession } from "@prisma/client";
+import { ExtractionEngineType, Prisma, type ProjectFileUploadSession } from "@prisma/client";
 import { prisma } from "@/lib/db/prisma";
 import type { CurrentActor } from "@/lib/auth/current-actor";
 import { hasCapability, requireCapability } from "@/lib/auth/rbac";
@@ -18,7 +18,7 @@ import {
 } from "@/lib/repositories/project-file-repository";
 import {
   createUploadSession,
-  getUploadSessionForUpdate,
+  getUploadSession,
   setUploadSessionStatus,
 } from "@/lib/repositories/project-file-upload-session-repository";
 import { buildDrawingStorageKey, computeChecksum } from "@/lib/files/file-security";
@@ -34,6 +34,8 @@ import {
   type DrawingMetadataInput,
 } from "@/lib/validation/drawing-schema";
 import { randomUUID } from "node:crypto";
+import { extractionJobQueue } from "@/lib/jobs/extraction-worker";
+import { getSourceProcessingCapability } from "@/lib/files/source-processing-capability";
 
 /**
  * Deterministic, real page count via pdf-parse's document-info reader (no
@@ -599,7 +601,7 @@ function assertExpectedFinalizedFile(
 }
 
 async function ensureDrawingUploadedAudit(
-  database: Prisma.TransactionClient,
+  database: typeof prisma | Prisma.TransactionClient,
   companyId: string,
   row: ProjectFileRecord,
 ): Promise<void> {
@@ -635,8 +637,8 @@ async function ensureDrawingUploadedAudit(
  * Fast idempotency/self-healing pass. A prior process may have committed the
  * expected ProjectFile under the old non-transactional implementation and
  * crashed before updating the PENDING session or writing its success audit.
- * Locking the session lets one retry heal that state while every concurrent
- * retry returns the same file.
+ * The file ID is pre-generated and unique, so a retry can heal that state
+ * without entering another interactive transaction on the Preview pg adapter.
  */
 async function resolveExistingUpload(
   companyId: string,
@@ -644,33 +646,56 @@ async function resolveExistingUpload(
   canonicalProjectId: string,
   sessionId: string,
 ): Promise<ExistingUploadResolution> {
-  return prisma.$transaction(async (tx) => {
-    const session = await getUploadSessionForUpdate(companyId, sessionId, tx);
-    assertUploadSessionProject(session, canonicalProjectId);
-    assertUploadSessionActor(session, actorUserId);
+  const session = await getUploadSession(companyId, sessionId);
+  assertUploadSessionProject(session, canonicalProjectId);
+  assertUploadSessionActor(session, actorUserId);
 
-    if (session.status === "CANCELLED") return { kind: "cancelled" };
+  if (session.status === "CANCELLED") return { kind: "cancelled" };
 
-    const existing = await findProjectFileRecord(companyId, session.fileId, tx);
-    if (existing) {
-      if (session.status === "EXPIRED") return { kind: "expired" };
-      assertExpectedFinalizedFile(session, existing, canonicalProjectId);
-      if (session.status !== "FINALIZED") {
-        await setUploadSessionStatus(session.id, "FINALIZED", new Date(), tx);
-      }
-      await ensureDrawingUploadedAudit(tx, companyId, existing);
-      return { kind: "existing", row: existing };
+  const existing = await findProjectFileRecord(companyId, session.fileId);
+  if (existing) {
+    assertExpectedFinalizedFile(session, existing, canonicalProjectId);
+    if (session.status !== "FINALIZED") {
+      await setUploadSessionStatus(session.id, "FINALIZED", new Date());
     }
+    await ensureDrawingUploadedAudit(prisma, companyId, existing);
+    return { kind: "existing", row: existing };
+  }
 
-    if (session.status === "EXPIRED" || session.expiresAt.getTime() <= Date.now()) {
-      if (session.status === "PENDING") {
-        await setUploadSessionStatus(session.id, "EXPIRED", undefined, tx);
-      }
-      return { kind: "expired" };
-    }
+  // An expired authorization may still have completed its scoped Blob PUT.
+  // Finalization verifies that immutable object below and may reconcile it;
+  // expiry only prevents another upload with the old client token.
+  return { kind: "missing", session };
+}
 
-    return { kind: "missing", session };
+async function enqueueInitialDrawingWorkflow(
+  actor: CurrentActor,
+  row: ProjectFileRecord,
+): Promise<string> {
+  const engineType = getSourceProcessingCapability(row.extension).canRenderPages
+    ? ExtractionEngineType.FILE_PREPROCESSING
+    : ExtractionEngineType.DOCUMENT_CLASSIFICATION;
+  const existing = await prisma.extractionJob.findFirst({
+    where: {
+      companyId: actor.companyId,
+      projectId: row.projectId,
+      projectFileId: row.id,
+      engineType,
+    },
+    orderBy: { createdAt: "asc" },
+    select: { id: true },
   });
+  if (existing) return existing.id;
+
+  await import("@/lib/jobs/register-handlers");
+  const job = await extractionJobQueue.enqueue({
+    companyId: actor.companyId,
+    projectId: row.projectId,
+    projectFileId: row.id,
+    engineType,
+    createdByUserId: actor.userId,
+  });
+  return job.id;
 }
 
 /**
@@ -695,7 +720,8 @@ export async function finalizeDrawingUpload(actor: CurrentActor, projectId: stri
     input.sessionId,
   );
   if (resolution.kind === "existing") {
-    return { drawing: toDrawingDTO(resolution.row), duplicateOfFileId: null, alreadyFinalized: true };
+    const workflowId = await enqueueInitialDrawingWorkflow(actor, resolution.row);
+    return { drawing: toDrawingDTO(resolution.row), workflowId, duplicateOfFileId: null, alreadyFinalized: true };
   }
   if (resolution.kind === "cancelled") {
     throw new AppError("UPLOAD_SESSION_CANCELLED", "This upload session was cancelled.", 409);
@@ -708,6 +734,12 @@ export async function finalizeDrawingUpload(actor: CurrentActor, projectId: stri
   const storage = getDrawingStorageAdapter();
   const metadata = await storage.getMetadata(session.storageKey);
   if (!metadata) {
+    if (session.status === "EXPIRED" || session.expiresAt.getTime() <= Date.now()) {
+      if (session.status === "PENDING") {
+        await setUploadSessionStatus(session.id, "EXPIRED");
+      }
+      throw new AppError("UPLOAD_SESSION_EXPIRED", "This upload session has expired. Start the upload again.", 410);
+    }
     throw new AppError("BLOB_OBJECT_MISSING", "The uploaded file could not be found in storage. Try uploading again.", 404);
   }
 
@@ -753,79 +785,80 @@ export async function finalizeDrawingUpload(actor: CurrentActor, projectId: stri
 
   const { discipline, drawingType, issueDate, sheetNumber, preparedBy, checkedBy, approvedBy, notes, drawingNumber, title, revision, scale } = input.metadata;
 
-  let committed:
-    | { kind: "created"; row: ProjectFileRecord }
-    | { kind: "existing"; row: ProjectFileRecord }
-    | { kind: "cancelled" }
-    | { kind: "expired" };
+  let committed: { kind: "created" | "existing"; row: ProjectFileRecord };
   try {
-    committed = await prisma.$transaction(async (tx) => {
-      const lockedSession = await getUploadSessionForUpdate(actor.companyId, input.sessionId, tx);
-      assertUploadSessionProject(lockedSession, canonicalProjectId);
-      assertUploadSessionActor(lockedSession, actor.userId);
-
-      if (lockedSession.status === "CANCELLED") return { kind: "cancelled" as const };
-
-      const existing = await findProjectFileRecord(actor.companyId, lockedSession.fileId, tx);
-      if (existing) {
-        if (lockedSession.status === "EXPIRED") return { kind: "expired" as const };
-        assertExpectedFinalizedFile(lockedSession, existing, canonicalProjectId);
-        if (lockedSession.status !== "FINALIZED") {
-          await setUploadSessionStatus(lockedSession.id, "FINALIZED", new Date(), tx);
-        }
-        await ensureDrawingUploadedAudit(tx, actor.companyId, existing);
-        return { kind: "existing" as const, row: existing };
-      }
-
-      if (lockedSession.status === "EXPIRED" || lockedSession.expiresAt.getTime() <= Date.now()) {
-        if (lockedSession.status === "PENDING") {
-          await setUploadSessionStatus(lockedSession.id, "EXPIRED", undefined, tx);
-        }
-        return { kind: "expired" as const };
-      }
-
-      const row = await createProjectFile(actor.companyId, {
-        id: lockedSession.fileId,
-        projectId: canonicalProjectId,
-        uploadedByUserId: lockedSession.actorUserId,
-        originalName: lockedSession.originalName,
-        safeFileName: lockedSession.storageKey.split("/").pop() ?? lockedSession.originalName,
-        storageKey: lockedSession.storageKey,
-        mimeType: lockedSession.declaredMimeType,
-        extension: lockedSession.extension,
-        fileSize: metadata.size,
-        checksum,
-        drawingNumber: drawingNumber ?? null,
-        drawingTitle: title ?? null,
-        revisionNumber: revision ?? null,
-        scaleText: scale ?? null,
-        pageCount,
-        metadataJson: { recordKind: "drawing", discipline, drawingType, issueDate, sheetNumber, preparedBy, checkedBy, approvedBy, notes },
-      }, tx);
-
-      await setUploadSessionStatus(lockedSession.id, "FINALIZED", new Date(), tx);
-      await ensureDrawingUploadedAudit(tx, actor.companyId, row);
-      return { kind: "created" as const, row };
-    });
+    await prisma.$transaction([
+      prisma.projectFile.create({
+        data: {
+          id: session.fileId,
+          companyId: actor.companyId,
+          projectId: canonicalProjectId,
+          uploadedByUserId: session.actorUserId,
+          originalName: session.originalName,
+          safeFileName: session.storageKey.split("/").pop() ?? session.originalName,
+          storageKey: session.storageKey,
+          mimeType: session.declaredMimeType,
+          extension: session.extension,
+          fileSize: metadata.size,
+          checksum,
+          drawingNumber: drawingNumber ?? null,
+          drawingTitle: title ?? null,
+          revisionNumber: revision ?? null,
+          scaleText: scale ?? null,
+          pageCount,
+          metadataJson: { recordKind: "drawing", discipline, drawingType, issueDate, sheetNumber, preparedBy, checkedBy, approvedBy, notes },
+        },
+      }),
+      setUploadSessionStatus(session.id, "FINALIZED", new Date()),
+      prisma.auditLog.create({
+        data: {
+          companyId: actor.companyId,
+          userId: actor.userId,
+          entityType: "ProjectFile",
+          entityId: session.fileId,
+          action: "DRAWING_UPLOADED",
+          payloadJson: {
+            projectId: canonicalProjectId,
+            originalName: session.originalName,
+            fileSize: metadata.size,
+            checksum,
+            discipline: discipline ?? null,
+            drawingType: drawingType ?? null,
+            path: "direct_upload",
+          },
+          actorName: actor.fullName,
+        },
+      }),
+    ]);
+    committed = {
+      kind: "created",
+      row: await getProjectFileRecord(actor.companyId, session.fileId),
+    };
   } catch (error) {
-    await createAuditLog(actor.companyId, {
-      entityType: "ProjectFile",
-      entityId: session.fileId,
-      action: "DRAWING_UPLOAD_FAILED",
-      payload: { projectId: canonicalProjectId, originalName: session.originalName, stage: "finalize_db_write" },
-    }).catch(() => undefined);
-    throw error;
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+      const existing = await findProjectFileRecord(actor.companyId, session.fileId);
+      if (existing) {
+        assertExpectedFinalizedFile(session, existing, canonicalProjectId);
+        committed = { kind: "existing", row: existing };
+      } else {
+        throw error;
+      }
+    } else {
+      await createAuditLog(actor.companyId, {
+        entityType: "ProjectFile",
+        entityId: session.fileId,
+        action: "DRAWING_UPLOAD_FAILED",
+        payload: { projectId: canonicalProjectId, originalName: session.originalName, stage: "finalize_db_write" },
+      }).catch(() => undefined);
+      throw error;
+    }
   }
 
-  if (committed.kind === "cancelled") {
-    throw new AppError("UPLOAD_SESSION_CANCELLED", "This upload session was cancelled.", 409);
-  }
-  if (committed.kind === "expired") {
-    throw new AppError("UPLOAD_SESSION_EXPIRED", "This upload session has expired. Start the upload again.", 410);
-  }
+  const workflowId = await enqueueInitialDrawingWorkflow(actor, committed.row);
 
   return {
     drawing: toDrawingDTO(committed.row),
+    workflowId,
     duplicateOfFileId: committed.kind === "created" && duplicate && isDrawingRecord(duplicate) ? duplicate.id : null,
     alreadyFinalized: committed.kind === "existing",
   };

@@ -62,12 +62,12 @@ export async function getUploadSessionForUpdate(
   }
 }
 
-export async function setUploadSessionStatus(
+export function setUploadSessionStatus(
   sessionId: string,
   status: ProjectFileUploadSessionStatus,
   finalizedAt?: Date,
   db: DbClient = prisma,
-): Promise<ProjectFileUploadSession> {
+): Prisma.PrismaPromise<ProjectFileUploadSession> {
   return db.projectFileUploadSession.update({
     where: { id: sessionId },
     data: { status, ...(finalizedAt ? { finalizedAt } : {}) },

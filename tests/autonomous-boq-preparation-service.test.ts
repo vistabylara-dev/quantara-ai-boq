@@ -1,5 +1,6 @@
 import { ExtractionJobStatus, UserRole } from "@prisma/client";
 import { describe, expect, it, vi } from "vitest";
+import { createAutonomousBOQOperationHash } from "../src/lib/autonomous-boq/preparation";
 import {
   createAutonomousBoqPreparationService,
   selectAutonomousSourceRevisions,
@@ -26,6 +27,29 @@ const actor = {
   fullName: "Quantara Owner",
   email: "owner@example.test",
 };
+
+function configurationForTest() {
+  const base = {
+    contractVersion: "autonomous-boq-preparation-v1" as const,
+    companyId: IDS.company,
+    projectId: IDS.project,
+    targetBoqId: IDS.boq,
+    industry: {
+      engineId: IDS.engine,
+      key: "construction",
+      name: "Construction",
+      policyVersion: "autonomous-boq-policy/v1",
+      configurationHash: "b".repeat(64),
+    },
+    frozenSources: [{
+      id: IDS.fileR2,
+      checksum: "a".repeat(64),
+      revision: "R02",
+      originalName: "drawing-R02.pdf",
+    }],
+  };
+  return { ...base, operationHash: createAutonomousBOQOperationHash(base) };
+}
 
 function source(
   id: string,
@@ -199,6 +223,33 @@ describe("autonomous preparation start and refresh", () => {
     await service.start(actor, "project-q-001", { sourceFileIds: [IDS.fileR1, IDS.fileR2] });
 
     expect(deps.scheduleJob).not.toHaveBeenCalled();
+  });
+
+  it("restarts a section-policy failure with synchronized configuration and the same frozen sources and BOQ", async () => {
+    const deps = serviceDependencies();
+    const failedConfiguration = configurationForTest();
+    deps.getJob = vi.fn().mockResolvedValue({
+      ...(await deps.getJob(IDS.company, IDS.job)),
+      status: ExtractionJobStatus.FAILED,
+      errorCode: "AUTONOMOUS_INDUSTRY_SECTION_MISSING",
+      errorMessage: "Industry rule gross-floor-area refers to a BOQ section that is not enabled.",
+      configurationJson: failedConfiguration,
+    });
+    deps.listSources = vi.fn().mockResolvedValue([
+      source(IDS.fileR2, "R02", "2026-01-01T00:00:00.000Z"),
+    ]);
+    const service = createAutonomousBoqPreparationService(deps);
+
+    await service.retry(actor, "project-q-001", IDS.job);
+
+    expect(deps.requeueJob).not.toHaveBeenCalled();
+    expect(deps.findOrCreateJob).toHaveBeenCalledWith(expect.objectContaining({
+      anchorProjectFileId: IDS.fileR2,
+      configuration: expect.objectContaining({
+        targetBoqId: IDS.boq,
+        frozenSources: [expect.objectContaining({ id: IDS.fileR2 })],
+      }),
+    }));
   });
 
   it("returns a persisted ready-for-rates state after refresh", () => {

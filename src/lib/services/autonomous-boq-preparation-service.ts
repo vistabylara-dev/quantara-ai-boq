@@ -12,6 +12,7 @@ import type { CurrentActor } from "@/lib/auth/current-actor";
 import { requireCapability } from "@/lib/auth/rbac";
 import {
   AUTONOMOUS_BOQ_PREPARATION_VERSION,
+  autonomousPreparationConfigurationSchema,
   createAutonomousBOQOperationHash,
   type AutonomousPreparationConfiguration,
 } from "@/lib/autonomous-boq/preparation";
@@ -569,6 +570,19 @@ export function createAutonomousBoqPreparationService(
       const current = await dependencies.getJob(actor.companyId, jobId);
       if (current.companyId !== actor.companyId || current.projectId !== project.id) {
         throw new NotFoundError("BOQ preparation not found.");
+      }
+      if (current.errorCode === "AUTONOMOUS_INDUSTRY_SECTION_MISSING") {
+        const failedConfiguration = autonomousPreparationConfigurationSchema.parse(
+          current.configurationJson,
+        );
+        return createAutonomousBoqPreparationService(dependencies).start(
+          actor,
+          projectIdentifier,
+          {
+            sourceFileIds: failedConfiguration.frozenSources.map((source) => source.id),
+            targetBoqId: failedConfiguration.targetBoqId,
+          },
+        );
       }
       const job = await dependencies.requeueJob(actor.companyId, jobId);
       await dependencies.registerHandlers();

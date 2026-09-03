@@ -441,19 +441,6 @@ async function verifyPdfSignature(storage: DocumentStorageAdapter, storageKey: s
   return head.equals(PDF_SIGNATURE);
 }
 
-/** Streams the full object through a sha256 hash without ever holding the whole file in memory at once — bounded memory regardless of file size. */
-async function computeStreamedChecksum(storage: DocumentStorageAdapter, storageKey: string): Promise<string> {
-  const { body } = await storage.getObjectStream(storageKey);
-  const hash = createHash("sha256");
-  const reader = body.getReader();
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    hash.update(value);
-  }
-  return hash.digest("hex");
-}
-
 export type AuthorizeDrawingUploadInput = {
   originalName: string;
   declaredMimeType: string;
@@ -906,8 +893,12 @@ export async function finalizeDrawingUpload(actor: CurrentActor, projectId: stri
     }
   }
 
-  const checksum = await computeStreamedChecksum(storage, session.storageKey);
-  const duplicate = await findDuplicateByChecksum(actor.companyId, canonicalProjectId, checksum);
+  // Full-object hashing belongs to the durable preprocessing job. This stable,
+  // deliberately non-SHA placeholder prevents the file from entering a frozen
+  // measurement scope until preprocessing replaces it with the real checksum.
+  const checksum = `pending:${createHash("sha256")
+    .update(`${session.id}:${session.storageKey}:${metadata.size}`)
+    .digest("hex")}`;
 
   // Direct uploads must finalize on the request's critical path. Pulling the
   // complete Blob back into a Vercel Function and booting pdf-parse here can
@@ -1016,7 +1007,7 @@ export async function finalizeDrawingUpload(actor: CurrentActor, projectId: stri
   return {
     drawing: toDrawingDTO(committed.row),
     workflowId,
-    duplicateOfFileId: committed.kind === "created" && duplicate && isDrawingRecord(duplicate) ? duplicate.id : null,
+    duplicateOfFileId: null,
     alreadyFinalized: committed.kind === "existing",
   };
 }

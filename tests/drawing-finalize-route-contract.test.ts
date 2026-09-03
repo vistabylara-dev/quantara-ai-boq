@@ -12,6 +12,16 @@ describe("drawing finalization route contract", () => {
     expect(source).toContain("return apiSuccess(result, 202)");
   });
 
+  it("keeps full-object checksum work outside the finalization request", () => {
+    const service = readFileSync(path.join(process.cwd(), "src/lib/services/drawing-service.ts"), "utf8");
+    const preprocessing = readFileSync(path.join(process.cwd(), "src/lib/files/preprocessing-handler.ts"), "utf8");
+
+    expect(service).not.toContain("computeStreamedChecksum");
+    expect(service).toContain('const checksum = `pending:');
+    expect(preprocessing).toContain("computeDurableChecksum");
+    expect(preprocessing).toContain("data: { checksum }");
+  });
+
   it("discovers server-owned incomplete uploads after browser refresh", () => {
     const route = readFileSync(path.join(
       process.cwd(),

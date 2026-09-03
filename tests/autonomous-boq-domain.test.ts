@@ -114,6 +114,50 @@ describe("autonomous BOQ industry policy contract", () => {
 });
 
 describe("autonomous BOQ deterministic domain", () => {
+  it("maps explicit Construction gross floor area into the enabled Measured Areas section as an unpriced item", () => {
+    const industry = supportedContext("construction");
+    const frozenSources = freezeAutonomousSources([{
+      fileId: "00000000-0000-4000-8000-000000000011",
+      checksumSha256: "b".repeat(64),
+      drawingIdentity: "A-001",
+      revision: "R01",
+      pageIds: ["construction-gfa-page-1"],
+    }]);
+    const operation = buildAutonomousOperationIdentity({
+      companyId: COMPANY_ID,
+      projectId: PROJECT_ID,
+      targetBoqId: BOQ_ID,
+      industry,
+      frozenSources,
+    });
+    const draft = assembleAutonomousBoqDraft({
+      operation,
+      industry,
+      frozenSources,
+      candidates: [{
+        candidateId: "construction-gfa-1",
+        subjectKey: "construction:gross-floor-area",
+        ruleId: "gross-floor-area",
+        description: "Explicit gross floor area",
+        formulaInputs: { netFloorArea: 1250 },
+        evidence: [{
+          evidenceId: "construction-gfa-evidence-1",
+          sourceFileId: frozenSources.sources[0]!.fileId,
+          pageId: "construction-gfa-page-1",
+          role: "PRIMARY",
+          reference: "A-001 / R01 / page 1",
+        }],
+        reconciliation: { status: "DIRECT", evidenceIds: ["construction-gfa-evidence-1"] },
+      }],
+      unsupportedScopes: [],
+      evaluatedAt: EVALUATED_AT,
+    });
+
+    expect(draft.items).toHaveLength(1);
+    expect(draft.items[0]).toMatchObject({ sectionId: "area-schedules", quantity: 1250, unit: "m2", rate: 0 });
+    expect(draft.completion).toMatchObject({ readyForRates: true, onlyRatesBlock: true });
+  });
+
   it.each(REPRESENTATIVE_INDUSTRY_FIXTURES)(
     "builds a technically complete, evidence-linked, unpriced $engineId item",
     (fixture) => {

@@ -94,6 +94,35 @@ async function synchronizeConfiguredIndustryEngine(
   return { id: updated.id, created: false, updated: true };
 }
 
+/**
+ * Refreshes only the industry already enabled for this tenant. This keeps the
+ * persisted registry aligned with the authoritative configuration when a new
+ * measurement rule starts using an existing canonical BOQ section, without
+ * changing any tenant enablement choices.
+ */
+export async function synchronizeEnabledIndustryEngine(
+  companyId: string,
+  identifier: string,
+): Promise<boolean> {
+  const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(identifier);
+  const link = await prisma.companyIndustryEngine.findFirst({
+    where: {
+      companyId,
+      enabled: true,
+      ...(isUuid
+        ? { industryEngineId: identifier }
+        : { industryEngine: { key: identifier } }),
+    },
+    select: { industryEngine: { select: { key: true } } },
+  });
+  if (!link) return false;
+
+  const source = demoIndustries.find((industry) => industry.id === link.industryEngine.key);
+  if (!source) return false;
+  const result = await synchronizeConfiguredIndustryEngine(source);
+  return result.updated;
+}
+
 async function synchronizeExistingJoineryIndustryEngine(): Promise<void> {
   const source = demoIndustries.find((industry) => industry.id === JOINERY_INDUSTRY_KEY);
   if (!source) throw new Error("The authoritative Joinery industry configuration is missing.");

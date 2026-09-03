@@ -120,6 +120,7 @@ function serviceDependencies(): AutonomousPreparationServiceDependencies {
         configJson: { supportedUnits: ["m3", "m2"], boqSections: [] },
       },
     }),
+    synchronizeEnabledIndustry: vi.fn().mockResolvedValue(false),
     getEnabledIndustry: vi.fn().mockResolvedValue({
       id: IDS.engine,
       key: "construction",
@@ -153,6 +154,9 @@ describe("autonomous preparation start and refresh", () => {
     });
 
     expect(deps.getEnabledIndustry).toHaveBeenCalledWith(IDS.company, IDS.engine);
+    expect(deps.synchronizeEnabledIndustry).toHaveBeenCalledWith(IDS.company, IDS.engine);
+    expect((deps.synchronizeEnabledIndustry as ReturnType<typeof vi.fn>).mock.invocationCallOrder[0])
+      .toBeLessThan((deps.getEnabledIndustry as ReturnType<typeof vi.fn>).mock.invocationCallOrder[0]!);
     expect(deps.findOrCreateJob).toHaveBeenCalledWith(expect.objectContaining({
       createdByUserId: IDS.user,
       anchorProjectFileId: IDS.fileR2,

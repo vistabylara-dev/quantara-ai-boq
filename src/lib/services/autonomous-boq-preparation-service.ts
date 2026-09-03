@@ -29,6 +29,7 @@ import {
 } from "@/lib/repositories/autonomous-boq-preparation-repository";
 import { getEnabledIndustry } from "@/lib/repositories/industry-repository";
 import { getProjectRecord } from "@/lib/repositories/project-repository";
+import { synchronizeEnabledIndustryEngine } from "@/lib/services/industry-bootstrap-service";
 import type { PreliminaryConceptSchedule } from "@/lib/autonomous-boq/concept-schedule";
 import { consolidatePreparationFindings } from "@/lib/autonomous-boq/review-findings";
 
@@ -354,6 +355,7 @@ type EnabledIndustryRecord = {
 
 export type AutonomousPreparationServiceDependencies = {
   getProject(companyId: string, identifier: string): Promise<AutonomousPreparationProjectRecord>;
+  synchronizeEnabledIndustry(companyId: string, identifier: string): Promise<boolean>;
   getEnabledIndustry(companyId: string, identifier: string): Promise<EnabledIndustryRecord>;
   listSources(companyId: string, projectId: string, sourceFileIds: readonly string[]): Promise<AutonomousPreparationSourceRecord[]>;
   findEditableBoq(companyId: string, projectId: string, targetBoqId?: string): Promise<{ id: string } | null>;
@@ -384,6 +386,7 @@ const defaultDependencies: AutonomousPreparationServiceDependencies = {
   getProject: async (companyId, identifier) => {
     return getProjectRecord(companyId, identifier);
   },
+  synchronizeEnabledIndustry: synchronizeEnabledIndustryEngine,
   getEnabledIndustry,
   listSources: (companyId, projectId, sourceFileIds) => prisma.projectFile.findMany({
     where: {
@@ -448,6 +451,11 @@ export function createAutonomousBoqPreparationService(
       const input = autonomousBoqPreparationRequestSchema.parse(rawInput);
       const project = await dependencies.getProject(actor.companyId, projectIdentifier);
       if (project.companyId !== actor.companyId) throw new NotFoundError("Project not found.");
+
+      await dependencies.synchronizeEnabledIndustry(
+        actor.companyId,
+        project.industryEngineId,
+      );
 
       const enabledIndustry = await dependencies.getEnabledIndustry(
         actor.companyId,

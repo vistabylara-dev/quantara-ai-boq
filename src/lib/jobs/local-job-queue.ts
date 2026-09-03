@@ -218,7 +218,12 @@ export class LocalJobQueue implements JobQueue {
           continue; // another controlled attempt, in the same call — re-claims atomically at the top
         }
 
-        await failExtractionJob(companyId, jobId, message);
+        await failExtractionJob(
+          companyId,
+          jobId,
+          message,
+          error instanceof AppError ? error.code : "HANDLER_ERROR",
+        );
         return;
       }
     }

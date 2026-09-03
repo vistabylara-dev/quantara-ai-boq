@@ -10,7 +10,7 @@ import { prisma } from "../src/lib/db/prisma";
 import { createClient } from "../src/lib/repositories/client-repository";
 import { createProjectWithDefaultBoq } from "../src/lib/services/project-service";
 import { LocalJobQueue } from "../src/lib/jobs/local-job-queue";
-import { NotFoundError } from "../src/lib/errors/app-error";
+import { AppError, NotFoundError } from "../src/lib/errors/app-error";
 import { resetExtractionJobToQueued } from "../src/lib/repositories/extraction-job-repository";
 
 const RUN_ID = Date.now();
@@ -215,6 +215,20 @@ describe("LocalJobQueue — request-lifecycle-aware scheduling", () => {
     expect(final.attempts).toBe(3);
     expect(calls).toBe(3);
     expect(final.errorCode).toBe("HANDLER_ERROR");
+  });
+
+  it("preserves a typed application error code after bounded retries", async () => {
+    const queue = newQueue();
+    queue.registerHandler(ExtractionEngineType.FILE_PREPROCESSING, async () => {
+      throw new AppError("PROVIDER_REJECTED", "Provider rejected the request.", 503);
+    });
+    const file = await makeFile();
+    const job = await queue.enqueue({ companyId, projectId, projectFileId: file.id, engineType: ExtractionEngineType.FILE_PREPROCESSING, createdByUserId: userId, maximumAttempts: 2 });
+
+    await waitFor(async () => (await prisma.extractionJob.findUniqueOrThrow({ where: { id: job.id } })).status === ExtractionJobStatus.FAILED);
+    const final = await prisma.extractionJob.findUniqueOrThrow({ where: { id: job.id } });
+    expect(final.errorCode).toBe("PROVIDER_REJECTED");
+    expect(final.errorMessage).toBe("Provider rejected the request.");
   });
 
   it("G. a duplicate enqueue for the same file+engine while non-terminal returns the existing job, not a new one", async () => {

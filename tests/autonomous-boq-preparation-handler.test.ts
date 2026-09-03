@@ -1,6 +1,7 @@
 import { ExtractionJobStatus, UserRole } from "@prisma/client";
 import { describe, expect, it, vi } from "vitest";
 import { createAutonomousBOQOperationHash } from "../src/lib/autonomous-boq/preparation";
+import { AppError } from "../src/lib/errors/app-error";
 import {
   createAutonomousBoqPreparationHandler,
   type AutonomousBoqPreparationHandlerDependencies,
@@ -226,6 +227,33 @@ describe("autonomous preparation handler", () => {
       providerAttempt: { operationHash: config.operationHash, startedAt: "2026-01-01T00:00:00.000Z" },
     }), ctx)).rejects.toMatchObject({ code: "AUTONOMOUS_PROVIDER_ATTEMPT_INCOMPLETE" });
     expect(deps.measure).not.toHaveBeenCalled();
+  });
+
+  it("durably preserves a sanitized provider failure before the queue retries", async () => {
+    const deps = dependencies();
+    deps.measure = vi.fn().mockImplementation(async (_actor, _project, _input, options) => {
+      await options.onReasonerStart?.();
+      throw new AppError(
+        "TAYQAN_MEASUREMENT_AI_REQUEST_REJECTED",
+        "Provider rejected the configured model (HTTP 400).",
+        503,
+      );
+    });
+    const handler = createAutonomousBoqPreparationHandler(deps);
+
+    await expect(handler(job(), ctx)).rejects.toMatchObject({
+      code: "TAYQAN_MEASUREMENT_AI_REQUEST_REJECTED",
+    });
+    expect(deps.checkpoint).toHaveBeenCalledWith(
+      IDS.company,
+      IDS.job,
+      expect.objectContaining({
+        providerFailure: expect.objectContaining({
+          code: "TAYQAN_MEASUREMENT_AI_REQUEST_REJECTED",
+          status: 503,
+        }),
+      }),
+    );
   });
 
   it("stops before the provider when source processing needs input", async () => {

@@ -122,6 +122,20 @@ describe("autonomous provider replay safety", () => {
     })).toThrow(/will not make another provider request/i);
   });
 
+  it("preserves the original sanitized provider failure while still failing closed", () => {
+    expect(() => resolveAutonomousProviderExecution({
+      providerAttempt: { operationHash: "a".repeat(64), startedAt: "2026-09-02T00:00:00.000Z" },
+      providerResult: null,
+      providerFailure: {
+        operationHash: "a".repeat(64),
+        failedAt: "2026-09-02T00:00:01.000Z",
+        code: "TAYQAN_MEASUREMENT_AI_REQUEST_REJECTED",
+        message: "Provider rejected the configured model (HTTP 400).",
+        status: 503,
+      },
+    })).toThrow(/configured model/);
+  });
+
   it("rejects a result checkpoint from another operation", () => {
     expect(() => resolveAutonomousProviderExecution({
       providerAttempt: { operationHash: "a".repeat(64), startedAt: "2026-09-02T00:00:00.000Z" },

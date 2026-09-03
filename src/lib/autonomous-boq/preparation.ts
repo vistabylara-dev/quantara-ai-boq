@@ -104,9 +104,18 @@ const providerResultCheckpointSchema = z.object({
   value: tayqanMeasurementReasonerResultSchema,
 }).strict();
 
+const providerFailureCheckpointSchema = z.object({
+  operationHash: z.string().regex(/^[a-f0-9]{64}$/i),
+  failedAt: z.string().datetime(),
+  code: z.string().trim().min(1).max(120),
+  message: z.string().trim().min(1).max(500),
+  status: z.number().int().min(400).max(599),
+}).strict();
+
 export const autonomousPreparationCheckpointSchema = z.object({
   providerAttempt: providerAttemptSchema.nullable().optional(),
   providerResult: providerResultCheckpointSchema.nullable().optional(),
+  providerFailure: providerFailureCheckpointSchema.nullable().optional(),
 }).passthrough();
 
 export type AutonomousPreparationCheckpoint = z.infer<
@@ -145,6 +154,10 @@ export function resolveAutonomousProviderExecution(
   }
 
   if (!result) {
+    const failure = checkpoint.providerFailure ?? null;
+    if (failure?.operationHash === attempt.operationHash) {
+      throw new AppError(failure.code, failure.message, failure.status);
+    }
     throw new AppError(
       "AUTONOMOUS_PROVIDER_ATTEMPT_INCOMPLETE",
       "Quantara found an uncertain provider attempt and will not make another provider request. The preserved operation requires safe recovery.",

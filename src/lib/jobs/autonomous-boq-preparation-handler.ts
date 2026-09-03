@@ -560,12 +560,36 @@ export function createAutonomousBoqPreparationHandler(
       });
     }
 
-    const measurement = await dependencies.measure(
-      actor,
-      scope.projectSlug,
-      measurementInput,
-      measurementOptions,
-    );
+    let measurement: PrepareTayqanMeasurementsResult;
+    try {
+      measurement = await dependencies.measure(
+        actor,
+        scope.projectSlug,
+        measurementInput,
+        measurementOptions,
+      );
+    } catch (error) {
+      if (summary.providerAttempt && !summary.providerResult) {
+        const appError = error instanceof AppError
+          ? error
+          : new AppError(
+            "TAYQAN_MEASUREMENT_AI_EXECUTION_FAILED",
+            "TAYQAN could not complete the bounded AI measurement pass.",
+            503,
+          );
+        await checkpoint({
+          providerFailure: {
+            operationHash: configuration.operationHash,
+            failedAt: dependencies.now().toISOString(),
+            code: appError.code,
+            message: appError.message.slice(0, 500),
+            status: appError.status,
+          },
+        });
+        throw appError;
+      }
+      throw error;
+    }
     await assertNotCancelled(ctx);
 
     await checkpoint({ stage: "ASSEMBLING_BOQ", readyForRates: false });

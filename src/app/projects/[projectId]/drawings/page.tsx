@@ -583,7 +583,7 @@ export default function ProjectDrawingsPage(props: { params: Promise<{ projectId
               >
                 Add unit rates
               </Link>
-            ) : preparation?.retryable && hasNewDrawingSet ? (
+            ) : hasNewDrawingSet && preparation && !["QUEUED", "RUNNING", "COMPLETED"].includes(preparation.status) ? (
               <button
                 type="button"
                 onClick={() => void startPreparation()}

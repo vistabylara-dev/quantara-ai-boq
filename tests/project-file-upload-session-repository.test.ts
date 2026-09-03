@@ -12,17 +12,15 @@ describe("getUploadSessionForUpdate", () => {
       fileId: "00000000-0000-0000-0000-000000000005",
       status: "PENDING",
     } as ProjectFileUploadSession;
-    const updateMany = vi.fn().mockResolvedValue({ count: 1 });
-    const findFirst = vi.fn().mockResolvedValue(lockedSession);
+    const update = vi.fn().mockResolvedValue(lockedSession);
     const queryRaw = vi.fn();
-    const db = { $queryRaw: queryRaw, projectFileUploadSession: { updateMany, findFirst } } as unknown as Prisma.TransactionClient;
+    const db = { $queryRaw: queryRaw, projectFileUploadSession: { update } } as unknown as Prisma.TransactionClient;
 
     await expect(getUploadSessionForUpdate(lockedSession.companyId, lockedSession.id, db)).resolves.toBe(lockedSession);
-    expect(updateMany).toHaveBeenCalledWith({
+    expect(update).toHaveBeenCalledWith({
       where: { id: lockedSession.id, companyId: lockedSession.companyId },
       data: { updatedAt: expect.any(Date) },
     });
-    expect(findFirst).toHaveBeenCalledTimes(1);
     expect(queryRaw).not.toHaveBeenCalled();
   });
 });

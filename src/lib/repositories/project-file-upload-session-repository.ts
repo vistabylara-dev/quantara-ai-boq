@@ -49,12 +49,17 @@ export async function getUploadSessionForUpdate(
   // query with subsequent Prisma calls leaves the Preview pg adapter's single
   // client in an executing state and finalization never returns. Touching only
   // updatedAt is safe for retries and does not change the session lifecycle.
-  const locked = await db.projectFileUploadSession.updateMany({
-    where: { id: sessionId, companyId },
-    data: { updatedAt: new Date() },
-  });
-  if (locked.count === 0) throw new NotFoundError("Upload session not found.");
-  return getUploadSession(companyId, sessionId, db);
+  try {
+    return await db.projectFileUploadSession.update({
+      where: { id: sessionId, companyId },
+      data: { updatedAt: new Date() },
+    });
+  } catch (error) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2025") {
+      throw new NotFoundError("Upload session not found.");
+    }
+    throw error;
+  }
 }
 
 export async function setUploadSessionStatus(

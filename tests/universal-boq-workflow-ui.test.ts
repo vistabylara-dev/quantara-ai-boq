@@ -3,6 +3,7 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   AUTONOMOUS_PREPARATION_STAGES,
+  autonomousSourceSetChanged,
   deriveAutonomousPreparationUi,
 } from "../src/lib/autonomous-boq/workflow-ui";
 
@@ -27,6 +28,11 @@ describe("universal drawing-to-BOQ customer workflow UI", () => {
     expect(deriveAutonomousPreparationUi({ drawingCount: 1, uploadActive: false, preparation: { status: "FAILED", stage: "FAILED", readyForRates: false, retryable: true } }).state).toBe("retryable_failure");
     expect(deriveAutonomousPreparationUi({ drawingCount: 1, uploadActive: false, preparation: { status: "NEEDS_INPUT", stage: "SOURCE_INPUT_REQUIRED", readyForRates: false, retryable: false } }).state).toBe("missing_evidence");
     expect(deriveAutonomousPreparationUi({ drawingCount: 1, uploadActive: false, preparation: { status: "COMPLETED", stage: "READY_FOR_RATES", readyForRates: true, retryable: false } }).state).toBe("ready");
+  });
+
+  it("starts a new frozen preparation after the active drawing set changes", () => {
+    expect(autonomousSourceSetChanged(["new-drawing"], ["old-drawing"])).toBe(true);
+    expect(autonomousSourceSetChanged(["drawing-a", "drawing-b"], ["drawing-b", "drawing-a"])).toBe(false);
   });
 
   it("limits project creation to truthful autonomous availability and continues to drawings", () => {

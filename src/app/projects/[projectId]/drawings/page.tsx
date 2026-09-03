@@ -29,6 +29,7 @@ import { emitOnboardingActionComplete } from "@/lib/onboarding/onboarding-state"
 import { trackFirstConversionEvent } from "@/lib/marketing/conversion-events";
 import {
   AUTONOMOUS_PREPARATION_STAGES,
+  autonomousSourceSetChanged,
   deriveAutonomousPreparationUi,
 } from "@/lib/autonomous-boq/workflow-ui";
 
@@ -196,6 +197,10 @@ export default function ProjectDrawingsPage(props: { params: Promise<{ projectId
     uploadActive: uploadStage === "preparing" || uploadStage === "uploading" || uploadStage === "finalizing",
     preparation,
   }), [drawings?.length, preparation, uploadStage]);
+  const hasNewDrawingSet = Boolean(preparation && autonomousSourceSetChanged(
+    drawings?.map((drawing) => drawing.id) ?? [],
+    preparation.sourceFileIds,
+  ));
 
   const startPreparation = useCallback(async () => {
     if (!drawings?.length || preparationAction) return;
@@ -537,6 +542,15 @@ export default function ProjectDrawingsPage(props: { params: Promise<{ projectId
               >
                 Add unit rates
               </Link>
+            ) : preparation?.retryable && hasNewDrawingSet ? (
+              <button
+                type="button"
+                onClick={() => void startPreparation()}
+                disabled={!drawings?.length || preparationAction !== null}
+                className="rounded-2xl bg-[#009FE3] px-4 py-2 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-50 dark:bg-[#21C7F3] dark:text-[#040A16]"
+              >
+                {preparationAction === "start" ? "Starting…" : "Generate BOQ from Drawings"}
+              </button>
             ) : preparation?.retryable ? (
               <button
                 type="button"

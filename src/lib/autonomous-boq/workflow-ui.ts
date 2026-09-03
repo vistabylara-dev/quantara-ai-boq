@@ -33,6 +33,15 @@ export function preparationStageIndex(stage: string): number {
   return 0;
 }
 
+export function autonomousSourceSetChanged(
+  activeSourceIds: readonly string[],
+  frozenSourceIds: readonly string[],
+): boolean {
+  if (activeSourceIds.length !== frozenSourceIds.length) return true;
+  const frozen = new Set(frozenSourceIds);
+  return activeSourceIds.some((sourceId) => !frozen.has(sourceId));
+}
+
 export function deriveAutonomousPreparationUi(input: {
   drawingCount: number;
   uploadActive: boolean;

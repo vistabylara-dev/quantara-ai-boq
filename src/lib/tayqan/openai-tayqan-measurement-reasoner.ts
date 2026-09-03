@@ -499,8 +499,9 @@ function sanitizedProviderToken(value: unknown): string | null {
     : null;
 }
 
-function classifyProviderFailure(status: number, providerCode: string | null): string {
+export function classifyProviderFailure(status: number, providerCode: string | null): string {
   if (providerCode === "rate_limit_exceeded") return "rate_limit_exceeded";
+  if (providerCode === "credit_balance_exhausted") return "credit_balance_exhausted";
   if (providerCode === "insufficient_quota") return "insufficient_quota";
   if (providerCode === "context_length_exceeded") return "context_length_exceeded";
   if (providerCode === "model_not_found") return "model_or_project_access";

@@ -19,7 +19,10 @@ import {
   type TayqanMeasurementPageEvidence,
 } from "../src/lib/tayqan/tayqan-measurement-reasoner";
 import type { TayqanMeasurementSubject } from "../src/lib/tayqan/tayqan-measurement-contract";
-import { createOpenAITayqanMeasurementReasoner } from "../src/lib/tayqan/openai-tayqan-measurement-reasoner";
+import {
+  classifyProviderFailure,
+  createOpenAITayqanMeasurementReasoner,
+} from "../src/lib/tayqan/openai-tayqan-measurement-reasoner";
 
 const PAGE_PLAN = "11111111-1111-4111-8111-111111111111";
 const PAGE_SECTION = "22222222-2222-4222-8222-222222222222";
@@ -704,6 +707,11 @@ describe("TAYQAN senior cross-page orchestration", () => {
 });
 
 describe("TAYQAN senior OpenAI orchestration — mocked, zero network", () => {
+  it("keeps credit exhaustion distinct from a funded organization's rate limit", () => {
+    expect(classifyProviderFailure(429, "credit_balance_exhausted"))
+      .toBe("credit_balance_exhausted");
+  });
+
   function responseJson(id: string, payload: unknown): Response {
     return new Response(JSON.stringify({
       id,

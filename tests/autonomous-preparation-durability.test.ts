@@ -174,6 +174,39 @@ describe("autonomous provider replay safety", () => {
     }, "2026-09-03T00:01:00.000Z")).toThrow(/already been used/i);
   });
 
+  it("permits one separately audited retry when the diagnostic run failed before provider contact", () => {
+    const originalFailure = {
+      operationHash: "a".repeat(64),
+      failedAt: "2026-09-02T00:00:01.000Z",
+      code: "TAYQAN_MEASUREMENT_AI_REQUEST_REJECTED",
+      message: "Provider rejected the request (HTTP 429).",
+      status: 503,
+    };
+    const recovered = authorizeSingle429ProviderRecovery({
+      providerAttempt: { operationHash: "a".repeat(64), startedAt: "2026-09-03T00:00:00.000Z" },
+      providerFailure: {
+        operationHash: "a".repeat(64),
+        failedAt: "2026-09-03T00:00:01.000Z",
+        code: "TAYQAN_MEASUREMENT_AI_EXECUTION_FAILED",
+        message: "The measurement pipeline failed before provider contact.",
+        status: 503,
+      },
+      providerRecovery: {
+        authorizedAt: "2026-09-03T00:00:00.000Z",
+        reason: "SANITIZED_429_DIAGNOSTIC_RETRY",
+        attemptCount: 1,
+        originalAttempt: { operationHash: "a".repeat(64), startedAt: "2026-09-02T00:00:00.000Z" },
+        originalFailure,
+      },
+    }, "2026-09-03T00:02:00.000Z");
+    expect(recovered.providerRecovery).toMatchObject({
+      reason: "PRE_PROVIDER_INFRASTRUCTURE_RETRY",
+      attemptCount: 2,
+      originalFailure,
+      infrastructureFailure: { code: "TAYQAN_MEASUREMENT_AI_EXECUTION_FAILED" },
+    });
+  });
+
   it("rejects a result checkpoint from another operation", () => {
     expect(() => resolveAutonomousProviderExecution({
       providerAttempt: { operationHash: "a".repeat(64), startedAt: "2026-09-02T00:00:00.000Z" },

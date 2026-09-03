@@ -301,11 +301,14 @@ export async function requeueAutonomousPreparationJob(
       );
     }
     if (retryCheckpoint) {
+      const recovery = jsonRecord(retryCheckpoint.providerRecovery as Prisma.JsonValue);
       await createAuditLog(companyId, {
         entityType: "ExtractionJob",
         entityId: jobId,
-        action: "AUTONOMOUS_PROVIDER_429_RECOVERY_AUTHORIZED",
-        payload: { attemptCount: 1 },
+        action: recovery.reason === "PRE_PROVIDER_INFRASTRUCTURE_RETRY"
+          ? "AUTONOMOUS_PRE_PROVIDER_INFRASTRUCTURE_RECOVERY_AUTHORIZED"
+          : "AUTONOMOUS_PROVIDER_429_RECOVERY_AUTHORIZED",
+        payload: { attemptCount: recovery.attemptCount as number },
       }, tx);
     }
     return tx.extractionJob.findFirstOrThrow({ where: { id: jobId, companyId } });

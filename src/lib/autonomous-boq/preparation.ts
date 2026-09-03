@@ -130,10 +130,14 @@ const providerFailureCheckpointSchema = z.object({
 
 const providerRecoverySchema = z.object({
   authorizedAt: z.string().datetime(),
-  reason: z.literal("SANITIZED_429_DIAGNOSTIC_RETRY"),
-  attemptCount: z.literal(1),
+  reason: z.enum([
+    "SANITIZED_429_DIAGNOSTIC_RETRY",
+    "PRE_PROVIDER_INFRASTRUCTURE_RETRY",
+  ]),
+  attemptCount: z.number().int().min(1).max(2),
   originalAttempt: providerAttemptSchema.optional(),
   originalFailure: providerFailureCheckpointSchema.optional(),
+  infrastructureFailure: providerFailureCheckpointSchema.optional(),
 }).strict();
 
 export const autonomousPreparationCheckpointSchema = z.object({
@@ -166,12 +170,32 @@ export function authorizeSingle429ProviderRecovery(
       409,
     );
   }
-  if (checkpoint.providerRecovery) {
-    throw new AppError(
-      "AUTONOMOUS_PROVIDER_RECOVERY_ALREADY_USED",
-      "The one controlled provider recovery attempt has already been used.",
-      409,
-    );
+  const priorRecovery = checkpoint.providerRecovery ?? null;
+  if (priorRecovery) {
+    const isProvenPreProviderInfrastructureFailure = priorRecovery.attemptCount === 1
+      && priorRecovery.reason === "SANITIZED_429_DIAGNOSTIC_RETRY"
+      && failure.code === "TAYQAN_MEASUREMENT_AI_EXECUTION_FAILED"
+      && !failure.providerDiagnostic;
+    if (!isProvenPreProviderInfrastructureFailure) {
+      throw new AppError(
+        "AUTONOMOUS_PROVIDER_RECOVERY_ALREADY_USED",
+        "The controlled provider recovery attempt has already been used.",
+        409,
+      );
+    }
+    return {
+      ...checkpoint,
+      providerAttempt: null,
+      providerResult: null,
+      providerFailure: null,
+      providerRecovery: {
+        ...priorRecovery,
+        authorizedAt,
+        reason: "PRE_PROVIDER_INFRASTRUCTURE_RETRY",
+        attemptCount: 2,
+        infrastructureFailure: failure,
+      },
+    };
   }
   const is429 = failure.providerDiagnostic?.httpStatus === 429
     || /HTTP 429/i.test(failure.message);

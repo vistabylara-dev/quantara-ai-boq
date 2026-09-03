@@ -12,6 +12,7 @@ import type { CurrentActor } from "@/lib/auth/current-actor";
 import { requireCapability } from "@/lib/auth/rbac";
 import {
   AUTONOMOUS_BOQ_PREPARATION_VERSION,
+  AUTONOMOUS_TAYQAN_REASONER_CONTRACT_VERSION,
   autonomousPreparationConfigurationSchema,
   createAutonomousBOQOperationHash,
   type AutonomousPreparationConfiguration,
@@ -320,12 +321,13 @@ export function toAutonomousPreparationStatus(job: ExtractionJob): AutonomousPre
   const exceptions = preparationExceptions(summary.exceptions);
   const conceptBlocked = summary.payableEligibility === "NOT_PAYABLE_CONCEPT"
     || exceptions.some((exception) => exception.code === "CONCEPT_DRAWING_NOT_PAYABLE");
+  const savedProviderResult = objectRecord(summary.providerResult);
   const staleEmptyClassification = job.status === ExtractionJobStatus.NEEDS_REVIEW
     && !conceptBlocked
-    && summary.categoryStatus === "REVIEW_REQUIRED"
     && summary.measuredSubjectCount === 0
     && summary.addedItemCount === 0
-    && Boolean(summary.providerResult);
+    && Boolean(summary.providerResult)
+    && savedProviderResult.reasonerContractVersion !== AUTONOMOUS_TAYQAN_REASONER_CONTRACT_VERSION;
   const retryable = job.status === ExtractionJobStatus.FAILED
     || (job.status === ExtractionJobStatus.NEEDS_INPUT
       && exceptions.some((exception) => exception.code === "SOURCE_PREPROCESSING_INCOMPLETE"))

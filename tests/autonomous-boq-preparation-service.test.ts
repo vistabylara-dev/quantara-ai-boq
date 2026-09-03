@@ -331,7 +331,7 @@ describe("autonomous preparation start and refresh", () => {
       ...base,
       resultSummaryJson: {
         stage: "NEEDS_REVIEW",
-        categoryStatus: "REVIEW_REQUIRED",
+        categoryStatus: "VERIFIED",
         payableEligibility: "PAYABLE_ELIGIBLE",
         measuredSubjectCount: 0,
         addedItemCount: 0,
@@ -339,6 +339,22 @@ describe("autonomous preparation start and refresh", () => {
         exceptions: [],
       },
     } as never).retryable).toBe(true);
+
+    expect(toAutonomousPreparationStatus({
+      ...base,
+      resultSummaryJson: {
+        stage: "NEEDS_REVIEW",
+        categoryStatus: "VERIFIED",
+        payableEligibility: "PAYABLE_ELIGIBLE",
+        measuredSubjectCount: 0,
+        addedItemCount: 0,
+        providerResult: {
+          reasonerContractVersion: "tayqan-measurement-contract/2026-09-03",
+          value: { plan: { subjects: [] } },
+        },
+        exceptions: [],
+      },
+    } as never).retryable).toBe(false);
 
     expect(toAutonomousPreparationStatus({
       ...base,

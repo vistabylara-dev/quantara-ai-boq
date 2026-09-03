@@ -8,6 +8,7 @@ import {
 } from "@prisma/client";
 import type { CurrentActor } from "@/lib/auth/current-actor";
 import {
+  AUTONOMOUS_TAYQAN_REASONER_CONTRACT_VERSION,
   autonomousPreparationConfigurationSchema,
   resolveAutonomousProviderExecution,
   type AutonomousPreparationConfiguration,
@@ -37,7 +38,6 @@ import type {
   TayqanMeasurementGoverningContext,
   TayqanMeasurementReasonerResult,
 } from "@/lib/tayqan/tayqan-measurement-reasoner";
-import { TAYQAN_REASONER_CONTRACT_VERSION } from "@/lib/tayqan/openai-tayqan-measurement-reasoner";
 
 type PreparationException = {
   code: string;
@@ -640,7 +640,7 @@ export function createAutonomousBoqPreparationHandler(
       && summary.addedItemCount === 0
       && (
         processing.evidenceChanged
-        || savedProviderResult.reasonerContractVersion !== TAYQAN_REASONER_CONTRACT_VERSION
+        || savedProviderResult.reasonerContractVersion !== AUTONOMOUS_TAYQAN_REASONER_CONTRACT_VERSION
       )
     );
     if (staleEmptyProviderResult) {
@@ -701,7 +701,7 @@ export function createAutonomousBoqPreparationHandler(
         providerResult: {
           operationHash: configuration.operationHash,
           checkpointedAt: dependencies.now().toISOString(),
-          reasonerContractVersion: TAYQAN_REASONER_CONTRACT_VERSION,
+          reasonerContractVersion: AUTONOMOUS_TAYQAN_REASONER_CONTRACT_VERSION,
           value: result,
         },
       });

@@ -1,5 +1,6 @@
 import { ExtractedEntityType } from "@prisma/client";
 import { AppError } from "@/lib/errors/app-error";
+import { AUTONOMOUS_TAYQAN_REASONER_CONTRACT_VERSION } from "@/lib/autonomous-boq/preparation";
 import {
   getRequiredDimensions,
   listSupportedCalculationTypes,
@@ -34,7 +35,7 @@ const MAX_TABLE_SCHEDULE_ENTITIES = 200;
 /** PR2 gap 2: bounds the existing-BOQ reconciliation context the same way entity/room evidence is already bounded. */
 const MAX_EXISTING_BOQ_ITEMS = 400;
 
-export const TAYQAN_REASONER_CONTRACT_VERSION = "tayqan-measurement-contract/2026-09-03" as const;
+export const TAYQAN_REASONER_CONTRACT_VERSION = AUTONOMOUS_TAYQAN_REASONER_CONTRACT_VERSION;
 
 export function deterministicMeasurementInputContract(): string {
   return listSupportedCalculationTypes()

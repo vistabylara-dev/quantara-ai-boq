@@ -1,6 +1,9 @@
 import { ExtractionJobStatus, UserRole } from "@prisma/client";
 import { describe, expect, it, vi } from "vitest";
-import { createAutonomousBOQOperationHash } from "../src/lib/autonomous-boq/preparation";
+import {
+  AUTONOMOUS_TAYQAN_REASONER_CONTRACT_VERSION,
+  createAutonomousBOQOperationHash,
+} from "../src/lib/autonomous-boq/preparation";
 import {
   createAutonomousBoqPreparationService,
   selectAutonomousSourceRevisions,
@@ -349,7 +352,7 @@ describe("autonomous preparation start and refresh", () => {
         measuredSubjectCount: 0,
         addedItemCount: 0,
         providerResult: {
-          reasonerContractVersion: "tayqan-measurement-contract/2026-09-03",
+          reasonerContractVersion: AUTONOMOUS_TAYQAN_REASONER_CONTRACT_VERSION,
           value: { plan: { subjects: [] } },
         },
         exceptions: [],

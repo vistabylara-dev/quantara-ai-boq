@@ -9,7 +9,7 @@ import {
 export const AUTONOMOUS_BOQ_PREPARATION_VERSION =
   "autonomous-boq-preparation-v1" as const;
 export const AUTONOMOUS_TAYQAN_REASONER_CONTRACT_VERSION =
-  "tayqan-measurement-contract/2026-09-03" as const;
+  "tayqan-measurement-contract/2026-09-03.2" as const;
 
 const frozenSourceSchema = z.object({
   id: z.string().uuid(),

@@ -43,7 +43,7 @@ export function deterministicMeasurementInputContract(): string {
       const definition = getRequiredDimensions(calculationType);
       if (!definition) return null;
       const inputs = definition.inputs
-        .map((input) => `${input.key}:${input.unit ?? "dimensionless"}:${input.required ? "required" : "optional"}`)
+        .map((input) => `${input.key}:unit=${input.unit ?? "null"}:${input.required ? "required" : "optional"}`)
         .join(", ");
       return `${calculationType}=>${inputs}`;
     })

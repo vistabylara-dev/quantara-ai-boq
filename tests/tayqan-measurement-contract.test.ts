@@ -29,9 +29,9 @@ import {
 
 it("publishes the exact deterministic input keys used for autonomous measurement", () => {
   const contract = deterministicMeasurementInputContract();
-  expect(contract).toContain("FLOOR_AREA=>netFloorArea:m2:required");
-  expect(contract).toContain("COUNT=>verifiedCount:dimensionless:required");
-  expect(contract).toContain("WALL_AREA=>wallLength:m:required, wallHeight:m:required");
+  expect(contract).toContain("FLOOR_AREA=>netFloorArea:unit=m2:required");
+  expect(contract).toContain("COUNT=>verifiedCount:unit=null:required");
+  expect(contract).toContain("WALL_AREA=>wallLength:unit=m:required, wallHeight:unit=m:required");
 });
 
 const PAGE_PLAN = "11111111-1111-4111-8111-111111111111";

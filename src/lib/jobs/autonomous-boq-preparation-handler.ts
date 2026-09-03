@@ -536,7 +536,7 @@ async function defaultAssemble(
               calculationType: rule.calculationType,
               boqUnit: rule.resultUnit,
               sectionCode: rule.sectionCode,
-              title: rule.title,
+              title: scope.industryContext.sections.find((section) => section.code === rule.sectionCode)?.title ?? rule.title,
             })),
           },
         }),

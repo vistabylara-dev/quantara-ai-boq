@@ -135,6 +135,18 @@ function sectionView(section: {
   };
 }
 
+export function missingAutonomousBoqSections(
+  existingSections: readonly { code: string }[],
+  rules: readonly { sectionCode: string; title: string }[],
+): Array<{ code: string; title: string }> {
+  const existingCodes = new Set(existingSections.map((section) => section.code));
+  return [...new Map(
+    rules
+      .filter((rule) => !existingCodes.has(rule.sectionCode))
+      .map((rule) => [rule.sectionCode, { code: rule.sectionCode, title: rule.title }] as const),
+  ).values()];
+}
+
 function assertAiDraftEditable(boq: Awaited<ReturnType<typeof getBOQRecord>>) {
   if (
     boq.isLocked
@@ -517,9 +529,42 @@ export async function generateAiDraftBoq(
       };
     }
 
-    const businessSections = current.sections
+    let businessSections = current.sections
       .filter((section) => section.code !== AI_DRAFT_FALLBACK_CODE)
       .map(sectionView);
+
+    if (autonomousMode) {
+      const requiredRules = toAdd.flatMap(({ autonomousRule }) => autonomousRule ? [autonomousRule] : []);
+      const missingSections = missingAutonomousBoqSections(businessSections, requiredRules);
+      if (missingSections.length > 0) {
+        const firstSortOrder = Math.max(0, ...current.sections.map((section) => section.sortOrder)) + 1;
+        await tx.bOQSection.createMany({
+          data: missingSections.map((section, index) => ({
+            companyId: actor.companyId,
+            boqId: current.id,
+            code: section.code,
+            title: section.title,
+            description: "Section synchronized from the frozen autonomous industry policy.",
+            sortOrder: firstSortOrder + index,
+          })),
+          skipDuplicates: true,
+        });
+        const synchronized = await tx.bOQSection.findMany({
+          where: {
+            companyId: actor.companyId,
+            boqId: current.id,
+            code: { in: missingSections.map((section) => section.code) },
+          },
+          select: { id: true, code: true, title: true, description: true },
+        });
+        businessSections = [
+          ...businessSections,
+          ...synchronized
+            .filter((section) => !businessSections.some((existing) => existing.code === section.code))
+            .map(sectionView),
+        ];
+      }
+    }
 
     if (
       autonomousMode

@@ -211,8 +211,12 @@ export function categorizeDrawingSheets(input: {
       .sort((left, right) => right.score - left.score || left.path.measurementRuleId.localeCompare(right.path.measurementRuleId));
     const topScore = ranked[0]?.score ?? 0;
     const minimumScore = maturity === "CONCEPT_BASIS_OF_DESIGN" ? 1 : 2;
-    const primary = ranked.filter((candidate) => candidate.score === topScore && topScore >= minimumScore);
-    const alternatives = ranked.filter((candidate) => candidate.score > 0 && !primary.includes(candidate)).slice(0, 4);
+    // One coordinated sheet can legitimately contain several independent
+    // schedules. Retaining only the highest-scoring definition silently made
+    // every other sufficiently evidenced work package unavailable to the
+    // measurement gate.
+    const primary = ranked.filter((candidate) => candidate.score >= minimumScore);
+    const alternatives = ranked.filter((candidate) => candidate.score > 0 && candidate.score < minimumScore).slice(0, 4);
     const drawingKey = normalized(page.drawingNumber);
     const superseding = drawingKey ? latestByDrawingNumber.get(drawingKey) : null;
     const supersededByPageId = superseding && superseding.id !== page.id ? superseding.id : null;

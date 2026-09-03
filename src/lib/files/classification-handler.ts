@@ -11,10 +11,25 @@ import { classifyProjectFile } from "./file-classifier";
  * itself does no work at import time beyond the registerHandler call.
  */
 extractionJobQueue.registerHandler(ExtractionEngineType.DOCUMENT_CLASSIFICATION, async (job, ctx) => {
-  const file = await prisma.projectFile.findUniqueOrThrow({ where: { id: job.projectFileId } });
-  await ctx.updateProgress(30, "analyzing filename and metadata");
+  const file = await prisma.projectFile.findUniqueOrThrow({
+    where: { id: job.projectFileId },
+    include: { drawingPages: { orderBy: { pageNumber: "asc" }, select: { textLayerJson: true } } },
+  });
+  await ctx.updateProgress(30, "analyzing rendered drawing content");
 
-  const suggestion = classifyProjectFile({ originalName: file.originalName, mimeType: file.mimeType, extension: file.extension });
+  const contentText = file.drawingPages.flatMap((page) => {
+    const value = page.textLayerJson;
+    if (!value || typeof value !== "object" || Array.isArray(value)) return [];
+    const text = (value as Record<string, unknown>).text;
+    return typeof text === "string" && text.trim() ? [text] : [];
+  }).join("\n");
+
+  const suggestion = classifyProjectFile({
+    originalName: file.originalName,
+    mimeType: file.mimeType,
+    extension: file.extension,
+    contentText,
+  });
 
   await ctx.updateProgress(80, "recording classification result");
   await applyAutoClassification(job.companyId, job.projectFileId, suggestion);

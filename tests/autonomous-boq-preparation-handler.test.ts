@@ -218,6 +218,50 @@ describe("autonomous preparation handler", () => {
     expect(providerCheckpoints).toHaveLength(0);
   });
 
+  it("does not replay a stale empty provider result after rendered evidence becomes classifiable", async () => {
+    const config = configuration();
+    const staleCheckpoint = {
+      providerAttempt: { operationHash: config.operationHash, startedAt: "2026-01-01T00:00:00.000Z" },
+      providerResult: { operationHash: config.operationHash, checkpointedAt: "2026-01-01T00:01:00.000Z", value: providerResult },
+      measuredSubjectCount: 0,
+      addedItemCount: 0,
+    };
+    const deps = dependencies();
+    deps.ensureSourcesProcessed = vi.fn().mockResolvedValue({ state: "READY", exceptions: [], evidenceChanged: true });
+    deps.measure = vi.fn().mockImplementation(async (_actor, _slug, _input, options) => {
+      expect(options.replayReasonerResult).toBeUndefined();
+      await options.onReasonerStart?.();
+      await options.onReasonerResult?.(providerResult);
+      return {
+        measuredSubjectCount: 2,
+        createdEntityCount: 2,
+        reusedEntityCount: 0,
+        createdCalculationCount: 2,
+        reusedCalculationCount: 0,
+        exceptionCount: 0,
+        exceptions: [],
+        provider: "openai",
+        model: "test-model",
+        seniorReview: { ...providerResult.seniorReview, acceptedSubjectCount: 2 },
+      };
+    });
+    const handler = createAutonomousBoqPreparationHandler(deps);
+
+    const result = await handler(job(staleCheckpoint), ctx);
+
+    expect(result.status).toBe(ExtractionJobStatus.COMPLETED);
+    expect(result.resultSummary).toEqual(expect.objectContaining({
+      stage: "READY_FOR_RATES",
+      measuredSubjectCount: 2,
+      addedItemCount: 2,
+    }));
+    expect(deps.checkpoint).toHaveBeenCalledWith(IDS.company, IDS.job, expect.objectContaining({
+      providerAttempt: null,
+      providerResult: null,
+      staleEmptyProviderResultDiscardedAt: expect.any(String),
+    }));
+  });
+
   it("refuses a second paid request after an uncertain provider attempt", async () => {
     const config = configuration();
     const deps = dependencies();

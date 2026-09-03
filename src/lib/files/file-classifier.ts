@@ -2,30 +2,27 @@ import { ProjectFileClassification } from "@prisma/client";
 
 export type ClassificationSuggestion = {
   classification: ProjectFileClassification;
-  /** 0-100. Filename-only heuristics never claim above 90 — real confidence requires content signals (page text, title block) that later sub-phases add. */
+  /** 0-100. Filename-only heuristics never claim above 90. */
   confidence: number;
   matchedSignals: string[];
-  method: "filename-heuristic";
+  method: "filename-heuristic" | "content-heuristic";
 };
 
 export type ClassifiableFile = {
   originalName: string;
   mimeType: string;
   extension: string;
+  /** Text extracted from rendered pages/title blocks. Never populated from the filename. */
+  contentText?: string;
 };
 
 type Rule = { classification: ProjectFileClassification; keywords: string[] };
 
-/**
- * Filename-keyword heuristics. This is the only signal available until
- * later sub-phases add PDF text extraction / OCR / title-block parsing
- * (spec section 9 lists those as additional future inputs) — deliberately
- * conservative confidence scoring so this never overclaims certainty it
- * doesn't have.
- */
+/** Controlled keyword signals used first against rendered page text, with a
+ * conservative filename-only fallback for sources that have no text layer. */
 const RULES: Rule[] = [
   { classification: ProjectFileClassification.STRUCTURAL_PLAN, keywords: ["structural", "struct-plan", "rebar", "reinforcement", "beam layout", "column layout", "foundation plan"] },
-  { classification: ProjectFileClassification.ARCHITECTURAL_PLAN, keywords: ["architectural", "arch plan", "arch-plan", "floor plan", "floorplan", "gfa plan"] },
+  { classification: ProjectFileClassification.ARCHITECTURAL_PLAN, keywords: ["architectural", "arch plan", "arch-plan", "floor plan", "floorplan", "gfa plan", "gross floor area", "net floor area", "room schedule"] },
   { classification: ProjectFileClassification.FURNITURE_LAYOUT, keywords: ["furniture layout", "ffe layout", "furniture-layout"] },
   { classification: ProjectFileClassification.FURNITURE_SCHEDULE, keywords: ["furniture schedule", "ffe schedule", "furniture-schedule"] },
   { classification: ProjectFileClassification.INTERIOR_LAYOUT, keywords: ["interior layout", "interior-layout", "fit-out plan", "fitout plan"] },
@@ -63,7 +60,9 @@ const CONFIDENCE_PER_EXTRA_MATCH = 15;
 const MAX_HEURISTIC_CONFIDENCE = 90;
 
 export function classifyProjectFile(file: ClassifiableFile): ClassificationSuggestion {
-  const haystack = ` ${file.originalName.toLowerCase().replace(/[._-]+/g, " ")} `;
+  const filenameHaystack = ` ${file.originalName.toLowerCase().replace(/[._-]+/g, " ")} `;
+  const contentHaystack = file.contentText?.toLowerCase().replace(/\s+/g, " ").trim() ?? "";
+  const haystack = contentHaystack || filenameHaystack;
 
   let best: { classification: ProjectFileClassification; matches: string[] } | null = null;
 
@@ -76,7 +75,12 @@ export function classifyProjectFile(file: ClassifiableFile): ClassificationSugge
   }
 
   if (!best) {
-    return { classification: ProjectFileClassification.UNKNOWN, confidence: 0, matchedSignals: [], method: "filename-heuristic" };
+    return { classification: ProjectFileClassification.UNKNOWN, confidence: 0, matchedSignals: [], method: contentHaystack ? "content-heuristic" : "filename-heuristic" };
+  }
+
+  if (contentHaystack) {
+    const confidence = Math.min(98, 80 + (best.matches.length - 1) * 6);
+    return { classification: best.classification, confidence, matchedSignals: best.matches, method: "content-heuristic" };
   }
 
   const confidence = Math.min(MAX_HEURISTIC_CONFIDENCE, BASE_CONFIDENCE + (best.matches.length - 1) * CONFIDENCE_PER_EXTRA_MATCH);

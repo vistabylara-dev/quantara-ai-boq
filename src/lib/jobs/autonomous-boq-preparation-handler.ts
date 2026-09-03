@@ -58,8 +58,8 @@ type ValidatedFrozenScope = {
 };
 
 type SourceProcessingResult =
-  | { state: "READY"; exceptions: PreparationException[] }
-  | { state: "NEEDS_INPUT"; exceptions: PreparationException[] };
+  | { state: "READY"; exceptions: PreparationException[]; evidenceChanged?: boolean }
+  | { state: "NEEDS_INPUT"; exceptions: PreparationException[]; evidenceChanged?: boolean };
 
 type AssemblyResult = {
   state: "READY_FOR_RATES" | "NEEDS_REVIEW";
@@ -215,6 +215,7 @@ async function defaultEnsureSourcesProcessed(
   }
 
   const exceptions: PreparationException[] = [];
+  let evidenceChanged = false;
   for (const file of files) {
     const capability = getSourceProcessingCapability(file.extension);
     if (capability.mode === "CAD_BIM_CONNECTOR_REQUIRED" || capability.mode === "SOURCE_ONLY") {
@@ -224,23 +225,6 @@ async function defaultEnsureSourcesProcessed(
         sourceFileIds: [file.id],
       });
       continue;
-    }
-
-    if (file.classification === "UNKNOWN") {
-      const classification = await runSourceEngine({
-        actor,
-        projectId: configuration.projectId,
-        projectFileId: file.id,
-        engineType: ExtractionEngineType.DOCUMENT_CLASSIFICATION,
-      });
-      if (classification.status === ExtractionJobStatus.FAILED) {
-        exceptions.push({
-          code: classification.errorCode ?? "SOURCE_CLASSIFICATION_FAILED",
-          message: classification.errorMessage ?? `Classification failed for ${file.originalName}.`,
-          sourceFileIds: [file.id],
-        });
-        continue;
-      }
     }
 
     if (capability.canRenderPages) {
@@ -261,8 +245,31 @@ async function defaultEnsureSourcesProcessed(
               ?? `Quantara could not prepare reviewable pages for ${file.originalName}.`,
             sourceFileIds: [file.id],
           });
+        } else {
+          evidenceChanged = true;
         }
       }
+    }
+
+    // Classification must follow rendering so a generic filename cannot hide
+    // the drawing's actual title-block and schedule evidence.
+    if (file.classification === "UNKNOWN") {
+      const classification = await runSourceEngine({
+        actor,
+        projectId: configuration.projectId,
+        projectFileId: file.id,
+        engineType: ExtractionEngineType.DOCUMENT_CLASSIFICATION,
+      });
+      if (classification.status === ExtractionJobStatus.FAILED) {
+        exceptions.push({
+          code: classification.errorCode ?? "SOURCE_CLASSIFICATION_FAILED",
+          message: classification.errorMessage ?? `Classification failed for ${file.originalName}.`,
+          sourceFileIds: [file.id],
+        });
+        continue;
+      }
+      const classifiedAs = record(classification.resultSummaryJson).classification;
+      if (typeof classifiedAs === "string" && classifiedAs !== "UNKNOWN") evidenceChanged = true;
     }
 
     if (["csv", "xlsx"].includes(file.extension.toLowerCase())) {
@@ -300,8 +307,8 @@ async function defaultEnsureSourcesProcessed(
   }
 
   return exceptions.length > 0
-    ? { state: "NEEDS_INPUT", exceptions }
-    : { state: "READY", exceptions: [] };
+    ? { state: "NEEDS_INPUT", exceptions, evidenceChanged }
+    : { state: "READY", exceptions: [], evidenceChanged };
 }
 
 async function defaultLoadActor(companyId: string, userId: string): Promise<CurrentActor> {
@@ -624,6 +631,21 @@ export function createAutonomousBoqPreparationHandler(
       };
     }
     await assertNotCancelled(ctx);
+
+    const staleEmptyProviderResult = Boolean(
+      processing.evidenceChanged
+      && summary.providerResult
+      && summary.measuredSubjectCount === 0
+      && summary.addedItemCount === 0,
+    );
+    if (staleEmptyProviderResult) {
+      await checkpoint({
+        providerAttempt: null,
+        providerResult: null,
+        providerFailure: null,
+        staleEmptyProviderResultDiscardedAt: dependencies.now().toISOString(),
+      });
+    }
 
     await checkpoint({ stage: "CATEGORIZING", readyForRates: false });
     await ctx.updateProgress(45, "measuring and reconciling drawing evidence");

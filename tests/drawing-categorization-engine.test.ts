@@ -100,4 +100,31 @@ describe("drawing and BOQ categorization engine", () => {
     expect(sheet).toMatchObject({ status: "VERIFIED", maturity: "IFC_CONSTRUCTION", payableStatus: "PAYABLE_ELIGIBLE" });
     expect(requireMeasurementCategoryBinding({ workPackage: "door-window-count", evidencePageIds: [sheet!.pageId], classificationsByPageId: new Map([[sheet!.pageId, sheet!]]) })).toMatchObject({ unit: "nos" });
   });
+
+  it("classifies the rendered valid Construction fixture into payable measurement rules", () => {
+    const constructionRules: CategorizerPolicyRule[] = [
+      { id: "gross-floor-area", sectionCode: "AREA", title: "Gross floor area", calculationType: QuantityCalculationType.FLOOR_AREA, resultUnit: "m2" },
+      { id: "net-floor-area", sectionCode: "AREA", title: "Net floor area", calculationType: QuantityCalculationType.FLOOR_AREA, resultUnit: "m2" },
+      { id: "room-schedule-count", sectionCode: "SPACE", title: "Room schedule", calculationType: QuantityCalculationType.COUNT, resultUnit: "nos" },
+      { id: "door-window-count", sectionCode: "OPENINGS", title: "Doors and windows", calculationType: QuantityCalculationType.COUNT, resultUnit: "nos" },
+      { id: "construction-partition-area", sectionCode: "PARTITIONS", title: "Partitions", calculationType: QuantityCalculationType.PARTITION_AREA, resultUnit: "m2" },
+    ];
+    const pages: CategorizerPageInput[] = [{
+      id: "ifc-page-1", projectFileId: "ifc-file", pageNumber: 1, drawingNumber: "A-101", revisionNumber: "R02",
+      drawingTitle: null, sheetName: null, drawingTitles: [], technicalLines: [],
+      text: "ISSUED FOR CONSTRUCTION IFC GROUND FLOOR PLAN AND AREA SCHEDULE GROSS FLOOR AREA GFA 78.00 m2 NET FLOOR AREA NFA 72.00 m2 ROOM SCHEDULE ROOM COUNT 3",
+    }, {
+      id: "ifc-page-2", projectFileId: "ifc-file", pageNumber: 2, drawingNumber: "A-601", revisionNumber: "R02",
+      drawingTitle: null, sheetName: null, drawingTitles: [], technicalLines: [],
+      text: "ISSUED FOR CONSTRUCTION IFC ARCHITECTURAL SCHEDULES DOOR SCHEDULE WINDOW SCHEDULE DOOR AND WINDOW SCHEDULE PARTITION SCHEDULE PARTITION TYPE",
+    }];
+
+    const classified = categorizeDrawingSheets({ engineId: "construction", pages, rules: constructionRules });
+
+    expect(classified).toHaveLength(2);
+    expect(classified.every((sheet) => sheet.status === "VERIFIED" && sheet.payableStatus === "PAYABLE_ELIGIBLE")).toBe(true);
+    expect(classified.flatMap((sheet) => sheet.categoryPaths).map((path) => path.measurementRuleId)).toEqual(expect.arrayContaining([
+      "gross-floor-area", "net-floor-area", "room-schedule-count", "door-window-count", "construction-partition-area",
+    ]));
+  });
 });

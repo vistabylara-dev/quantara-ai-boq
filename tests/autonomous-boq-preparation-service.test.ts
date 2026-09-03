@@ -315,4 +315,42 @@ describe("autonomous preparation start and refresh", () => {
       resultSummaryJson: { stage: "SOURCE_INPUT_REQUIRED", exceptions: [{ code: "OCR_REQUIRED", message: "Better drawing required" }] },
     } as never).retryable).toBe(false);
   });
+
+  it("allows one recovery retry for a non-concept stale empty classification result", () => {
+    const base = {
+      id: IDS.job, companyId: IDS.company, projectId: IDS.project, projectFileId: IDS.fileR2,
+      engineType: "QUANTITY_CALCULATION", provider: "local", status: ExtractionJobStatus.NEEDS_REVIEW,
+      progressPercentage: 100, currentStep: "NEEDS_REVIEW", startedAt: new Date(), completedAt: null, failedAt: null,
+      attempts: 1, maximumAttempts: 3,
+      configurationJson: { targetBoqId: IDS.boq, frozenSources: [{ id: IDS.fileR2 }] },
+      usageMetadataJson: null, errorCode: null, errorMessage: null,
+      createdByUserId: IDS.user, createdAt: new Date(), updatedAt: new Date(),
+    };
+
+    expect(toAutonomousPreparationStatus({
+      ...base,
+      resultSummaryJson: {
+        stage: "NEEDS_REVIEW",
+        categoryStatus: "REVIEW_REQUIRED",
+        payableEligibility: "PAYABLE_ELIGIBLE",
+        measuredSubjectCount: 0,
+        addedItemCount: 0,
+        providerResult: { value: { plan: { subjects: [] } } },
+        exceptions: [],
+      },
+    } as never).retryable).toBe(true);
+
+    expect(toAutonomousPreparationStatus({
+      ...base,
+      resultSummaryJson: {
+        stage: "NEEDS_REVIEW",
+        categoryStatus: "REVIEW_REQUIRED",
+        payableEligibility: "NOT_PAYABLE_CONCEPT",
+        measuredSubjectCount: 0,
+        addedItemCount: 0,
+        providerResult: { value: { plan: { subjects: [] } } },
+        exceptions: [{ code: "CONCEPT_DRAWING_NOT_PAYABLE", message: "Concept only" }],
+      },
+    } as never).retryable).toBe(false);
+  });
 });

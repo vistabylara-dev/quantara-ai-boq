@@ -320,9 +320,16 @@ export function toAutonomousPreparationStatus(job: ExtractionJob): AutonomousPre
   const exceptions = preparationExceptions(summary.exceptions);
   const conceptBlocked = summary.payableEligibility === "NOT_PAYABLE_CONCEPT"
     || exceptions.some((exception) => exception.code === "CONCEPT_DRAWING_NOT_PAYABLE");
+  const staleEmptyClassification = job.status === ExtractionJobStatus.NEEDS_REVIEW
+    && !conceptBlocked
+    && summary.categoryStatus === "REVIEW_REQUIRED"
+    && summary.measuredSubjectCount === 0
+    && summary.addedItemCount === 0
+    && Boolean(summary.providerResult);
   const retryable = job.status === ExtractionJobStatus.FAILED
     || (job.status === ExtractionJobStatus.NEEDS_INPUT
-      && exceptions.some((exception) => exception.code === "SOURCE_PREPROCESSING_INCOMPLETE"));
+      && exceptions.some((exception) => exception.code === "SOURCE_PREPROCESSING_INCOMPLETE"))
+    || staleEmptyClassification;
 
   return {
     id: job.id,

@@ -6,6 +6,7 @@ import {
   createAutonomousBoqPreparationHandler,
   type AutonomousBoqPreparationHandlerDependencies,
 } from "../src/lib/jobs/autonomous-boq-preparation-handler";
+import { TAYQAN_REASONER_CONTRACT_VERSION } from "../src/lib/tayqan/openai-tayqan-measurement-reasoner";
 
 const IDS = {
   company: "30000000-0000-4000-8000-000000000001",
@@ -161,6 +162,7 @@ describe("autonomous preparation handler", () => {
       providerResult: {
         operationHash: configuration().operationHash,
         checkpointedAt: "2026-01-01T00:01:00.000Z",
+        reasonerContractVersion: TAYQAN_REASONER_CONTRACT_VERSION,
         value: providerResult,
       },
     }]);
@@ -255,6 +257,41 @@ describe("autonomous preparation handler", () => {
       measuredSubjectCount: 2,
       addedItemCount: 2,
     }));
+    expect(deps.checkpoint).toHaveBeenCalledWith(IDS.company, IDS.job, expect.objectContaining({
+      providerAttempt: null,
+      providerResult: null,
+      staleEmptyProviderResultDiscardedAt: expect.any(String),
+    }));
+  });
+
+  it("does not replay an empty result produced by an older measurement contract", async () => {
+    const config = configuration();
+    const staleCheckpoint = {
+      providerAttempt: { operationHash: config.operationHash, startedAt: "2026-01-01T00:00:00.000Z" },
+      providerResult: { operationHash: config.operationHash, checkpointedAt: "2026-01-01T00:01:00.000Z", value: providerResult },
+      measuredSubjectCount: 0,
+      addedItemCount: 0,
+    };
+    const deps = dependencies();
+    deps.measure = vi.fn().mockImplementation(async (_actor, _slug, _input, options) => {
+      expect(options.replayReasonerResult).toBeUndefined();
+      return {
+        measuredSubjectCount: 1,
+        createdEntityCount: 1,
+        reusedEntityCount: 0,
+        createdCalculationCount: 1,
+        reusedCalculationCount: 0,
+        exceptionCount: 0,
+        exceptions: [],
+        provider: "openai",
+        model: "test-model",
+        seniorReview: { ...providerResult.seniorReview, acceptedSubjectCount: 1 },
+      };
+    });
+
+    const result = await createAutonomousBoqPreparationHandler(deps)(job(staleCheckpoint), ctx);
+
+    expect(result.resultSummary).toEqual(expect.objectContaining({ measuredSubjectCount: 1 }));
     expect(deps.checkpoint).toHaveBeenCalledWith(IDS.company, IDS.job, expect.objectContaining({
       providerAttempt: null,
       providerResult: null,

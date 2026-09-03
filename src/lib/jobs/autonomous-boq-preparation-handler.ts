@@ -37,6 +37,7 @@ import type {
   TayqanMeasurementGoverningContext,
   TayqanMeasurementReasonerResult,
 } from "@/lib/tayqan/tayqan-measurement-reasoner";
+import { TAYQAN_REASONER_CONTRACT_VERSION } from "@/lib/tayqan/openai-tayqan-measurement-reasoner";
 
 type PreparationException = {
   code: string;
@@ -632,11 +633,15 @@ export function createAutonomousBoqPreparationHandler(
     }
     await assertNotCancelled(ctx);
 
+    const savedProviderResult = record(summary.providerResult);
     const staleEmptyProviderResult = Boolean(
-      processing.evidenceChanged
-      && summary.providerResult
+      summary.providerResult
       && summary.measuredSubjectCount === 0
-      && summary.addedItemCount === 0,
+      && summary.addedItemCount === 0
+      && (
+        processing.evidenceChanged
+        || savedProviderResult.reasonerContractVersion !== TAYQAN_REASONER_CONTRACT_VERSION
+      )
     );
     if (staleEmptyProviderResult) {
       await checkpoint({
@@ -696,6 +701,7 @@ export function createAutonomousBoqPreparationHandler(
         providerResult: {
           operationHash: configuration.operationHash,
           checkpointedAt: dependencies.now().toISOString(),
+          reasonerContractVersion: TAYQAN_REASONER_CONTRACT_VERSION,
           value: result,
         },
       });

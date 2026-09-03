@@ -22,9 +22,17 @@ import type { TayqanMeasurementSubject } from "../src/lib/tayqan/tayqan-measurem
 import {
   classifyProviderFailure,
   createOpenAITayqanMeasurementReasoner,
+  deterministicMeasurementInputContract,
   providerResponseMetadata,
   verifyOpenAIProviderProject,
 } from "../src/lib/tayqan/openai-tayqan-measurement-reasoner";
+
+it("publishes the exact deterministic input keys used for autonomous measurement", () => {
+  const contract = deterministicMeasurementInputContract();
+  expect(contract).toContain("FLOOR_AREA=>netFloorArea:m2:required");
+  expect(contract).toContain("COUNT=>verifiedCount:dimensionless:required");
+  expect(contract).toContain("WALL_AREA=>wallLength:m:required, wallHeight:m:required");
+});
 
 const PAGE_PLAN = "11111111-1111-4111-8111-111111111111";
 const PAGE_SECTION = "22222222-2222-4222-8222-222222222222";

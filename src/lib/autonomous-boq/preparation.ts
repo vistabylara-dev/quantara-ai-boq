@@ -101,6 +101,7 @@ const providerAttemptSchema = z.object({
 const providerResultCheckpointSchema = z.object({
   operationHash: z.string().regex(/^[a-f0-9]{64}$/i),
   checkpointedAt: z.string().datetime(),
+  reasonerContractVersion: z.string().trim().min(1).max(120).optional(),
   value: tayqanMeasurementReasonerResultSchema,
 }).strict();
 

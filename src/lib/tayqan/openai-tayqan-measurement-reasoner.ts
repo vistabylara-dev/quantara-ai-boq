@@ -1,6 +1,7 @@
 import { ExtractedEntityType } from "@prisma/client";
 import { AppError } from "@/lib/errors/app-error";
 import {
+  getRequiredDimensions,
   listSupportedCalculationTypes,
 } from "@/lib/calculations/required-dimensions-registry";
 import {
@@ -32,6 +33,22 @@ const GLOBAL_REVIEW_BATCH_SIZE = 200;
 const MAX_TABLE_SCHEDULE_ENTITIES = 200;
 /** PR2 gap 2: bounds the existing-BOQ reconciliation context the same way entity/room evidence is already bounded. */
 const MAX_EXISTING_BOQ_ITEMS = 400;
+
+export const TAYQAN_REASONER_CONTRACT_VERSION = "tayqan-measurement-contract/2026-09-03" as const;
+
+export function deterministicMeasurementInputContract(): string {
+  return listSupportedCalculationTypes()
+    .map((calculationType) => {
+      const definition = getRequiredDimensions(calculationType);
+      if (!definition) return null;
+      const inputs = definition.inputs
+        .map((input) => `${input.key}:${input.unit ?? "dimensionless"}:${input.required ? "required" : "optional"}`)
+        .join(", ");
+      return `${calculationType}=>${inputs}`;
+    })
+    .filter((value): value is string => Boolean(value))
+    .join("; ");
+}
 
 type OpenAITayqanMeasurementConfig = {
   apiKey: string;
@@ -765,6 +782,7 @@ function measurementInstruction(): string {
     "Respect the frozen source scope, revision identifiers, customer exclusions and authoritative-source policy supplied in governingContext.",
     "When governingContext.industryPolicy is present, treat its selected project industry, supported units, sections, rules and calculation types as mandatory governing context. Drawing titles or inferred disciplines may refine scope inside that policy but must never switch the project to another industry engine.",
     "For an industry-policy run, workPackage must equal exactly one governingContext.industryPolicy.rules[].id. Use that rule's calculationType and resultUnit; if no exact rule fits the evidence, create an UNSUPPORTED_FORMULA or SCOPE_GAP exception instead of inventing a work package.",
+    `Use only these exact deterministic input keys for each calculationType; declaredCapabilities are evidence labels, not calculator input names: ${deterministicMeasurementInputContract()}.`,
     "If a customer names a measurement standard, do not apply unstated clauses from model memory. Apply only standard-specific rules explicitly present in supplied project evidence/configured context; use STANDARD_RULE_UNAVAILABLE whenever a missing rule could change the measured result.",
     "Create professional BOQ scope labels with a workPackage and location where the evidence supports them.",
     "Autonomously choose the PRIMARY measurementMethod for every payable BOQ scope: COUNT, LINEAR, AREA, VOLUME or WEIGHT. The user must not be asked to choose a calculator.",

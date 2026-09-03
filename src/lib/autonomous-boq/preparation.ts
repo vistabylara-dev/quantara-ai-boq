@@ -133,11 +133,13 @@ const providerRecoverySchema = z.object({
   reason: z.enum([
     "SANITIZED_429_DIAGNOSTIC_RETRY",
     "PRE_PROVIDER_INFRASTRUCTURE_RETRY",
+    "FUNDED_PROJECT_KEY_RETRY",
   ]),
-  attemptCount: z.number().int().min(1).max(2),
+  attemptCount: z.number().int().min(1).max(3),
   originalAttempt: providerAttemptSchema.optional(),
   originalFailure: providerFailureCheckpointSchema.optional(),
   infrastructureFailure: providerFailureCheckpointSchema.optional(),
+  credentialFailure: providerFailureCheckpointSchema.optional(),
 }).strict();
 
 export const autonomousPreparationCheckpointSchema = z.object({
@@ -172,6 +174,23 @@ export function authorizeSingle429ProviderRecovery(
   }
   const priorRecovery = checkpoint.providerRecovery ?? null;
   if (priorRecovery) {
+    const isRemediatedCreditAdmissionFailure = priorRecovery.attemptCount < 3
+      && failure.providerDiagnostic?.providerCode === "credit_balance_exhausted";
+    if (isRemediatedCreditAdmissionFailure) {
+      return {
+        ...checkpoint,
+        providerAttempt: null,
+        providerResult: null,
+        providerFailure: null,
+        providerRecovery: {
+          ...priorRecovery,
+          authorizedAt,
+          reason: "FUNDED_PROJECT_KEY_RETRY",
+          attemptCount: priorRecovery.attemptCount + 1,
+          credentialFailure: failure,
+        },
+      };
+    }
     const isProvenPreProviderInfrastructureFailure = priorRecovery.attemptCount === 1
       && priorRecovery.reason === "SANITIZED_429_DIAGNOSTIC_RETRY"
       && failure.code === "TAYQAN_MEASUREMENT_AI_EXECUTION_FAILED"

@@ -307,7 +307,9 @@ export async function requeueAutonomousPreparationJob(
         entityId: jobId,
         action: recovery.reason === "PRE_PROVIDER_INFRASTRUCTURE_RETRY"
           ? "AUTONOMOUS_PRE_PROVIDER_INFRASTRUCTURE_RECOVERY_AUTHORIZED"
-          : "AUTONOMOUS_PROVIDER_429_RECOVERY_AUTHORIZED",
+          : recovery.reason === "FUNDED_PROJECT_KEY_RETRY"
+            ? "AUTONOMOUS_FUNDED_PROJECT_KEY_RECOVERY_AUTHORIZED"
+            : "AUTONOMOUS_PROVIDER_429_RECOVERY_AUTHORIZED",
         payload: { attemptCount: recovery.attemptCount as number },
       }, tx);
     }

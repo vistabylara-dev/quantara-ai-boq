@@ -207,6 +207,53 @@ describe("autonomous provider replay safety", () => {
     });
   });
 
+  it("permits one funded-project retry after a preserved credit admission failure", () => {
+    const operationHash = "a".repeat(64);
+    const recovered = authorizeSingle429ProviderRecovery({
+      providerAttempt: { operationHash, startedAt: "2026-09-03T01:00:00.000Z" },
+      providerFailure: {
+        operationHash,
+        failedAt: "2026-09-03T01:00:01.000Z",
+        code: "TAYQAN_MEASUREMENT_AI_REQUEST_REJECTED",
+        message: "Provider rejected the request (HTTP 429; credit_balance_exhausted).",
+        status: 503,
+        providerDiagnostic: {
+          classification: "credit_balance_exhausted",
+          providerCode: "credit_balance_exhausted",
+          providerType: "insufficient_quota",
+          httpStatus: 429,
+          requestId: "req_old_project",
+          organizationId: "user_old",
+          projectId: "proj_old",
+          retryAfter: null,
+          requestLimit: null,
+          remainingRequests: null,
+          requestReset: null,
+          tokenLimit: null,
+          remainingTokens: null,
+          tokenReset: null,
+        },
+      },
+      providerRecovery: {
+        authorizedAt: "2026-09-03T00:30:00.000Z",
+        reason: "PRE_PROVIDER_INFRASTRUCTURE_RETRY",
+        attemptCount: 2,
+      },
+    }, "2026-09-03T01:10:00.000Z");
+
+    expect(recovered).toMatchObject({
+      providerAttempt: null,
+      providerFailure: null,
+      providerRecovery: {
+        reason: "FUNDED_PROJECT_KEY_RETRY",
+        attemptCount: 3,
+        credentialFailure: {
+          providerDiagnostic: { providerCode: "credit_balance_exhausted" },
+        },
+      },
+    });
+  });
+
   it("rejects a result checkpoint from another operation", () => {
     expect(() => resolveAutonomousProviderExecution({
       providerAttempt: { operationHash: "a".repeat(64), startedAt: "2026-09-02T00:00:00.000Z" },

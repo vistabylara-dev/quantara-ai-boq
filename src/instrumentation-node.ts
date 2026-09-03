@@ -1,5 +1,5 @@
 export async function initializePdfCanvasRuntime() {
-  if (!process.env.VERCEL_ENV) return;
+  if (process.env.VERCEL_ENV === undefined && process.env.STORAGE_PROVIDER !== "vercel-blob") return;
   const canvas = await import("@napi-rs/canvas");
   Object.assign(globalThis, {
     DOMMatrix: globalThis.DOMMatrix ?? canvas.DOMMatrix,

@@ -368,7 +368,7 @@ const defaultDependencies: AutonomousPreparationServiceDependencies = {
     // Vercel cannot trace pdfjs-dist's createRequire("@napi-rs/canvas").
     // Import it directly before pdf-parse loads so the Node function contains
     // the DOMMatrix/ImageData/Path2D provider used by drawing extraction.
-    if (process.env.VERCEL === "1") {
+    if (process.env.VERCEL_ENV) {
       const canvas = await import("@napi-rs/canvas");
       Object.assign(globalThis, {
         DOMMatrix: globalThis.DOMMatrix ?? canvas.DOMMatrix,

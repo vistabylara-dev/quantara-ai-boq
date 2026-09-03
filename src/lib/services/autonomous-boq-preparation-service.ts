@@ -30,6 +30,7 @@ import {
 import { getEnabledIndustry } from "@/lib/repositories/industry-repository";
 import { getProjectRecord } from "@/lib/repositories/project-repository";
 import type { PreliminaryConceptSchedule } from "@/lib/autonomous-boq/concept-schedule";
+import { consolidatePreparationFindings } from "@/lib/autonomous-boq/review-findings";
 
 export const autonomousBoqPreparationRequestSchema = z.object({
   sourceFileIds: z.array(z.string().uuid("Every drawing requires a valid file ID."))
@@ -226,7 +227,7 @@ function objectRecord(value: unknown): Record<string, unknown> {
 
 function preparationExceptions(value: unknown): AutonomousPreparationExceptionDTO[] {
   if (!Array.isArray(value)) return [];
-  return value.flatMap((entry) => {
+  const parsed = value.flatMap((entry) => {
     const row = objectRecord(entry);
     if (typeof row.code !== "string" || typeof row.message !== "string") return [];
     const sourceFileIds = Array.isArray(row.sourceFileIds)
@@ -246,6 +247,17 @@ function preparationExceptions(value: unknown): AutonomousPreparationExceptionDT
       workPackage: typeof row.workPackage === "string" ? row.workPackage : null,
     }];
   });
+  const operational = parsed.filter((finding) => ["SOURCE_PREPROCESSING_INCOMPLETE", "CAD_CONNECTOR_REQUIRED"].includes(finding.code));
+  const review = parsed.filter((finding) => !operational.includes(finding));
+  return [...operational, ...consolidatePreparationFindings(review)].map((finding) => ({
+    code: finding.code,
+    message: finding.message,
+    sourceFileIds: finding.sourceFileIds,
+    pageIds: finding.pageIds,
+    sourceSheets: finding.sourceSheets,
+    discipline: finding.discipline,
+    workPackage: finding.workPackage,
+  }));
 }
 
 function conceptSchedule(value: unknown): PreliminaryConceptSchedule | null {
@@ -304,6 +316,8 @@ export function toAutonomousPreparationStatus(job: ExtractionJob): AutonomousPre
     && stage === "READY_FOR_RATES"
     && summary.readyForRates === true;
   const exceptions = preparationExceptions(summary.exceptions);
+  const conceptBlocked = summary.payableEligibility === "NOT_PAYABLE_CONCEPT"
+    || exceptions.some((exception) => exception.code === "CONCEPT_DRAWING_NOT_PAYABLE");
   const retryable = job.status === ExtractionJobStatus.FAILED
     || (job.status === ExtractionJobStatus.NEEDS_INPUT
       && exceptions.some((exception) => exception.code === "SOURCE_PREPROCESSING_INCOMPLETE"));
@@ -319,8 +333,8 @@ export function toAutonomousPreparationStatus(job: ExtractionJob): AutonomousPre
     readyForRates,
     retryable,
     exceptions,
-    drawingMaturity: Array.isArray(summary.drawingMaturity) ? summary.drawingMaturity.filter((value): value is string => typeof value === "string") : [],
-    payableEligibility: summary.payableEligibility === "PAYABLE_ELIGIBLE" || summary.payableEligibility === "NOT_PAYABLE_CONCEPT" ? summary.payableEligibility : null,
+    drawingMaturity: Array.isArray(summary.drawingMaturity) ? summary.drawingMaturity.filter((value): value is string => typeof value === "string") : conceptBlocked ? ["CONCEPT_BASIS_OF_DESIGN"] : [],
+    payableEligibility: conceptBlocked ? "NOT_PAYABLE_CONCEPT" : summary.payableEligibility === "PAYABLE_ELIGIBLE" ? "PAYABLE_ELIGIBLE" : null,
     categoryStatus: summary.categoryStatus === "VERIFIED" || summary.categoryStatus === "REVIEW_REQUIRED" ? summary.categoryStatus : null,
     conceptSchedule: conceptSchedule(summary.conceptSchedule),
     error: job.errorCode || job.errorMessage

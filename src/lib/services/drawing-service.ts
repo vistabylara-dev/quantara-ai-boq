@@ -436,7 +436,13 @@ async function verifyPdfSignature(storage: DocumentStorageAdapter, storageKey: s
     chunks.push(value);
     collected += value.byteLength;
   }
-  await reader.cancel().catch(() => undefined);
+  // We already have the only bytes needed for the signature check. Some
+  // remote stream implementations do not settle cancel() until the origin
+  // closes the full object response, which can pin finalization until the
+  // Vercel function timeout when a Range request is ignored. Request
+  // cancellation without putting that transport acknowledgement on the
+  // upload request's critical path.
+  void reader.cancel().catch(() => undefined);
   const head = Buffer.concat(chunks).subarray(0, PDF_SIGNATURE.byteLength);
   return head.equals(PDF_SIGNATURE);
 }

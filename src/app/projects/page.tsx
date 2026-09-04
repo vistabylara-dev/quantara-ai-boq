@@ -15,6 +15,7 @@ type PlatformRole =
 type SessionData = {
   authenticated: boolean;
   user?: {
+    role?: string;
     platformRole: PlatformRole | null;
   };
 };
@@ -35,6 +36,7 @@ export default function ProjectsPage() {
   );
 
   const [projects, setProjects] = useState<Project[]>([]);
+  const [canDeleteProjects, setCanDeleteProjects] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -84,6 +86,10 @@ export default function ProjectsPage() {
           session.user?.platformRole
           ?? null,
         );
+        setCanDeleteProjects(
+          session.user?.role === "COMPANY_OWNER"
+          || session.user?.role === "ADMINISTRATOR",
+        );
       })
       .catch((sessionError) => {
         if (
@@ -106,7 +112,7 @@ export default function ProjectsPage() {
     async (project: Project) => {
       if (
         !window.confirm(
-          `Remove "${project.name}" from the active workspace? This archives the project; it does not hard-delete project evidence.`,
+          `Delete "${project.name}"? This is allowed only before a BOQ is generated. The project is retained as archived audit evidence, and trial/free accounts receive only one empty-project replacement.`,
         )
       ) {
         return;
@@ -219,7 +225,7 @@ export default function ProjectsPage() {
                           Open
                         </Link>
 
-                        {ownerAccess && !tayqanAssignmentMode && (
+                        {(ownerAccess || canDeleteProjects) && !tayqanAssignmentMode && (
                           <button
                             type="button"
                             onClick={() =>
@@ -229,8 +235,8 @@ export default function ProjectsPage() {
                             className="inline-flex rounded-2xl border border-rose-900 bg-rose-950/30 px-3 py-2 text-sm font-semibold text-rose-300 hover:bg-rose-950/60 disabled:cursor-not-allowed disabled:opacity-50"
                           >
                             {removingProjectId === project.id
-                              ? "Removing..."
-                              : "Remove"}
+                              ? "Deleting..."
+                              : "Delete unused project"}
                           </button>
                         )}
 

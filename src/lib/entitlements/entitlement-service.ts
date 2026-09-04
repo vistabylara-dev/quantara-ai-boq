@@ -1,4 +1,4 @@
-import { PlanType, PlatformRole, SubscriptionStatus } from "@prisma/client";
+import { PlanType, PlatformRole, ProjectStatus, SubscriptionStatus } from "@prisma/client";
 import { prisma } from "@/lib/db/prisma";
 import { AppError, NotFoundError, PermissionDeniedError } from "@/lib/errors/app-error";
 import { createAuditLog } from "@/lib/repositories/audit-repository";
@@ -170,7 +170,9 @@ export async function canCreateProject(companyId: string): Promise<CheckResult> 
   const entitlements = await getCompanyEntitlements(companyId);
   if (entitlements.maxProjects === null) return allow();
 
-  const activeProjectCount = await prisma.project.count({ where: { companyId } });
+  const activeProjectCount = await prisma.project.count({
+    where: { companyId, status: { not: ProjectStatus.ARCHIVED } },
+  });
   if (activeProjectCount >= entitlements.maxProjects) {
     if (entitlements.isTrial) {
       return deny("The 3-day Pro trial allows one project. Upgrade to create additional projects.");

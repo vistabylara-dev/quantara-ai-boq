@@ -1,4 +1,4 @@
-import { PlanType, SubscriptionStatus, type SimulationMode } from "@prisma/client";
+import { PlanType, ProjectStatus, SubscriptionStatus, type SimulationMode } from "@prisma/client";
 import { prisma } from "@/lib/db/prisma";
 import type { CurrentActor } from "@/lib/auth/current-actor";
 
@@ -122,7 +122,9 @@ export async function canCreateProjectEffective(actor: EntitlementActor): Promis
   const effective = await getEffectiveEntitlements(actor);
   if (effective.source === "real") return canCreateProjectReal(actor.companyId);
   if (effective.maxProjects === null) return allow();
-  const activeProjectCount = await prisma.project.count({ where: { companyId: actor.companyId } });
+  const activeProjectCount = await prisma.project.count({
+    where: { companyId: actor.companyId, status: { not: ProjectStatus.ARCHIVED } },
+  });
   return activeProjectCount >= effective.maxProjects
     ? deny(`${effective.planName} allows ${effective.maxProjects} project(s).`)
     : allow();

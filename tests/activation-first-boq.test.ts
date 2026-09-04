@@ -35,15 +35,17 @@ describe("first-value activation journey", () => {
     expect(english).not.toContain("development console link");
   });
 
-  it("opens the automatically created BOQ immediately after project creation", () => {
+  it("opens drawing intake after project creation and marks BOQ preparation only when ready", () => {
     const newProjectPage = source("src/app/projects/new/page.tsx");
+    const drawingsPage = source("src/app/projects/[projectId]/drawings/page.tsx");
     const industriesRoute = source("src/app/api/industries/route.ts");
 
     expect(newProjectPage).toContain('emitOnboardingActionComplete("PROJECT_CREATED"');
-    expect(newProjectPage).toContain('emitOnboardingActionComplete("BOQ_PREPARED"');
+    expect(newProjectPage).not.toContain('emitOnboardingActionComplete("BOQ_PREPARED"');
+    expect(drawingsPage).toContain('emitOnboardingActionComplete("BOQ_PREPARED"');
     expect(newProjectPage).toContain('trackFirstConversionEvent("first_project_created"');
-    expect(newProjectPage).toContain('trackFirstConversionEvent("first_boq_created"');
-    expect(newProjectPage).toContain("/boq`");
+    expect(newProjectPage).not.toContain('trackFirstConversionEvent("first_boq_created"');
+    expect(newProjectPage).toContain("/drawings`");
     expect(newProjectPage).not.toContain("router.push(`/projects/${result.project.id}`)");
     expect(industriesRoute).toContain("ensureCompanyIndustryEngines(actor.companyId)");
   });

@@ -61,6 +61,18 @@ describe("universal drawing-to-BOQ customer workflow UI", () => {
     expect(page).not.toMatch(/name=["']dimension/);
   });
 
+  it("opens the native drawing picker from every visible upload action", () => {
+    const page = source("src/app/projects/[projectId]/drawings/page.tsx");
+    const inputPosition = page.indexOf('id="drawing-file-input"');
+    const stagedBranchPosition = page.indexOf("{!stagedFile ? (");
+
+    expect(inputPosition).toBeGreaterThan(-1);
+    expect(inputPosition).toBeLessThan(stagedBranchPosition);
+    expect(page.match(/htmlFor="drawing-file-input"/g)).toHaveLength(2);
+    expect(page).toContain('className="sr-only"');
+    expect(page).not.toContain("fileInputRef.current?.click()");
+  });
+
   it("keeps generated scope read-only, exposes missing rates and nests override behind evidence", () => {
     const editor = source("src/components/boq/rate-only-boq-editor.tsx");
 

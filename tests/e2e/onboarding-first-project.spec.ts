@@ -68,7 +68,13 @@ async function mockAuthenticatedDashboard(
     } else if (pathname === "/api/admin/simulation") {
       data = { simulation: null };
     } else if (pathname === "/api/industries") {
-      data = [{ id: "industry-e2e", key: "fit-out", name: "Fit-out", enabled: true }];
+      data = [{
+        id: "industry-e2e",
+        key: "fit-out",
+        name: "Fit-out",
+        enabled: true,
+        autonomousAvailability: "AUTONOMOUS_VERIFIED",
+      }];
     } else if (pathname === "/api/clients" && route.request().method() === "GET") {
       data = {
         items: existingClient

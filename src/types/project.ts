@@ -17,4 +17,5 @@ export type Project = {
   createdAt: string;
   updatedAt: string;
   description: string;
+  canDeleteUnusedProject?: boolean;
 };

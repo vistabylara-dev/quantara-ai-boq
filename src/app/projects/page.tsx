@@ -225,7 +225,9 @@ export default function ProjectsPage() {
                           Open
                         </Link>
 
-                        {(ownerAccess || canDeleteProjects) && !tayqanAssignmentMode && (
+                        {(ownerAccess || canDeleteProjects)
+                          && project.canDeleteUnusedProject
+                          && !tayqanAssignmentMode && (
                           <button
                             type="button"
                             onClick={() =>

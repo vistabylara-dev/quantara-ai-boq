@@ -190,8 +190,15 @@ describe("TAYQAN Full-BOQ rescue regression", () => {
       '"TAYQAN_AI_DRAFT_HANDOFF_FAILED"',
     );
 
-    expect(draft).toContain(
-      "i.quantityProvenance?.extractedEntityId ?? getAiDraftExtractedEntityId(i.sourceReference)",
+    const coverage = read(
+      "src/lib/guidance/ai-draft-coverage.ts",
+    );
+
+    expect(coverage).toContain(
+      "item.quantityProvenance?.extractedEntityId",
+    );
+    expect(coverage).toContain(
+      "getAiDraftExtractedEntityId(item.sourceReference)",
     );
 
     expect(draft).toContain(

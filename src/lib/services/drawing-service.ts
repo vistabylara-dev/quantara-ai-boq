@@ -912,47 +912,31 @@ export async function finalizeDrawingUpload(actor: CurrentActor, projectId: stri
 
   let committed: { kind: "created" | "existing"; row: ProjectFileRecord };
   try {
-    const created = await prisma.$transaction(async (tx) => {
-      const row = await createProjectFile(actor.companyId, {
-        id: session.fileId,
-        projectId: canonicalProjectId,
-        uploadedByUserId: session.actorUserId,
-        originalName: session.originalName,
-        safeFileName: session.storageKey.split("/").pop() ?? session.originalName,
-        storageKey: session.storageKey,
-        mimeType: session.declaredMimeType,
-        extension: session.extension,
-        fileSize: metadata.size,
-        checksum,
-        drawingNumber: drawingNumber ?? null,
-        drawingTitle: title ?? null,
-        revisionNumber: revision ?? null,
-        scaleText: scale ?? null,
-        pageCount,
-        metadataJson: { recordKind: "drawing", discipline, drawingType, issueDate, sheetNumber, preparedBy, checkedBy, approvedBy, notes },
-      }, tx);
-      await setUploadSessionStatus(session.id, "FINALIZED", new Date(), tx);
-      await tx.auditLog.create({
-        data: {
-          companyId: actor.companyId,
-          userId: actor.userId,
-          entityType: "ProjectFile",
-          entityId: session.fileId,
-          action: "DRAWING_UPLOADED",
-          payloadJson: {
-            projectId: canonicalProjectId,
-            originalName: session.originalName,
-            fileSize: metadata.size,
-            checksum,
-            discipline: discipline ?? null,
-            drawingType: drawingType ?? null,
-            path: "direct_upload",
-          },
-          actorName: actor.fullName,
-        },
-      });
-      return row;
+    // Do not wrap these writes in an interactive transaction. On the Preview
+    // pg adapter, a stalled transaction retains the pooled connection until
+    // the function timeout and blocks even recovery requests. The file ID is
+    // pre-generated and unique; resolveExistingUpload above reconciles a
+    // partial completion idempotently on the next request.
+    const created = await createProjectFile(actor.companyId, {
+      id: session.fileId,
+      projectId: canonicalProjectId,
+      uploadedByUserId: session.actorUserId,
+      originalName: session.originalName,
+      safeFileName: session.storageKey.split("/").pop() ?? session.originalName,
+      storageKey: session.storageKey,
+      mimeType: session.declaredMimeType,
+      extension: session.extension,
+      fileSize: metadata.size,
+      checksum,
+      drawingNumber: drawingNumber ?? null,
+      drawingTitle: title ?? null,
+      revisionNumber: revision ?? null,
+      scaleText: scale ?? null,
+      pageCount,
+      metadataJson: { recordKind: "drawing", discipline, drawingType, issueDate, sheetNumber, preparedBy, checkedBy, approvedBy, notes },
     });
+    await setUploadSessionStatus(session.id, "FINALIZED", new Date());
+    await ensureDrawingUploadedAudit(prisma, actor.companyId, created);
     committed = {
       kind: "created",
       row: created,

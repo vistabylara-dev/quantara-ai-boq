@@ -27,13 +27,14 @@ describe("drawing finalization route contract", () => {
     expect(queue).toContain('await import("@/lib/jobs/register-handlers")');
   });
 
-  it("serializes finalization writes on Preview database adapters", () => {
+  it("keeps finalization off interactive transactions on Preview database adapters", () => {
     const service = readFileSync(path.join(process.cwd(), "src/lib/services/drawing-service.ts"), "utf8");
 
-    expect(service).not.toContain("prisma.$transaction([");
-    expect(service).toContain("prisma.$transaction(async (tx) =>");
-    expect(service).toContain('await setUploadSessionStatus(session.id, "FINALIZED", new Date(), tx)');
-    expect(service).toContain("await tx.auditLog.create(");
+    const finalization = service.slice(service.indexOf("export async function finalizeDrawingUpload"));
+    expect(finalization).not.toContain("prisma.$transaction(");
+    expect(finalization).toContain("const created = await createProjectFile(actor.companyId");
+    expect(finalization).toContain('await setUploadSessionStatus(session.id, "FINALIZED", new Date())');
+    expect(finalization).toContain("await ensureDrawingUploadedAudit(prisma, actor.companyId, created)");
   });
 
   it("discovers server-owned incomplete uploads after browser refresh", () => {

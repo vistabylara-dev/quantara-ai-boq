@@ -912,30 +912,27 @@ export async function finalizeDrawingUpload(actor: CurrentActor, projectId: stri
 
   let committed: { kind: "created" | "existing"; row: ProjectFileRecord };
   try {
-    await prisma.$transaction([
-      prisma.projectFile.create({
-        data: {
-          id: session.fileId,
-          companyId: actor.companyId,
-          projectId: canonicalProjectId,
-          uploadedByUserId: session.actorUserId,
-          originalName: session.originalName,
-          safeFileName: session.storageKey.split("/").pop() ?? session.originalName,
-          storageKey: session.storageKey,
-          mimeType: session.declaredMimeType,
-          extension: session.extension,
-          fileSize: metadata.size,
-          checksum,
-          drawingNumber: drawingNumber ?? null,
-          drawingTitle: title ?? null,
-          revisionNumber: revision ?? null,
-          scaleText: scale ?? null,
-          pageCount,
-          metadataJson: { recordKind: "drawing", discipline, drawingType, issueDate, sheetNumber, preparedBy, checkedBy, approvedBy, notes },
-        },
-      }),
-      setUploadSessionStatus(session.id, "FINALIZED", new Date()),
-      prisma.auditLog.create({
+    const created = await prisma.$transaction(async (tx) => {
+      const row = await createProjectFile(actor.companyId, {
+        id: session.fileId,
+        projectId: canonicalProjectId,
+        uploadedByUserId: session.actorUserId,
+        originalName: session.originalName,
+        safeFileName: session.storageKey.split("/").pop() ?? session.originalName,
+        storageKey: session.storageKey,
+        mimeType: session.declaredMimeType,
+        extension: session.extension,
+        fileSize: metadata.size,
+        checksum,
+        drawingNumber: drawingNumber ?? null,
+        drawingTitle: title ?? null,
+        revisionNumber: revision ?? null,
+        scaleText: scale ?? null,
+        pageCount,
+        metadataJson: { recordKind: "drawing", discipline, drawingType, issueDate, sheetNumber, preparedBy, checkedBy, approvedBy, notes },
+      }, tx);
+      await setUploadSessionStatus(session.id, "FINALIZED", new Date(), tx);
+      await tx.auditLog.create({
         data: {
           companyId: actor.companyId,
           userId: actor.userId,
@@ -953,11 +950,12 @@ export async function finalizeDrawingUpload(actor: CurrentActor, projectId: stri
           },
           actorName: actor.fullName,
         },
-      }),
-    ]);
+      });
+      return row;
+    });
     committed = {
       kind: "created",
-      row: await getProjectFileRecord(actor.companyId, session.fileId),
+      row: created,
     };
   } catch (error) {
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {

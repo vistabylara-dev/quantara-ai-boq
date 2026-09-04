@@ -27,6 +27,15 @@ describe("drawing finalization route contract", () => {
     expect(queue).toContain('await import("@/lib/jobs/register-handlers")');
   });
 
+  it("serializes finalization writes on Preview database adapters", () => {
+    const service = readFileSync(path.join(process.cwd(), "src/lib/services/drawing-service.ts"), "utf8");
+
+    expect(service).not.toContain("prisma.$transaction([");
+    expect(service).toContain("prisma.$transaction(async (tx) =>");
+    expect(service).toContain('await setUploadSessionStatus(session.id, "FINALIZED", new Date(), tx)');
+    expect(service).toContain("await tx.auditLog.create(");
+  });
+
   it("discovers server-owned incomplete uploads after browser refresh", () => {
     const route = readFileSync(path.join(
       process.cwd(),

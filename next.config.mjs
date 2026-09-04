@@ -3,6 +3,14 @@ import { fileURLToPath } from "node:url";
 import path from "node:path";
 
 const projectRoot = path.dirname(fileURLToPath(import.meta.url));
+const isCloudflareBuild = process.env.QUANTARA_CLOUDFLARE_BUILD === "1";
+const CLOUDFLARE_CANVAS_SHIM = path.join(
+  projectRoot,
+  "src",
+  "lib",
+  "files",
+  "cloudflare-canvas-shim.mjs",
+);
 const VERCEL_BLOB_FETCH_SHIM = path.join(
   projectRoot,
   "node_modules",
@@ -68,6 +76,7 @@ const nextConfig = {
     config.resolve.alias = {
       ...config.resolve.alias,
       "undici$": VERCEL_BLOB_FETCH_SHIM,
+      ...(isCloudflareBuild ? { "@napi-rs/canvas$": CLOUDFLARE_CANVAS_SHIM } : {}),
     };
     return config;
   },
@@ -161,9 +170,7 @@ const nextConfig = {
     "@prisma/client",
     ".prisma/client",
     "pdfkit",
-    "pdf-parse",
-    "pdfjs-dist",
-    "@napi-rs/canvas",
+    ...(isCloudflareBuild ? [] : ["pdf-parse", "pdfjs-dist", "@napi-rs/canvas"]),
   ],
 };
 

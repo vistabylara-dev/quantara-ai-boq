@@ -37,6 +37,15 @@ describe("drawing finalization route contract", () => {
     expect(finalization).toContain("await ensureDrawingUploadedAudit(prisma, actor.companyId, created)");
   });
 
+  it("does not await remote stream cancellation after reading the PDF signature", () => {
+    const service = readFileSync(path.join(process.cwd(), "src/lib/services/drawing-service.ts"), "utf8");
+    const adapter = readFileSync(path.join(process.cwd(), "src/lib/storage/vercel-blob-storage-adapter.ts"), "utf8");
+
+    expect(service).toContain("void reader.cancel().catch(() => undefined)");
+    expect(service).not.toContain("await reader.cancel()");
+    expect(adapter).toContain("![200, 206].includes(response.statusCode)");
+  });
+
   it("discovers server-owned incomplete uploads after browser refresh", () => {
     const route = readFileSync(path.join(
       process.cwd(),

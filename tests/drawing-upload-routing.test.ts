@@ -333,7 +333,7 @@ describe("upload workflow navigation and production controls", () => {
     const drawings = readFileSync(path.join(repoRoot, "src/app/projects/[projectId]/drawings/page.tsx"), "utf8");
     expect(layout).toContain("Source Processing");
     expect(layout).toContain('href={`${basePath}/files`}');
-    expect(drawings).toContain("View Source Processing");
+    expect(drawings).toContain("Source details");
     expect(drawings).not.toContain("Nothing here is scanned, extracted, or analyzed today.");
   });
 

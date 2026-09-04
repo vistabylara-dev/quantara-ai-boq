@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { resolveUploadDrawingHref, resolveBoqHref, type CurrentProject } from "../src/components/dashboard/workspace-header";
 
@@ -31,5 +33,12 @@ describe("dashboard workspace header — navigation contract", () => {
   it("keeps Create BOQ carrying the active project's ID", () => {
     expect(resolveBoqHref(project)).toBe("/projects/proj-abc/boq");
     expect(resolveBoqHref(null)).toBe("/projects/new");
+  });
+
+  it("routes the dashboard upload ring through the drawing resolver while preserving spreadsheet import separately", () => {
+    const source = readFileSync(join(__dirname, "..", "src", "app", "dashboard", "page.tsx"), "utf8");
+    expect(source).toContain("href={resolveUploadDrawingHref(currentProject)}");
+    expect(source).toContain('href="/imports" label={t("dashboard.spreadsheetImport")}');
+    expect(source).not.toContain('<Link href="/imports" className="relative group w-72 h-72');
   });
 });

@@ -35,7 +35,7 @@ describe("TAYQAN public landing", () => {
     );
 
     expect(pageSource).toContain(
-      'createPublicPageMetadata("/tayqan-ai-quantity-surveyor")',
+      'createPublicPageMetadata("/tayqan-ai-quantity-surveyor", locale)',
     );
     expect(pageSource).toContain("buildPublicPageGraph");
     expect(pageSource).toContain("faqs");

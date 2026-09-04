@@ -93,7 +93,11 @@ describe("public search registry", () => {
       expect(metadata.description).toBe(entry.description);
       expect(metadata.alternates).toEqual({
         canonical: canonicalUrl,
-        languages: { "en-AE": canonicalUrl, "x-default": canonicalUrl },
+        languages: {
+          "en-AE": canonicalUrl,
+          "ar-AE": `${PUBLIC_SITE_ORIGIN}/ar${entry.path === "/" ? "" : entry.path}`,
+          "x-default": canonicalUrl,
+        },
       });
       expect(metadata.robots).toMatchObject({
         index: entry.indexable !== false,

@@ -54,8 +54,8 @@ describe("universal drawing-to-BOQ customer workflow UI", () => {
     expect(page).toContain("AUTONOMOUS_PREPARATION_STAGES");
     expect(page).toContain("Generate BOQ from Drawings");
     expect(page).toContain("router.replace");
-    expect(page).toContain("Replace or upload drawing");
-    expect(page).toContain("Open engineering review");
+    expect(page).toContain("Upload coordinated drawings");
+    expect(page).toContain("Engineering review");
     expect(page).toContain('aria-live="polite"');
     expect(page).not.toMatch(/name=["']quantity/);
     expect(page).not.toMatch(/name=["']dimension/);

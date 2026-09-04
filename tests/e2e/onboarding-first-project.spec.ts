@@ -68,7 +68,13 @@ async function mockAuthenticatedDashboard(
     } else if (pathname === "/api/admin/simulation") {
       data = { simulation: null };
     } else if (pathname === "/api/industries") {
-      data = [{ id: "industry-e2e", key: "fit-out", name: "Fit-out", enabled: true }];
+      data = [{
+        id: "industry-e2e",
+        key: "fit-out",
+        name: "Fit-out",
+        enabled: true,
+        autonomousAvailability: "AUTONOMOUS_VERIFIED",
+      }];
     } else if (pathname === "/api/clients" && route.request().method() === "GET") {
       data = {
         items: existingClient
@@ -138,7 +144,7 @@ test.describe("first-project onboarding route", () => {
     await expect(page).toHaveURL(/\/dashboard$/);
   });
 
-  test("successful project creation opens its automatically created BOQ", async ({ page }) => {
+  test("successful project creation opens drawing intake", async ({ page }) => {
     const { projectSubmissions } = await mockAuthenticatedDashboard(page, 0);
     await openHydratedNewProject(page);
 
@@ -149,9 +155,9 @@ test.describe("first-project onboarding route", () => {
     await page.getByRole("button", { name: "Existing Test Client" }).click();
     await page.getByLabel("Industry engine").selectOption("fit-out");
     await page.getByLabel("Location").fill("Dubai");
-    await page.getByRole("button", { name: "Create project" }).click();
+    await page.getByRole("button", { name: "Create project and upload drawings" }).click();
 
-    await expect(page).toHaveURL(/\/projects\/first-project-e2e\/boq$/);
+    await expect(page).toHaveURL(/\/projects\/first-project-e2e\/drawings$/);
     expect(projectSubmissions).toEqual([
       expect.objectContaining({
         name: "First Value Project",
@@ -162,7 +168,7 @@ test.describe("first-project onboarding route", () => {
     ]);
   });
 
-  test("a zero-client user can self-serve client creation and reach the first BOQ", async ({ page }) => {
+  test("a zero-client user can self-serve client creation and reach drawing intake", async ({ page }) => {
     const { clientSubmissions, projectSubmissions } = await mockAuthenticatedDashboard(
       page,
       0,
@@ -186,9 +192,9 @@ test.describe("first-project onboarding route", () => {
     await expect(page.getByRole("button", { name: "Quick Client" })).toBeVisible();
     await page.getByLabel("Industry engine").selectOption("fit-out");
     await page.getByLabel("Location").fill("Dubai");
-    await page.getByRole("button", { name: "Create project" }).click();
+    await page.getByRole("button", { name: "Create project and upload drawings" }).click();
 
-    await expect(page).toHaveURL(/\/projects\/first-project-e2e\/boq$/);
+    await expect(page).toHaveURL(/\/projects\/first-project-e2e\/drawings$/);
     expect(clientSubmissions).toEqual([
       expect.objectContaining({
         name: "Quick Client",

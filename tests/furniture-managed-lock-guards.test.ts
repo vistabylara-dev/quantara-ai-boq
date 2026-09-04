@@ -34,6 +34,9 @@ vi.mock("@/lib/db/prisma", () => {
     extractedEntity: {
       findMany: vi.fn(),
     },
+    extractionJob: {
+      findMany: vi.fn().mockResolvedValue([]),
+    },
     bOQRevisionSnapshot: {
       create: vi.fn(),
     },

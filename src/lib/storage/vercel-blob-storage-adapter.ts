@@ -117,7 +117,7 @@ export class VercelBlobStorageAdapter implements DocumentStorageAdapter {
    */
   async getObjectStream(key: string, range?: ByteRange): Promise<ObjectStreamResult> {
     const response = await this.ensureObject(key, range ? { Range: `bytes=${range.start}-${range.end}` } : undefined);
-    if (!response || response.statusCode !== 200 || !response.stream) {
+    if (!response || ![200, 206].includes(response.statusCode) || !response.stream) {
       throw new VercelBlobStorageError(`Failed to retrieve object: ${key}`);
     }
     const contentRange = response.headers.get("content-range");

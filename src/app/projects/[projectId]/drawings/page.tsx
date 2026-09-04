@@ -311,7 +311,7 @@ export default function ProjectDrawingsPage(props: { params: Promise<{ projectId
     setStagedFile(file);
   }, []);
 
-  function handleDrop(event: React.DragEvent<HTMLDivElement>) {
+  function handleDrop(event: React.DragEvent<HTMLLabelElement>) {
     event.preventDefault();
     setIsDragging(false);
     const file = event.dataTransfer.files?.[0];
@@ -440,12 +440,23 @@ export default function ProjectDrawingsPage(props: { params: Promise<{ projectId
       <div id="drawing-upload" className={panel}>
         <SectionHeader title="Upload a drawing" description={`Supported: ${DRAWING_EXTENSIONS.join(", ")} · Maximum ${Math.floor(DRAWING_UPLOAD_MAX_BYTES_DEFAULT / (1024 * 1024))}MB per file`} />
 
+        <input
+          ref={fileInputRef}
+          id="drawing-file-input"
+          type="file"
+          aria-label="Choose drawing file"
+          className="sr-only"
+          accept={DRAWING_EXTENSIONS.map((ext) => `.${ext}`).join(",")}
+          onChange={(event) => {
+            const file = event.target.files?.[0];
+            if (file) stageFile(file);
+            event.target.value = "";
+          }}
+        />
+
         {!stagedFile ? (
-          <div
-            role="button"
-            tabIndex={0}
-            onClick={() => fileInputRef.current?.click()}
-            onKeyDown={(event) => (event.key === "Enter" || event.key === " ") && fileInputRef.current?.click()}
+          <label
+            htmlFor="drawing-file-input"
             onDragOver={(event) => { event.preventDefault(); setIsDragging(true); }}
             onDragLeave={() => setIsDragging(false)}
             onDrop={handleDrop}
@@ -458,19 +469,7 @@ export default function ProjectDrawingsPage(props: { params: Promise<{ projectId
             </span>
             <p className="text-sm font-semibold text-[#08152E] dark:text-white">Drag and drop a drawing here, or click to browse</p>
             <p className="text-xs text-[#7B879C] dark:text-[#8CA0BE]">{DRAWING_EXTENSIONS.join(", ")} · up to {Math.floor(DRAWING_UPLOAD_MAX_BYTES_DEFAULT / (1024 * 1024))}MB</p>
-            <input
-              ref={fileInputRef}
-              type="file"
-              aria-label="Choose drawing file"
-              className="hidden"
-              accept={DRAWING_EXTENSIONS.map((ext) => `.${ext}`).join(",")}
-              onChange={(event) => {
-                const file = event.target.files?.[0];
-                if (file) stageFile(file);
-                event.target.value = "";
-              }}
-            />
-          </div>
+          </label>
         ) : (
           <div className="mt-4 rounded-2xl border border-[#D5E0EC] bg-[#EAF1F8] p-5 dark:border-[#20304D] dark:bg-[#101D34]">
             <div className="flex items-center justify-between gap-2">
@@ -731,13 +730,12 @@ export default function ProjectDrawingsPage(props: { params: Promise<{ projectId
               <span aria-hidden="true">→</span>
               <span className="rounded-full border border-[#D5E0EC] px-2.5 py-1 dark:border-[#20304D]">Document</span>
             </div>
-            <button
-              type="button"
-              onClick={() => fileInputRef.current?.click()}
+            <label
+              htmlFor="drawing-file-input"
               className="mt-5 rounded-2xl bg-[#009FE3] px-4 py-2 text-sm font-semibold text-white hover:opacity-90 dark:bg-[#21C7F3] dark:text-[#040A16]"
             >
               Upload a drawing
-            </button>
+            </label>
           </div>
         ) : !drawings ? (
           <LoadingSkeleton rows={4} />

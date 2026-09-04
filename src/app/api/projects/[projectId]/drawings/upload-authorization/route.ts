@@ -2,7 +2,7 @@ import { z } from "zod";
 import { apiSuccess, handleApiError, parseJsonBody } from "@/lib/http/api-response";
 import { getCurrentActor } from "@/lib/auth/current-actor";
 import { setActorContext, withActorRequestContext } from "@/lib/auth/request-context";
-import { authorizeDrawingUpload } from "@/lib/services/drawing-service";
+import { authorizeDrawingUpload, listRecoverableDrawingUploads } from "@/lib/services/drawing-service";
 import { projectIdParamsSchema } from "@/lib/validation/boq-route-schemas";
 
 export const dynamic = "force-dynamic";
@@ -39,3 +39,16 @@ async function POSTHandler(request: Request, context: RouteContext) {
 }
 
 export const POST = withActorRequestContext(POSTHandler);
+
+async function GETHandler(_request: Request, context: RouteContext) {
+  try {
+    const actor = await getCurrentActor();
+    setActorContext(actor);
+    const { projectId } = projectIdParamsSchema.parse(await context.params);
+    return apiSuccess(await listRecoverableDrawingUploads(actor, projectId));
+  } catch (error) {
+    return handleApiError(error);
+  }
+}
+
+export const GET = withActorRequestContext(GETHandler);

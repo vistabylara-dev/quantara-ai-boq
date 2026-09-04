@@ -1,0 +1,82 @@
+{
+  "construction": [
+    {
+      "id": "page-foundation-r1",
+      "projectFileId": "file-structural",
+      "pageNumber": 1,
+      "drawingNumber": "S-101",
+      "revisionNumber": "R1",
+      "drawingTitle": "Foundation Plan",
+      "sheetName": "S-101",
+      "text": "EXISTING FOUNDATION PLAN - SUPERSEDED. Footing type F1 reinforced concrete.",
+      "drawingTitles": ["STRUCTURAL FOUNDATION PLAN"],
+      "technicalLines": ["F1 2000 x 2000 x 500"]
+    },
+    {
+      "id": "page-foundation-r2",
+      "projectFileId": "file-structural",
+      "pageNumber": 2,
+      "drawingNumber": "S-101",
+      "revisionNumber": "R2",
+      "drawingTitle": "Proposed Foundation Plan",
+      "sheetName": "S-101",
+      "text": "ISSUED FOR CONSTRUCTION. PROPOSED FOUNDATION PLAN. Reinforced concrete footing type F1. Refer detail S-501.",
+      "drawingTitles": ["STRUCTURAL FOUNDATION PLAN"],
+      "technicalLines": ["F1 2000 x 2000 x 500", "CONCRETE C35/45"]
+    }
+  ],
+  "mep": [
+    {
+      "id": "page-lighting",
+      "projectFileId": "file-mep",
+      "pageNumber": 1,
+      "drawingNumber": "E-201",
+      "revisionNumber": "P03",
+      "drawingTitle": "Lighting Layout",
+      "sheetName": "LEVEL 01",
+      "text": "PROPOSED LIGHTING LAYOUT. Lighting legend: DL1 LED downlight. Schedule count DL1 24 No.",
+      "drawingTitles": ["ELECTRICAL LIGHTING LAYOUT"],
+      "technicalLines": ["DL1 LED DOWNLIGHT", "LIGHTING LEGEND"]
+    },
+    {
+      "id": "page-hvac",
+      "projectFileId": "file-mep",
+      "pageNumber": 2,
+      "drawingNumber": "M-301",
+      "revisionNumber": "P02",
+      "drawingTitle": "HVAC Layout",
+      "sheetName": "LEVEL 01",
+      "text": "PROPOSED HVAC LAYOUT. Rectangular duct 600x300. Refer ductwork schedule M-601.",
+      "drawingTitles": ["MECHANICAL HVAC LAYOUT"],
+      "technicalLines": ["RECTANGULAR DUCT", "DUCT SIZE 600x300"]
+    }
+  ],
+  "fitout": [
+    {
+      "id": "page-floor-finish",
+      "projectFileId": "file-architectural",
+      "pageNumber": 1,
+      "drawingNumber": "A-401",
+      "revisionNumber": "C01",
+      "drawingTitle": "Floor Finish Plan",
+      "sheetName": "LEVEL 02",
+      "text": "PROPOSED FLOOR FINISH PLAN. FF-01 porcelain tile 600x600 to rooms 201-208.",
+      "drawingTitles": ["ARCHITECTURAL FLOOR FINISH PLAN"],
+      "technicalLines": ["FF-01 PORCELAIN TILE", "REFER FINISH SCHEDULE"]
+    }
+  ],
+  "joinery": [
+    {
+      "id": "page-kitchen-cabinet",
+      "projectFileId": "file-joinery",
+      "pageNumber": 1,
+      "drawingNumber": "J-501",
+      "revisionNumber": "C02",
+      "drawingTitle": "Kitchen Cabinet Drawing",
+      "sheetName": "KITCHEN TYPE K01",
+      "text": "PROPOSED KITCHEN CABINETRY. Board material: 18 mm panel. Refer cutting list and hardware schedule.",
+      "drawingTitles": ["JOINERY CABINET DRAWING"],
+      "technicalLines": ["18 MM PANEL", "BOARD MATERIAL", "CUTTING LIST"]
+    }
+  ]
+}

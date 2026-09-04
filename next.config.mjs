@@ -136,6 +136,8 @@ const nextConfig = {
     // issues a Blob token before any bytes exist, it never touches PDFParse.
     "/api/files/[fileId]/preprocess": ["./node_modules/@napi-rs/canvas/**", "./node_modules/@napi-rs/canvas-linux-x64-gnu/**", ...PDFJS_WORKER_GLOB],
     "/api/files/[fileId]/extract": ["./node_modules/@napi-rs/canvas/**", "./node_modules/@napi-rs/canvas-linux-x64-gnu/**", ...PDFJS_WORKER_GLOB],
+    "/api/projects/[projectId]/boq-preparation": ["./node_modules/@napi-rs/canvas/**", "./node_modules/@napi-rs/canvas-linux-x64-gnu/**", ...PDFJS_WORKER_GLOB],
+    "/api/projects/[projectId]/boq-preparation/[jobId]/retry": ["./node_modules/@napi-rs/canvas/**", "./node_modules/@napi-rs/canvas-linux-x64-gnu/**", ...PDFJS_WORKER_GLOB],
     "/api/projects/[projectId]/drawings": ["./node_modules/@napi-rs/canvas/**", "./node_modules/@napi-rs/canvas-linux-x64-gnu/**", ...PDFJS_WORKER_GLOB],
     "/api/projects/[projectId]/drawings/upload-authorization/[sessionId]/finalize": ["./node_modules/@napi-rs/canvas/**", "./node_modules/@napi-rs/canvas-linux-x64-gnu/**", ...PDFJS_WORKER_GLOB],
   },
@@ -161,6 +163,7 @@ const nextConfig = {
     "pdfkit",
     "pdf-parse",
     "pdfjs-dist",
+    "@napi-rs/canvas",
   ],
 };
 

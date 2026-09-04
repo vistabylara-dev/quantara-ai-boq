@@ -1,4 +1,4 @@
-import type { Prisma } from "@prisma/client";
+import type { Prisma, QuantityCalculationType } from "@prisma/client";
 import { z } from "zod";
 import {
   tayqanMeasurementExceptionKindSchema,
@@ -7,6 +7,7 @@ import {
   type TayqanMeasurementPlan,
   type TayqanMeasurementSubject,
 } from "@/lib/tayqan/tayqan-measurement-contract";
+import type { DrawingSheetClassification } from "@/lib/autonomous-boq/drawing-categorizer";
 
 export type TayqanMeasurementPageRole =
   | "PLAN"
@@ -25,6 +26,29 @@ export type TayqanMeasurementGoverningContext = {
   specialInstructions: string | null;
   pricingBasis: string | null;
   authoritativeSourcePolicy: string | null;
+  /**
+   * Present for the universal Quantara workflow and frozen into its operation
+   * identity. Existing paid TAYQAN assignments may omit it, preserving their
+   * commercial intake contract. The selected project engine remains governing;
+   * drawing text must never switch the run to another industry.
+   */
+  industryPolicy?: {
+    engineId: string;
+    key: string;
+    name: string;
+    policyVersion: string;
+    configurationHash: string;
+    supportedUnits: string[];
+    sections: Array<{ code: string; title: string }>;
+    supportedCalculationTypes: string[];
+    rules: Array<{
+      id: string;
+      sectionCode: string;
+      title: string;
+      calculationType: QuantityCalculationType;
+      resultUnit: string;
+    }>;
+  };
 };
 
 export type TayqanMeasurementPageEvidence = {
@@ -51,6 +75,8 @@ export type TayqanMeasurementPageEvidence = {
   drawingUnit: string | null;
   realWorldUnit: string | null;
   hasImage: boolean;
+  /** Controlled, persisted sheet categorization produced before measurement. */
+  classification?: DrawingSheetClassification;
 };
 
 export type TayqanMeasurementExistingEntityEvidence = {

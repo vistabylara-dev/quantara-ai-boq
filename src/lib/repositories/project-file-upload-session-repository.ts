@@ -49,20 +49,25 @@ export async function getUploadSessionForUpdate(
   // query with subsequent Prisma calls leaves the Preview pg adapter's single
   // client in an executing state and finalization never returns. Touching only
   // updatedAt is safe for retries and does not change the session lifecycle.
-  const locked = await db.projectFileUploadSession.updateMany({
-    where: { id: sessionId, companyId },
-    data: { updatedAt: new Date() },
-  });
-  if (locked.count === 0) throw new NotFoundError("Upload session not found.");
-  return getUploadSession(companyId, sessionId, db);
+  try {
+    return await db.projectFileUploadSession.update({
+      where: { id: sessionId, companyId },
+      data: { updatedAt: new Date() },
+    });
+  } catch (error) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2025") {
+      throw new NotFoundError("Upload session not found.");
+    }
+    throw error;
+  }
 }
 
-export async function setUploadSessionStatus(
+export function setUploadSessionStatus(
   sessionId: string,
   status: ProjectFileUploadSessionStatus,
   finalizedAt?: Date,
   db: DbClient = prisma,
-): Promise<ProjectFileUploadSession> {
+): Prisma.PrismaPromise<ProjectFileUploadSession> {
   return db.projectFileUploadSession.update({
     where: { id: sessionId },
     data: { status, ...(finalizedAt ? { finalizedAt } : {}) },
@@ -75,5 +80,24 @@ export async function listOrphanUploadSessions(companyId: string, limit = 100): 
     where: { companyId, status: "PENDING", expiresAt: { lt: new Date() } },
     orderBy: { createdAt: "desc" },
     take: Math.min(Math.max(limit, 1), 500),
+  });
+}
+
+/** Active actor/project sessions are discoverable after refresh without ever returning their scoped Blob token. */
+export async function listRecoverableUploadSessions(
+  companyId: string,
+  projectId: string,
+  actorUserId: string,
+  limit = 20,
+): Promise<ProjectFileUploadSession[]> {
+  return prisma.projectFileUploadSession.findMany({
+    where: {
+      companyId,
+      projectId,
+      actorUserId,
+      status: { in: ["PENDING", "FINALIZED"] },
+    },
+    orderBy: { createdAt: "desc" },
+    take: Math.min(Math.max(limit, 1), 100),
   });
 }

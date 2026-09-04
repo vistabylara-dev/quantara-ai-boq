@@ -27,7 +27,7 @@ async function POSTHandler(request: Request, context: RouteContext) {
     const { projectId, sessionId } = paramsSchema.parse(await context.params);
     const { metadata } = await parseJsonBody(request, finalizeRequestSchema);
     const result = await finalizeDrawingUpload(actor, projectId, { sessionId, metadata });
-    return apiSuccess(result, result.alreadyFinalized ? 200 : 201);
+    return apiSuccess(result, 202);
   } catch (error) {
     return handleApiError(error);
   }

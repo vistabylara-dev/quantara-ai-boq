@@ -1,6 +1,8 @@
 import { ExtractedEntityType } from "@prisma/client";
 import { AppError } from "@/lib/errors/app-error";
+import { AUTONOMOUS_TAYQAN_REASONER_CONTRACT_VERSION } from "@/lib/autonomous-boq/preparation";
 import {
+  getRequiredDimensions,
   listSupportedCalculationTypes,
 } from "@/lib/calculations/required-dimensions-registry";
 import {
@@ -33,6 +35,22 @@ const MAX_TABLE_SCHEDULE_ENTITIES = 200;
 /** PR2 gap 2: bounds the existing-BOQ reconciliation context the same way entity/room evidence is already bounded. */
 const MAX_EXISTING_BOQ_ITEMS = 400;
 
+export const TAYQAN_REASONER_CONTRACT_VERSION = AUTONOMOUS_TAYQAN_REASONER_CONTRACT_VERSION;
+
+export function deterministicMeasurementInputContract(): string {
+  return listSupportedCalculationTypes()
+    .map((calculationType) => {
+      const definition = getRequiredDimensions(calculationType);
+      if (!definition) return null;
+      const inputs = definition.inputs
+        .map((input) => `${input.key}:unit=${input.unit ?? "null"}:${input.required ? "required" : "optional"}`)
+        .join(", ");
+      return `${calculationType}=>${inputs}`;
+    })
+    .filter((value): value is string => Boolean(value))
+    .join("; ");
+}
+
 type OpenAITayqanMeasurementConfig = {
   apiKey: string;
   model: string;
@@ -40,16 +58,36 @@ type OpenAITayqanMeasurementConfig = {
   useSeniorProMode?: boolean;
 };
 
+export type OpenAIProviderDiagnostic = {
+  classification: string;
+  providerCode: string | null;
+  providerType: string | null;
+  httpStatus: number;
+  requestId: string | null;
+  organizationId: string | null;
+  projectId: string | null;
+  retryAfter: string | null;
+  requestLimit: string | null;
+  remainingRequests: string | null;
+  requestReset: string | null;
+  tokenLimit: string | null;
+  remainingTokens: string | null;
+  tokenReset: string | null;
+};
+
 class NonRetryableOpenAIError extends AppError {
-  constructor(status: number, requestId: string | null) {
-    const providerReference = requestId
-      ? ` Provider request: ${requestId}.`
+  readonly providerDiagnostic: OpenAIProviderDiagnostic;
+
+  constructor(diagnostic: OpenAIProviderDiagnostic) {
+    const providerReference = diagnostic.requestId
+      ? ` Provider request: ${diagnostic.requestId}.`
       : "";
     super(
       "TAYQAN_MEASUREMENT_AI_REQUEST_REJECTED",
-      `TAYQAN's AI measurement request was rejected by the configured provider (HTTP ${status}).${providerReference} Verify model access and request compatibility, then retry this same assignment.`,
+      `TAYQAN's AI measurement request was rejected by the configured provider (HTTP ${diagnostic.httpStatus}; ${diagnostic.classification}).${providerReference} Retry this same assignment only after the classified provider constraint is resolved.`,
       503,
     );
+    this.providerDiagnostic = diagnostic;
   }
 }
 
@@ -374,6 +412,7 @@ function clusterContext(
       drawingUnit: page.drawingUnit,
       realWorldUnit: page.realWorldUnit,
       hasImage: page.hasImage,
+      classification: page.classification,
     }));
 
   const fileIds = new Set(pages.map((page) => page.projectFileId));
@@ -425,6 +464,7 @@ function compactProjectContext(bundle: TayqanMeasurementEvidenceBundle) {
       scaleVerified: page.scaleVerified,
       technicalLines: page.technicalLines.slice(0, 20),
       text: page.text?.slice(0, 1_200) ?? null,
+      classification: page.classification,
     })),
     // PR2 gap 1: the final cross-cluster reconciliation pass explicitly
     // checks for duplicate scope and schedule-plan mismatches (see
@@ -469,6 +509,103 @@ function supportsGpt56Features(model: string): boolean {
 
 function shouldRetryStatus(status: number): boolean {
   return status === 408 || status === 409 || status === 429 || status >= 500;
+}
+
+function sanitizedProviderToken(value: unknown): string | null {
+  return typeof value === "string" && /^[a-zA-Z0-9_.:-]{1,160}$/.test(value)
+    ? value
+    : null;
+}
+
+export function providerResponseMetadata(response: Pick<Response, "headers">) {
+  const header = (name: string) => sanitizedProviderToken(response.headers.get(name));
+  return {
+    requestId: header("x-request-id"),
+    organizationId: header("openai-organization"),
+    projectId: header("openai-project"),
+    retryAfter: header("retry-after"),
+    requestLimit: header("x-ratelimit-limit-requests"),
+    remainingRequests: header("x-ratelimit-remaining-requests"),
+    requestReset: header("x-ratelimit-reset-requests"),
+    tokenLimit: header("x-ratelimit-limit-tokens"),
+    remainingTokens: header("x-ratelimit-remaining-tokens"),
+    tokenReset: header("x-ratelimit-reset-tokens"),
+  };
+}
+
+export function classifyProviderFailure(status: number, providerCode: string | null): string {
+  if (providerCode === "rate_limit_exceeded") return "rate_limit_exceeded";
+  if (providerCode === "credit_balance_exhausted") return "credit_balance_exhausted";
+  if (providerCode === "insufficient_quota") return "insufficient_quota";
+  if (providerCode === "context_length_exceeded") return "context_length_exceeded";
+  if (providerCode === "model_not_found") return "model_or_project_access";
+  return status === 429 ? "unclassified_429" : "provider_request_rejected";
+}
+
+async function providerDiagnostic(response: Response): Promise<OpenAIProviderDiagnostic> {
+  let body: Record<string, unknown> | null = null;
+  try {
+    body = record(await response.json());
+  } catch {
+    // Non-JSON failures still retain safe headers and HTTP status.
+  }
+  const providerError = record(body?.error);
+  const providerCode = sanitizedProviderToken(providerError?.code);
+  return {
+    classification: classifyProviderFailure(response.status, providerCode),
+    providerCode,
+    providerType: sanitizedProviderToken(providerError?.type),
+    httpStatus: response.status,
+    ...providerResponseMetadata(response),
+  };
+}
+
+export async function verifyOpenAIProviderProject(
+  input: {
+    apiKey: string;
+    model: string;
+    expectedProjectId: string;
+    timeoutMs?: number;
+  },
+  fetchImpl: typeof fetch = fetch,
+): Promise<{ projectId: string; requestId: string | null }> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), input.timeoutMs ?? 10_000);
+  try {
+    const response = await fetchImpl(
+      `https://api.openai.com/v1/models/${encodeURIComponent(input.model)}`,
+      {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${input.apiKey}`,
+          "OpenAI-Project": input.expectedProjectId,
+        },
+        signal: controller.signal,
+      },
+    );
+    if (!response.ok) {
+      const diagnostic = await providerDiagnostic(response);
+      console.warn("[tayqan-provider-preflight-rejection]", diagnostic);
+      throw new AppError(
+        "TAYQAN_PREVIEW_PROVIDER_PREFLIGHT_REJECTED",
+        `The configured Preview provider key failed its non-billable readiness check (HTTP ${response.status}). No recovery authorization was consumed.`,
+        503,
+      );
+    }
+    const metadata = providerResponseMetadata(response);
+    if (metadata.projectId && metadata.projectId !== input.expectedProjectId) {
+      console.warn("[tayqan-provider-preflight-project-mismatch]", metadata);
+      throw new AppError(
+        "TAYQAN_PREVIEW_PROVIDER_PROJECT_MISMATCH",
+        "The configured Preview provider key does not belong to the authorized funded project. No recovery authorization was consumed.",
+        503,
+      );
+    }
+    console.info("[tayqan-provider-preflight-ready]", metadata);
+    return { projectId: input.expectedProjectId, requestId: metadata.requestId };
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 async function sleep(milliseconds: number) {
@@ -532,17 +669,21 @@ async function requestStructuredJson(
       });
 
       if (!response.ok) {
+        const diagnostic = await providerDiagnostic(response);
+        console.warn("[tayqan-provider-rejection]", diagnostic);
+        if (response.status === 429) {
+          throw new NonRetryableOpenAIError(diagnostic);
+        }
         const message = `OpenAI TAYQAN request failed with status ${response.status}.`;
         if (attempt + 1 < REQUEST_RETRY_COUNT && shouldRetryStatus(response.status)) {
           lastError = new Error(message);
           await sleep(700 * (attempt + 1));
           continue;
         }
-        throw new NonRetryableOpenAIError(
-          response.status,
-          response.headers.get("x-request-id"),
-        );
+        throw new NonRetryableOpenAIError(diagnostic);
       }
+
+      console.info("[tayqan-provider-ready]", providerResponseMetadata(response));
 
       const raw = await response.json() as Record<string, unknown>;
       if (raw.status === "incomplete") {
@@ -637,8 +778,12 @@ function measurementInstruction(): string {
   return [
     "Act as the measurement engineer inside a senior quantity-surveying team.",
     "Treat the project as a coordinated drawing/specification set, not isolated pages.",
+    "Every page may include a persisted controlled classification. Use only VERIFIED categoryPaths for autonomous payable measurements; UNCERTAIN, UNRESOLVED, SUPERSEDED, existing, optional or excluded scope must become a scoped exception instead of a quantity.",
     "Follow plan call-outs into sections, elevations, details and schedules before proposing a measurement.",
     "Respect the frozen source scope, revision identifiers, customer exclusions and authoritative-source policy supplied in governingContext.",
+    "When governingContext.industryPolicy is present, treat its selected project industry, supported units, sections, rules and calculation types as mandatory governing context. Drawing titles or inferred disciplines may refine scope inside that policy but must never switch the project to another industry engine.",
+    "For an industry-policy run, workPackage must equal exactly one governingContext.industryPolicy.rules[].id. Use that rule's calculationType and resultUnit; if no exact rule fits the evidence, create an UNSUPPORTED_FORMULA or SCOPE_GAP exception instead of inventing a work package.",
+    `Use only these exact deterministic input keys for each calculationType; declaredCapabilities are evidence labels, not calculator input names: ${deterministicMeasurementInputContract()}.`,
     "If a customer names a measurement standard, do not apply unstated clauses from model memory. Apply only standard-specific rules explicitly present in supplied project evidence/configured context; use STANDARD_RULE_UNAVAILABLE whenever a missing rule could change the measured result.",
     "Create professional BOQ scope labels with a workPackage and location where the evidence supports them.",
     "Autonomously choose the PRIMARY measurementMethod for every payable BOQ scope: COUNT, LINEAR, AREA, VOLUME or WEIGHT. The user must not be asked to choose a calculator.",

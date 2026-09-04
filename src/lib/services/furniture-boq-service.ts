@@ -51,6 +51,13 @@ export {
 
 const BOQ_SOURCE_REFERENCE_MAX_LENGTH = 500;
 const CALLER_OWNED_WASTAGE_ASSUMPTION_KEY = "assumption:wastage";
+const FURNITURE_SECTION_TITLES: Record<FurnitureCanonicalSectionCode, string> = {
+  PRJ: "PROJECT SUMMARY",
+  BRD: "BOARD / SHEET MATERIAL — ORDER QUANTITIES",
+  HWA: "HARDWARE & ACCESSORIES — ORDER QUANTITIES",
+  CUT: "FULL CUTTING LIST — ALL ROOMS",
+  VER: "NOTES, ASSUMPTIONS & VERIFICATION ITEMS",
+};
 
 type FurnitureCandidateEnvelope = {
   kind: typeof FURNITURE_CANDIDATE_TECHNICAL_DATA_KIND;
@@ -189,7 +196,14 @@ export function furnitureManagedNotes(item: FurnitureCanonicalItem): string {
       ? `Source methods: ${item.evidence.sourceMethods.join(", ")}`
       : "",
   ].filter(Boolean).join("\n");
-  return [marker, item.notes, evidence].filter(Boolean).join("\n");
+  const sectionTitle = FURNITURE_SECTION_TITLES[item.sectionCode];
+  const measurementRule = item.sectionCode === "BRD"
+    ? "specialized-sheet-optimization"
+    : item.unit === "lm"
+      ? "specialized-linear-edge"
+      : "specialized-verified-count";
+  const categoryPath = `Category path: joinery → Joinery → Cabinet drawing → Kitchen cabinetry → ${sectionTitle} → ${item.description} → ${measurementRule} → ${item.unit}`;
+  return [marker, item.notes, categoryPath, evidence].filter(Boolean).join("\n");
 }
 
 function sameGeneratedFields(current: ExistingFurnitureManagedBOQItem, item: FurnitureCanonicalItem, index: number): boolean {

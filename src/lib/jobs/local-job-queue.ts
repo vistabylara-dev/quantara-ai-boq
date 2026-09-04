@@ -146,11 +146,14 @@ export class LocalJobQueue implements JobQueue {
   private scheduleProcessing(companyId: string, jobId: string): void {
     if (process.env.NODE_ENV === "production") {
       try {
-        after(() =>
-          this.processQueuedJob(companyId, jobId).catch((error) => {
+        after(async () => {
+          try {
+            await import("@/lib/jobs/register-handlers");
+            await this.processQueuedJob(companyId, jobId);
+          } catch (error) {
             console.error(`[local-job-queue] unhandled error processing job ${jobId}`, error);
-          }),
-        );
+          }
+        });
         return;
       } catch (error) {
         console.error(`[local-job-queue] after() unavailable outside a request context for job ${jobId}, falling back to setImmediate`, error);
@@ -160,10 +163,13 @@ export class LocalJobQueue implements JobQueue {
   }
 
   private scheduleLocal(companyId: string, jobId: string): void {
-    setImmediate(() => {
-      this.processQueuedJob(companyId, jobId).catch((error) => {
+    setImmediate(async () => {
+      try {
+        await import("@/lib/jobs/register-handlers");
+        await this.processQueuedJob(companyId, jobId);
+      } catch (error) {
         console.error(`[local-job-queue] unhandled error processing job ${jobId}`, error);
-      });
+      }
     });
   }
 
@@ -218,7 +224,12 @@ export class LocalJobQueue implements JobQueue {
           continue; // another controlled attempt, in the same call — re-claims atomically at the top
         }
 
-        await failExtractionJob(companyId, jobId, message);
+        await failExtractionJob(
+          companyId,
+          jobId,
+          message,
+          error instanceof AppError ? error.code : "HANDLER_ERROR",
+        );
         return;
       }
     }

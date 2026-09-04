@@ -17,6 +17,7 @@ import { prisma } from "@/lib/db/prisma";
 import { AppError, ConflictError, NotFoundError } from "@/lib/errors/app-error";
 import { getSourceProcessingCapability } from "@/lib/files/source-processing-capability";
 import { getAiDraftExtractedEntityId } from "@/lib/guidance/ai-draft-boq";
+import { evaluateAiDraftEntityCoverage } from "@/lib/guidance/ai-draft-coverage";
 import { extractionJobQueue } from "@/lib/jobs/extraction-worker";
 import {
   createProjectBOQ,
@@ -2508,8 +2509,6 @@ async function prepareTayqanAiDraft(
     }
   });
 
-  const usableEntities = activeEntities.filter(e => e.label && e.label.trim().length > 0);
-  
   const boq = await getBOQRecord(actor.companyId, boqId);
   if (!boq) {
     throw new AppError(
@@ -2519,16 +2518,13 @@ async function prepareTayqanAiDraft(
     );
   }
   
-  const representedEntityIds = new Set(
-    boq.sections.flatMap(s => s.items)
-      .map(i => i.quantityProvenance?.extractedEntityId ?? getAiDraftExtractedEntityId(i.sourceReference))
-      .filter(id => id !== null)
+  const coverage = evaluateAiDraftEntityCoverage(
+    activeEntities,
+    boq.sections.flatMap((section) => section.items),
   );
 
-  const missingEntities = usableEntities.filter(e => !representedEntityIds.has(e.id));
-  
-  if (missingEntities.length > 0) {
-    const reason = `eligible entity count: ${usableEntities.length}, represented entity count: ${representedEntityIds.size}, missing count: ${missingEntities.length}`;
+  if (coverage.missingEntityIds.length > 0) {
+    const reason = `eligible entity count: ${coverage.eligibleEntityCount}, represented entity count: ${coverage.representedEntityCount}, missing count: ${coverage.missingEntityIds.length}`;
     return fail(actor, loaded, "SCOPE_COVERAGE_INCOMPLETE", "tayqan.hire.workflow.scopeCoverageIncomplete", {
       kind: "ERROR",
       i18nKey: "tayqan.hire.workflow.scopeCoverageIncomplete",

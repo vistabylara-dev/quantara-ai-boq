@@ -18,7 +18,7 @@ import { useCallback, useEffect, useState } from "react";
 import { apiClient, getApiErrorMessage } from "@/lib/api/client";
 import { formatDate } from "@/lib/formatting/dates";
 import TrialBanner from "@/components/dashboard/trial-banner";
-import WorkspaceHeader from "@/components/dashboard/workspace-header";
+import WorkspaceHeader, { resolveUploadDrawingHref } from "@/components/dashboard/workspace-header";
 import QuickStartWorkspace from "@/components/dashboard/quick-start-workspace";
 import ProjectIntelligencePanel from "@/components/dashboard/project-intelligence-panel";
 import AIAssistantPanel from "@/components/dashboard/ai-assistant-panel";
@@ -275,6 +275,7 @@ export default function DashboardPage() {
                 image="/images/dashboard/cyber_suppliers.jpg"
               />
               <QuickActionButton href="/templates" label={t("dashboard.templates")} icon={BookOpen} />
+              <QuickActionButton href="/imports" label={t("dashboard.spreadsheetImport")} icon={UploadCloud} />
             </nav>
           </div>
         </div>
@@ -289,14 +290,14 @@ export default function DashboardPage() {
              </div>
           </div>
           
-          <Link href="/imports" className="relative group w-72 h-72 sm:w-80 sm:h-80 xl:w-[350px] xl:h-[350px] flex items-center justify-center cursor-pointer mt-12 xl:mt-0">
+          <Link href={resolveUploadDrawingHref(currentProject)} className="relative group w-72 h-72 sm:w-80 sm:h-80 xl:w-[350px] xl:h-[350px] flex items-center justify-center cursor-pointer mt-12 xl:mt-0">
             <div className="absolute inset-0 rounded-full border-[6px] border-blue-600 dark:border-[#00F0FF]/10 border-t-[#00F0FF] border-b-[#00F0FF] animate-[spin_8s_linear_infinite] group-hover:border-t-[#FF0055] group-hover:border-b-[#FF0055] transition-colors shadow-[0_0_40px_rgba(0,240,255,0.2)] group-hover:shadow-[0_0_60px_rgba(255,0,85,0.4)] z-10"></div>
             <div className="absolute inset-6 rounded-full border-[3px] border-dashed border-blue-500/30 dark:border-[#00F0FF]/30 animate-[spin_15s_linear_infinite_reverse] group-hover:border-red-500/30 dark:border-[#FF0055]/30 z-10"></div>
             <div className="absolute inset-10 rounded-full bg-gradient-to-b from-[#00F0FF]/10 to-transparent blur-xl group-hover:from-[#FF0055]/10 z-0 transition-colors"></div>
             <div className="text-center z-20 relative flex flex-col items-center justify-center bg-slate-100 dark:bg-black/60 w-52 h-52 rounded-full border border-white/5 cyber-border backdrop-blur-sm">
                <Upload className="w-12 h-12 text-blue-600 dark:text-[#00F0FF] mb-3 group-hover:text-red-600 dark:text-[#FF0055] transition-colors group-hover:-translate-y-1 duration-300" />
-               <p className="text-slate-900 dark:text-white text-sm font-bold uppercase tracking-widest group-hover:text-red-600 dark:text-[#FF0055] transition-colors">{t("dashboard.dataUplink")}</p>
-               <p className="text-blue-600 dark:text-[#00F0FF] text-[9px] uppercase tracking-[0.2em] group-hover:text-slate-900 dark:text-white transition-colors mt-1">{t("dashboard.initializeImport")}</p>
+               <p className="text-slate-900 dark:text-white text-sm font-bold uppercase tracking-widest group-hover:text-red-600 dark:text-[#FF0055] transition-colors">{t("dashboard.drawingUplink")}</p>
+               <p className="text-blue-600 dark:text-[#00F0FF] text-[9px] uppercase tracking-[0.2em] group-hover:text-slate-900 dark:text-white transition-colors mt-1">{t("dashboard.initializeDrawingUpload")}</p>
             </div>
           </Link>
         </div>

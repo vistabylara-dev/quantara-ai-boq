@@ -8,6 +8,18 @@ import type { CurrentActor } from "@/lib/auth/current-actor";
 import { requireCapability } from "@/lib/auth/rbac";
 import { prisma } from "@/lib/db/prisma";
 import { AppError } from "@/lib/errors/app-error";
+import {
+  AutonomousMeasurementPolicyBindingError,
+  resolveAutonomousMeasurementPolicyRule,
+} from "@/lib/autonomous-boq/measurement-policy";
+import {
+  AutonomousCategorizationBindingError,
+  categorizeDrawingSheets,
+  requireMeasurementCategoryBinding,
+  type ControlledCategoryPath,
+  type DrawingSheetClassification,
+} from "@/lib/autonomous-boq/drawing-categorizer";
+import { buildPreliminaryConceptSchedule, type PreliminaryConceptSchedule } from "@/lib/autonomous-boq/concept-schedule";
 import { createAuditLog } from "@/lib/repositories/audit-repository";
 import { getProjectRecord } from "@/lib/repositories/project-repository";
 import { createStorageAdapter, resolveStorageProvider } from "@/lib/storage/storage-factory";
@@ -42,6 +54,72 @@ const ACTIVE_ENTITY_STATUSES = [
   ExtractedEntityStatus.CONFIRMED,
   ExtractedEntityStatus.CORRECTED,
 ] as const;
+
+export type MeasurementPersistencePolicyInput = {
+  mode: "SYSTEM_VALIDATED";
+  calculatedByPrefix: string;
+  measurementVersion: string;
+  measurementAuditAction: string;
+  completionAuditAction: string;
+  actorName: string;
+};
+
+export type ResolvedMeasurementPersistencePolicy = {
+  status: ExtractedEntityStatus;
+  confirmedAt: Date | null;
+  confirmedByUserId: null;
+  calculatedByPrefix: string;
+  measurementVersion: string;
+  measurementAuditAction: string;
+  completionAuditAction: string;
+  actorName: string | null;
+  systemValidated: boolean;
+};
+
+/**
+ * Keeps TAYQAN's existing proposal/review semantics as the default while
+ * allowing the ordinary Quantara workflow to persist a distinct, truthful
+ * system-validated calculation. A system prefix must include the immutable
+ * 64-character operation hash so two source/policy snapshots can never share
+ * a calculatedBy identity.
+ */
+export function resolveMeasurementPersistencePolicy(
+  input?: MeasurementPersistencePolicyInput,
+): ResolvedMeasurementPersistencePolicy {
+  if (!input) {
+    return {
+      status: ExtractedEntityStatus.EXTRACTED,
+      confirmedAt: null,
+      confirmedByUserId: null,
+      calculatedByPrefix: TAYQAN_MEASUREMENT_CALCULATED_BY_PREFIX,
+      measurementVersion: TAYQAN_MEASUREMENT_VERSION,
+      measurementAuditAction: "TAYQAN_MEASUREMENT_PROPOSED",
+      completionAuditAction: "TAYQAN_MEASUREMENT_PASS_COMPLETED",
+      actorName: null,
+      systemValidated: false,
+    };
+  }
+
+  if (!/:[a-f0-9]{64}:$/i.test(input.calculatedByPrefix)) {
+    throw new AppError(
+      "AUTONOMOUS_MEASUREMENT_IDENTITY_INVALID",
+      "System-validated measurement persistence requires an operation-bound calculation prefix.",
+      409,
+    );
+  }
+
+  return {
+    status: ExtractedEntityStatus.CONFIRMED,
+    confirmedAt: new Date(),
+    confirmedByUserId: null,
+    calculatedByPrefix: input.calculatedByPrefix,
+    measurementVersion: input.measurementVersion,
+    measurementAuditAction: input.measurementAuditAction,
+    completionAuditAction: input.completionAuditAction,
+    actorName: input.actorName,
+    systemValidated: true,
+  };
+}
 
 let storageAdapter: DocumentStorageAdapter | null = null;
 function getStorageAdapter(): DocumentStorageAdapter {
@@ -125,6 +203,8 @@ export type PrepareTayqanMeasurementsResult = {
   provider: string;
   model: string;
   seniorReview: TayqanSeniorReviewSummary;
+  classifications?: DrawingSheetClassification[];
+  conceptSchedule?: PreliminaryConceptSchedule | null;
 };
 
 export type PrepareTayqanMeasurementsOptions = {
@@ -132,6 +212,8 @@ export type PrepareTayqanMeasurementsOptions = {
   env?: NodeJS.ProcessEnv;
   /** Used by the persisted TAYQAN work order to keep its execution lease fresh. */
   onProgress?: (progress: TayqanMeasurementReasonerProgress) => Promise<void>;
+  /** Optional durable checkpoint after categorization/evidence preparation and before AI measurement. */
+  onEvidencePrepared?: () => Promise<void>;
   /**
    * A validated, durably checkpointed provider result. When supplied the paid
    * reasoner is never constructed or invoked; only deterministic validation
@@ -151,6 +233,13 @@ export type PrepareTayqanMeasurementsOptions = {
   onReasonerResult?: (result: TayqanMeasurementReasonerResult) => Promise<void>;
   /** Stable work-order operation id used to deduplicate completion audit replay. */
   completionAuditOperationId?: string;
+  /**
+   * Omitted by every existing TAYQAN caller. The universal workflow supplies
+   * this only after evidence, deterministic formula and senior-review gates
+   * pass, so the persisted calculation is system validated without claiming
+   * a human confirmed it.
+   */
+  persistencePolicy?: MeasurementPersistencePolicyInput;
 };
 
 async function buildEvidenceBundle(
@@ -236,7 +325,7 @@ async function buildEvidenceBundle(
     }
   }
 
-  const pageEvidence: TayqanMeasurementPageEvidence[] = pages.map((page) => {
+  let pageEvidence: TayqanMeasurementPageEvidence[] = pages.map((page) => {
     const file = fileById.get(page.projectFileId);
     if (!file) throw new Error("TAYQAN page resolved to a source file outside its frozen scope.");
     const metadata = jsonRecord(file.metadataJson);
@@ -279,6 +368,29 @@ async function buildEvidenceBundle(
     };
   });
 
+  const industryPolicy = input.governingContext?.industryPolicy;
+  if (industryPolicy) {
+    const classifications = categorizeDrawingSheets({
+      engineId: industryPolicy.engineId,
+      pages: pageEvidence,
+      rules: industryPolicy.rules,
+    });
+    const classificationByPageId = new Map(classifications.map((classification) => [classification.pageId, classification] as const));
+    await prisma.$transaction(pages.map((page) => prisma.drawingPage.update({
+      where: { id: page.id, companyId: actor.companyId },
+      data: {
+        titleBlockJson: {
+          ...(jsonRecord(page.titleBlockJson) ?? {}),
+          autonomousClassification: classificationByPageId.get(page.id)!,
+        } as Prisma.InputJsonObject,
+      },
+    })));
+    pageEvidence = pageEvidence.map((page) => ({
+      ...page,
+      classification: classificationByPageId.get(page.id),
+    }));
+  }
+
   const entities = await prisma.extractedEntity.findMany({
     where: {
       companyId: actor.companyId,
@@ -303,6 +415,24 @@ async function buildEvidenceBundle(
   // bundle — never re-queried mid-pass. Only ever populated for an
   // UPDATE_EXISTING_BOQ assignment; every other assignment gets an empty
   // array, identical to today's behavior.
+  if (input.targetBoqId) {
+    const targetBoq = await prisma.bOQ.findFirst({
+      where: {
+        id: input.targetBoqId,
+        companyId: actor.companyId,
+        projectId: project.id,
+      },
+      select: { id: true },
+    });
+    if (!targetBoq) {
+      throw new AppError(
+        "TAYQAN_MEASUREMENT_TARGET_BOQ_SCOPE_INVALID",
+        "The target BOQ is outside the frozen measurement project scope.",
+        403,
+      );
+    }
+  }
+
   const existingBoqItems = input.targetBoqId
     ? await prisma.bOQItem.findMany({
         where: { companyId: actor.companyId, section: { boqId: input.targetBoqId } },
@@ -368,11 +498,13 @@ async function buildEvidenceBundle(
   };
 }
 
+type CategorizedMeasurement = EvaluatedTayqanMeasurement & { categoryPath?: ControlledCategoryPath };
+
 async function resolveOrCreateMeasurementEntity(
   db: Prisma.TransactionClient,
   actor: CurrentActor,
   projectId: string,
-  evaluated: EvaluatedTayqanMeasurement,
+  evaluated: CategorizedMeasurement,
   pageById: ReadonlyMap<string, { projectFileId: string; originalName: string }>,
   fingerprint: string,
 ) {
@@ -391,6 +523,15 @@ async function resolveOrCreateMeasurementEntity(
         "An extracted entity changed while TAYQAN was preparing measurements. Restart the work order against the current evidence.",
         409,
       );
+    }
+    if (evaluated.categoryPath) {
+      return {
+        entity: await db.extractedEntity.update({
+          where: { id: existing.id, companyId: actor.companyId },
+          data: { technicalDataJson: { ...(jsonRecord(existing.technicalDataJson) ?? {}), categoryPath: evaluated.categoryPath } as Prisma.InputJsonObject },
+        }),
+        created: false,
+      };
     }
     return { entity: existing, created: false };
   }
@@ -411,7 +552,18 @@ async function resolveOrCreateMeasurementEntity(
       sourceReference: { contains: marker },
     },
   });
-  if (existing) return { entity: existing, created: false };
+  if (existing) {
+    if (evaluated.categoryPath) {
+      return {
+        entity: await db.extractedEntity.update({
+          where: { id: existing.id, companyId: actor.companyId },
+          data: { technicalDataJson: { ...(jsonRecord(existing.technicalDataJson) ?? {}), categoryPath: evaluated.categoryPath } as Prisma.InputJsonObject },
+        }),
+        created: false,
+      };
+    }
+    return { entity: existing, created: false };
+  }
 
   const entity = await db.extractedEntity.create({
     data: {
@@ -442,6 +594,7 @@ async function resolveOrCreateMeasurementEntity(
         supportingChecks: evaluated.supportingChecks,
         rationale: evaluated.subject.rationale,
         sourceSummary: evaluated.subject.sourceSummary,
+        categoryPath: evaluated.categoryPath ?? null,
       },
       status: ExtractedEntityStatus.NEEDS_REVIEW,
     },
@@ -471,12 +624,16 @@ export async function prepareTayqanMeasurementProposals(
   options: PrepareTayqanMeasurementsOptions = {},
 ): Promise<PrepareTayqanMeasurementsResult> {
   requireCapability(actor, "boq:edit");
+  const persistencePolicy = resolveMeasurementPersistencePolicy(
+    options.persistencePolicy,
+  );
   const { bundle, imageStorageKeyByPageId } = await runTayqanMeasurementPhase(
     "evidence preparation",
     "TAYQAN_MEASUREMENT_EVIDENCE_PREPARATION_FAILED",
     "TAYQAN could not prepare the processed source evidence for measurement. Retry this same assignment; completed work remains preserved.",
     () => buildEvidenceBundle(actor, projectIdentifier, input),
   );
+  await options.onEvidencePrepared?.();
 
   let result: TayqanMeasurementReasonerResult;
   if (options.replayReasonerResult) {
@@ -495,7 +652,7 @@ export async function prepareTayqanMeasurementProposals(
     const env = options.env ?? process.env;
     const apiKey = env.OPENAI_API_KEY?.trim();
     const model = env.TAYQAN_MEASUREMENT_MODEL?.trim()
-      || "gpt-5.6";
+      || "gpt-5.6-sol";
     const safetyIdentifier = `tayqan_${createHash("sha256")
       .update(actor.userId)
       .digest("hex")
@@ -612,14 +769,54 @@ export async function prepareTayqanMeasurementProposals(
   // proposal into a visible, dangerous measurement exception. The work order
   // can therefore continue to the review document, but BOQ acceptance remains
   // blocked until a professional resolves the invalid proposal.
-  const evaluated: EvaluatedTayqanMeasurement[] = [];
+  const evaluated: CategorizedMeasurement[] = [];
   const validationExceptions: TayqanMeasurementException[] = [];
   for (const subject of result.plan.subjects) {
     try {
-      evaluated.push(evaluateTayqanMeasurementSubject(subject, { allowedEntityIds, roomsById, pagesById }));
+      const measurement = evaluateTayqanMeasurementSubject(subject, { allowedEntityIds, roomsById, pagesById });
+      const industryPolicy = input.governingContext?.industryPolicy;
+      if (!industryPolicy) {
+        evaluated.push(measurement);
+        continue;
+      }
+
+      const policyBinding = resolveAutonomousMeasurementPolicyRule({
+        workPackage: measurement.subject.workPackage,
+        calculationType: measurement.subject.calculationType,
+        calculatedResultUnit: measurement.resultUnit,
+        allowedRules: industryPolicy.rules.map((rule) => ({
+          id: rule.id,
+          calculationType: rule.calculationType,
+          boqUnit: rule.resultUnit,
+        })),
+      });
+      const categoryPath = requireMeasurementCategoryBinding({
+        workPackage: policyBinding.ruleId,
+        evidencePageIds: measurement.subject.evidencePageIds,
+        classificationsByPageId: new Map(bundle.pages.flatMap((page) => page.classification ? [[page.id, page.classification] as const] : [])),
+      });
+      evaluated.push({ ...measurement, resultUnit: policyBinding.resultUnit, categoryPath });
     } catch (error) {
       if (error instanceof TayqanRevisionConflictError) {
         validationExceptions.push(error.exception);
+        continue;
+      }
+      if (error instanceof AutonomousMeasurementPolicyBindingError) {
+        validationExceptions.push({
+          kind: "UNSUPPORTED_FORMULA",
+          message: error.message,
+          pageIds: [...new Set(subject.evidencePageIds)],
+          relatedEntityId: subject.existingEntityId,
+        });
+        continue;
+      }
+      if (error instanceof AutonomousCategorizationBindingError) {
+        validationExceptions.push({
+          kind: "METHOD_SELECTION_UNCERTAIN",
+          message: error.message,
+          pageIds: [...new Set(subject.evidencePageIds)],
+          relatedEntityId: subject.existingEntityId,
+        });
         continue;
       }
       validationExceptions.push({
@@ -661,7 +858,7 @@ export async function prepareTayqanMeasurementProposals(
         fingerprint,
       );
 
-      const calculatedBy = `${TAYQAN_MEASUREMENT_CALCULATED_BY_PREFIX}${fingerprint}`;
+      const calculatedBy = `${persistencePolicy.calculatedByPrefix}${fingerprint}`;
       let calculation = await tx.quantityCalculation.findFirst({
         where: {
           companyId: actor.companyId,
@@ -687,7 +884,9 @@ export async function prepareTayqanMeasurementProposals(
             resultValue: measurement.resultValue,
             resultUnit: measurement.resultUnit,
             confidence: measurement.confidence,
-            status: ExtractedEntityStatus.EXTRACTED,
+            status: persistencePolicy.status,
+            confirmedAt: persistencePolicy.confirmedAt,
+            confirmedByUserId: persistencePolicy.confirmedByUserId,
             calculatedBy,
           },
         });
@@ -696,12 +895,12 @@ export async function prepareTayqanMeasurementProposals(
         await createAuditLog(actor.companyId, {
           entityType: "QuantityCalculation",
           entityId: calculation.id,
-          action: "TAYQAN_MEASUREMENT_PROPOSED",
-          actorName: actor.fullName,
+          action: persistencePolicy.measurementAuditAction,
+          actorName: persistencePolicy.actorName ?? actor.fullName,
           payload: {
             projectId: bundle.project.id,
             extractedEntityId: entity.id,
-            measurementVersion: TAYQAN_MEASUREMENT_VERSION,
+            measurementVersion: persistencePolicy.measurementVersion,
             fingerprint,
             measurementMethod: measurement.subject.measurementMethod,
             methodSelectionRationale: measurement.subject.methodSelectionRationale,
@@ -710,6 +909,7 @@ export async function prepareTayqanMeasurementProposals(
             evidencePageIds: measurement.subject.evidencePageIds,
             evidenceInputs: measurement.subject.inputs,
             workPackage: measurement.subject.workPackage,
+            categoryPath: measurement.categoryPath ?? null,
             location: measurement.subject.location,
             normalizedInputValues: measurement.normalizedInputValues,
             formula: measurement.formula,
@@ -727,8 +927,24 @@ export async function prepareTayqanMeasurementProposals(
             seniorReview: result.seniorReview,
             governingContext: bundle.governingContext,
             professionallyConfirmed: false,
+            systemValidated: persistencePolicy.systemValidated,
           },
         }, tx);
+      }
+
+      if (
+        persistencePolicy.systemValidated
+        && (
+          calculation.status !== ExtractedEntityStatus.CONFIRMED
+          || calculation.confirmedAt === null
+          || calculation.confirmedByUserId !== null
+        )
+      ) {
+        throw new AppError(
+          "AUTONOMOUS_MEASUREMENT_PROVENANCE_INVALID",
+          "A preserved autonomous calculation does not carry truthful system-validation provenance.",
+          409,
+        );
       }
 
       return { entityCreated: created, calculationCreated };
@@ -755,7 +971,7 @@ export async function prepareTayqanMeasurementProposals(
             companyId: actor.companyId,
             entityType: "Project",
             entityId: bundle.project.id,
-            action: "TAYQAN_MEASUREMENT_PASS_COMPLETED",
+            action: persistencePolicy.completionAuditAction,
             payloadJson: {
               path: ["operationId"],
               equals: options.completionAuditOperationId,
@@ -769,10 +985,10 @@ export async function prepareTayqanMeasurementProposals(
       return createAuditLog(actor.companyId, {
         entityType: "Project",
         entityId: bundle.project.id,
-        action: "TAYQAN_MEASUREMENT_PASS_COMPLETED",
-        actorName: actor.fullName,
+        action: persistencePolicy.completionAuditAction,
+        actorName: persistencePolicy.actorName ?? actor.fullName,
         payload: {
-          measurementVersion: TAYQAN_MEASUREMENT_VERSION,
+          measurementVersion: persistencePolicy.measurementVersion,
           operationId: options.completionAuditOperationId ?? null,
           sourceFileCount: bundle.sourceFileIds.length,
           pageCount: bundle.pages.length,
@@ -796,6 +1012,7 @@ export async function prepareTayqanMeasurementProposals(
           seniorReview: result.seniorReview,
           governingContext: bundle.governingContext,
           professionallyConfirmed: false,
+          systemValidated: persistencePolicy.systemValidated,
         },
       });
     },
@@ -812,5 +1029,7 @@ export async function prepareTayqanMeasurementProposals(
     provider: result.provider,
     model: result.model,
     seniorReview: result.seniorReview,
+    classifications: bundle.pages.flatMap((page) => page.classification ? [page.classification] : []),
+    conceptSchedule: buildPreliminaryConceptSchedule(bundle.pages),
   };
 }

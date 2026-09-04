@@ -1,5 +1,5 @@
+import { createHash } from "node:crypto";
 import { ExtractionEngineType, ExtractionJobStatus } from "@prisma/client";
-import { PDFParse } from "pdf-parse";
 import { prisma } from "@/lib/db/prisma";
 import { extractionJobQueue } from "@/lib/jobs/extraction-worker";
 import { createStorageAdapter, resolveStorageProvider } from "@/lib/storage/storage-factory";
@@ -7,6 +7,7 @@ import type { DocumentStorageAdapter } from "@/lib/storage/document-storage-adap
 import { buildStorageKey } from "@/lib/files/file-security";
 import { replaceDrawingPagesForFile, type CreateDrawingPageInput } from "@/lib/repositories/drawing-page-repository";
 import { buildPageTextExtraction } from "@/lib/files/pdf-text-extraction";
+import { loadPdfParse } from "@/lib/files/pdf-parse-runtime";
 
 const IMAGE_EXTENSIONS = new Set(["png", "jpg", "jpeg", "tif", "tiff"]);
 
@@ -25,6 +26,18 @@ function getProjectFileStorageAdapter(): DocumentStorageAdapter {
   return cachedStorageAdapter;
 }
 
+async function computeDurableChecksum(storage: DocumentStorageAdapter, storageKey: string): Promise<string> {
+  const { body } = await storage.getObjectStream(storageKey);
+  const reader = body.getReader();
+  const hash = createHash("sha256");
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    hash.update(value);
+  }
+  return hash.digest("hex");
+}
+
 /**
  * Rasterizes a file into one or more viewable DrawingPage images: real page
  * rasterization for PDFs (via pdf-parse's PDFParse.getScreenshot(), backed
@@ -41,6 +54,12 @@ function getProjectFileStorageAdapter(): DocumentStorageAdapter {
 extractionJobQueue.registerHandler(ExtractionEngineType.FILE_PREPROCESSING, async (job, ctx) => {
   const file = await prisma.projectFile.findUniqueOrThrow({ where: { id: job.projectFileId } });
   await ctx.updateProgress(10, "reading file");
+  const storage = getProjectFileStorageAdapter();
+  const checksum = await computeDurableChecksum(storage, file.storageKey);
+  await prisma.projectFile.update({
+    where: { id: file.id },
+    data: { checksum },
+  });
 
   if (IMAGE_EXTENSIONS.has(file.extension)) {
     const pages: CreateDrawingPageInput[] = [{ projectFileId: file.id, pageNumber: 1, imageStorageKey: file.storageKey, processingStatus: "READY" }];
@@ -52,8 +71,8 @@ extractionJobQueue.registerHandler(ExtractionEngineType.FILE_PREPROCESSING, asyn
     return { status: ExtractionJobStatus.NEEDS_REVIEW, resultSummary: { message: `Page rasterization is not supported yet for .${file.extension} files.`, pagesCreated: 0 } };
   }
 
-  const storage = getProjectFileStorageAdapter();
   const buffer = await storage.getObject(file.storageKey);
+  const { PDFParse } = await loadPdfParse();
   const parser = new PDFParse({ data: buffer });
   try {
     await ctx.updateProgress(30, "rasterizing pages");

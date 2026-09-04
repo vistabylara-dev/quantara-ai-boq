@@ -3,6 +3,7 @@ import {
   BOQItemStatus,
   BOQStatus,
   ExtractedEntityStatus,
+  ExtractionEngineType,
   MarginMode,
   Prisma,
   RateProvenanceSource,
@@ -281,6 +282,7 @@ export function toBOQDTO(
           quantity: {
             sourceType: item.quantityProvenance?.sourceType ?? null,
             confirmed: Boolean(item.quantityProvenance?.confirmedAt) && item.quantityProvenance?.sourceType !== "LEGACY_UNVERIFIED",
+            quantityCalculationId: item.quantityProvenance?.quantityCalculationId ?? null,
           },
           rate: {
             sourceType: item.rateProvenance?.sourceType ?? null,
@@ -817,9 +819,33 @@ function snapshotValue(record: BOQRecord): Prisma.InputJsonValue {
   return JSON.parse(JSON.stringify(record)) as Prisma.InputJsonValue;
 }
 
+export function assertAutonomousPreparationPayable(resultSummary: unknown): void {
+  if (resultSummary && typeof resultSummary === "object" && !Array.isArray(resultSummary)
+    && (resultSummary as Record<string, unknown>).payableEligibility === "NOT_PAYABLE_CONCEPT") {
+    throw new AppError(
+      "CONCEPT_BOQ_NOT_PAYABLE",
+      "This preliminary concept quantity schedule is not eligible for payable verification or lock. Upload coordinated Tender or IFC drawings.",
+      400,
+    );
+  }
+}
+
 export async function lockBOQ(companyId: string, boqId: string, actorName = "Development User", lockedByUserId?: string) {
   const existing = await getBOQRecord(companyId, boqId);
   if (existing.isLocked) return toBOQDTO(existing);
+
+  const recentPreparations = await prisma.extractionJob.findMany({
+    where: { companyId, projectId: existing.projectId, engineType: ExtractionEngineType.QUANTITY_CALCULATION },
+    orderBy: { createdAt: "desc" },
+    take: 25,
+    select: { configurationJson: true, resultSummaryJson: true },
+  });
+  const matchingPreparation = recentPreparations.find((candidate) => {
+    const configuration = candidate.configurationJson;
+    return configuration !== null && typeof configuration === "object" && !Array.isArray(configuration)
+      && (configuration as Record<string, unknown>).targetBoqId === boqId;
+  });
+  assertAutonomousPreparationPayable(matchingPreparation?.resultSummaryJson);
 
   const { canCreateBoq, recordBoqCompleted } = await import("@/lib/entitlements/entitlement-service");
   const boqCheck = await canCreateBoq(companyId);

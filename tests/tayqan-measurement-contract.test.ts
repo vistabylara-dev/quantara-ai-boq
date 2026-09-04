@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { ExtractedEntityType, QuantityCalculationType } from "@prisma/client";
 import {
   derivationConfidenceCap,
@@ -19,12 +19,88 @@ import {
   type TayqanMeasurementPageEvidence,
 } from "../src/lib/tayqan/tayqan-measurement-reasoner";
 import type { TayqanMeasurementSubject } from "../src/lib/tayqan/tayqan-measurement-contract";
-import { createOpenAITayqanMeasurementReasoner } from "../src/lib/tayqan/openai-tayqan-measurement-reasoner";
+import {
+  classifyProviderFailure,
+  createOpenAITayqanMeasurementReasoner,
+  deterministicMeasurementInputContract,
+  providerResponseMetadata,
+  verifyOpenAIProviderProject,
+} from "../src/lib/tayqan/openai-tayqan-measurement-reasoner";
+
+it("publishes the exact deterministic input keys used for autonomous measurement", () => {
+  const contract = deterministicMeasurementInputContract();
+  expect(contract).toContain("FLOOR_AREA=>netFloorArea:unit=m2:required");
+  expect(contract).toContain("COUNT=>verifiedCount:unit=null:required");
+  expect(contract).toContain("WALL_AREA=>wallLength:unit=m:required, wallHeight:unit=m:required");
+});
 
 const PAGE_PLAN = "11111111-1111-4111-8111-111111111111";
 const PAGE_SECTION = "22222222-2222-4222-8222-222222222222";
 const PAGE_SCHEDULE = "33333333-3333-4333-8333-333333333333";
 const PAGE_DETAIL = "44444444-4444-4444-8444-444444444444";
+
+it("retains only sanitized provider readiness headers", () => {
+  const metadata = providerResponseMetadata(new Response(null, {
+    headers: {
+      "x-request-id": "req_funded_preview",
+      "openai-organization": "org_funded",
+      "openai-project": "proj_Osq_funded",
+      "x-ratelimit-limit-tokens": "500000",
+      "authorization": "Bearer must-never-be-recorded",
+    },
+  }));
+
+  expect(metadata).toMatchObject({
+    requestId: "req_funded_preview",
+    organizationId: "org_funded",
+    projectId: "proj_Osq_funded",
+    tokenLimit: "500000",
+  });
+  expect(JSON.stringify(metadata)).not.toContain("must-never-be-recorded");
+});
+
+it("preflights the funded project without sending a billable response request", async () => {
+  const fetchMock = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => new Response(JSON.stringify({ id: "gpt-5.6" }), {
+    status: 200,
+    headers: {
+      "Content-Type": "application/json",
+      "x-request-id": "req_preflight",
+      "openai-project": "proj_qnek_funded",
+    },
+  }));
+  const fakeFetch = fetchMock as unknown as typeof fetch;
+  await expect(verifyOpenAIProviderProject({
+    apiKey: "test-key",
+    model: "gpt-5.6",
+    expectedProjectId: "proj_qnek_funded",
+  }, fakeFetch)).resolves.toEqual({
+    projectId: "proj_qnek_funded",
+    requestId: "req_preflight",
+  });
+  expect(fetchMock).toHaveBeenCalledTimes(1);
+  expect(fetchMock.mock.calls[0]?.[0]).toBe("https://api.openai.com/v1/models/gpt-5.6");
+  expect(fetchMock.mock.calls[0]?.[1]).toMatchObject({
+    method: "GET",
+    headers: {
+      Authorization: "Bearer test-key",
+      "OpenAI-Project": "proj_qnek_funded",
+    },
+  });
+});
+
+it("rejects a mismatched project before consuming job recovery", async () => {
+  const fakeFetch = vi.fn(async () => new Response(null, {
+    status: 200,
+    headers: { "openai-project": "proj_wrong" },
+  })) as typeof fetch;
+  await expect(verifyOpenAIProviderProject({
+    apiKey: "test-key",
+    model: "gpt-5.6",
+    expectedProjectId: "proj_qnek_funded",
+  }, fakeFetch)).rejects.toMatchObject({
+    code: "TAYQAN_PREVIEW_PROVIDER_PROJECT_MISMATCH",
+  });
+});
 
 function page(overrides: Partial<TayqanMeasurementPageEvidence>): TayqanMeasurementPageEvidence {
   return {
@@ -704,6 +780,11 @@ describe("TAYQAN senior cross-page orchestration", () => {
 });
 
 describe("TAYQAN senior OpenAI orchestration — mocked, zero network", () => {
+  it("keeps credit exhaustion distinct from a funded organization's rate limit", () => {
+    expect(classifyProviderFailure(429, "credit_balance_exhausted"))
+      .toBe("credit_balance_exhausted");
+  });
+
   function responseJson(id: string, payload: unknown): Response {
     return new Response(JSON.stringify({
       id,
@@ -762,6 +843,71 @@ describe("TAYQAN senior OpenAI orchestration — mocked, zero network", () => {
     await expect(reasoner(input)).rejects.toThrow(
       "Provider request: req_tayqan_diagnostic",
     );
+  });
+
+  it("classifies a 429 from its sanitized provider body and preserves project rate-limit metadata", async () => {
+    const fakeFetch = vi.fn(async () => new Response(JSON.stringify({
+      error: {
+        type: "tokens",
+        code: "rate_limit_exceeded",
+        message: "Sensitive provider wording must not be persisted.",
+      },
+    }), {
+      status: 429,
+      headers: {
+        "Content-Type": "application/json",
+        "x-request-id": "req_tayqan_rate_limit",
+        "openai-organization": "org_funded",
+        "openai-project": "proj_funded",
+        "retry-after": "3",
+        "x-ratelimit-limit-tokens": "30000",
+        "x-ratelimit-remaining-tokens": "0",
+        "x-ratelimit-reset-tokens": "3s",
+      },
+    })) as typeof fetch;
+
+    const reasoner = createOpenAITayqanMeasurementReasoner({
+      apiKey: "test-key",
+      model: "gpt-5.6",
+    }, fakeFetch);
+
+    let captured: unknown;
+    try {
+      await reasoner({
+        bundle: {
+          project: { id: "project-1", slug: "project-1", name: "Test", reference: "Q-001" },
+          governingContext: null,
+          sourceFileIds: ["aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"],
+          pages: [page({})],
+          existingEntities: [],
+          existingBoqItems: [],
+          rooms: [],
+        },
+        loadPageImageDataUrl: async () => null,
+      });
+    } catch (error) {
+      captured = error;
+    }
+
+    expect(fakeFetch).toHaveBeenCalledTimes(1);
+    expect(captured).toMatchObject({
+      code: "TAYQAN_MEASUREMENT_AI_REQUEST_REJECTED",
+      message: expect.stringContaining("rate_limit_exceeded"),
+      providerDiagnostic: {
+        classification: "rate_limit_exceeded",
+        providerCode: "rate_limit_exceeded",
+        providerType: "tokens",
+        httpStatus: 429,
+        requestId: "req_tayqan_rate_limit",
+        organizationId: "org_funded",
+        projectId: "proj_funded",
+        retryAfter: "3",
+        tokenLimit: "30000",
+        remainingTokens: "0",
+        tokenReset: "3s",
+      },
+    });
+    expect((captured as Error).message).not.toContain("Sensitive provider wording");
   });
 
   it("surfaces an incomplete structured response as a safe retryable TAYQAN error", async () => {
@@ -1123,7 +1269,7 @@ describe("TAYQAN senior work-order governance wiring", () => {
       "src/lib/services/tayqan-measurement-service.ts",
       "utf8",
     );
-    expect(service).toContain('|| "gpt-5.6"');
+    expect(service).toContain('|| "gpt-5.6-sol"');
     expect(service).toContain(
       'env.TAYQAN_SENIOR_PRO_MODE?.trim() === "1"',
     );

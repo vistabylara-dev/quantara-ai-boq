@@ -45,6 +45,10 @@ import { getProjectRecord } from "@/lib/repositories/project-repository";
 import { TAYQAN_MEASUREMENT_CALCULATED_BY_PREFIX } from "@/lib/tayqan/tayqan-measurement-contract";
 import { FURNITURE_CANDIDATE_TECHNICAL_DATA_KIND } from "@/lib/furniture/types";
 import { FURNITURE_ORDER_ITEM_TECHNICAL_DATA_KIND } from "@/lib/furniture/order-item-mapper";
+import {
+  resolveAutonomousMeasurementPolicyRule,
+  type AutonomousMeasurementPolicyRule,
+} from "@/lib/autonomous-boq/measurement-policy";
 
 const AI_DRAFT_FALLBACK_CODE = "AI-DRAFT";
 const REVIEWABLE_ENTITY_STATUSES = new Set(["EXTRACTED", "NEEDS_REVIEW"]);
@@ -58,6 +62,22 @@ function jsonRecord(value: unknown): Record<string, unknown> | null {
   return value !== null && typeof value === "object" && !Array.isArray(value)
     ? value as Record<string, unknown>
     : null;
+}
+
+function formatAutonomousCategoryPath(value: unknown): string | null {
+  const path = jsonRecord(value);
+  if (!path) return null;
+  const segments = [
+    path.industry,
+    path.discipline,
+    path.drawingType,
+    path.workPackage,
+    path.boqSectionTitle,
+    path.boqItemClassification,
+    path.measurementRuleId,
+    path.unit,
+  ].filter((segment): segment is string => typeof segment === "string" && segment.trim().length > 0);
+  return segments.length === 8 ? `Category path: ${segments.join(" → ")}` : null;
 }
 
 function toMeasurementEvidencePage(row: {
@@ -115,6 +135,18 @@ function sectionView(section: {
   };
 }
 
+export function missingAutonomousBoqSections(
+  existingSections: readonly { code: string }[],
+  rules: readonly { sectionCode: string; title: string }[],
+): Array<{ code: string; title: string }> {
+  const existingCodes = new Set(existingSections.map((section) => section.code));
+  return [...new Map(
+    rules
+      .filter((rule) => !existingCodes.has(rule.sectionCode))
+      .map((rule) => [rule.sectionCode, { code: rule.sectionCode, title: rule.title }] as const),
+  ).values()];
+}
+
 function assertAiDraftEditable(boq: Awaited<ReturnType<typeof getBOQRecord>>) {
   if (
     boq.isLocked
@@ -134,7 +166,22 @@ export type AiDraftGenerationOptions = {
   targetBoqId?: string;
   projectFileIds?: readonly string[];
   /** Default preserves normal Quantara. TAYQAN opts in explicitly. */
-  quantityMode?: "EXTRACTION_ONLY" | "TAYQAN_MEASUREMENT_PROPOSAL";
+  quantityMode?: "EXTRACTION_ONLY" | "TAYQAN_MEASUREMENT_PROPOSAL"
+    | "AUTONOMOUS_SYSTEM_VALIDATED";
+  /** Required only by AUTONOMOUS_SYSTEM_VALIDATED. */
+  autonomousPolicy?: {
+    operationHash: string;
+    rules: ReadonlyArray<AutonomousMeasurementPolicyRule & {
+      sectionCode: string;
+      title: string;
+    }>;
+  };
+  /** Forces a non-payable review schedule into one clearly labelled section. */
+  reviewSection?: {
+    code: string;
+    title: string;
+    description: string;
+  };
 };
 
 export async function generateAiDraftBoq(
@@ -143,6 +190,20 @@ export async function generateAiDraftBoq(
   options: AiDraftGenerationOptions = {},
 ) {
   requireCapability(actor, "boq:edit");
+  const autonomousMode = options.quantityMode === "AUTONOMOUS_SYSTEM_VALIDATED";
+  if (
+    autonomousMode
+    && (
+      !options.autonomousPolicy
+      || !/^[a-f0-9]{64}$/i.test(options.autonomousPolicy.operationHash)
+      || options.autonomousPolicy.rules.length === 0
+    )
+  ) {
+    throw new ConflictError(
+      "AUTONOMOUS_AI_DRAFT_POLICY_REQUIRED",
+      "Autonomous BOQ assembly requires the frozen operation hash and at least one allowed industry rule.",
+    );
+  }
   const project = await getProjectRecord(actor.companyId, projectIdentifier);
 
   const latest = options.targetBoqId
@@ -205,8 +266,8 @@ export async function generateAiDraftBoq(
       orderBy: [{ projectFileId: "asc" }, { createdAt: "asc" }],
     });
 
-    const tayqanMeasurements =
-      options.quantityMode === "TAYQAN_MEASUREMENT_PROPOSAL"
+    const calculatedMeasurements =
+      (options.quantityMode === "TAYQAN_MEASUREMENT_PROPOSAL" || autonomousMode)
       && rows.length > 0
         ? await tx.quantityCalculation.findMany({
             where: {
@@ -217,11 +278,17 @@ export async function generateAiDraftBoq(
               },
               calculatedBy: {
                 startsWith:
-                  TAYQAN_MEASUREMENT_CALCULATED_BY_PREFIX,
+                  autonomousMode
+                    ? `UNIVERSAL:autonomous-boq/v1:${options.autonomousPolicy!.operationHash}:`
+                    : TAYQAN_MEASUREMENT_CALCULATED_BY_PREFIX,
               },
-              status: {
-                not: "REJECTED",
-              },
+              ...(autonomousMode
+                ? {
+                    status: "CONFIRMED" as const,
+                    confirmedAt: { not: null },
+                    confirmedByUserId: null,
+                  }
+                : { status: { not: "REJECTED" as const } }),
             },
             orderBy: {
               updatedAt: "desc",
@@ -229,17 +296,19 @@ export async function generateAiDraftBoq(
           })
         : [];
 
-    const tayqanMeasurementByEntityId =
-      new Map<string, (typeof tayqanMeasurements)[number]>();
+    // Preserves the original tayqanMeasurementByEntityId one-latest-result-per-entity
+    // invariant while extending the same map to operation-bound autonomous results.
+    const measurementByEntityId =
+      new Map<string, (typeof calculatedMeasurements)[number]>();
 
-    for (const measurement of tayqanMeasurements) {
+    for (const measurement of calculatedMeasurements) {
       if (
         measurement.extractedEntityId
-        && !tayqanMeasurementByEntityId.has(
+        && !measurementByEntityId.has(
           measurement.extractedEntityId
         )
       ) {
-        tayqanMeasurementByEntityId.set(
+        measurementByEntityId.set(
           measurement.extractedEntityId,
           measurement
         );
@@ -247,8 +316,8 @@ export async function generateAiDraftBoq(
     }
 
     const useQuantaraMeasurementIntelligence =
-      options.quantityMode !==
-      "TAYQAN_MEASUREMENT_PROPOSAL";
+      options.quantityMode !== "TAYQAN_MEASUREMENT_PROPOSAL"
+      && !autonomousMode;
 
     const sourceFileIds =
       useQuantaraMeasurementIntelligence
@@ -282,26 +351,58 @@ export async function generateAiDraftBoq(
     const suggestionByEntityId =
       new Map<string, AiMeasurementSuggestion>();
 
+    const autonomousRuleByEntityId = new Map<
+      string,
+      NonNullable<AiDraftGenerationOptions["autonomousPolicy"]>["rules"][number]
+    >();
+
+    if (autonomousMode) {
+      for (const row of rows) {
+        const measurement = measurementByEntityId.get(row.id);
+        if (!measurement) continue;
+        const technicalData = jsonRecord(row.technicalDataJson);
+        const workPackage = typeof technicalData?.workPackage === "string"
+          ? technicalData.workPackage
+          : "";
+        const binding = resolveAutonomousMeasurementPolicyRule({
+          workPackage,
+          calculationType: measurement.calculationType,
+          calculatedResultUnit: measurement.resultUnit,
+          allowedRules: options.autonomousPolicy!.rules,
+        });
+        const selectedRule = options.autonomousPolicy!.rules.find(
+          (rule) => rule.id === binding.ruleId,
+        );
+        if (!selectedRule || measurement.resultUnit !== binding.resultUnit) {
+          throw new ConflictError(
+            "AUTONOMOUS_MEASUREMENT_POLICY_DRIFT",
+            "A preserved autonomous calculation no longer matches its frozen industry rule and payable unit.",
+          );
+        }
+        autonomousRuleByEntityId.set(row.id, selectedRule);
+      }
+    }
+
     const candidates = rows.map((row) => {
       const extractedCandidate =
         toCandidate(row);
 
-      const tayqanMeasurement =
-        tayqanMeasurementByEntityId.get(row.id)
+      const calculatedMeasurement =
+        measurementByEntityId.get(row.id)
         ?? null;
 
       const baseCandidate: AiDraftCandidate =
-        tayqanMeasurement
+        calculatedMeasurement
           ? {
               ...extractedCandidate,
               quantity:
-                tayqanMeasurement.resultValue.toNumber(),
+                calculatedMeasurement.resultValue.toNumber(),
               unit:
-                tayqanMeasurement.resultUnit,
+                calculatedMeasurement.resultUnit,
               confidence:
                 Math.min(
                   extractedCandidate.confidence,
-                  tayqanMeasurement.confidence.toNumber(),
+                  calculatedMeasurement.confidence.toNumber(),
                 ),
             }
           : extractedCandidate;
@@ -370,9 +471,13 @@ export async function generateAiDraftBoq(
           candidateByEntityId.get(row.id)
           ?? toCandidate(row);
 
-        const tayqanMeasurement =
-          tayqanMeasurementByEntityId.get(row.id)
+        const calculatedMeasurement =
+          measurementByEntityId.get(row.id)
           ?? null;
+
+        const autonomousRule = autonomousMode
+          ? autonomousRuleByEntityId.get(row.id) ?? null
+          : null;
 
         const suggestion =
           useQuantaraMeasurementIntelligence
@@ -384,7 +489,8 @@ export async function generateAiDraftBoq(
           row,
           candidate,
           suggestion,
-          tayqanMeasurement,
+          calculatedMeasurement,
+          autonomousRule,
 
           methodRecommendation:
             useQuantaraMeasurementIntelligence
@@ -397,12 +503,18 @@ export async function generateAiDraftBoq(
               : null,
         };
       })
-      .filter(({ row, candidate }) =>
+      .filter(({ row, candidate, calculatedMeasurement, autonomousRule }) =>
         !alreadyPresentIds.has(row.id)
         && isAiDraftCandidateUsable(candidate)
+        && (!autonomousMode || Boolean(calculatedMeasurement && autonomousRule))
       );
 
     if (toAdd.length === 0) {
+      const autonomousAlreadyAssembled = autonomousMode
+        && autonomousRuleByEntityId.size > 0
+        && [...autonomousRuleByEntityId.keys()].every((entityId) =>
+          alreadyPresentIds.has(entityId)
+        );
       return {
         boqId: current.id,
         addedCount: 0,
@@ -412,16 +524,66 @@ export async function generateAiDraftBoq(
         reviewedAddedCount: 0,
         measurementIncompleteAddedCount: 0,
         inferredMeasurementAddedCount: 0,
+        systemValidated: autonomousMode,
+        readyForRates: autonomousAlreadyAssembled,
       };
     }
 
-    const businessSections = current.sections
+    let businessSections = current.sections
       .filter((section) => section.code !== AI_DRAFT_FALLBACK_CODE)
       .map(sectionView);
 
-    const needsFallbackSection = toAdd.some(({ candidate }) =>
-      chooseAiDraftSection(businessSections, candidate) === null,
-    );
+    if (autonomousMode) {
+      const requiredRules = toAdd.flatMap(({ autonomousRule }) => autonomousRule ? [autonomousRule] : []);
+      const missingSections = missingAutonomousBoqSections(businessSections, requiredRules);
+      if (missingSections.length > 0) {
+        const firstSortOrder = Math.max(0, ...current.sections.map((section) => section.sortOrder)) + 1;
+        await tx.bOQSection.createMany({
+          data: missingSections.map((section, index) => ({
+            companyId: actor.companyId,
+            boqId: current.id,
+            code: section.code,
+            title: section.title,
+            description: "Section synchronized from the frozen autonomous industry policy.",
+            sortOrder: firstSortOrder + index,
+          })),
+          skipDuplicates: true,
+        });
+        const synchronized = await tx.bOQSection.findMany({
+          where: {
+            companyId: actor.companyId,
+            boqId: current.id,
+            code: { in: missingSections.map((section) => section.code) },
+          },
+          select: { id: true, code: true, title: true, description: true },
+        });
+        businessSections = [
+          ...businessSections,
+          ...synchronized
+            .filter((section) => !businessSections.some((existing) => existing.code === section.code))
+            .map(sectionView),
+        ];
+      }
+    }
+
+    if (
+      autonomousMode
+      && toAdd.some(({ autonomousRule }) =>
+        !autonomousRule
+        || !businessSections.some((section) => section.code === autonomousRule.sectionCode)
+      )
+    ) {
+      throw new ConflictError(
+        "AUTONOMOUS_BOQ_SECTION_POLICY_DRIFT",
+        "The target BOQ no longer contains the exact section required by its frozen industry policy.",
+      );
+    }
+
+    const fallbackSectionCode = options.reviewSection?.code ?? AI_DRAFT_FALLBACK_CODE;
+    const needsFallbackSection = Boolean(options.reviewSection)
+      || (!autonomousMode && toAdd.some(({ candidate }) =>
+        chooseAiDraftSection(businessSections, candidate) === null,
+      ));
 
     const claimed = await tx.bOQ.updateMany({
       where: {
@@ -446,7 +608,7 @@ export async function generateAiDraftBoq(
     }
 
     let fallbackSectionId = current.sections.find(
-      (section) => section.code === AI_DRAFT_FALLBACK_CODE,
+      (section) => section.code === fallbackSectionCode,
     )?.id ?? null;
 
     if (needsFallbackSection && !fallbackSectionId) {
@@ -454,10 +616,10 @@ export async function generateAiDraftBoq(
         data: {
           companyId: actor.companyId,
           boqId: current.id,
-          code: AI_DRAFT_FALLBACK_CODE,
-          title: "AI Draft - Review",
-          description:
-            "Extracted project items that could not be matched safely to an existing industry BOQ section. Professional review required.",
+          code: fallbackSectionCode,
+          title: options.reviewSection?.title ?? "AI Draft - Review",
+          description: options.reviewSection?.description
+            ?? "Extracted project items that could not be matched safely to an existing industry BOQ section. Professional review required.",
           sortOrder:
             Math.max(0, ...current.sections.map((section) => section.sortOrder)) + 1,
         },
@@ -487,10 +649,15 @@ export async function generateAiDraftBoq(
       row,
       candidate,
       suggestion,
-      tayqanMeasurement,
+      calculatedMeasurement,
+      autonomousRule,
       methodRecommendation,
     } of toAdd) {
-      const matchedSectionId = chooseAiDraftSection(businessSections, candidate);
+      const matchedSectionId = options.reviewSection
+        ? null
+        : autonomousRule
+        ? businessSections.find((section) => section.code === autonomousRule.sectionCode)?.id ?? null
+        : chooseAiDraftSection(businessSections, candidate);
       const sectionId = matchedSectionId ?? fallbackSectionId;
 
       if (!sectionId) {
@@ -537,6 +704,10 @@ export async function generateAiDraftBoq(
         methodMarker,
       ].filter((value): value is string => Boolean(value)).join(" | ");
 
+      const categoryPath = formatAutonomousCategoryPath(
+        jsonRecord(row.technicalDataJson)?.categoryPath,
+      );
+
       const specification = [
         row.sourceText?.trim() || null,
         suggestion?.evidenceSummary
@@ -577,8 +748,15 @@ export async function generateAiDraftBoq(
           sourceReference,
           confidenceScore: row.confidence,
           status: BOQItemStatus.DRAFT,
-          notes: tayqanMeasurement
-            ? "TAYQAN measured this draft quantity from project drawing evidence using the deterministic quantity engine. Professional review is still required; unit price is intentionally left for the engineer."
+          notes: options.reviewSection
+            ? "Preliminary concept quantity schedule only. Not for contract or payment. The source quantity remains linked to its extracted drawing evidence and cannot pass payable lock while concept blockers remain."
+            : autonomousMode
+            ? [
+                "Quantara system-validated this quantity against the frozen project drawing scope and deterministic industry rule. Only the unit rate is awaiting user input.",
+                categoryPath,
+              ].filter(Boolean).join("\n")
+            : calculatedMeasurement
+              ? "TAYQAN measured this draft quantity from project drawing evidence using the deterministic quantity engine. Professional review is still required; unit price is intentionally left for the engineer."
             : measurementComplete
               ? suggestion
                 ? `AI Draft from extracted project evidence with an AI-suggested measurement. Review the quantity/unit once in this BOQ before confirmation. Commercial rate selection is still required.${methodRecommendationNote}`
@@ -589,15 +767,15 @@ export async function generateAiDraftBoq(
         },
       });
 
-      const tayqanMeasurementConfirmed =
+      const calculatedMeasurementConfirmed =
         Boolean(
-          tayqanMeasurement
-          && tayqanMeasurement.status === "CONFIRMED"
-          && tayqanMeasurement.confirmedAt !== null
+          calculatedMeasurement
+          && calculatedMeasurement.status === "CONFIRMED"
+          && calculatedMeasurement.confirmedAt !== null
         );
 
       const previouslyReviewed = (
-        !tayqanMeasurement
+        !calculatedMeasurement
         && !suggestion
         && measurementComplete
         && (
@@ -612,34 +790,36 @@ export async function generateAiDraftBoq(
           companyId: actor.companyId,
           projectId: project.id,
           boqItemId: item.id,
-          sourceType: tayqanMeasurementConfirmed
+          sourceType: calculatedMeasurementConfirmed
             ? QuantityProvenanceSource.CONFIRMED_CALCULATION
             : previouslyReviewed
               ? QuantityProvenanceSource.REVIEWED_EXTRACTION
               : QuantityProvenanceSource.LEGACY_UNVERIFIED,
           extractedEntityId: row.id,
           quantityCalculationId:
-            tayqanMeasurement?.id ?? null,
+            calculatedMeasurement?.id ?? null,
           projectFileId: row.projectFileId,
           quantitySnapshot: quantity,
           unitSnapshot: unit,
           confirmedByUserId:
-            tayqanMeasurementConfirmed
-              ? tayqanMeasurement?.confirmedByUserId ?? null
+            calculatedMeasurementConfirmed
+              ? calculatedMeasurement?.confirmedByUserId ?? null
               : previouslyReviewed
                 ? row.confirmedByUserId
                 : null,
           confirmedByName:
-            tayqanMeasurementConfirmed
-              ? "Confirmed TAYQAN calculation"
+            calculatedMeasurementConfirmed
+              ? autonomousMode
+                ? "Quantara system validation"
+                : "Confirmed TAYQAN calculation"
               : previouslyReviewed
                 ? "Previously reviewed extraction"
-                : tayqanMeasurement
+                : calculatedMeasurement
                   ? "TAYQAN measurement - professional review pending"
                   : "AI draft - professional review pending",
           confirmedAt:
-            tayqanMeasurementConfirmed
-              ? tayqanMeasurement?.confirmedAt ?? null
+            calculatedMeasurementConfirmed
+              ? calculatedMeasurement?.confirmedAt ?? null
               : previouslyReviewed
                 ? row.confirmedAt
                 : null,
@@ -660,7 +840,9 @@ export async function generateAiDraftBoq(
           marginPercentageSnapshot: zero,
           currencySnapshot: current.project.currency,
           confirmedByUserId: null,
-          confirmedByName: "AI draft - rate selection pending",
+          confirmedByName: autonomousMode
+            ? "Autonomous BOQ - unit rate pending"
+            : "AI draft - rate selection pending",
           confirmedAt: null,
         },
       });
@@ -697,7 +879,9 @@ export async function generateAiDraftBoq(
       await createAuditLog(actor.companyId, {
         entityType: "BOQItem",
         entityId: item.id,
-        action: "AI_DRAFT_ITEM_ADDED",
+        action: autonomousMode
+          ? "AUTONOMOUS_BOQ_ITEM_ASSEMBLED"
+          : "AI_DRAFT_ITEM_ADDED",
         actorName: actor.fullName,
         payload: {
           boqId: current.id,
@@ -707,7 +891,14 @@ export async function generateAiDraftBoq(
           confidence: row.confidence.toString(),
           measurementComplete,
           tayqanMeasurementCalculationId:
-            tayqanMeasurement?.id ?? null,
+            autonomousMode ? null : calculatedMeasurement?.id ?? null,
+          autonomousQuantityCalculationId:
+            autonomousMode ? calculatedMeasurement?.id ?? null : null,
+          autonomousOperationHash:
+            autonomousMode ? options.autonomousPolicy?.operationHash ?? null : null,
+          autonomousRuleId: autonomousRule?.id ?? null,
+          autonomousCategoryPath: categoryPath,
+          systemValidated: autonomousMode,
           ...(suggestion
             ? {
                 measurementSuggestion: {
@@ -726,7 +917,9 @@ export async function generateAiDraftBoq(
     await createAuditLog(actor.companyId, {
       entityType: "BOQ",
       entityId: current.id,
-      action: "AI_DRAFT_GENERATED",
+      action: autonomousMode
+        ? "AUTONOMOUS_UNPRICED_BOQ_ASSEMBLED"
+        : "AI_DRAFT_GENERATED",
       actorName: actor.fullName,
       payload: {
         projectId: project.id,
@@ -738,6 +931,9 @@ export async function generateAiDraftBoq(
         measurementIncompleteAddedCount,
         inferredMeasurementAddedCount,
         ratesAutomaticallyApplied: false,
+        autonomousOperationHash:
+          autonomousMode ? options.autonomousPolicy?.operationHash ?? null : null,
+        systemValidated: autonomousMode,
       },
     }, tx);
 
@@ -750,6 +946,11 @@ export async function generateAiDraftBoq(
       reviewedAddedCount,
       measurementIncompleteAddedCount,
       inferredMeasurementAddedCount,
+      systemValidated: autonomousMode,
+      readyForRates:
+        autonomousMode
+        && toAdd.length > 0
+        && measurementIncompleteAddedCount === 0,
     };
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 }

@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { projectSchema, projectSchemaType } from "@/lib/validation/project-schema";
@@ -16,7 +16,13 @@ type IndustryOption = {
   key: string;
   name: string;
   enabled: boolean;
+  autonomousAvailability: "AUTONOMOUS_VERIFIED" | "SPECIALIZED_AUTONOMOUS" | "UNAVAILABLE";
 };
+
+const AUTONOMOUS_INDUSTRY_AVAILABILITY = new Set<IndustryOption["autonomousAvailability"]>([
+  "AUTONOMOUS_VERIFIED",
+  "SPECIALIZED_AUTONOMOUS",
+]);
 
 type ProjectCreateResult = {
   project: { id: string };
@@ -31,6 +37,9 @@ export default function NewProjectPage() {
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const selectableIndustries = useMemo(() => industries.filter((industry) =>
+    AUTONOMOUS_INDUSTRY_AVAILABILITY.has(industry.autonomousAvailability),
+  ), [industries]);
 
   const {
     register,
@@ -77,11 +86,11 @@ export default function NewProjectPage() {
   // picked (or is mid-typing around) is never silently overwritten.
   const hasDefaultedIndustryRef = useRef(false);
   useEffect(() => {
-    if (!hasDefaultedIndustryRef.current && industries[0]) {
-      setValue("industryEngineId", industries[0].key);
+    if (!hasDefaultedIndustryRef.current && selectableIndustries[0]) {
+      setValue("industryEngineId", selectableIndustries[0].key);
       hasDefaultedIndustryRef.current = true;
     }
-  }, [industries, setValue]);
+  }, [selectableIndustries, setValue]);
 
   const handleClientSelect = (client: Client) => {
     setSelectedClient(client);
@@ -104,10 +113,8 @@ export default function NewProjectPage() {
         language: data.language,
       });
       emitOnboardingActionComplete("PROJECT_CREATED", { projectId: result.project.id });
-      emitOnboardingActionComplete("BOQ_PREPARED", { projectId: result.project.id });
       trackFirstConversionEvent("first_project_created", { industry: data.industryEngineId });
-      trackFirstConversionEvent("first_boq_created", { source: "project_creation" });
-      router.push(`/projects/${encodeURIComponent(result.project.id)}/boq`);
+      router.push(`/projects/${encodeURIComponent(result.project.id)}/drawings`);
     } catch (submitError) {
       setFormError(getApiErrorMessage(submitError));
       if (submitError instanceof ApiClientError && submitError.code === "PROJECT_REFERENCE_EXISTS") {
@@ -124,8 +131,8 @@ export default function NewProjectPage() {
           <p className="text-sm uppercase tracking-[0.3em] text-slate-500">Create project</p>
           <h1 className="mt-2 text-3xl font-semibold text-white">New project workspace</h1>
           <p className="mt-2 text-slate-400">
-            Create a project against an enabled industry engine. A default R01 BOQ with the
-            engine&apos;s standard sections is created automatically.
+            Select the project industry, then upload the drawings. Quantara will prepare the
+            measured BOQ so you only need to add unit rates.
           </p>
         </div>
 
@@ -146,7 +153,7 @@ export default function NewProjectPage() {
             </button>
           </div>
         )}
-        {!industriesLoading && !industriesError && industries.length === 0 && (
+        {!industriesLoading && !industriesError && selectableIndustries.length === 0 && (
           <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-amber-900 bg-amber-950/50 px-4 py-3 text-sm text-amber-300">
             <span>No industry engines are enabled for this company yet. Enable at least one from Industries before creating a project.</span>
             <button
@@ -163,13 +170,13 @@ export default function NewProjectPage() {
           <div className="grid gap-4 sm:grid-cols-2">
             <label className="block text-sm text-slate-300">
               <span className="text-slate-400">Project name</span>
-              <input className="mt-2 w-full rounded-2xl border border-slate-800 bg-slate-900 px-4 py-3 text-white outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20" {...register("name")} />
-              {errors.name && <p className="mt-2 text-xs text-rose-400">{errors.name.message}</p>}
+              <input aria-invalid={Boolean(errors.name)} aria-describedby={errors.name ? "project-name-error" : undefined} className="mt-2 w-full rounded-2xl border border-slate-800 bg-slate-900 px-4 py-3 text-white outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20" {...register("name")} />
+              {errors.name && <p id="project-name-error" role="alert" className="mt-2 text-xs text-rose-400">{errors.name.message}</p>}
             </label>
             <label className="block text-sm text-slate-300">
               <span className="text-slate-400">Project reference</span>
-              <input className="mt-2 w-full rounded-2xl border border-slate-800 bg-slate-900 px-4 py-3 text-white outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20" {...register("reference")} />
-              {errors.reference && <p className="mt-2 text-xs text-rose-400">{errors.reference.message}</p>}
+              <input aria-invalid={Boolean(errors.reference)} aria-describedby={errors.reference ? "project-reference-error" : undefined} className="mt-2 w-full rounded-2xl border border-slate-800 bg-slate-900 px-4 py-3 text-white outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20" {...register("reference")} />
+              {errors.reference && <p id="project-reference-error" role="alert" className="mt-2 text-xs text-rose-400">{errors.reference.message}</p>}
             </label>
           </div>
 
@@ -185,17 +192,26 @@ export default function NewProjectPage() {
                 name="industryEngineId"
                 render={({ field }) => (
                   <select
+                    aria-invalid={Boolean(errors.industryEngineId)}
+                    aria-describedby={errors.industryEngineId ? "project-industry-error" : "project-industry-help"}
                     className="mt-2 w-full rounded-2xl border border-slate-800 bg-slate-900 px-4 py-3 text-white outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
                     {...field}
                   >
                     <option value="" disabled>Select an industry engine</option>
                     {industries.map((industry) => (
-                      <option key={industry.id} value={industry.key}>{industry.name}</option>
+                      <option
+                        key={industry.id}
+                        value={industry.key}
+                        disabled={!AUTONOMOUS_INDUSTRY_AVAILABILITY.has(industry.autonomousAvailability)}
+                      >
+                        {industry.name}{industry.autonomousAvailability === "UNAVAILABLE" ? " (Coming soon)" : ""}
+                      </option>
                     ))}
                   </select>
                 )}
               />
-              {errors.industryEngineId && <p className="mt-2 text-xs text-rose-400">{errors.industryEngineId.message}</p>}
+              <p id="project-industry-help" className="mt-2 text-xs text-slate-500">Only industries with an autonomous drawing-to-BOQ workflow are selectable.</p>
+              {errors.industryEngineId && <p id="project-industry-error" role="alert" className="mt-2 text-xs text-rose-400">{errors.industryEngineId.message}</p>}
             </label>
           </div>
 
@@ -231,7 +247,7 @@ export default function NewProjectPage() {
           </label>
 
           {formError && (
-            <div className="rounded-2xl border border-rose-900 bg-rose-950/50 px-4 py-3 text-sm text-rose-300">
+            <div role="alert" className="rounded-2xl border border-rose-900 bg-rose-950/50 px-4 py-3 text-sm text-rose-300">
               {formError}
             </div>
           )}
@@ -239,10 +255,10 @@ export default function NewProjectPage() {
           <div className="flex justify-end">
             <button
               type="submit"
-              disabled={isSubmitting || industries.length === 0}
+              disabled={isSubmitting || selectableIndustries.length === 0}
               className="inline-flex rounded-2xl bg-blue-600 px-6 py-3 text-sm font-semibold text-white transition hover:bg-blue-500 disabled:opacity-60"
             >
-              {isSubmitting ? "Creating project..." : "Create project"}
+              {isSubmitting ? "Creating project..." : "Create project and upload drawings"}
             </button>
           </div>
         </form>

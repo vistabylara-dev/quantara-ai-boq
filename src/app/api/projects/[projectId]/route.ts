@@ -2,7 +2,8 @@ import { apiSuccess, handleApiError, parseJsonBody } from "@/lib/http/api-respon
 import { getCurrentActor } from "@/lib/auth/current-actor";
 import { setActorContext, withActorRequestContext } from "@/lib/auth/request-context";
 import { requireCapability } from "@/lib/auth/rbac";
-import { archiveProject, getProject, updateProject } from "@/lib/repositories/project-repository";
+import { getProject, updateProject } from "@/lib/repositories/project-repository";
+import { deleteUnusedProject } from "@/lib/services/project-deletion-service";
 import type { ZodSchema } from "zod";
 import {
   projectUpdateRequestSchema,
@@ -45,9 +46,8 @@ async function DELETEHandler(_request: Request, context: RouteContext) {
   try {
     const actor = await getCurrentActor();
     setActorContext(actor);
-    requireCapability(actor, "projects:archive");
     const params = await context.params;
-    const project = await archiveProject(actor.companyId, params.projectId);
+    const project = await deleteUnusedProject(actor, params.projectId);
     return apiSuccess(project);
   } catch (error) {
     return handleApiError(error);

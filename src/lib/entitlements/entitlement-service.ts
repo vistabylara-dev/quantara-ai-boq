@@ -94,7 +94,12 @@ export async function getCompanyEntitlements(companyId: string): Promise<Company
     include: { softwarePlan: true },
   });
 
-  const isTrial = fresh.status === SubscriptionStatus.TRIAL;
+  // Some legacy/self-service subscriptions were persisted as ACTIVE while
+  // still pointing at the canonical TRIAL plan. Plan type is authoritative
+  // for commercial limits; otherwise those accounts fall back to the stale
+  // SoftwarePlan.maxProjects value instead of TRIAL_LIMITS.
+  const isTrial = fresh.status === SubscriptionStatus.TRIAL
+    || fresh.softwarePlan.planType === PlanType.TRIAL;
   const isActive = fresh.status === SubscriptionStatus.ACTIVE || isTrial;
   const trialDaysRemaining = isTrial && fresh.trialExpiresAt
     ? Math.max(0, Math.ceil((fresh.trialExpiresAt.getTime() - Date.now()) / (24 * 60 * 60 * 1000)))

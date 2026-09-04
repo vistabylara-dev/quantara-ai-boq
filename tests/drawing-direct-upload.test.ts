@@ -335,7 +335,7 @@ describe("Direct-to-Blob drawing upload (integration, real local Postgres, fake 
 
       const stored = await prisma.projectFile.findUniqueOrThrow({ where: { id: finalizedDrawingId } });
       expect(stored.fileSize).toBe(file.size);
-      expect(stored.checksum).toMatch(/^[0-9a-f]{64}$/);
+      expect(stored.checksum).toMatch(/^pending:[0-9a-f]{64}$/);
       expect(await prisma.projectFile.count({ where: { id: finalizedDrawingId } })).toBe(1);
     });
   });
@@ -364,7 +364,7 @@ describe("Direct-to-Blob drawing upload (integration, real local Postgres, fake 
       expect(elapsedMs).toBeLessThan(10_000);
       expect(first.workflowId).toMatch(/^[0-9a-f-]{36}$/i);
       expect(first.drawing.fileSize).toBe(body.byteLength);
-      expect(first.drawing.checksum).toMatch(/^[0-9a-f]{64}$/);
+      expect(first.drawing.checksum).toMatch(/^pending:[0-9a-f]{64}$/);
       expect(first.drawing.pageCount).toBeNull();
 
       const countAfterFirst = await prisma.projectFile.count({ where: { id: first.drawing.id } });
@@ -429,7 +429,7 @@ describe("Direct-to-Blob drawing upload (integration, real local Postgres, fake 
       })).toBe(1);
     });
 
-    it("rolls back the file when the FINALIZED transition fails, then succeeds once on retry", async () => {
+    it("preserves and reconciles the file when the FINALIZED transition fails", async () => {
       const body = pdfBuffer("transaction rollback and retry");
       const auth = await authorizeDrawingUpload(ownerActorA, projectAId, {
         originalName: "status-transition-failure.pdf",
@@ -445,7 +445,7 @@ describe("Direct-to-Blob drawing upload (integration, real local Postgres, fake 
         metadata: {},
       })).rejects.toThrow("injected FINALIZED transition failure");
 
-      expect(await prisma.projectFile.count({ where: { id: session.fileId } })).toBe(0);
+      expect(await prisma.projectFile.count({ where: { id: session.fileId } })).toBe(1);
       expect((await prisma.projectFileUploadSession.findUniqueOrThrow({ where: { id: auth.sessionId } })).status).toBe("PENDING");
       expect(await prisma.auditLog.count({
         where: { companyId: companyAId, entityId: session.fileId, action: "DRAWING_UPLOADED" },
@@ -455,7 +455,7 @@ describe("Direct-to-Blob drawing upload (integration, real local Postgres, fake 
         sessionId: auth.sessionId,
         metadata: {},
       });
-      expect(retried.alreadyFinalized).toBe(false);
+      expect(retried.alreadyFinalized).toBe(true);
       expect(retried.drawing.id).toBe(session.fileId);
       expect(await prisma.projectFile.count({ where: { id: session.fileId } })).toBe(1);
       expect((await prisma.projectFileUploadSession.findUniqueOrThrow({ where: { id: auth.sessionId } })).status).toBe("FINALIZED");
@@ -620,20 +620,21 @@ describe("Direct-to-Blob drawing upload (integration, real local Postgres, fake 
       ).rejects.toThrow(NotFoundError);
     });
 
-    it("rejects finalize for an expired session", async () => {
+    it("reconciles an exact uploaded Blob after its authorization expires", async () => {
+      const body = Buffer.alloc(100, 0);
+      body.write("%PDF-1.4\n", 0, "ascii");
       const auth = await authorizeDrawingUpload(ownerActorA, projectAId, {
         originalName: "expired.pdf",
         declaredMimeType: "application/pdf",
-        declaredByteSize: 100,
+        declaredByteSize: body.byteLength,
       });
       await prisma.projectFileUploadSession.update({ where: { id: auth.sessionId }, data: { expiresAt: new Date(Date.now() - 1000) } });
-      fakeAdapter.seed(auth.pathname, pdfBuffer("x"), "application/pdf");
+      fakeAdapter.seed(auth.pathname, body, "application/pdf");
 
-      await expect(finalizeDrawingUpload(ownerActorA, projectAId, { sessionId: auth.sessionId, metadata: {} })).rejects.toMatchObject({
-        code: "UPLOAD_SESSION_EXPIRED",
-      });
+      const finalized = await finalizeDrawingUpload(ownerActorA, projectAId, { sessionId: auth.sessionId, metadata: {} });
+      expect(finalized.drawing.fileSize).toBe(body.byteLength);
       const session = await prisma.projectFileUploadSession.findUniqueOrThrow({ where: { id: auth.sessionId } });
-      expect(session.status).toBe("EXPIRED");
+      expect(session.status).toBe("FINALIZED");
     });
 
     it("records an audit event on successful finalize", async () => {

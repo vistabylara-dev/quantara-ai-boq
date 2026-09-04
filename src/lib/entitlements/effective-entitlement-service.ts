@@ -10,6 +10,7 @@ import {
   canGenerateDocument as canGenerateDocumentReal,
   canUsePremiumItem as canUsePremiumItemReal,
   canCreateProposal as canCreateProposalReal,
+  TRIAL_LIMITS,
   type CompanyEntitlements,
   type CheckResult,
 } from "./entitlement-service";
@@ -70,9 +71,9 @@ function simulatedEntitlements(mode: SimulationMode, targetBoqId: string | null)
   const base = { ...UNRESTRICTED_BASE, source: "simulation" as const, simulationMode: mode, simulationTargetBoqId: targetBoqId };
   switch (mode) {
     case "TRIAL_ACTIVE":
-      return { ...base, planType: PlanType.TRIAL, planName: "Simulated Trial (active)", status: SubscriptionStatus.TRIAL, isTrial: true, isExpiredOrNone: false, maxProjects: 1, trialDaysRemaining: 3 };
+      return { ...base, planType: PlanType.TRIAL, planName: "Simulated Trial (active)", status: SubscriptionStatus.TRIAL, isTrial: true, isExpiredOrNone: false, maxProjects: TRIAL_LIMITS.maxProjects, trialDaysRemaining: 3 };
     case "TRIAL_EXPIRED":
-      return { ...base, planType: PlanType.TRIAL, planName: "Simulated Trial (expired)", status: SubscriptionStatus.EXPIRED, isTrial: true, isExpiredOrNone: true, maxProjects: 1, trialDaysRemaining: 0 };
+      return { ...base, planType: PlanType.TRIAL, planName: "Simulated Trial (expired)", status: SubscriptionStatus.EXPIRED, isTrial: true, isExpiredOrNone: true, maxProjects: TRIAL_LIMITS.maxProjects, trialDaysRemaining: 0 };
     case "FREE":
       return { ...base, planType: PlanType.FREE, planName: "Simulated Free", status: "NONE", isTrial: false, isExpiredOrNone: true, maxProjects: 1 };
     case "PRO":

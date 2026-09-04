@@ -7,14 +7,12 @@ import { canCreateProject } from "../src/lib/entitlements/entitlement-service";
  * limited plan the same "The free plan allows one draft project" wording,
  * even a genuine paid plan (Starter/Professional) with its own distinct
  * maxProjects limit. The denial message must name the actual plan and its
- * actual limit. Trial and true-Free (status "NONE") wording must stay
- * exactly as before.
+ * actual limit. Trial and true-Free (status "NONE") wording must report
+ * their canonical limits.
  *
  * The paid-plan case uses a maxProjects: 0 fixture plan so "at limit" is
- * reachable with zero projects. Trial and Free are hardcoded to a 1-project
- * limit regardless of any SoftwarePlan.maxProjects value (TRIAL_LIMITS/
- * FREE_LIMITS in entitlement-service.ts), so those two cases need one real
- * Project row to actually be at capacity.
+ * reachable with zero projects. Trial and Free use canonical limits rather
+ * than SoftwarePlan.maxProjects.
  */
 const RUN_ID = `${Date.now()}-${process.pid}-planmsg`;
 
@@ -63,22 +61,22 @@ describe("canCreateProject — plan-aware denial message", () => {
     const freeCompany = await prisma.company.create({ data: { legalName: `Free Co ${RUN_ID}`, tradeName: "Free Co", email: `freemsg-${RUN_ID}@example.com` } });
     freeCompanyId = freeCompany.id; // no subscription row at all -> status "NONE"
 
-    // Trial and Free are both hardcoded to a 1-project limit (TRIAL_LIMITS/FREE_LIMITS),
-    // independent of any SoftwarePlan.maxProjects value — each needs one real project to be at capacity.
-    for (const companyId of [trialCompanyId, freeCompanyId]) {
-      const client = await prisma.client.create({ data: { companyId, name: `Test Client ${RUN_ID}` } });
+    for (const [companyId, projectCount] of [[trialCompanyId, 3], [freeCompanyId, 1]] as const) {
+      const client = await prisma.client.create({ data: { companyId, name: `Test Client ${RUN_ID}-${companyId}` } });
       clientIds.push(client.id);
-      const project = await prisma.project.create({
-        data: {
-          companyId,
-          clientId: client.id,
-          industryEngineId,
-          slug: `test-planmsg-${companyId}`,
-          reference: `TEST-PLANMSG-${RUN_ID}`,
-          name: "Test Project",
-        },
-      });
-      projectIds.push(project.id);
+      for (let index = 0; index < projectCount; index += 1) {
+        const project = await prisma.project.create({
+          data: {
+            companyId,
+            clientId: client.id,
+            industryEngineId,
+            slug: `test-planmsg-${companyId}-${index}`,
+            reference: `TEST-PLANMSG-${RUN_ID}-${index}`,
+            name: `Test Project ${index + 1}`,
+          },
+        });
+        projectIds.push(project.id);
+      }
     }
   });
 
@@ -99,10 +97,10 @@ describe("canCreateProject — plan-aware denial message", () => {
     expect(result.reason).not.toMatch(/free plan/i);
   });
 
-  it("preserves the exact trial wording", async () => {
+  it("reports the canonical three-project trial limit", async () => {
     const result = await canCreateProject(trialCompanyId);
     expect(result.allowed).toBe(false);
-    expect(result.reason).toBe("The 3-day Pro trial allows one project. Upgrade to create additional projects.");
+    expect(result.reason).toBe("The 3-day Pro trial allows 3 projects. Upgrade to create additional projects.");
   });
 
   it("preserves the exact free-plan (no subscription) wording", async () => {

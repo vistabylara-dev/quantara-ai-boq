@@ -15,7 +15,7 @@ import { companyHasPackageAccess, companyHasPackageAccessForItem } from "./packa
 
 export const TRIAL_LIMITS = {
   durationDays: 3,
-  maxProjects: 1,
+  maxProjects: 3,
   maxCompletedBoqs: 1,
   maxUniquePremiumItems: 5,
   maxFinalExports: 1,
@@ -175,7 +175,7 @@ export async function canCreateProject(companyId: string): Promise<CheckResult> 
   });
   if (activeProjectCount >= entitlements.maxProjects) {
     if (entitlements.isTrial) {
-      return deny("The 3-day Pro trial allows one project. Upgrade to create additional projects.");
+      return deny(`The 3-day Pro trial allows ${TRIAL_LIMITS.maxProjects} projects. Upgrade to create additional projects.`);
     }
     if (entitlements.status === "NONE") {
       return deny("The free plan allows one draft project. Upgrade to create additional projects.");

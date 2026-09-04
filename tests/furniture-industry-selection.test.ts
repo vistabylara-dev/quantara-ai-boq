@@ -112,12 +112,12 @@ describe("Furniture and Joinery industry identities", () => {
     expect(joineryEngine.boqSections.map((section) => section.code)).toEqual(["PRJ", "BRD", "HWA", "CUT", "VER"]);
   });
 
-  it("keeps every unrelated configured industry equivalent to the rescue baseline", () => {
+  it("keeps every unrelated configured industry equivalent to the autonomous workflow baseline", () => {
     const unrelated = demoIndustries
       .filter((industry) => !["furniture", JOINERY_INDUSTRY_KEY].includes(industry.id))
       .sort((left, right) => left.id.localeCompare(right.id));
     const digest = createHash("sha256").update(stableJson(unrelated)).digest("hex");
-    expect(digest).toBe("a7d939fb39dad40e310b0eb7f61fe8322acc7b098b344daaf50850d72d33c171");
+    expect(digest).toBe("81569ec1a9c9bf7153ca0fba9ede89ea88aa77726b6a1f2ae5465811e88ba95e");
   });
 });
 

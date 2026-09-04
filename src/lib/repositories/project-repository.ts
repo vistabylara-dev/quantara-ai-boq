@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { Prisma, ProjectStatus } from "@prisma/client";
+import { BOQStatus, Prisma, ProjectStatus } from "@prisma/client";
 import { prisma } from "@/lib/db/prisma";
 import { NotFoundError } from "@/lib/errors/app-error";
 import {
@@ -143,7 +143,45 @@ export async function listProjects(companyId: string) {
     include: projectInclude,
     orderBy: { updatedAt: "desc" },
   });
-  return projects.map(toProjectDTO);
+
+  const boqs = projects.length === 0
+    ? []
+    : await prisma.bOQ.findMany({
+        where: {
+          companyId,
+          projectId: { in: projects.map((project) => project.id) },
+        },
+        select: {
+          projectId: true,
+          status: true,
+          isLocked: true,
+          verifiedAt: true,
+          sections: {
+            select: { _count: { select: { items: true } } },
+          },
+        },
+      });
+
+  const boqsByProject = new Map<string, typeof boqs>();
+  for (const boq of boqs) {
+    const projectBoqs = boqsByProject.get(boq.projectId) ?? [];
+    projectBoqs.push(boq);
+    boqsByProject.set(boq.projectId, projectBoqs);
+  }
+
+  return projects.map((project) => {
+    const projectBoqs = boqsByProject.get(project.id) ?? [];
+    const canDeleteUnusedProject =
+      project.status === ProjectStatus.DRAFT
+      && projectBoqs.every((boq) =>
+        boq.status === BOQStatus.DRAFT
+        && !boq.isLocked
+        && boq.verifiedAt === null
+        && boq.sections.every((section) => section._count.items === 0),
+      );
+
+    return { ...toProjectDTO(project), canDeleteUnusedProject };
+  });
 }
 
 export async function getProjectRecord(companyId: string, identifier: string, db: DbClient = prisma) {

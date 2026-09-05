@@ -689,6 +689,64 @@ export function createAutonomousBoqPreparationHandler(
     }
     await assertNotCancelled(ctx);
 
+    // Joinery schedule rows already carry their exact counted quantity and
+    // ordering unit. They are validated and assembled by the deterministic
+    // furniture engine below; sending them through the generic drawing
+    // reasoner first invents a geometry requirement and can incur an AI call
+    // for a workflow that does not need one.
+    if (scope.assemblyMode === "SPECIALIZED_JOINERY") {
+      const measurement: PrepareTayqanMeasurementsResult = {
+        measuredSubjectCount: 0,
+        createdEntityCount: 0,
+        reusedEntityCount: 0,
+        createdCalculationCount: 0,
+        reusedCalculationCount: 0,
+        exceptionCount: 0,
+        exceptions: [],
+        provider: "deterministic",
+        model: "joinery-schedule-v1",
+        seniorReview: {
+          clusterReviewCount: 0,
+          globalReviewApplied: false,
+          acceptedSubjectCount: 0,
+          rejectedSubjectCount: 0,
+          findingCount: 0,
+          evidencePageCoveragePercent: 100,
+        },
+        classifications: [],
+        conceptSchedule: null,
+      };
+      await checkpoint({ stage: "ASSEMBLING_BOQ", readyForRates: false });
+      await ctx.updateProgress(85, "assembling deterministic Joinery schedule");
+      const assembly = await dependencies.assemble(actor, configuration, scope, measurement);
+      const exceptions = consolidatePreparationFindings(assembly.exceptions);
+      const ready = assembly.state === "READY_FOR_RATES" && exceptions.length === 0;
+      return {
+        status: ready ? ExtractionJobStatus.COMPLETED : ExtractionJobStatus.NEEDS_REVIEW,
+        resultSummary: {
+          ...summary,
+          stage: ready ? "READY_FOR_RATES" : "NEEDS_REVIEW",
+          readyForRates: ready,
+          boqId: assembly.boqId,
+          addedItemCount: assembly.addedItemCount,
+          duplicateItemCount: assembly.duplicateItemCount,
+          measuredSubjectCount: assembly.addedItemCount + assembly.duplicateItemCount,
+          provider: measurement.provider,
+          model: measurement.model,
+          exceptions,
+          drawingMaturity: [],
+          payableEligibility: "PAYABLE_ELIGIBLE",
+          categoryStatus: "VERIFIED",
+          conceptSchedule: null,
+        },
+        usageMetadata: {
+          provider: measurement.provider,
+          model: measurement.model,
+          providerCallReplayed: false,
+        },
+      };
+    }
+
     const savedProviderResult = record(summary.providerResult);
     const staleEmptyProviderResult = Boolean(
       summary.providerResult

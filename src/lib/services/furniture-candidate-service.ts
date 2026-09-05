@@ -36,6 +36,9 @@ import { getProjectRecord } from "@/lib/repositories/project-repository";
 
 export { FURNITURE_CANDIDATE_TECHNICAL_DATA_KIND } from "@/lib/furniture/types";
 
+/** Candidate persistence for production-sized schedules must outlive Prisma's 5s default. */
+const FURNITURE_CANDIDATE_TRANSACTION_TIMEOUT_MS = 120_000;
+
 export type FurnitureCandidateGenerationResult = {
   status: "generated" | "skipped";
   reason?: string;
@@ -417,7 +420,7 @@ export async function generateFurnitureCandidatesFromStructuredTables(
     }, tx);
 
     return false;
-  });
+  }, { timeout: FURNITURE_CANDIDATE_TRANSACTION_TIMEOUT_MS });
 
   if (reviewedInsideLock) {
     return {

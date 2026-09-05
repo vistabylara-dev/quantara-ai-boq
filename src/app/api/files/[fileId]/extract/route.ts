@@ -5,8 +5,13 @@ import { triggerFileExtraction } from "@/lib/services/table-extraction-service";
 import { projectFileIdParamsSchema } from "@/lib/validation/route-params";
 
 export const dynamic = "force-dynamic";
-/** Table extraction over a single already-stored file; 60s leaves generous headroom over observed local runtimes. */
-export const maxDuration = 60;
+/**
+ * Real production drawing sets can contain large, vector-heavy PDFs. The
+ * extraction worker is attached to this request with Next.js `after()`, so
+ * its execution budget is this route's budget even though the 202 response
+ * is returned immediately.
+ */
+export const maxDuration = 300;
 
 type RouteContext = { params: Promise<{ fileId: string }> };
 

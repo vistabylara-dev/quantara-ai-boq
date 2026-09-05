@@ -10,6 +10,7 @@ import type { CurrentActor } from "@/lib/auth/current-actor";
 import {
   AUTONOMOUS_TAYQAN_REASONER_CONTRACT_VERSION,
   autonomousPreparationConfigurationSchema,
+  resolveAutonomousProviderExecution,
   type AutonomousPreparationConfiguration,
 } from "@/lib/autonomous-boq/preparation";
 import { stableAutonomousHash } from "@/lib/autonomous-boq/contract";
@@ -35,6 +36,7 @@ import {
 } from "@/lib/services/tayqan-measurement-service";
 import type {
   TayqanMeasurementGoverningContext,
+  TayqanMeasurementReasonerResult,
 } from "@/lib/tayqan/tayqan-measurement-reasoner";
 
 type PreparationException = {
@@ -711,6 +713,7 @@ export function createAutonomousBoqPreparationHandler(
         migratedToDeterministicEstimatorAt: dependencies.now().toISOString(),
       });
     }
+    const execution = resolveAutonomousProviderExecution(summary);
     const measurementInput: PrepareTayqanMeasurementsInput = {
       projectId: configuration.projectId,
       sourceFileIds: configuration.frozenSources.map((source) => source.id),
@@ -744,12 +747,58 @@ export function createAutonomousBoqPreparationHandler(
       },
       onEvidencePrepared: () => checkpoint({ stage: "MEASURING", readyForRates: false }),
     };
-    const measurement: PrepareTayqanMeasurementsResult = await dependencies.measure(
-      actor,
-      scope.projectSlug,
-      measurementInput,
-      measurementOptions,
-    );
+    if (execution.kind === "REPLAY_RESULT") {
+      measurementOptions.replayReasonerResult = execution.result;
+    } else {
+      measurementOptions.onReasonerStart = () => checkpoint({
+        providerAttempt: {
+          operationHash: configuration.operationHash,
+          startedAt: dependencies.now().toISOString(),
+        },
+      });
+      measurementOptions.onReasonerResult = (result: TayqanMeasurementReasonerResult) => checkpoint({
+        providerResult: {
+          operationHash: configuration.operationHash,
+          checkpointedAt: dependencies.now().toISOString(),
+          reasonerContractVersion: AUTONOMOUS_TAYQAN_REASONER_CONTRACT_VERSION,
+          value: result,
+        },
+      });
+    }
+
+    let measurement: PrepareTayqanMeasurementsResult;
+    try {
+      measurement = await dependencies.measure(
+        actor,
+        scope.projectSlug,
+        measurementInput,
+        measurementOptions,
+      );
+    } catch (error) {
+      if (summary.providerAttempt && !summary.providerResult) {
+        const appError = error instanceof AppError
+          ? error
+          : new AppError(
+            "TAYQAN_MEASUREMENT_AI_EXECUTION_FAILED",
+            "TAYQAN could not complete the bounded AI measurement pass.",
+            503,
+          );
+        await checkpoint({
+          providerFailure: {
+            operationHash: configuration.operationHash,
+            failedAt: dependencies.now().toISOString(),
+            code: appError.code,
+            message: appError.message.slice(0, 500),
+            status: appError.status,
+            ...("providerDiagnostic" in appError
+              ? { providerDiagnostic: appError.providerDiagnostic }
+              : {}),
+          },
+        });
+        throw appError;
+      }
+      throw error;
+    }
     await assertNotCancelled(ctx);
 
     await checkpoint({ stage: "ASSEMBLING_BOQ", readyForRates: false });
@@ -806,7 +855,7 @@ export function createAutonomousBoqPreparationHandler(
       usageMetadata: {
         provider: measurement.provider,
         model: measurement.model,
-        providerCallReplayed: false,
+        providerCallReplayed: execution.kind === "REPLAY_RESULT",
       },
     };
   };

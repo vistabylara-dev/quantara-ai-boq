@@ -321,9 +321,8 @@ export function toAutonomousPreparationStatus(job: ExtractionJob): AutonomousPre
   const exceptions = preparationExceptions(summary.exceptions);
   const conceptBlocked = summary.payableEligibility === "NOT_PAYABLE_CONCEPT"
     || exceptions.some((exception) => exception.code === "CONCEPT_DRAWING_NOT_PAYABLE");
-  const industry = objectRecord(configuration.industry);
-  const joineryEvidenceCanBeRechecked = job.status === ExtractionJobStatus.NEEDS_REVIEW
-    && industry.key === "joinery"
+  const reviewedEvidenceCanBeRechecked = job.status === ExtractionJobStatus.NEEDS_REVIEW
+    && !conceptBlocked
     && exceptions.some((exception) => [
       "STRUCTURAL_EVIDENCE_MISSING",
       "JOINERY_ENGINEERING_REVIEW_REQUIRED",
@@ -339,7 +338,7 @@ export function toAutonomousPreparationStatus(job: ExtractionJob): AutonomousPre
     || (job.status === ExtractionJobStatus.NEEDS_INPUT
       && exceptions.some((exception) => exception.code === "SOURCE_PREPROCESSING_INCOMPLETE"))
     || staleEmptyClassification
-    || joineryEvidenceCanBeRechecked;
+    || reviewedEvidenceCanBeRechecked;
 
   return {
     id: job.id,

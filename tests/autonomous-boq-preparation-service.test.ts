@@ -381,7 +381,6 @@ describe("autonomous preparation start and refresh", () => {
       attempts: 1, maximumAttempts: 3,
       configurationJson: {
         targetBoqId: IDS.boq,
-        industry: { key: "joinery" },
         frozenSources: [{ id: IDS.fileR2 }],
       },
       resultSummaryJson: {

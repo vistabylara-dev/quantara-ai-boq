@@ -21,16 +21,16 @@ import {
 import type { EnqueueJobInput, EnqueueJobOptions, JobHandler, JobHandlerContext, JobQueue } from "./job-queue";
 
 /**
- * Comfortably longer than the extraction routes' 60s maxDuration
- * (preprocess/classify/extract) — a RUNNING job with no persisted update in
+ * Comfortably longer than the longest extraction route's 300s maxDuration —
+ * a RUNNING job with no persisted update in
  * this long can only mean the invocation that owned it is dead, never a
  * legitimately slow attempt still in flight (see
  * findStaleRunningExtractionJobs's own doc for why `updatedAt` is the right
- * signal). 5 minutes is ~5x the longest maxDuration in this codebase,
- * leaving no realistic room for a false "stale" classification while still
- * recovering genuinely abandoned jobs promptly.
+ * signal). Ten minutes leaves enough room for the platform to terminate a
+ * five-minute invocation before another request can classify it as stale,
+ * while still recovering genuinely abandoned jobs promptly.
  */
-const STALE_RUNNING_CUTOFF_MS = 5 * 60 * 1000;
+const STALE_RUNNING_CUTOFF_MS = 10 * 60 * 1000;
 
 /**
  * In-process queue — "local" in the same spirit as local-document-storage-adapter:

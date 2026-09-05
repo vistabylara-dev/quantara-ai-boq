@@ -10,6 +10,13 @@ export const QUEUE_NON_TERMINAL_STATUSES: ExtractionJobStatus[] = [
   ExtractionJobStatus.NEEDS_REVIEW,
 ];
 
+/** States that represent an execution already in flight and must be deduplicated. */
+const QUEUE_ACTIVE_EXECUTION_STATUSES: ExtractionJobStatus[] = [
+  ExtractionJobStatus.QUEUED,
+  ExtractionJobStatus.RUNNING,
+  ExtractionJobStatus.NEEDS_INPUT,
+];
+
 export function toExtractionJobDTO(row: ExtractionJob) {
   return {
     id: row.id,
@@ -161,7 +168,7 @@ export async function findOrCreateQueuedExtractionJob(input: CreateQueuedExtract
           }
 
           const existing = await tx.extractionJob.findFirst({
-            where: { companyId: input.companyId, projectFileId: input.projectFileId, engineType: input.engineType, status: { in: QUEUE_NON_TERMINAL_STATUSES } },
+            where: { companyId: input.companyId, projectFileId: input.projectFileId, engineType: input.engineType, status: { in: QUEUE_ACTIVE_EXECUTION_STATUSES } },
             orderBy: { createdAt: "desc" },
           });
           if (existing) return existing;

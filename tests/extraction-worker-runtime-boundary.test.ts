@@ -42,6 +42,11 @@ describe("extraction worker runtime boundary", () => {
     expect(queue).toContain("const STALE_RUNNING_CUTOFF_MS = 10 * 60 * 1000;");
   });
 
+  it("claims the queued extraction inside the request so post-response scheduling cannot strand it", () => {
+    expect(extractionRoute).toContain("await extractionJobQueue.processQueuedJob(actor.companyId, data.id);");
+    expect(queue).toContain("claimQueuedExtractionJob(companyId, jobId)");
+  });
+
   it("scopes targeted stale recovery to tenant, file, engine, RUNNING state and cutoff", () => {
     expect(repository).toContain("recoverStaleRunningExtractionJobForTarget");
     expect(repository).toContain("companyId,");

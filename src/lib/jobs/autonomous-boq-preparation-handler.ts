@@ -701,7 +701,19 @@ export function createAutonomousBoqPreparationHandler(
 
     await checkpoint({ stage: "CATEGORIZING", readyForRates: false });
     await ctx.updateProgress(45, "measuring and reconciling drawing evidence");
-    const execution = resolveAutonomousProviderExecution(summary);
+    // Standard estimator jobs are local and deterministic. Provider checkpoints
+    // belong only to paid TAYQAN assignments; clear legacy failures so a former
+    // OpenAI 429 cannot block this coded workflow.
+    if (summary.providerAttempt || summary.providerResult || summary.providerFailure) {
+      await checkpoint({
+        providerAttempt: null,
+        providerResult: null,
+        providerFailure: null,
+        providerRecovery: null,
+        migratedToDeterministicEstimatorAt: dependencies.now().toISOString(),
+      });
+    }
+    const execution = { kind: "CALL_PROVIDER" as const };
     const measurementInput: PrepareTayqanMeasurementsInput = {
       projectId: configuration.projectId,
       sourceFileIds: configuration.frozenSources.map((source) => source.id),
@@ -735,58 +747,12 @@ export function createAutonomousBoqPreparationHandler(
       },
       onEvidencePrepared: () => checkpoint({ stage: "MEASURING", readyForRates: false }),
     };
-    if (execution.kind === "REPLAY_RESULT") {
-      measurementOptions.replayReasonerResult = execution.result;
-    } else {
-      measurementOptions.onReasonerStart = () => checkpoint({
-        providerAttempt: {
-          operationHash: configuration.operationHash,
-          startedAt: dependencies.now().toISOString(),
-        },
-      });
-      measurementOptions.onReasonerResult = (result: TayqanMeasurementReasonerResult) => checkpoint({
-        providerResult: {
-          operationHash: configuration.operationHash,
-          checkpointedAt: dependencies.now().toISOString(),
-          reasonerContractVersion: AUTONOMOUS_TAYQAN_REASONER_CONTRACT_VERSION,
-          value: result,
-        },
-      });
-    }
-
-    let measurement: PrepareTayqanMeasurementsResult;
-    try {
-      measurement = await dependencies.measure(
-        actor,
-        scope.projectSlug,
-        measurementInput,
-        measurementOptions,
-      );
-    } catch (error) {
-      if (summary.providerAttempt && !summary.providerResult) {
-        const appError = error instanceof AppError
-          ? error
-          : new AppError(
-            "TAYQAN_MEASUREMENT_AI_EXECUTION_FAILED",
-            "TAYQAN could not complete the bounded AI measurement pass.",
-            503,
-          );
-        await checkpoint({
-          providerFailure: {
-            operationHash: configuration.operationHash,
-            failedAt: dependencies.now().toISOString(),
-            code: appError.code,
-            message: appError.message.slice(0, 500),
-            status: appError.status,
-            ...("providerDiagnostic" in appError
-              ? { providerDiagnostic: appError.providerDiagnostic }
-              : {}),
-          },
-        });
-        throw appError;
-      }
-      throw error;
-    }
+    const measurement: PrepareTayqanMeasurementsResult = await dependencies.measure(
+      actor,
+      scope.projectSlug,
+      measurementInput,
+      measurementOptions,
+    );
     await assertNotCancelled(ctx);
 
     await checkpoint({ stage: "ASSEMBLING_BOQ", readyForRates: false });
@@ -843,7 +809,7 @@ export function createAutonomousBoqPreparationHandler(
       usageMetadata: {
         provider: measurement.provider,
         model: measurement.model,
-        providerCallReplayed: execution.kind === "REPLAY_RESULT",
+        providerCallReplayed: false,
       },
     };
   };

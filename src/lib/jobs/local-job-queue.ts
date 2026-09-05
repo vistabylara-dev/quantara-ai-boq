@@ -18,7 +18,7 @@ import {
   setExtractionJobCancelled,
   updateExtractionJobProgress,
 } from "@/lib/repositories/extraction-job-repository";
-import type { EnqueueJobInput, JobHandler, JobHandlerContext, JobQueue } from "./job-queue";
+import type { EnqueueJobInput, EnqueueJobOptions, JobHandler, JobHandlerContext, JobQueue } from "./job-queue";
 
 /**
  * Comfortably longer than the extraction routes' 60s maxDuration
@@ -62,7 +62,7 @@ export class LocalJobQueue implements JobQueue {
     this.handlers.set(engineType, handler);
   }
 
-  async enqueue(input: EnqueueJobInput): Promise<ExtractionJob> {
+  async enqueue(input: EnqueueJobInput, options: EnqueueJobOptions = {}): Promise<ExtractionJob> {
     // Crash recovery belongs to the real request/enqueue path, never module
     // initialization. Only the same tenant + file + engine being retried is
     // inspected. A live RUNNING job is untouched because the repository
@@ -78,7 +78,7 @@ export class LocalJobQueue implements JobQueue {
     // findOrCreateQueuedExtractionJob is atomic (SERIALIZABLE transaction) — two concurrent
     // enqueue() calls for the same company+file+engine can never both create a row.
     const job = await findOrCreateQueuedExtractionJob(input);
-    if (job.status === ExtractionJobStatus.QUEUED) {
+    if (job.status === ExtractionJobStatus.QUEUED && options.schedule !== false) {
       // Whether this call created the job or found an existing QUEUED one (e.g. one
       // recoverStaleJobs() reset, or one whose original after()/setImmediate scheduling was
       // itself lost), scheduling is safe either way: claimQueuedExtractionJob() inside

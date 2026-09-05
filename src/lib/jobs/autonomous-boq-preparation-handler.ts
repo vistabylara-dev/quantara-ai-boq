@@ -70,6 +70,46 @@ type AssemblyResult = {
   exceptions: PreparationException[];
 };
 
+const SOURCE_ENGINE_SETTLE_TIMEOUT_MS = 240_000;
+const SOURCE_ENGINE_POLL_INTERVAL_MS = 250;
+
+function isSourceEngineExecuting(status: ExtractionJobStatus): boolean {
+  return status === ExtractionJobStatus.QUEUED || status === ExtractionJobStatus.RUNNING;
+}
+
+type SourceEngineWaitDependencies = {
+  read(companyId: string, jobId: string): Promise<ExtractionJob>;
+  sleep(milliseconds: number): Promise<void>;
+  now(): number;
+};
+
+const defaultSourceEngineWaitDependencies: SourceEngineWaitDependencies = {
+  read: getExtractionJobRecord,
+  sleep: (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds)),
+  now: () => Date.now(),
+};
+
+export async function waitForSourceEngineResult(
+  companyId: string,
+  jobId: string,
+  dependencies: SourceEngineWaitDependencies = defaultSourceEngineWaitDependencies,
+): Promise<ExtractionJob> {
+  const deadline = dependencies.now() + SOURCE_ENGINE_SETTLE_TIMEOUT_MS;
+  let current = await dependencies.read(companyId, jobId);
+  while (isSourceEngineExecuting(current.status) && dependencies.now() < deadline) {
+    await dependencies.sleep(SOURCE_ENGINE_POLL_INTERVAL_MS);
+    current = await dependencies.read(companyId, jobId);
+  }
+  if (isSourceEngineExecuting(current.status)) {
+    throw new AppError(
+      "SOURCE_ENGINE_SETTLE_TIMEOUT",
+      "Source processing is still running. Quantara preserved the job and will safely resume it.",
+      503,
+    );
+  }
+  return current;
+}
+
 async function ensureConceptScheduleEntities(
   actor: CurrentActor,
   configuration: AutonomousPreparationConfiguration,
@@ -177,17 +217,24 @@ async function runSourceEngine(input: {
   projectFileId: string;
   engineType: ExtractionEngineType;
 }): Promise<ExtractionJob> {
-  const queued = await extractionJobQueue.enqueue({
-    companyId: input.actor.companyId,
-    projectId: input.projectId,
-    projectFileId: input.projectFileId,
-    engineType: input.engineType,
-    createdByUserId: input.actor.userId,
-  });
+  const queued = await extractionJobQueue.enqueue(
+    {
+      companyId: input.actor.companyId,
+      projectId: input.projectId,
+      projectFileId: input.projectFileId,
+      engineType: input.engineType,
+      createdByUserId: input.actor.userId,
+    },
+    { schedule: false },
+  );
   if (queued.status === ExtractionJobStatus.QUEUED) {
     await extractionJobQueue.processQueuedJob(input.actor.companyId, queued.id);
   }
-  return getExtractionJobRecord(input.actor.companyId, queued.id);
+  // Finalization can already have a live preprocessing job. In that case the
+  // atomic claim above correctly becomes a no-op; do not immediately mistake
+  // the other worker's RUNNING row for a failed source. Await its persisted
+  // terminal result before deciding whether measurement may continue.
+  return waitForSourceEngineResult(input.actor.companyId, queued.id);
 }
 
 async function defaultEnsureSourcesProcessed(

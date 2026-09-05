@@ -154,6 +154,29 @@ describe("LocalJobQueue — request-lifecycle-aware scheduling", () => {
     setImmediateSpy.mockRestore();
   });
 
+  it("lets a durable parent process a queued child inline without scheduling a competing worker", async () => {
+    setNodeEnv("production");
+    const setImmediateSpy = vi.spyOn(global, "setImmediate");
+    const queue = newQueue();
+    queue.registerHandler(ExtractionEngineType.FILE_PREPROCESSING, async () => ({ status: ExtractionJobStatus.COMPLETED }));
+    const file = await makeFile();
+
+    const job = await queue.enqueue(
+      { companyId, projectId, projectFileId: file.id, engineType: ExtractionEngineType.FILE_PREPROCESSING, createdByUserId: userId },
+      { schedule: false },
+    );
+
+    expect(job.status).toBe(ExtractionJobStatus.QUEUED);
+    expect(afterMock).not.toHaveBeenCalled();
+    expect(setImmediateSpy).not.toHaveBeenCalled();
+
+    await queue.processQueuedJob(companyId, job.id);
+    const final = await prisma.extractionJob.findUniqueOrThrow({ where: { id: job.id } });
+    expect(final.status).toBe(ExtractionJobStatus.COMPLETED);
+    expect(final.attempts).toBe(1);
+    setImmediateSpy.mockRestore();
+  });
+
   it("production falls back to setImmediate if after() throws (no request context)", async () => {
     setNodeEnv("production");
     const queue = newQueue();

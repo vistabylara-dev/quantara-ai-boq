@@ -38,10 +38,19 @@ export type EnqueueJobInput = {
   maximumAttempts?: number;
 };
 
+export type EnqueueJobOptions = {
+  /**
+   * The caller will claim and await this job in the current durable workflow.
+   * Suppressing the normal background schedule prevents two execution paths
+   * racing to claim the same freshly-created row.
+   */
+  schedule?: boolean;
+};
+
 export interface JobQueue {
   registerHandler(engineType: ExtractionEngineType, handler: JobHandler): void;
   /** Idempotent: an existing non-terminal job for the same file + engine type is returned instead of creating a duplicate. */
-  enqueue(input: EnqueueJobInput): Promise<ExtractionJob>;
+  enqueue(input: EnqueueJobInput, options?: EnqueueJobOptions): Promise<ExtractionJob>;
   cancel(companyId: string, jobId: string): Promise<ExtractionJob>;
   /**
    * Explicit maintenance recovery for stale RUNNING jobs.

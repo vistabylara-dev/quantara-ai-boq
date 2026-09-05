@@ -4,6 +4,7 @@ import { createAutonomousBOQOperationHash } from "../src/lib/autonomous-boq/prep
 import { AppError } from "../src/lib/errors/app-error";
 import {
   createAutonomousBoqPreparationHandler,
+  waitForSourceEngineResult,
   type AutonomousBoqPreparationHandlerDependencies,
 } from "../src/lib/jobs/autonomous-boq-preparation-handler";
 import { TAYQAN_REASONER_CONTRACT_VERSION } from "../src/lib/tayqan/openai-tayqan-measurement-reasoner";
@@ -82,6 +83,27 @@ const providerResult = {
     evidencePageCoveragePercent: 100,
   },
 };
+
+describe("source-engine settlement", () => {
+  it("waits for an already-running preprocessing worker instead of reporting a false failure", async () => {
+    let now = 0;
+    const read = vi.fn()
+      .mockResolvedValueOnce(job() as never)
+      .mockResolvedValueOnce({
+        ...(job() as unknown as Record<string, unknown>),
+        status: ExtractionJobStatus.COMPLETED,
+      } as never);
+
+    const result = await waitForSourceEngineResult(IDS.company, IDS.job, {
+      read,
+      sleep: vi.fn().mockImplementation(async (milliseconds: number) => { now += milliseconds; }),
+      now: () => now,
+    });
+
+    expect(result.status).toBe(ExtractionJobStatus.COMPLETED);
+    expect(read).toHaveBeenCalledTimes(2);
+  });
+});
 
 function dependencies(): AutonomousBoqPreparationHandlerDependencies {
   return {

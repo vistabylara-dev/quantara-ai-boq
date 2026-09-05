@@ -85,7 +85,7 @@ function bundle() {
       id: ENTITY_ID,
       projectFileId: FILE_ID,
       drawingPageId: PAGE_ID,
-      entityType: "JOINERY_ITEM",
+      entityType: "FURNITURE",
       label: "J01 base cabinet",
       quantity: 4,
       unit: "pcs",

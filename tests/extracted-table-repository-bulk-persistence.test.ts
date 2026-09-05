@@ -63,5 +63,8 @@ describe("extracted table bulk persistence", () => {
       rowNumber: 4,
     });
     expect(tx.extractedTableCell.createMany).toHaveBeenCalledOnce();
+    expect(vi.mocked((await import("@/lib/db/prisma")).prisma.$transaction).mock.calls[0]?.[1]).toEqual({
+      timeout: 120_000,
+    });
   });
 });

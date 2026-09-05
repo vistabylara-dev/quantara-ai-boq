@@ -5,6 +5,9 @@ import type { ParsedTable } from "@/lib/files/table-extraction/types";
 
 type DbClient = typeof prisma | Prisma.TransactionClient;
 
+/** Large drawing schedules can exceed Prisma's five-second interactive-transaction default. */
+const BULK_TABLE_TRANSACTION_TIMEOUT_MS = 120_000;
+
 function readHeaderTitles(value: Prisma.JsonValue | null): Record<string, string> {
   if (!value || typeof value !== "object" || Array.isArray(value)) return {};
   const headerTitles = (value as Record<string, unknown>).headerTitles;
@@ -159,7 +162,7 @@ export async function replaceExtractedTablesForFile(
     if (tables.length > 0) await tx.extractedTable.createMany({ data: tables });
     if (rows.length > 0) await tx.extractedTableRow.createMany({ data: rows });
     if (cells.length > 0) await tx.extractedTableCell.createMany({ data: cells });
-  });
+  }, { timeout: BULK_TABLE_TRANSACTION_TIMEOUT_MS });
 
   return createdTableIds;
 }

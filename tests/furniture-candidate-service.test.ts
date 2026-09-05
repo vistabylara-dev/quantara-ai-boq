@@ -290,6 +290,7 @@ describe("Furniture structured-source candidate persistence", () => {
     expect(candidateStore.state.entities.every((row) =>
       row.categoryKey === FURNITURE_CANDIDATE_TECHNICAL_DATA_KIND
       && row.status === ExtractedEntityStatus.NEEDS_REVIEW)).toBe(true);
+    expect(candidateStore.prisma.$transaction.mock.calls[0]?.[1]).toEqual({ timeout: 120_000 });
   });
 
   it("is idempotent on replay and updates the same deterministic keys without duplicates", async () => {

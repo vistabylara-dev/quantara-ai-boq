@@ -152,6 +152,34 @@ describe("furniture stored order-item mapper", () => {
     ]));
   });
 
+  it("keeps an exact Joinery drawing schedule quantity usable while leaving category editable", () => {
+    const result = mapFurnitureOrderItemCandidates({
+      ...hardwareTable(),
+      sheetName: null,
+      title: "Joinery item schedule — page 1",
+      rows: [{
+        sourceRowKey: "1:0",
+        rowNumber: 1,
+        cells: [
+          { columnKey: "item_code", rawValue: "J05" },
+          { columnKey: "room", rawValue: "MASTER BATH" },
+          { columnKey: "description", rawValue: "CABINET WITH DRAWERS" },
+          { columnKey: "quantity", rawValue: "1" },
+          { columnKey: "unit", rawValue: "nr" },
+        ],
+      }],
+    });
+
+    expect(result.items[0]).toMatchObject({
+      description: "CABINET WITH DRAWERS",
+      quantity: 1,
+      unit: "nr",
+      category: "UNCLASSIFIED",
+      verificationStatus: "NEEDS_REVIEW",
+      issues: [{ code: "CATEGORY_REQUIRES_REVIEW", severity: "REVIEW" }],
+    });
+  });
+
   it("exposes the persistence marker and typed envelope without changing the candidate", () => {
     const candidate = mapFurnitureOrderItemCandidates(hardwareTable()).items[0]!;
     expect(furnitureOrderItemCandidateEnvelope(candidate)).toEqual({

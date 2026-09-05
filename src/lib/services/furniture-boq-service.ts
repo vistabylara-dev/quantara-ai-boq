@@ -119,6 +119,8 @@ export type RegenerateFurnitureManagedBOQInput = {
   boqId: string;
   /** Required caller-owned setting. The exported UI default is 10%. */
   wastagePercentage: number;
+  /** Immutable autonomous operation identity. Human-triggered generation omits it. */
+  systemValidatedOperationHash?: string;
 };
 
 export type RegenerateFurnitureManagedBOQResult = {
@@ -328,6 +330,10 @@ function uniqueStrings(values: readonly string[]): string[] {
   return [...new Set(values)];
 }
 
+function asJson(value: unknown): Prisma.InputJsonValue {
+  return JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue;
+}
+
 function parseCandidate(value: Prisma.JsonValue): FurniturePartCandidate {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     throw new AppError("FURNITURE_CANDIDATE_INVALID", "A confirmed furniture candidate has invalid data.", 409);
@@ -367,6 +373,30 @@ function parseOrderItemCandidate(value: Prisma.JsonValue): FurnitureOrderItemCan
     throw new AppError("FURNITURE_ORDER_ITEM_INVALID", "A confirmed furniture order item has invalid data.", 409);
   }
   return record as FurnitureOrderItemCandidate;
+}
+
+function assertAutonomousOperationHash(value: string): void {
+  if (!/^[a-f0-9]{64}$/i.test(value)) {
+    throw new AppError(
+      "AUTONOMOUS_JOINERY_IDENTITY_INVALID",
+      "System-validated Joinery assembly requires an immutable operation hash.",
+      409,
+    );
+  }
+}
+
+function systemValidatableCandidate(candidate: FurniturePartCandidate): boolean {
+  return candidate.evidence.method.length > 0
+    && candidate.evidence.sourceFileId !== null
+    && candidate.verificationStatus !== "BLOCKED"
+    && candidate.issues.every((issue) => issue.severity !== "BLOCKING");
+}
+
+function systemValidatableOrderItem(candidate: FurnitureOrderItemCandidate): boolean {
+  return candidate.evidence.method.length > 0
+    && candidate.evidence.sourceFileId !== null
+    && candidate.verificationStatus !== "BLOCKED"
+    && candidate.issues.every((issue) => issue.severity !== "BLOCKING");
 }
 
 function canonicalItemsForSection(output: FurnitureCanonicalOutput, code: FurnitureCanonicalSectionCode) {
@@ -528,6 +558,52 @@ export async function regenerateFurnitureManagedBOQ(
         technicalDataJson: true,
       },
     });
+    let systemValidatedCandidateCount = 0;
+    if (input.systemValidatedOperationHash) {
+      assertAutonomousOperationHash(input.systemValidatedOperationHash);
+      for (const entity of entities) {
+        if (entity.status === ExtractedEntityStatus.CONFIRMED && entity.confirmedAt) continue;
+        const candidate = parseCandidate(entity.technicalDataJson);
+        if (!systemValidatableCandidate(candidate)) continue;
+        const validatedAt = new Date();
+        const approved: FurniturePartCandidate = {
+          ...candidate,
+          verificationStatus: "APPROVED_LOCKED",
+        };
+        const claimed = await tx.extractedEntity.updateMany({
+          where: {
+            id: entity.id,
+            companyId: actor.companyId,
+            projectId: project.id,
+            status: { in: [ExtractedEntityStatus.EXTRACTED, ExtractedEntityStatus.NEEDS_REVIEW, ExtractedEntityStatus.CORRECTED] },
+            updatedAt: entity.updatedAt,
+          },
+          data: {
+            technicalDataJson: asJson({ kind: FURNITURE_CANDIDATE_TECHNICAL_DATA_KIND, candidate: approved }),
+            status: ExtractedEntityStatus.CONFIRMED,
+            confirmedByUserId: null,
+            confirmedAt: validatedAt,
+            correctionJson: asJson({
+              schemaVersion: "autonomous-joinery-validation-v1",
+              validationType: "SYSTEM_VALIDATED",
+              operationHash: input.systemValidatedOperationHash,
+              validatedAt: validatedAt.toISOString(),
+              retainedReviewIssues: approved.issues.map((issue) => issue.code),
+            }),
+          },
+        });
+        if (claimed.count !== 1) {
+          throw new ConflictError("CONCURRENT_WRITE_CONFLICT", "A Joinery candidate changed during deterministic validation.");
+        }
+        entity.status = ExtractedEntityStatus.CONFIRMED;
+        entity.confirmedAt = validatedAt;
+        entity.technicalDataJson = asJson({
+          kind: FURNITURE_CANDIDATE_TECHNICAL_DATA_KIND,
+          candidate: approved,
+        }) as unknown as Prisma.JsonValue;
+        systemValidatedCandidateCount += 1;
+      }
+    }
     if (entities.length === 0) {
       throw new AppError(
         "FURNITURE_CONFIRMED_CANDIDATES_REQUIRED",
@@ -574,6 +650,50 @@ export async function regenerateFurnitureManagedBOQ(
         technicalDataJson: true,
       },
     });
+    let systemValidatedOrderItemCount = 0;
+    if (input.systemValidatedOperationHash) {
+      for (const entity of orderEntities) {
+        if (entity.status === ExtractedEntityStatus.CONFIRMED && entity.confirmedAt) continue;
+        const candidate = parseOrderItemCandidate(entity.technicalDataJson);
+        if (!systemValidatableOrderItem(candidate)) continue;
+        const validatedAt = new Date();
+        const approved: FurnitureOrderItemCandidate = {
+          ...candidate,
+          verificationStatus: "APPROVED_LOCKED",
+        };
+        const claimed = await tx.extractedEntity.updateMany({
+          where: {
+            id: entity.id,
+            companyId: actor.companyId,
+            projectId: project.id,
+            status: { in: [ExtractedEntityStatus.EXTRACTED, ExtractedEntityStatus.NEEDS_REVIEW, ExtractedEntityStatus.CORRECTED] },
+            updatedAt: entity.updatedAt,
+          },
+          data: {
+            technicalDataJson: asJson({ kind: FURNITURE_ORDER_ITEM_TECHNICAL_DATA_KIND, candidate: approved }),
+            status: ExtractedEntityStatus.CONFIRMED,
+            confirmedByUserId: null,
+            confirmedAt: validatedAt,
+            correctionJson: asJson({
+              schemaVersion: "autonomous-joinery-validation-v1",
+              validationType: "SYSTEM_VALIDATED",
+              operationHash: input.systemValidatedOperationHash,
+              validatedAt: validatedAt.toISOString(),
+            }),
+          },
+        });
+        if (claimed.count !== 1) {
+          throw new ConflictError("CONCURRENT_WRITE_CONFLICT", "A Joinery order item changed during deterministic validation.");
+        }
+        entity.status = ExtractedEntityStatus.CONFIRMED;
+        entity.confirmedAt = validatedAt;
+        entity.technicalDataJson = asJson({
+          kind: FURNITURE_ORDER_ITEM_TECHNICAL_DATA_KIND,
+          candidate: approved,
+        }) as unknown as Prisma.JsonValue;
+        systemValidatedOrderItemCount += 1;
+      }
+    }
     if (orderEntities.some((entity) => entity.status !== ExtractedEntityStatus.CONFIRMED || !entity.confirmedAt)) {
       throw new AppError(
         "FURNITURE_ORDER_ITEMS_REQUIRE_REVIEW",
@@ -799,6 +919,10 @@ export async function regenerateFurnitureManagedBOQ(
         projectId: project.id,
         outputVersion: FURNITURE_CANONICAL_OUTPUT_VERSION,
         confirmedCandidateCount: confirmedCandidates.length,
+        validationType: input.systemValidatedOperationHash ? "SYSTEM_VALIDATED" : "HUMAN_CONFIRMED",
+        systemValidatedOperationHash: input.systemValidatedOperationHash ?? null,
+        systemValidatedCandidateCount,
+        systemValidatedOrderItemCount,
         wastagePercentage: input.wastagePercentage,
         createdItems,
         updatedItems,

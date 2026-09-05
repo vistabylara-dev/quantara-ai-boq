@@ -8,14 +8,9 @@ import { prisma } from "@/lib/db/prisma";
 import { AppError, ConflictError, NotFoundError } from "@/lib/errors/app-error";
 import { createAuditLog } from "@/lib/repositories/audit-repository";
 import {
-  authorizePreviewProviderKeyRecovery,
-  authorizeSingle429ProviderRecovery,
   autonomousPreparationConfigurationSchema,
-  isPreviewProviderKeyRecoveryEligible,
-  PREVIEW_PROVIDER_KEY_CORRECTED_RECOVERY_REASON,
   type AutonomousPreparationConfiguration,
 } from "@/lib/autonomous-boq/preparation";
-import { verifyOpenAIProviderProject } from "@/lib/tayqan/openai-tayqan-measurement-reasoner";
 
 function jsonRecord(value: Prisma.JsonValue | null): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value)
@@ -264,41 +259,15 @@ export async function requeueAutonomousPreparationJob(
 
   const checkpoint = jsonRecord(current.resultSummaryJson);
   let retryCheckpoint: Record<string, unknown> | null = null;
-  if (checkpoint.providerAttempt && !checkpoint.providerResult) {
-    const authorizedAt = new Date().toISOString();
-    if (isPreviewProviderKeyRecoveryEligible(checkpoint)) {
-      if (
-        process.env.VERCEL_ENV !== "preview"
-        || process.env.VERCEL_GIT_COMMIT_REF !== "fix/universal-drawing-to-boq-workflow"
-      ) {
-        throw new AppError(
-          "AUTONOMOUS_PREVIEW_PROVIDER_KEY_RECOVERY_SCOPE_INVALID",
-          "The job-specific provider-key recovery is restricted to the authorized feature Preview.",
-          409,
-        );
-      }
-      const apiKey = process.env.OPENAI_API_KEY?.trim();
-      if (!apiKey) {
-        throw new AppError(
-          "TAYQAN_PREVIEW_PROVIDER_KEY_NOT_CONFIGURED",
-          "The branch Preview provider key is not configured. No recovery authorization was consumed.",
-          503,
-        );
-      }
-      const proof = await verifyOpenAIProviderProject({
-        apiKey,
-        model: process.env.TAYQAN_MEASUREMENT_MODEL?.trim() || "gpt-5.6-sol",
-        expectedProjectId: "proj_qnekQBZ4GZrcqdMEEIwJkC7X",
-      });
-      retryCheckpoint = authorizePreviewProviderKeyRecovery(checkpoint, {
-        jobId,
-        authorizedAt,
-        providerProjectId: proof.projectId,
-        providerRequestId: proof.requestId,
-      });
-    } else {
-      retryCheckpoint = authorizeSingle429ProviderRecovery(checkpoint, authorizedAt);
-    }
+  if (checkpoint.providerAttempt || checkpoint.providerFailure || checkpoint.providerResult) {
+    retryCheckpoint = {
+      ...checkpoint,
+      providerAttempt: null,
+      providerResult: null,
+      providerFailure: null,
+      providerRecovery: null,
+      migratedToDeterministicEstimatorAt: new Date().toISOString(),
+    };
   }
 
   return prisma.$transaction(async (tx) => {
@@ -335,28 +304,14 @@ export async function requeueAutonomousPreparationJob(
       );
     }
     if (retryCheckpoint) {
-      const recovery = jsonRecord(retryCheckpoint.providerRecovery as Prisma.JsonValue);
-      const previewRecovery = jsonRecord(
-        retryCheckpoint.previewProviderKeyRecovery as Prisma.JsonValue,
-      );
       await createAuditLog(companyId, {
         entityType: "ExtractionJob",
         entityId: jobId,
-        action: previewRecovery.reason === PREVIEW_PROVIDER_KEY_CORRECTED_RECOVERY_REASON
-          ? "AUTONOMOUS_PREVIEW_PROVIDER_KEY_RECOVERY_CONSUMED"
-          : recovery.reason === "PRE_PROVIDER_INFRASTRUCTURE_RETRY"
-          ? "AUTONOMOUS_PRE_PROVIDER_INFRASTRUCTURE_RECOVERY_AUTHORIZED"
-          : recovery.reason === "FUNDED_PROJECT_KEY_RETRY"
-            ? "AUTONOMOUS_FUNDED_PROJECT_KEY_RECOVERY_AUTHORIZED"
-            : "AUTONOMOUS_PROVIDER_429_RECOVERY_AUTHORIZED",
-        payload: previewRecovery.reason === PREVIEW_PROVIDER_KEY_CORRECTED_RECOVERY_REASON
-          ? {
-              reason: PREVIEW_PROVIDER_KEY_CORRECTED_RECOVERY_REASON,
-              providerProjectId: previewRecovery.providerProjectId as string,
-              providerRequestId: previewRecovery.providerRequestId as string | null,
-              consumedAt: previewRecovery.consumedAt as string,
-            }
-          : { attemptCount: recovery.attemptCount as number },
+        action: "AUTONOMOUS_ESTIMATOR_MIGRATED_TO_DETERMINISTIC",
+        payload: {
+          previousProviderCheckpointCleared: true,
+          migratedAt: retryCheckpoint.migratedToDeterministicEstimatorAt as string,
+        },
       }, tx);
     }
     return tx.extractionJob.findFirstOrThrow({ where: { id: jobId, companyId } });

@@ -23,6 +23,16 @@ describe("extraction worker runtime boundary", () => {
     "utf8",
   );
 
+  const preparationRoute = readFileSync(
+    path.resolve(__dirname, "../src/app/api/projects/[projectId]/boq-preparation/route.ts"),
+    "utf8",
+  );
+
+  const preparationRetryRoute = readFileSync(
+    path.resolve(__dirname, "../src/app/api/projects/[projectId]/boq-preparation/[jobId]/retry/route.ts"),
+    "utf8",
+  );
+
   it("performs no stale-job database recovery merely by importing extraction-worker", () => {
     expect(worker).not.toContain("quantaraExtractionJobQueueRecovered");
     expect(worker).not.toContain("extractionJobQueue.recoverStaleJobs()");
@@ -45,6 +55,11 @@ describe("extraction worker runtime boundary", () => {
   it("claims the queued extraction inside the request so post-response scheduling cannot strand it", () => {
     expect(extractionRoute).toContain("await extractionJobQueue.processQueuedJob(actor.companyId, data.id);");
     expect(queue).toContain("claimQueuedExtractionJob(companyId, jobId)");
+  });
+
+  it("claims autonomous preparation starts and retries inside their request", () => {
+    expect(preparationRoute).toContain("await extractionJobQueue.processQueuedJob(actor.companyId, preparation.id);");
+    expect(preparationRetryRoute).toContain("await extractionJobQueue.processQueuedJob(actor.companyId, preparation.id);");
   });
 
   it("scopes targeted stale recovery to tenant, file, engine, RUNNING state and cutoff", () => {

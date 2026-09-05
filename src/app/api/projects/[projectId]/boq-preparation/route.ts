@@ -7,6 +7,7 @@ import {
   startAutonomousBoqPreparation,
 } from "@/lib/services/autonomous-boq-preparation-service";
 import { projectIdParamsSchema } from "@/lib/validation/boq-route-schemas";
+import { extractionJobQueue } from "@/lib/jobs/extraction-worker";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -31,7 +32,9 @@ async function POSTHandler(request: Request, context: RouteContext) {
     setActorContext(actor);
     const { projectId } = projectIdParamsSchema.parse(await context.params);
     const input = await parseJsonBody(request, autonomousBoqPreparationRequestSchema);
-    return apiSuccess(await startAutonomousBoqPreparation(actor, projectId, input), 202);
+    const preparation = await startAutonomousBoqPreparation(actor, projectId, input);
+    await extractionJobQueue.processQueuedJob(actor.companyId, preparation.id);
+    return apiSuccess(preparation, 202);
   } catch (error) {
     return handleApiError(error);
   }

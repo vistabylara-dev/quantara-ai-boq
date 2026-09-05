@@ -320,7 +320,7 @@ async function defaultEnsureSourcesProcessed(
       if (typeof classifiedAs === "string" && classifiedAs !== "UNKNOWN") evidenceChanged = true;
     }
 
-    if (["csv", "xlsx"].includes(file.extension.toLowerCase())) {
+    if (["csv", "xlsx", "pdf"].includes(file.extension.toLowerCase())) {
       const tableCount = await prisma.extractedTable.count({
         where: { companyId: actor.companyId, projectFileId: file.id },
       });
@@ -331,13 +331,21 @@ async function defaultEnsureSourcesProcessed(
           projectFileId: file.id,
           engineType: ExtractionEngineType.TABLE_EXTRACTION,
         });
-        if (extraction.status !== ExtractionJobStatus.COMPLETED) {
+        const extractedTableCount = await prisma.extractedTable.count({
+          where: { companyId: actor.companyId, projectFileId: file.id },
+        });
+        const usableReviewedPdfEvidence = file.extension.toLowerCase() === "pdf"
+          && extraction.status === ExtractionJobStatus.NEEDS_REVIEW
+          && extractedTableCount > 0;
+        if (extraction.status !== ExtractionJobStatus.COMPLETED && !usableReviewedPdfEvidence) {
           exceptions.push({
             code: extraction.errorCode ?? "STRUCTURED_SOURCE_EXTRACTION_INCOMPLETE",
             message: extraction.errorMessage
               ?? `Quantara could not extract the schedule evidence in ${file.originalName}.`,
             sourceFileIds: [file.id],
           });
+        } else {
+          evidenceChanged = true;
         }
       }
     }
@@ -527,6 +535,7 @@ async function defaultAssemble(
         projectIdentifier: scope.projectSlug,
         boqId: configuration.targetBoqId,
         wastagePercentage: DEFAULT_FURNITURE_WASTAGE_PERCENTAGE,
+        systemValidatedOperationHash: configuration.operationHash,
       });
       return {
         state: "READY_FOR_RATES",

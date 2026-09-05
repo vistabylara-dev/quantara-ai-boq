@@ -40,6 +40,13 @@ const managedStore = vi.hoisted(() => {
         ? rows.filter((row) => row.status !== where.status.not)
         : rows;
     }),
+    updateMany: vi.fn(async ({ where, data }: { where: Record<string, any>; data: Record<string, any> }) => {
+      const rows = [...state.partRows, ...state.orderRows];
+      const row = rows.find((candidate) => candidate.id === where.id && candidate.updatedAt === where.updatedAt);
+      if (!row) return { count: 0 };
+      Object.assign(row, data);
+      return { count: 1 };
+    }),
   };
   const bOQ = {
     findFirst: vi.fn(async () => state.boq),
@@ -352,6 +359,52 @@ describe("Furniture managed BOQ hardware/order integration", () => {
     expect(mocks.buildFurnitureCanonicalOutput).not.toHaveBeenCalled();
     expect(managedStore.bOQ.findFirst).not.toHaveBeenCalled();
     expect(managedStore.bOQ.updateMany).not.toHaveBeenCalled();
+  });
+
+  it("system-validates exact non-blocking source rows for an autonomous operation", async () => {
+    const part = partRow(ExtractedEntityStatus.NEEDS_REVIEW);
+    part.technicalDataJson.candidate.verificationStatus = "READY_FOR_REVIEW";
+    const order = orderRow(ExtractedEntityStatus.NEEDS_REVIEW);
+    order.technicalDataJson.candidate.verificationStatus = "NEEDS_REVIEW";
+    managedStore.state.partRows = [part];
+    managedStore.state.orderRows = [order];
+
+    const result = await regenerateFurnitureManagedBOQ(actor, {
+      projectIdentifier: "controlled-project",
+      boqId: BOQ_ID,
+      wastagePercentage: 10,
+      systemValidatedOperationHash: "a".repeat(64),
+    });
+
+    expect(result.changed).toBe(false);
+    expect(managedStore.extractedEntity.updateMany).toHaveBeenCalledTimes(2);
+    expect(part).toMatchObject({ status: ExtractedEntityStatus.CONFIRMED, confirmedByUserId: null });
+    expect(order).toMatchObject({ status: ExtractedEntityStatus.CONFIRMED, confirmedByUserId: null });
+    expect(mocks.buildFurnitureCanonicalOutput).toHaveBeenCalledWith(expect.objectContaining({
+      confirmedCandidates: [expect.objectContaining({ status: "CONFIRMED" })],
+      confirmedOrderItems: [expect.objectContaining({ status: "CONFIRMED" })],
+    }));
+  });
+
+  it("does not system-validate a source row with a blocking issue", async () => {
+    const part = partRow(ExtractedEntityStatus.NEEDS_REVIEW);
+    part.technicalDataJson.candidate.verificationStatus = "BLOCKED";
+    part.technicalDataJson.candidate.issues = [{
+      severity: "BLOCKING",
+      code: "MISSING_DIMENSION",
+      message: "Width is missing.",
+      evidenceReferences: [],
+    }];
+    managedStore.state.partRows = [part];
+
+    await expect(regenerateFurnitureManagedBOQ(actor, {
+      projectIdentifier: "controlled-project",
+      boqId: BOQ_ID,
+      wastagePercentage: 10,
+      systemValidatedOperationHash: "b".repeat(64),
+    })).rejects.toMatchObject({ code: "FURNITURE_CANDIDATES_REQUIRE_REVIEW" });
+
+    expect(managedStore.extractedEntity.updateMany).not.toHaveBeenCalled();
   });
 
   it("passes only confirmed order items to canonical output without flattening their shape", async () => {

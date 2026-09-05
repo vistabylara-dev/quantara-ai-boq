@@ -10,7 +10,6 @@ import type { CurrentActor } from "@/lib/auth/current-actor";
 import {
   AUTONOMOUS_TAYQAN_REASONER_CONTRACT_VERSION,
   autonomousPreparationConfigurationSchema,
-  resolveAutonomousProviderExecution,
   type AutonomousPreparationConfiguration,
 } from "@/lib/autonomous-boq/preparation";
 import { stableAutonomousHash } from "@/lib/autonomous-boq/contract";
@@ -36,7 +35,6 @@ import {
 } from "@/lib/services/tayqan-measurement-service";
 import type {
   TayqanMeasurementGoverningContext,
-  TayqanMeasurementReasonerResult,
 } from "@/lib/tayqan/tayqan-measurement-reasoner";
 
 type PreparationException = {
@@ -713,7 +711,6 @@ export function createAutonomousBoqPreparationHandler(
         migratedToDeterministicEstimatorAt: dependencies.now().toISOString(),
       });
     }
-    const execution = { kind: "CALL_PROVIDER" as const };
     const measurementInput: PrepareTayqanMeasurementsInput = {
       projectId: configuration.projectId,
       sourceFileIds: configuration.frozenSources.map((source) => source.id),

@@ -389,7 +389,12 @@ describe("Furniture managed BOQ hardware/order integration", () => {
   it("does not system-validate a source row with a blocking issue", async () => {
     const part = partRow(ExtractedEntityStatus.NEEDS_REVIEW);
     part.technicalDataJson.candidate.verificationStatus = "BLOCKED";
-    part.technicalDataJson.candidate.issues = [{ severity: "BLOCKING", code: "MISSING_DIMENSION" }];
+    part.technicalDataJson.candidate.issues = [{
+      severity: "BLOCKING",
+      code: "MISSING_DIMENSION",
+      message: "Width is missing.",
+      evidenceReferences: [],
+    }];
     managedStore.state.partRows = [part];
 
     await expect(regenerateFurnitureManagedBOQ(actor, {

@@ -33,6 +33,7 @@ import {
   type TayqanMeasurementException,
 } from "@/lib/tayqan/tayqan-measurement-contract";
 import { createOpenAITayqanMeasurementReasoner } from "@/lib/tayqan/openai-tayqan-measurement-reasoner";
+import { createDeterministicMeasurementReasoner } from "@/lib/autonomous-boq/deterministic-measurement-reasoner";
 import {
   classifyTayqanDrawingPageRole,
   mergeTayqanMeasurementPlans,
@@ -658,7 +659,13 @@ export async function prepareTayqanMeasurementProposals(
       .digest("hex")
       .slice(0, 32)}`;
     const useSeniorProMode = env.TAYQAN_SENIOR_PRO_MODE?.trim() === "1";
-    const providedReasoner = options.reasoner;
+    // The commercial estimator is code-driven. Only callers that omit the
+    // system-validated persistence policy (paid TAYQAN work orders) may fall
+    // through to the OpenAI reasoner.
+    const providedReasoner = options.reasoner
+      ?? (persistencePolicy.systemValidated
+        ? createDeterministicMeasurementReasoner()
+        : undefined);
     if (!providedReasoner && !apiKey) {
       throw new AppError(
         "TAYQAN_MEASUREMENT_AI_NOT_CONFIGURED",

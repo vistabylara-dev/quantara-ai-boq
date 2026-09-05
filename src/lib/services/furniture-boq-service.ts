@@ -604,13 +604,6 @@ export async function regenerateFurnitureManagedBOQ(
         systemValidatedCandidateCount += 1;
       }
     }
-    if (entities.length === 0) {
-      throw new AppError(
-        "FURNITURE_CONFIRMED_CANDIDATES_REQUIRED",
-        "Confirm at least one furniture candidate before generating the managed BOQ and cutting list.",
-        409,
-      );
-    }
     if (entities.some((entity) => entity.status !== ExtractedEntityStatus.CONFIRMED || !entity.confirmedAt)) {
       throw new AppError(
         "FURNITURE_CANDIDATES_REQUIRE_REVIEW",
@@ -693,6 +686,13 @@ export async function regenerateFurnitureManagedBOQ(
         }) as unknown as Prisma.JsonValue;
         systemValidatedOrderItemCount += 1;
       }
+    }
+    if (entities.length === 0 && orderEntities.length === 0) {
+      throw new AppError(
+        "FURNITURE_CONFIRMED_CANDIDATES_REQUIRED",
+        "Confirm at least one furniture part or scheduled order item before generating managed outputs.",
+        409,
+      );
     }
     if (orderEntities.some((entity) => entity.status !== ExtractedEntityStatus.CONFIRMED || !entity.confirmedAt)) {
       throw new AppError(

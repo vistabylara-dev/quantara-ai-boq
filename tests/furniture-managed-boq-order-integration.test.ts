@@ -386,6 +386,27 @@ describe("Furniture managed BOQ hardware/order integration", () => {
     }));
   });
 
+  it("generates an order-only Joinery schedule without requiring fabricated part rows", async () => {
+    const order = orderRow(ExtractedEntityStatus.NEEDS_REVIEW);
+    order.technicalDataJson.candidate.verificationStatus = "NEEDS_REVIEW";
+    managedStore.state.partRows = [];
+    managedStore.state.orderRows = [order];
+
+    const result = await regenerateFurnitureManagedBOQ(actor, {
+      projectIdentifier: "controlled-project",
+      boqId: BOQ_ID,
+      wastagePercentage: 10,
+      systemValidatedOperationHash: "c".repeat(64),
+    });
+
+    expect(result.changed).toBe(false);
+    expect(order).toMatchObject({ status: ExtractedEntityStatus.CONFIRMED, confirmedByUserId: null });
+    expect(mocks.buildFurnitureCanonicalOutput).toHaveBeenCalledWith(expect.objectContaining({
+      confirmedCandidates: [],
+      confirmedOrderItems: [expect.objectContaining({ status: "CONFIRMED" })],
+    }));
+  });
+
   it("does not system-validate a source row with a blocking issue", async () => {
     const part = partRow(ExtractedEntityStatus.NEEDS_REVIEW);
     part.technicalDataJson.candidate.verificationStatus = "BLOCKED";
@@ -462,8 +483,9 @@ describe("Furniture managed BOQ hardware/order integration", () => {
     }));
   });
 
-  it("fails closed when every detected part was rejected", async () => {
+  it("fails closed when every detected Joinery record was rejected", async () => {
     managedStore.state.partRows = [partRow(ExtractedEntityStatus.REJECTED)];
+    managedStore.state.orderRows = [orderRow(ExtractedEntityStatus.REJECTED)];
 
     await expect(regenerateFurnitureManagedBOQ(actor, {
       projectIdentifier: "controlled-project",

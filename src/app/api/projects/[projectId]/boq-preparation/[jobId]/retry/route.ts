@@ -3,6 +3,7 @@ import { getCurrentActor } from "@/lib/auth/current-actor";
 import { setActorContext, withActorRequestContext } from "@/lib/auth/request-context";
 import { apiSuccess, handleApiError } from "@/lib/http/api-response";
 import { retryAutonomousBoqPreparation } from "@/lib/services/autonomous-boq-preparation-service";
+import { extractionJobQueue } from "@/lib/jobs/extraction-worker";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -20,7 +21,9 @@ async function POSTHandler(_request: Request, context: RouteContext) {
     const actor = await getCurrentActor();
     setActorContext(actor);
     const { projectId, jobId } = paramsSchema.parse(await context.params);
-    return apiSuccess(await retryAutonomousBoqPreparation(actor, projectId, jobId), 202);
+    const preparation = await retryAutonomousBoqPreparation(actor, projectId, jobId);
+    await extractionJobQueue.processQueuedJob(actor.companyId, preparation.id);
+    return apiSuccess(preparation, 202);
   } catch (error) {
     return handleApiError(error);
   }

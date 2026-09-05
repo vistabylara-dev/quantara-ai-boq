@@ -10,6 +10,28 @@ import { parsePositionalTextFallback } from "../src/lib/files/table-extraction/p
  * trustworthy enough to call a table, never re-derives geometry itself.
  */
 describe("parsePositionalTextFallback", () => {
+  it("preserves every row in a headerless Joinery item schedule and counts each exact occurrence", () => {
+    const tables = parsePositionalTextFallback(
+      [
+        "J05\tMASTER BATH\tCABINET WITH DRAWERS",
+        "J06\tMASTER BATH\tCABINET WITH DOOR AND OPEN SHELF",
+        "J07\tKITCHEN\tSINK BASE CABINET",
+      ].join("\n"),
+      1,
+    );
+
+    expect(tables).toHaveLength(1);
+    expect(tables[0].title).toBe("Joinery item schedule — page 1");
+    expect(tables[0].rows).toHaveLength(3);
+    expect(tables[0].rows[0].cells).toEqual(expect.arrayContaining([
+      expect.objectContaining({ columnKey: "item_code", rawValue: "J05" }),
+      expect.objectContaining({ columnKey: "room", rawValue: "MASTER BATH" }),
+      expect.objectContaining({ columnKey: "description", rawValue: "CABINET WITH DRAWERS" }),
+      expect.objectContaining({ columnKey: "quantity", rawValue: "1" }),
+      expect.objectContaining({ columnKey: "unit", rawValue: "nr" }),
+    ]));
+  });
+
   it("recovers a table when enough rows agree on the same column count", () => {
     const text = [
       "Item\tDescription\tQty\tUnit",

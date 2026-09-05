@@ -28,6 +28,15 @@ const FALLBACK_CONFIDENCE = 40; // Lower than the schedule-specific fallback (50
 const MIN_ROWS_FOR_TABLE = 3; // header + at least 2 data rows sharing the same column count
 const MIN_COLUMNS = 2;
 
+function isHeaderlessJoineryItemSchedule(rows: string[][], columnCount: number): boolean {
+  if (columnCount !== 3 || rows.length < MIN_ROWS_FOR_TABLE) return false;
+  return rows.every((row) => (
+    /^J\d+[A-Z]?$/i.test(row[0]?.trim() ?? "")
+    && (row[1]?.trim().length ?? 0) > 0
+    && (row[2]?.trim().length ?? 0) > 0
+  ));
+}
+
 function splitIntoCellRows(cellSeparatedText: string): string[][] {
   // Deliberately do NOT trim trailing whitespace off the whole line before
   // splitting — a trailing tab is a meaningful empty final cell (e.g. a row
@@ -66,7 +75,11 @@ export function parsePositionalTextFallback(cellSeparatedText: string, pageNumbe
   if (frequency < MIN_ROWS_FOR_TABLE) return [];
 
   const matchingRows = rows.filter((row) => row.length === dominantColumnCount);
-  const [headerRow, ...dataRows] = matchingRows;
+  const headerlessJoinery = isHeaderlessJoineryItemSchedule(matchingRows, dominantColumnCount);
+  const headerRow = headerlessJoinery
+    ? ["Item code", "Room", "Description"]
+    : matchingRows[0];
+  const dataRows = headerlessJoinery ? matchingRows : matchingRows.slice(1);
   if (!headerRow || dataRows.length === 0) return [];
 
   const parsedRows: ParsedTableRow[] = dataRows
@@ -82,6 +95,21 @@ export function parsePositionalTextFallback(cellSeparatedText: string, pageNumbe
           };
         })
         .filter((c) => c.rawValue !== "");
+      if (headerlessJoinery) {
+        const itemCode = row[0]!.trim();
+        cells.push({
+          columnKey: "quantity",
+          columnTitle: "Quantity",
+          rawValue: "1",
+          sourceCellReference: `page ${pageNumber}, scheduled item ${itemCode}, one row occurrence`,
+        });
+        cells.push({
+          columnKey: "unit",
+          columnTitle: "Unit",
+          rawValue: "nr",
+          sourceCellReference: `page ${pageNumber}, scheduled item ${itemCode}, counted occurrence`,
+        });
+      }
       return { rowNumber: index + 1, confidence: FALLBACK_CONFIDENCE, cells };
     })
     .filter((row) => row.cells.length > 0);
@@ -90,7 +118,9 @@ export function parsePositionalTextFallback(cellSeparatedText: string, pageNumbe
 
   return [
     {
-      title: `Recovered table — page ${pageNumber}`,
+      title: headerlessJoinery
+        ? `Joinery item schedule — page ${pageNumber}`
+        : `Recovered table — page ${pageNumber}`,
       confidence: FALLBACK_CONFIDENCE,
       method: "pdf-positional-text-fallback",
       rows: parsedRows,

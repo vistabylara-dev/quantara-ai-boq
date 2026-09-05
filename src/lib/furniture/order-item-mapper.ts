@@ -183,6 +183,11 @@ function explicitCategory(
   return "UNCLASSIFIED";
 }
 
+function isJoineryItemSchedule(table: FurnitureSourceTable): boolean {
+  return normalizeValue(`${table.sheetName ?? ""} ${table.title ?? ""}`)
+    .includes("joinery item schedule");
+}
+
 function stableIdentity(table: FurnitureSourceTable, row: FurnitureSourceRow): {
   tableKey: string;
   rowKey: string;
@@ -260,11 +265,14 @@ export function mapFurnitureOrderItemCandidates(
       });
     }
     if (category === "UNCLASSIFIED") {
+      const scheduledJoineryItem = isJoineryItemSchedule(table);
       issues.push({
         code: "CATEGORY_REQUIRES_REVIEW",
         field: "category",
-        severity: "BLOCKING",
-        message: "No explicit order category was present in the source row; select a category before approval.",
+        severity: scheduledJoineryItem ? "REVIEW" : "BLOCKING",
+        message: scheduledJoineryItem
+          ? "The drawing identifies a scheduled Joinery item; its purchasing category remains editable during rate review."
+          : "No explicit order category was present in the source row; select a category before approval.",
         evidenceReferences: [sourceReference(table, row, descriptionCell)],
       });
     }

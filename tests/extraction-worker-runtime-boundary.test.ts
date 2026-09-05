@@ -18,6 +18,11 @@ describe("extraction worker runtime boundary", () => {
     "utf8",
   );
 
+  const extractionRoute = readFileSync(
+    path.resolve(__dirname, "../src/app/api/files/[fileId]/extract/route.ts"),
+    "utf8",
+  );
+
   it("performs no stale-job database recovery merely by importing extraction-worker", () => {
     expect(worker).not.toContain("quantaraExtractionJobQueueRecovered");
     expect(worker).not.toContain("extractionJobQueue.recoverStaleJobs()");
@@ -30,6 +35,11 @@ describe("extraction worker runtime boundary", () => {
     expect(queue).toContain("input.projectFileId");
     expect(queue).toContain("input.engineType");
     expect(queue).toContain("STALE_RUNNING_CUTOFF_MS");
+  });
+
+  it("gives production PDF extraction five minutes and keeps stale recovery beyond that budget", () => {
+    expect(extractionRoute).toContain("export const maxDuration = 300;");
+    expect(queue).toContain("const STALE_RUNNING_CUTOFF_MS = 10 * 60 * 1000;");
   });
 
   it("scopes targeted stale recovery to tenant, file, engine, RUNNING state and cutoff", () => {

@@ -223,6 +223,29 @@ describe("LocalJobQueue — request-lifecycle-aware scheduling", () => {
     expect(final.progressPercentage).not.toBe(100);
   });
 
+  it("creates one new execution when a user reprocesses a NEEDS_REVIEW result", async () => {
+    const queue = newQueue();
+    queue.registerHandler(ExtractionEngineType.TABLE_EXTRACTION, async () => ({
+      status: ExtractionJobStatus.NEEDS_REVIEW,
+      resultSummary: { reason: "professional review" },
+    }));
+    const file = await makeFile();
+    const input = {
+      companyId,
+      projectId,
+      projectFileId: file.id,
+      engineType: ExtractionEngineType.TABLE_EXTRACTION,
+      createdByUserId: userId,
+    };
+    const first = await queue.enqueue(input);
+    await waitFor(async () => (await prisma.extractionJob.findUniqueOrThrow({ where: { id: first.id } })).status === ExtractionJobStatus.NEEDS_REVIEW);
+
+    const second = await queue.enqueue(input);
+    expect(second.id).not.toBe(first.id);
+    await waitFor(async () => (await prisma.extractionJob.findUniqueOrThrow({ where: { id: second.id } })).status === ExtractionJobStatus.NEEDS_REVIEW);
+    expect(await prisma.extractionJob.count({ where: { projectFileId: file.id, engineType: ExtractionEngineType.TABLE_EXTRACTION } })).toBe(2);
+  });
+
   it("E/F. a handler that always fails retries up to maximumAttempts, then becomes FAILED", async () => {
     const queue = newQueue();
     let calls = 0;

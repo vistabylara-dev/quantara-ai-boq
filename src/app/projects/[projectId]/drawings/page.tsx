@@ -669,7 +669,11 @@ export default function ProjectDrawingsPage(props: { params: Promise<{ projectId
                 disabled={preparationAction !== null}
                 className="rounded-2xl bg-[#009FE3] px-4 py-2 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-50 dark:bg-[#21C7F3] dark:text-[#040A16]"
               >
-                {preparationAction === "retry" ? "Retrying…" : "Retry failed scopes"}
+                {preparationAction === "retry"
+                  ? "Rechecking…"
+                  : preparation.status === "NEEDS_REVIEW"
+                    ? "Recheck reviewed evidence"
+                    : "Retry failed scopes"}
               </button>
             ) : preparation && ["NEEDS_INPUT", "NEEDS_REVIEW", "FAILED", "CANCELLED"].includes(preparation.status) ? (
               <>

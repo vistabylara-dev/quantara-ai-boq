@@ -701,18 +701,6 @@ export function createAutonomousBoqPreparationHandler(
 
     await checkpoint({ stage: "CATEGORIZING", readyForRates: false });
     await ctx.updateProgress(45, "measuring and reconciling drawing evidence");
-    // Standard estimator jobs are local and deterministic. Provider checkpoints
-    // belong only to paid TAYQAN assignments; clear legacy failures so a former
-    // OpenAI 429 cannot block this coded workflow.
-    if (summary.providerAttempt || summary.providerResult || summary.providerFailure) {
-      await checkpoint({
-        providerAttempt: null,
-        providerResult: null,
-        providerFailure: null,
-        providerRecovery: null,
-        migratedToDeterministicEstimatorAt: dependencies.now().toISOString(),
-      });
-    }
     const execution = resolveAutonomousProviderExecution(summary);
     const measurementInput: PrepareTayqanMeasurementsInput = {
       projectId: configuration.projectId,

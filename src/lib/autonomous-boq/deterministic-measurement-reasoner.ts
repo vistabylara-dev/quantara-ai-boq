@@ -74,7 +74,7 @@ function ruleForEntity(
     sourceText: entity.sourceText,
     unit: entity.unit,
   });
-  if (!recommendation.calculationType) return null;
+  if (!recommendation?.calculationType) return null;
   const matches = rules.filter(
     (rule) => rule.calculationType === recommendation.calculationType,
   );

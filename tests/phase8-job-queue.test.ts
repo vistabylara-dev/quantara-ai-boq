@@ -195,18 +195,15 @@ describe("Phase 8 sub-phase 2: background processing (job queue) (integration, r
           status: ExtractionJobStatus.RUNNING,
           completedAt: null,
           resultSummaryJson: undefined,
-          updatedAt: new Date(Date.now() - 6 * 60 * 1000),
+          updatedAt: new Date(Date.now() - 11 * 60 * 1000),
         },
       });
 
       await queue.recoverStaleJobs();
-      await waitFor(
-        async () => (await prisma.extractionJob.findUniqueOrThrow({ where: { id: job.id } })).status === ExtractionJobStatus.COMPLETED,
-        10_000,
-      );
+      await waitFor(async () => (await prisma.extractionJob.findUniqueOrThrow({ where: { id: job.id } })).status === ExtractionJobStatus.COMPLETED);
       const final = await prisma.extractionJob.findUniqueOrThrow({ where: { id: job.id } });
       expect((final.resultSummaryJson as { recovered?: boolean })?.recovered).toBe(true);
-    }, 15_000);
+    });
   });
 
   describe("extraction-job-service (real global queue singleton, tenant isolation + RBAC)", () => {

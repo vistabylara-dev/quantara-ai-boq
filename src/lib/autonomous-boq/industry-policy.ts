@@ -107,9 +107,10 @@ const POLICIES: Record<AutonomousIndustryEngineId, AutonomousIndustryPolicy> = {
   landscaping: policy("landscaping", [
     rule("landscape-irrigation-route", "irrigation", QuantityCalculationType.PIPE_LENGTH, "m", "Verified irrigation route", ["irrigationLength"]),
     rule("landscape-plant-count", "trees", QuantityCalculationType.COUNT, "nos", "Scheduled plant count"),
+    rule("landscape-coverage-area", "soil", QuantityCalculationType.FLOOR_AREA, "m2", "Measured softscape coverage area", ["coverageArea"]),
+    rule("landscape-hardscape-area", "hardscape", QuantityCalculationType.FLOOR_AREA, "m2", "Measured hardscape area"),
   ], [
     unsupported("plantSpacing", "UNSUPPORTED_DESIGN_SIZING", "Plant spacing is a design rule and has no registered deterministic take-off formula."),
-    unsupported("coverageArea", "UNREGISTERED_MEASUREMENT_FORMULA", "Coverage area is measurable, but generic AREA has no registered deterministic formula."),
   ]),
 };
 
@@ -147,13 +148,13 @@ const FAMILY_ROUTES: Record<string, FamilyRoute> = {
   },
   infrastructure: {
     engineId: "construction",
-    allowedRuleIds: ["foundation-excavation", "foundation-concrete"],
-    scopeNote: "Measured excavation and concrete only; road build-ups and utility design are outside the registered formulas.",
+    allowedRuleIds: ["foundation-excavation", "foundation-concrete", "external-works-area"],
+    scopeNote: "Measured excavation, concrete and external-works surface areas; utility design remains outside the registered formulas.",
   },
   "site-infrastructure": {
     engineId: "construction",
-    allowedRuleIds: ["foundation-excavation", "foundation-concrete"],
-    scopeNote: "Measured excavation and concrete only; road build-ups and utility design are outside the registered formulas.",
+    allowedRuleIds: ["foundation-excavation", "foundation-concrete", "external-works-area"],
+    scopeNote: "Measured excavation, concrete and external-works surface areas; utility design remains outside the registered formulas.",
   },
 };
 

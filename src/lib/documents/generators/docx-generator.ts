@@ -198,7 +198,7 @@ export async function generateDocx(input: GenerateDocxInput): Promise<Buffer> {
       new Paragraph({
         alignment: AlignmentType.CENTER,
         spacing: { after: 200 },
-        children: [new TextRun({ text: "Draft Quantities — For Scope Review Only (No Pricing)", bold: true, color: "B45309", size: 22 })],
+        children: [new TextRun({ text: data.meta.isDraft ? "Draft Quantities — For Scope Review Only (No Pricing)" : "Unpriced BOQ — Rates Excluded", bold: true, color: "B45309", size: 22 })],
       }),
     );
   }

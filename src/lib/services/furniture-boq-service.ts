@@ -766,7 +766,7 @@ export async function regenerateFurnitureManagedBOQ(
       && (!item.rateProvenance
         || item.rateProvenance.sourceType === "LEGACY_UNVERIFIED"
         || item.rateProvenance.confirmedAt === null));
-    const changed = sectionChanges || createdItems > 0 || updatedItems > 0
+    const changed = boq.pricingMode === "PRICED" || sectionChanges || createdItems > 0 || updatedItems > 0
       || removedManagedItems > 0 || nonCommercialRateBackfillItems.length > 0;
     if (!changed) {
       return {
@@ -792,6 +792,7 @@ export async function regenerateFurnitureManagedBOQ(
       },
       data: {
         status: BOQStatus.NEEDS_VERIFICATION,
+        pricingMode: "UNPRICED",
         version: { increment: 1 },
         verifiedVersion: null,
         verifiedAt: null,

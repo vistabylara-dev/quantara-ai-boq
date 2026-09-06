@@ -84,6 +84,20 @@ describe("autonomous BOQ industry policy contract", () => {
     }
   });
 
+  it("includes measurable infrastructure surfaces and landscaping coverage without claiming design sizing", () => {
+    const infrastructure = supportedContext("infrastructure");
+    expect(infrastructure.allowedRuleIds).toContain("external-works-area");
+
+    const landscaping = supportedContext("landscaping");
+    expect(landscaping.allowedRuleIds).toEqual(expect.arrayContaining([
+      "landscape-coverage-area",
+      "landscape-hardscape-area",
+    ]));
+    expect(landscaping.policy.unsupportedCapabilities).toEqual([
+      expect.objectContaining({ capability: "plantSpacing", code: "UNSUPPORTED_DESIGN_SIZING" }),
+    ]);
+  });
+
   it.each(REPRESENTATIVE_FAMILY_FIXTURES)(
     "executes the bounded $requestedIndustry family through its real $engineId policy",
     ({ requestedIndustry, engineId }) => {
@@ -94,7 +108,7 @@ describe("autonomous BOQ industry policy contract", () => {
       const operation = buildAutonomousOperationIdentity({ companyId: COMPANY_ID, projectId: PROJECT_ID, targetBoqId: BOQ_ID, industry, frozenSources });
       const draft = assembleAutonomousBoqDraft({ operation, industry, frozenSources, candidates: [fixture.measurement], unsupportedScopes: [], evaluatedAt: EVALUATED_AT });
       expect(draft.industry).toMatchObject({ requestedIndustry, engineId });
-      expect(draft.completion).toMatchObject({ technicalComplete: true, onlyRatesBlock: true });
+      expect(draft.completion).toMatchObject({ technicalComplete: true, readyToFinalizeUnpriced: true, pricingOptional: true, onlyRatesBlock: false });
     },
   );
 
@@ -155,7 +169,7 @@ describe("autonomous BOQ deterministic domain", () => {
 
     expect(draft.items).toHaveLength(1);
     expect(draft.items[0]).toMatchObject({ sectionId: "area-schedules", quantity: 1250, unit: "m2", rate: 0 });
-    expect(draft.completion).toMatchObject({ readyForRates: true, onlyRatesBlock: true });
+    expect(draft.completion).toMatchObject({ readyForRates: true, readyToFinalizeUnpriced: true, onlyRatesBlock: false });
   });
 
   it.each(REPRESENTATIVE_INDUSTRY_FIXTURES)(
@@ -186,8 +200,10 @@ describe("autonomous BOQ deterministic domain", () => {
       expect(draft.completion).toEqual({
         technicalComplete: true,
         readyForRates: true,
-        onlyRatesBlock: true,
-        blockers: ["UNIT_RATES_REQUIRED"],
+        readyToFinalizeUnpriced: true,
+        pricingOptional: true,
+        onlyRatesBlock: false,
+        blockers: [],
       });
     },
   );

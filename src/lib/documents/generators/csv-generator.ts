@@ -23,6 +23,7 @@ function row(fields: Array<string | number>): string {
  */
 export function generateCsv(data: CanonicalDocumentData): Buffer {
   const showInternal = data.boq.showInternalFields;
+  const quantitiesOnly = data.boq.pricingMode === "QUANTITIES_ONLY";
   const headers = [
     "Section",
     "Item No.",
@@ -32,8 +33,7 @@ export function generateCsv(data: CanonicalDocumentData): Buffer {
     "Quantity",
     "Unit",
     ...(showInternal ? ["Unit Cost", "Freight", "Installation", "Additional", "Landed Cost", "Margin %"] : []),
-    "Selling Rate",
-    "Total",
+    ...(quantitiesOnly ? [] : ["Selling Rate", "Total"]),
     "Room / Zone",
     "Drawing Ref.",
     "Notes",
@@ -65,8 +65,7 @@ export function generateCsv(data: CanonicalDocumentData): Buffer {
               item.marginPercentage ?? 0,
             ]
           : []),
-        item.sellingRate ?? 0,
-        item.totalAmount ?? 0,
+        ...(quantitiesOnly ? [] : [item.sellingRate ?? 0, item.totalAmount ?? 0]),
         item.roomOrZone,
         item.drawingReference,
         item.notes,

@@ -221,9 +221,10 @@ export function toBOQDTO(
       status: item.status,
       quantityConfirmed: Boolean(item.quantityProvenance?.confirmedAt) && item.quantityProvenance?.sourceType !== "LEGACY_UNVERIFIED",
       rateConfirmed: Boolean(item.rateProvenance?.confirmedAt) && item.rateProvenance?.sourceType !== "LEGACY_UNVERIFIED",
-      rateConfirmationRequired: !isStrictFurnitureManagedNonCommercialRow(
-        managedIdentityFor(boq.project.industryEngine.key, sectionCode, item),
-      ),
+      rateConfirmationRequired: boq.pricingMode !== "UNPRICED"
+        && !isStrictFurnitureManagedNonCommercialRow(
+          managedIdentityFor(boq.project.industryEngine.key, sectionCode, item),
+        ),
     })),
   });
 
@@ -243,6 +244,7 @@ export function toBOQDTO(
     version: boq.version,
     revisionNumber: boq.revisionNumber,
     status: toFrontendBOQStatus(boq.status),
+    pricingMode: boq.pricingMode,
     sections: boq.sections.map((section) => ({
       id: section.id,
       code: section.code,
@@ -609,6 +611,7 @@ export async function updateBOQ(companyId: string, boqId: string, input: BOQDocu
       where: { id: current.id, companyId, isLocked: false, version: current.version },
       data: {
         title: input.title,
+        pricingMode: input.pricingMode ?? "PRICED",
         discountPercentage: new Prisma.Decimal(input.totals.discountPercentage),
         ...(input.approvedBy !== undefined ? { approvedByName: input.approvedBy } : {}),
         ...(input.taxRate !== undefined ? { taxRate: new Prisma.Decimal(input.taxRate) } : {}),
@@ -727,6 +730,7 @@ export async function createBOQRevision(companyId: string, boqId: string, actorN
         approvedByName: null,
         discountPercentage: source.discountPercentage,
         taxRate: source.taxRate,
+        pricingMode: source.pricingMode,
         sections: {
           create: source.sections.map((section) => ({
             companyId,
@@ -911,9 +915,10 @@ export async function lockBOQ(companyId: string, boqId: string, actorName = "Dev
         rateProvenance.additionalCostSnapshot.equals(item.additionalCost) &&
         rateProvenance.marginModeSnapshot === item.marginMode &&
         rateProvenance.marginPercentageSnapshot.equals(item.marginPercentage);
-      const rateConfirmationRequired = !isStrictFurnitureManagedNonCommercialRow(
-        managedIdentityFor(current.project.industryEngine.key, sectionCode, item),
-      );
+      const rateConfirmationRequired = current.pricingMode !== "UNPRICED"
+        && !isStrictFurnitureManagedNonCommercialRow(
+          managedIdentityFor(current.project.industryEngine.key, sectionCode, item),
+        );
       if (!quantityTraceable || (rateConfirmationRequired && !rateTraceable)) {
         throw new AppError(
           "ESTIMATE_INTEGRITY_REQUIRED",

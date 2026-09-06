@@ -32,7 +32,7 @@ export type FurnitureSourceTable = {
   sourceTableId?: string;
   /** Stable logical position used for idempotent regeneration. */
   sourceTableKey?: string;
-  sheetName?: string;
+  sheetName?: string | null;
   title?: string;
   pageNumber?: number;
   rows: FurnitureSourceRow[];

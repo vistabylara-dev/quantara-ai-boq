@@ -30,6 +30,10 @@ const CATEGORIES = [
   {
     title: "Software and Spreadsheet Comparisons",
     links: [
+      { url: "/quantara-vs-togal-ai", label: "Quantara vs Togal.AI", desc: "Compare AI takeoff with Quantara's evidence-led, quantity-complete unpriced BOQ workflow." },
+      { url: "/quantara-vs-kreo", label: "Quantara vs Kreo", desc: "Compare cloud takeoff and estimating with structured BOQ preparation and governed review." },
+      { url: "/quantara-vs-costx", label: "Quantara vs RIB CostX", desc: "Compare established 2D and BIM measurement with Quantara's drawing-to-BOQ workflow." },
+      { url: "/quantara-vs-autodesk-takeoff", label: "Quantara vs Autodesk Takeoff", desc: "Compare Autodesk's 2D and 3D quantification workflow with Quantara's unpriced BOQ outputs." },
       { url: "/boq-software-comparison-uae", label: "BOQ Software Comparison UAE", desc: "Compare Quantara, CostX, Candy, Procore, Autodesk Forma Takeoff, STACK and PlanSwift using official sources and explicit eligibility boundaries." },
       { url: "/quantara-vs-excel-for-boq", label: "Quantara vs Excel for BOQ", desc: "Compare structured BOQ software with spreadsheets across project records, revisions, templates and outputs." },
       { url: "/boq-software-vs-spreadsheets", label: "BOQ Software vs Spreadsheets", desc: "When are spreadsheets sufficient, and when does structured software add value for project control?" },

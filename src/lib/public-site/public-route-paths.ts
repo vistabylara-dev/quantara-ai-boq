@@ -66,6 +66,10 @@ export const PUBLIC_WEBSITE_PATHS = [
   "/ai-boq-vs-manual-boq-preparation",
   "/ocr-vs-structured-boq-extraction",
   "/quantity-takeoff-vs-boq-software",
+  "/quantara-vs-togal-ai",
+  "/quantara-vs-kreo",
+  "/quantara-vs-costx",
+  "/quantara-vs-autodesk-takeoff",
   "/boq-software-vs-document-management",
   "/construction-estimating-software-vs-excel",
   "/when-to-use-boq-software",
@@ -77,6 +81,10 @@ export const PUBLIC_WEBSITE_PATHS = [
 export type PublicWebsitePath = (typeof PUBLIC_WEBSITE_PATHS)[number];
 
 export const PUBLIC_ENGLISH_ONLY_PATHS = [
+  "/quantara-vs-togal-ai",
+  "/quantara-vs-kreo",
+  "/quantara-vs-costx",
+  "/quantara-vs-autodesk-takeoff",
   "/boq-software-comparison-uae",
   "/boq-software-dubai",
   "/boq-software-abu-dhabi",

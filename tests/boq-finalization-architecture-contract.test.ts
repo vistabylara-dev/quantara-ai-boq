@@ -23,6 +23,15 @@ describe("BOQ finalization architecture contract", () => {
     expect(lockCall).toBeGreaterThan(verificationCall);
   });
 
+  it("lets the final-pricing screen persist a newly selected unpriced mode before server verification", () => {
+    const boqPage = read("src/app/projects/[projectId]/boq/page.tsx");
+
+    expect(boqPage).toContain("const locked = await lockRevisionAndReturn(activeRevision)");
+    expect(boqPage).toContain("if (!activeRevision || (requiresRates && !allRatesEntered)) return;");
+    expect(boqPage).not.toContain("hasUnsavedChanges || (requiresRates && !allRatesEntered) || verificationBlocked");
+    expect(boqPage).not.toContain("disabled={actionInProgress || hasUnsavedChanges || (requiresRates && !allRatesEntered) || verificationBlocked}");
+  });
+
   it("does not offer proposal locking unless the shared gate approves it", () => {
     const proposalsPage = read("src/app/projects/[projectId]/proposals/page.tsx");
 

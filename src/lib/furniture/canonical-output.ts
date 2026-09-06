@@ -220,9 +220,6 @@ export function computeFurnitureInputSignature(input: {
 }
 
 function assertConfirmedCandidates(entries: readonly ConfirmedFurnitureCandidate[]): void {
-  if (entries.length === 0) {
-    throw new Error("Furniture canonical output requires at least one confirmed furniture candidate.");
-  }
   const entityIds = new Set<string>();
   const candidateIds = new Set<string>();
   for (const entry of entries) {
@@ -261,9 +258,6 @@ function assertConfirmedOrderItems(entries: readonly ConfirmedFurnitureOrderItem
     }
     if (!entry.item.unit?.trim()) {
       throw new Error("Every confirmed furniture order item requires an explicit unit.");
-    }
-    if (entry.item.category === "UNCLASSIFIED") {
-      throw new Error("Every confirmed furniture order item requires an explicit category.");
     }
     entityIds.add(entry.entityId);
     itemIds.add(entry.item.id);
@@ -450,6 +444,9 @@ export function buildFurnitureCanonicalOutput(input: BuildFurnitureCanonicalOutp
     entry.item.suppliedByOthers && entry.item.category !== "SUPPLIED_BY_OTHERS"
       ? { ...entry, item: { ...entry.item, category: "SUPPLIED_BY_OTHERS" as const } }
       : entry);
+  if (input.confirmedCandidates.length === 0 && confirmedOrderEntries.length === 0) {
+    throw new Error("Furniture canonical output requires at least one confirmed part or scheduled order item.");
+  }
   const confirmedOrderItems = confirmedOrderEntries.map((entry) => entry.item);
   const candidates = input.confirmedCandidates.map((entry) => entry.candidate);
   const inputSignature = computeFurnitureInputSignature({
@@ -458,7 +455,10 @@ export function buildFurnitureCanonicalOutput(input: BuildFurnitureCanonicalOutp
     partEntities: input.confirmedCandidates,
     orderEntities: confirmedOrderEntries,
   });
-  const allEvidence = evidenceFor(input.confirmedCandidates);
+  const allEvidence = combineEvidence(
+    evidenceFor(input.confirmedCandidates),
+    ...confirmedOrderEntries.map((entry) => orderItemEvidence(entry)),
+  );
   const board = calculateFurnitureBoardGroups(candidates, { wastagePercentage: input.wastagePercentage });
   const edge = calculateFurnitureEdgeBanding(candidates);
   const frontEdgeUsesAssumedOrientation = candidates.some((candidate) =>
@@ -500,9 +500,9 @@ export function buildFurnitureCanonicalOutput(input: BuildFurnitureCanonicalOutp
     sectionCode: "PRJ",
     category: "PROJECT_SUMMARY",
     description: `${input.projectReference} — ${input.projectName}`,
-    specification: `${input.discipline}; ${input.confirmedCandidates.length} confirmed cutting-list candidates`,
-    quantity: input.confirmedCandidates.length,
-    unit: "confirmed parts",
+    specification: `${input.discipline}; ${input.confirmedCandidates.length} confirmed parts; ${confirmedOrderEntries.length} confirmed scheduled items`,
+    quantity: input.confirmedCandidates.length + confirmedOrderEntries.length,
+    unit: "confirmed source rows",
     wastagePercentage: 0,
     roomOrZone: unique(candidates.map((candidate) => candidate.room)).join(", "),
     drawingReference: "",

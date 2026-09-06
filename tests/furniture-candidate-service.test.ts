@@ -57,7 +57,7 @@ const candidateStore = vi.hoisted(() => {
   };
   const prisma = {
     drawingPage: { findMany: vi.fn(async () => []) },
-    $transaction: vi.fn(async (operation: (client: typeof tx) => Promise<unknown>) => operation(tx)),
+    $transaction: vi.fn(async (operation: (client: typeof tx) => Promise<unknown>, _options?: { timeout: number }) => operation(tx)),
   };
   return { state, extractedEntity, tx, prisma };
 });
@@ -120,7 +120,7 @@ function table(id: string, part: string, edgeBanding = "All 4 edges", title = "C
     companyId: COMPANY_ID,
     projectFileId: FILE_ID,
     drawingPageId: null,
-    sheetName: "Cutting List",
+    sheetName: "Cutting List" as string | null,
     title,
     tableType: ExtractedTableType.FURNITURE_SCHEDULE,
     confidence: decimal(96),
@@ -291,6 +291,27 @@ describe("Furniture structured-source candidate persistence", () => {
       row.categoryKey === FURNITURE_CANDIDATE_TECHNICAL_DATA_KIND
       && row.status === ExtractedEntityStatus.NEEDS_REVIEW)).toBe(true);
     expect(candidateStore.prisma.$transaction.mock.calls[0]?.[1]).toEqual({ timeout: 120_000 });
+  });
+
+  it("ignores positional PDF rows with neither Joinery hierarchy nor order-item semantics", async () => {
+    const noise = table("noise-table", "unused");
+    noise.sheetName = null;
+    noise.title = "Recovered table — page 2";
+    noise.rows[0].cells = sourceCells("unused").slice(0, 3).map((cell, index) => ({
+      ...cell,
+      columnKey: `unrecognized_${index + 1}`,
+      rawValue: ["01", "GROUND FLOOR", "SCALE 1:50"][index]!,
+    }));
+    tableRepository.listExtractedTablesForFile.mockResolvedValue([noise]);
+
+    const result = await generateFurnitureCandidatesFromStructuredTables({
+      companyId: COMPANY_ID,
+      projectId: PROJECT_ID,
+      projectFileId: FILE_ID,
+    });
+
+    expect(result).toMatchObject({ status: "generated", candidatesCreated: 0 });
+    expect(candidateStore.state.entities).toHaveLength(0);
   });
 
   it("is idempotent on replay and updates the same deterministic keys without duplicates", async () => {

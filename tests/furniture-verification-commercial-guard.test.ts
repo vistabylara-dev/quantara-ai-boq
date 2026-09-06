@@ -105,6 +105,7 @@ function boq(industryKey: string, items: Array<ReturnType<typeof item>>) {
     companyId: COMPANY_ID,
     projectId: PROJECT_ID,
     status: BOQStatus.DRAFT,
+    pricingMode: "PRICED",
     isLocked: false,
     version: 1,
     verifiedVersion: null,
@@ -171,5 +172,17 @@ describe("Furniture non-commercial verification guard", () => {
     await runBOQVerification(COMPANY_ID, BOQ_ID, new Date("2026-08-31T02:00:00.000Z"));
 
     expect(zeroSellingRateItemIds()).toEqual(["non-furniture-summary"]);
+  });
+
+  it("waives commercial-rate findings for an explicitly unpriced BOQ while preserving all other verification", async () => {
+    const unpriced = boq("construction", [item({
+      id: "unpriced-construction",
+      category: "CONCRETE",
+      sourceReference: "S-101",
+    })]);
+    unpriced.pricingMode = "UNPRICED";
+    verificationMocks.getBOQRecord.mockResolvedValue(unpriced);
+    await runBOQVerification(COMPANY_ID, BOQ_ID, new Date("2026-08-31T02:00:00.000Z"));
+    expect(zeroSellingRateItemIds()).toEqual([]);
   });
 });

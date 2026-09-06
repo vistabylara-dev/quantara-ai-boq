@@ -67,25 +67,91 @@ const UNIT_FIELD_KEYS = new Set(["unit", "uom", "unit_of_measure", "units"]);
  * top-level technicalData keys with no further judgement of its own. */
 const DIMENSION_KEY_ALIASES: Record<string, string> = {
   wall_height: "wallHeight",
+  wall_height_mm: "wallHeight",
+  wall_height_cm: "wallHeight",
   wall_length: "wallLength",
+  wall_length_mm: "wallLength",
+  wall_length_cm: "wallLength",
   openings_area: "openingsArea",
   net_floor_area: "netFloorArea",
   ceiling_area: "ceilingArea",
   perimeter: "perimeter",
   length: "length",
   length_m: "length",
+  length_mm: "length",
+  length_cm: "length",
   width: "width",
   width_m: "width",
+  width_mm: "width",
+  width_cm: "width",
   depth: "depth",
   depth_m: "depth",
+  depth_mm: "depth",
+  depth_cm: "depth",
   height: "height",
   height_m: "height",
+  height_mm: "height",
+  height_cm: "height",
   route_length: "routeLength",
+  route_length_mm: "routeLength",
+  route_length_cm: "routeLength",
   verified_route_length: "verifiedRouteLength",
+  verified_route_length_mm: "verifiedRouteLength",
+  verified_route_length_cm: "verifiedRouteLength",
+  duct_perimeter: "ductPerimeter",
+  duct_perimeter_mm: "ductPerimeter",
+  duct_perimeter_cm: "ductPerimeter",
+  vertical_drops: "verticalDrops",
+  approved_termination_allowance: "approvedTerminationAllowance",
+  approved_allowance_percentage: "approvedAllowancePercentage",
+  total_door_widths: "totalDoorWidths",
+  wall_area: "wallArea",
+  exposed_concrete_surface_area: "exposedConcreteSurfaceArea",
+  schedule_quantity: "scheduleQuantity",
+  bar_length: "barLength",
+  bar_length_mm: "barLength",
+  bar_length_cm: "barLength",
+  unit_weight_per_meter: "unitWeightPerMeter",
   wastage_percentage: "wastagePercentage",
   coats: "coats",
   faces: "faces",
 };
+
+const AREA_DIMENSION_KEYS = new Set(["netFloorArea", "ceilingArea", "openingsArea", "wallArea", "exposedConcreteSurfaceArea"]);
+const WEIGHT_DIMENSION_KEYS = new Set(["scheduleQuantity"]);
+
+function canonicalEvidenceUnit(value: string): string {
+  return value.trim().toLowerCase().replace(/²/g, "2").replace(/³/g, "3").replace(/\s+/g, "");
+}
+
+function explicitColumnUnit(columnKey: string): string | null {
+  const match = columnKey.match(/_(mm|cm|m|mm2|cm2|m2|kg|g|t)$/);
+  return match?.[1] ?? null;
+}
+
+/** Converts only an explicit unit suffix/cell unit into the registry's canonical units. */
+function normalizeDimensionEvidence(columnKey: string, targetKey: string, value: number, parsedUnit: string | null): number | null {
+  const source = canonicalEvidenceUnit(parsedUnit ?? explicitColumnUnit(columnKey) ?? "");
+  if (!source) return value;
+  if (["wastagePercentage", "approvedAllowancePercentage"].includes(targetKey)) return source === "%" ? value : null;
+  if (["faces", "coats"].includes(targetKey)) return ["nr", "no", "nos", "pcs", ""].includes(source) ? value : null;
+  if (targetKey === "unitWeightPerMeter") {
+    if (["kg/m", "kgperm"].includes(source)) return value;
+    if (["g/m", "gperm"].includes(source)) return value / 1_000;
+    return null;
+  }
+  if (WEIGHT_DIMENSION_KEYS.has(targetKey)) {
+    if (source === "kg") return value;
+    if (source === "g") return value / 1_000;
+    if (["t", "tonne", "tonnes"].includes(source)) return value * 1_000;
+    return null;
+  }
+  const factors = AREA_DIMENSION_KEYS.has(targetKey)
+    ? { mm2: 0.000001, cm2: 0.0001, m2: 1 }
+    : { mm: 0.001, cm: 0.01, m: 1 };
+  const factor = factors[source as keyof typeof factors];
+  return factor === undefined ? null : value * factor;
+}
 
 function normalizedKey(columnKey: string): string {
   return columnKey.trim().toLowerCase();
@@ -152,7 +218,10 @@ export function extractDimensionKeys(cellsByKey: Map<string, string>): Record<st
     const raw = cellsByKey.get(columnKey);
     if (raw === undefined) continue;
     const parsed = parseNumericWithOptionalUnit(raw);
-    if (parsed) out[targetKey] = parsed.value;
+    if (parsed) {
+      const normalized = normalizeDimensionEvidence(columnKey, targetKey, parsed.value, parsed.unit);
+      if (normalized !== null) out[targetKey] = normalized;
+    }
   }
   return out;
 }

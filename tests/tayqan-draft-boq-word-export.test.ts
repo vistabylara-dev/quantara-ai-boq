@@ -4,6 +4,9 @@ import JSZip from "jszip";
 import { describe, expect, it } from "vitest";
 import { buildDocumentData, type BuildDocumentDataInput } from "@/lib/documents/build-document-data";
 import { generateDocx } from "@/lib/documents/generators/docx-generator";
+import { generateCsv } from "@/lib/documents/generators/csv-generator";
+import { generateHtml } from "@/lib/documents/generators/html-generator";
+import { generateXlsx } from "@/lib/documents/generators/xlsx-generator";
 import { DEFAULT_CONTENT_CONFIG, DEFAULT_STYLE_CONFIG, mergeContentConfig, mergeStyleConfig } from "@/lib/documents/template-config";
 import type { BOQ } from "@/types/boq";
 
@@ -140,6 +143,33 @@ describe("TAYQAN Draft BOQ Word export — QUANTITIES_ONLY mode (mission 1)", ()
     expect(data.boq.termsText).not.toContain("Payment");
   });
 
+  it("removes commercial columns and totals from every structured unpriced renderer", async () => {
+    const data = buildDocumentData({ ...baseInput, audience: "CLIENT", pricingMode: "QUANTITIES_ONLY", isDraft: false });
+
+    const csv = generateCsv(data).toString("utf8");
+    expect(csv).not.toContain("Selling Rate");
+    expect(csv).not.toContain("Grand Total");
+
+    const html = generateHtml({ data, style, content });
+    expect(html).toContain("Unpriced BOQ — Rates Excluded");
+    expect(html).not.toContain('>Rate<');
+    expect(html).not.toContain("Grand Total");
+
+    const workbook = await JSZip.loadAsync(await generateXlsx(data));
+    const sharedStrings = await workbook.file("xl/sharedStrings.xml")?.async("string") ?? "";
+    expect(sharedStrings).toContain("UNPRICED BOQ — RATES EXCLUDED");
+    expect(sharedStrings).not.toContain("Selling Rate");
+    expect(sharedStrings).not.toContain("Grand Total");
+  });
+
+  it("labels a locked quantities-only Word document as a final unpriced BOQ", async () => {
+    const data = buildDocumentData({ ...baseInput, audience: "CLIENT", pricingMode: "QUANTITIES_ONLY", isDraft: false });
+    const zip = await JSZip.loadAsync(await generateDocx({ data, style, content }));
+    const xml = await zip.file("word/document.xml")!.async("string");
+    expect(xml).toContain("Unpriced BOQ — Rates Excluded");
+    expect(xml).not.toContain("For Scope Review Only");
+  });
+
   it("labels the generated DOCX clearly as a draft, unpriced, scope-review document", async () => {
     const data = buildDocumentData({ ...baseInput, audience: "CLIENT", pricingMode: "QUANTITIES_ONLY" });
     const buffer = await generateDocx({ data, style, content });
@@ -203,7 +233,7 @@ describe("TAYQAN Draft BOQ Word export — service wiring (mission 3)", () => {
 
   it("exempts only DOCX + QUANTITIES_ONLY from the locked-revision requirement — every other FINAL_ONLY_TYPES case is unchanged", () => {
     const source = read("src", "lib", "services", "document-generation-service.ts");
-    expect(source).toContain('input.documentType === GeneratedDocumentType.DOCX && input.pricingMode === "QUANTITIES_ONLY"');
+    expect(source).toContain('input.documentType === GeneratedDocumentType.DOCX && requestedPricingMode === "QUANTITIES_ONLY"');
     expect(source).toContain("FINAL_ONLY_TYPES.includes(input.documentType) && isDraft && !isQuantitiesOnlyDraftDocx");
     // Still throws for a draft PDF/XLSX, and for a draft WITH_PRICES DOCX.
     expect(source).toContain("LOCKED_REVISION_REQUIRED");
@@ -211,7 +241,8 @@ describe("TAYQAN Draft BOQ Word export — service wiring (mission 3)", () => {
 
   it("threads pricingMode from the parsed request into buildDocumentData", () => {
     const source = read("src", "lib", "services", "document-generation-service.ts");
-    expect(source).toContain('pricingMode: input.pricingMode ?? "WITH_PRICES"');
+    expect(source).toContain('const requestedPricingMode = input.pricingMode ?? "WITH_PRICES"');
+    expect(source).toContain("pricingMode: requestedPricingMode");
   });
 });
 

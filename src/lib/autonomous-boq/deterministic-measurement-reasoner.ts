@@ -50,8 +50,10 @@ function ruleForEntity(
   const rules = bundle.governingContext?.industryPolicy?.rules ?? [];
   const technicalData = record(entity.technicalData);
   const categoryPath = record(technicalData.categoryPath);
-  const explicitRuleId = typeof categoryPath.workPackage === "string"
-    ? categoryPath.workPackage
+  const explicitRuleId = typeof categoryPath.measurementRuleId === "string"
+    ? categoryPath.measurementRuleId
+    : typeof categoryPath.workPackage === "string"
+      ? categoryPath.workPackage
     : typeof technicalData.workPackage === "string"
       ? technicalData.workPackage
       : null;
@@ -60,8 +62,10 @@ function ruleForEntity(
     if (exact) return exact;
   }
 
-  const explicitCalculationType = typeof technicalData.calculationType === "string"
-    ? technicalData.calculationType
+  const explicitCalculationType = typeof categoryPath.calculationType === "string"
+    ? categoryPath.calculationType
+    : typeof technicalData.calculationType === "string"
+      ? technicalData.calculationType
     : null;
   if (explicitCalculationType) {
     const matches = rules.filter((rule) => rule.calculationType === explicitCalculationType);
@@ -124,6 +128,12 @@ function inputsForEntity(
       evidenceNote: entity.sourceReference || entity.sourceText || "Deterministically extracted project evidence.",
       confidence: entity.confidence,
     });
+  }
+  if (calculationType === QuantityCalculationType.REINFORCEMENT_WEIGHT) {
+    const values = new Set(inputs.map((input) => input.key));
+    if (!values.has("scheduleQuantity") && !(values.has("barLength") && values.has("unitWeightPerMeter"))) {
+      missing.push("verified reinforcement schedule quantity or both bar length and unit weight per metre");
+    }
   }
   return { inputs, missing };
 }

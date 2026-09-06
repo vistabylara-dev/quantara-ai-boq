@@ -308,6 +308,7 @@ function emptyBoq() {
     id: BOQ_ID,
     projectId: PROJECT_ID,
     status: BOQStatus.DRAFT,
+    pricingMode: "PRICED",
     isLocked: false,
     version: 1,
     sections: [],
@@ -376,12 +377,35 @@ describe("Furniture managed BOQ hardware/order integration", () => {
       systemValidatedOperationHash: "a".repeat(64),
     });
 
-    expect(result.changed).toBe(false);
+    expect(result.changed).toBe(true);
+    expect(managedStore.bOQ.updateMany).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ pricingMode: "UNPRICED" }) }));
     expect(managedStore.extractedEntity.updateMany).toHaveBeenCalledTimes(2);
     expect(part).toMatchObject({ status: ExtractedEntityStatus.CONFIRMED, confirmedByUserId: null });
     expect(order).toMatchObject({ status: ExtractedEntityStatus.CONFIRMED, confirmedByUserId: null });
     expect(mocks.buildFurnitureCanonicalOutput).toHaveBeenCalledWith(expect.objectContaining({
       confirmedCandidates: [expect.objectContaining({ status: "CONFIRMED" })],
+      confirmedOrderItems: [expect.objectContaining({ status: "CONFIRMED" })],
+    }));
+  });
+
+  it("generates an order-only Joinery schedule without requiring fabricated part rows", async () => {
+    const order = orderRow(ExtractedEntityStatus.NEEDS_REVIEW);
+    order.technicalDataJson.candidate.verificationStatus = "NEEDS_REVIEW";
+    managedStore.state.partRows = [];
+    managedStore.state.orderRows = [order];
+
+    const result = await regenerateFurnitureManagedBOQ(actor, {
+      projectIdentifier: "controlled-project",
+      boqId: BOQ_ID,
+      wastagePercentage: 10,
+      systemValidatedOperationHash: "c".repeat(64),
+    });
+
+    expect(result.changed).toBe(true);
+    expect(managedStore.bOQ.updateMany).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ pricingMode: "UNPRICED" }) }));
+    expect(order).toMatchObject({ status: ExtractedEntityStatus.CONFIRMED, confirmedByUserId: null });
+    expect(mocks.buildFurnitureCanonicalOutput).toHaveBeenCalledWith(expect.objectContaining({
+      confirmedCandidates: [],
       confirmedOrderItems: [expect.objectContaining({ status: "CONFIRMED" })],
     }));
   });
@@ -414,7 +438,7 @@ describe("Furniture managed BOQ hardware/order integration", () => {
       wastagePercentage: 10,
     });
 
-    expect(result.changed).toBe(false);
+    expect(result.changed).toBe(true);
     const canonicalInput = mocks.buildFurnitureCanonicalOutput.mock.calls[0][0];
     expect(canonicalInput.confirmedCandidates).toEqual([
       expect.objectContaining({
@@ -462,8 +486,9 @@ describe("Furniture managed BOQ hardware/order integration", () => {
     }));
   });
 
-  it("fails closed when every detected part was rejected", async () => {
+  it("fails closed when every detected Joinery record was rejected", async () => {
     managedStore.state.partRows = [partRow(ExtractedEntityStatus.REJECTED)];
+    managedStore.state.orderRows = [orderRow(ExtractedEntityStatus.REJECTED)];
 
     await expect(regenerateFurnitureManagedBOQ(actor, {
       projectIdentifier: "controlled-project",

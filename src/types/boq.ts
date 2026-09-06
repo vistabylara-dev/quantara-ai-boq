@@ -89,6 +89,8 @@ export type BOQ = {
   title: string;
   revision: string;
   status: BOQStatus;
+  /** Legacy fixtures/clients may omit this; persisted BOQs always return PRICED or UNPRICED. */
+  pricingMode?: "PRICED" | "UNPRICED";
   sections: BOQSection[];
   totals: BOQTotals;
   taxRate?: number;

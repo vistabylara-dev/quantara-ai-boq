@@ -431,14 +431,15 @@ export default function ProjectBOQPage(props: PageProps) {
     [activeRevision],
   );
   const verificationBlocked = (activeRevision?.finalization?.unresolvedCritical ?? 0) > 0;
+  const requiresRates = activeRevision?.pricingMode !== "UNPRICED";
 
   const generateFinalBoq = useCallback(async () => {
-    if (!activeRevision || hasUnsavedChanges || !allRatesEntered || verificationBlocked) return;
+    if (!activeRevision || hasUnsavedChanges || (requiresRates && !allRatesEntered) || verificationBlocked) return;
     const locked = await lockRevisionAndReturn(activeRevision);
     if (locked) {
       router.push(`/projects/${encodeURIComponent(params.projectId)}/documents`);
     }
-  }, [activeRevision, allRatesEntered, hasUnsavedChanges, lockRevisionAndReturn, params.projectId, router, verificationBlocked]);
+  }, [activeRevision, allRatesEntered, hasUnsavedChanges, lockRevisionAndReturn, params.projectId, requiresRates, router, verificationBlocked]);
 
   const confirmRemainingAiDraftQuantities = useCallback(async () => {
     if (!activeRevision || isReadOnlyBOQ(activeRevision) || isConfirmingAiDraft) return;
@@ -845,18 +846,33 @@ export default function ProjectBOQPage(props: PageProps) {
           <div className="mt-2 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <h3 className="text-xl font-semibold text-white">Quantara prepared the measured BOQ</h3>
-              <p className="mt-1 text-sm text-slate-300">Enter every unit rate, then generate the verified final BOQ. Quantities and source evidence remain read-only.</p>
-              {missingRateCount > 0 ? <p className="mt-2 text-sm font-semibold text-amber-200">Finalization is blocked: {missingRateCount} zero or missing {missingRateCount === 1 ? "rate" : "rates"} remain.</p> : null}
+              <p className="mt-1 text-sm text-slate-300">{requiresRates ? "Enter every unit rate, then generate the verified priced estimate." : "Rates are optional. Generate the verified unpriced BOQ now, or add rates and switch to a priced estimate."} Quantities and source evidence remain read-only.</p>
+              {requiresRates && missingRateCount > 0 ? <p className="mt-2 text-sm font-semibold text-amber-200">Finalization is blocked: {missingRateCount} zero or missing {missingRateCount === 1 ? "rate" : "rates"} remain.</p> : null}
               {verificationBlocked ? <p className="mt-2 text-sm font-semibold text-rose-200">Finalization is blocked by critical verification findings. Resolve only the affected evidence before locking.</p> : null}
+              <div className="mt-4 inline-flex rounded-xl border border-slate-700 bg-slate-950 p-1" aria-label="BOQ commercial mode">
+                {(["UNPRICED", "PRICED"] as const).map((mode) => (
+                  <button
+                    key={mode}
+                    type="button"
+                    onClick={() => {
+                      setActiveBoq((current) => current ? { ...current, pricingMode: mode } : current);
+                      setHasUnsavedChanges(true);
+                    }}
+                    className={`rounded-lg px-3 py-1.5 text-xs font-semibold ${activeRevision.pricingMode === mode ? "bg-blue-600 text-white" : "text-slate-300 hover:bg-slate-800"}`}
+                  >
+                    {mode === "UNPRICED" ? "Unpriced BOQ" : "Priced estimate"}
+                  </button>
+                ))}
+              </div>
             </div>
             <button
               type="button"
               onClick={() => void generateFinalBoq()}
-              disabled={actionInProgress || hasUnsavedChanges || !allRatesEntered || verificationBlocked}
-              title={hasUnsavedChanges ? "Save every rate before generating the final BOQ." : !allRatesEntered ? "Enter a rate greater than zero for every item." : verificationBlocked ? "Resolve critical verification findings before finalization." : ""}
+              disabled={actionInProgress || hasUnsavedChanges || (requiresRates && !allRatesEntered) || verificationBlocked}
+              title={hasUnsavedChanges ? "Save changes before generating the final BOQ." : requiresRates && !allRatesEntered ? "Enter a rate greater than zero for every commercial item." : verificationBlocked ? "Resolve critical verification findings before finalization." : ""}
               className="shrink-0 rounded-2xl bg-blue-600 px-5 py-3 text-sm font-semibold text-white hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              {pendingAction === "lock" ? "Verifying…" : "Generate final BOQ"}
+              {pendingAction === "lock" ? "Verifying…" : requiresRates ? "Generate priced estimate" : "Generate unpriced BOQ"}
             </button>
           </div>
         </section>

@@ -54,9 +54,10 @@ export function generateHtml(input: GenerateHtmlInput): string {
   const { data, style, content } = input;
   const rtl = style.direction === "rtl";
   const showInternal = data.boq.showInternalFields;
+  const quantitiesOnly = data.boq.pricingMode === "QUANTITIES_ONLY";
   const showSpecification = shouldRenderSpecification(data, content.columns.specification);
   const logoDataUri = logoImageToDataUri(input.logoImage);
-  const tableColumnCount = 7 + (showSpecification ? 1 : 0) + (showInternal ? 2 : 0);
+  const tableColumnCount = 5 + (showSpecification ? 1 : 0) + (showInternal ? 2 : 0) + (quantitiesOnly ? 0 : 2);
 
   const sectionsHtml = getDocumentOutputSections(data)
     .filter((section) => shouldRenderDocumentSection(data, section))
@@ -73,8 +74,8 @@ export function generateHtml(input: GenerateHtmlInput): string {
             <td class="num">${getDocumentItemQuantity(data, item)}</td>
             ${showInternal ? `<td class="num">${(item.landedCost ?? 0).toLocaleString("en-US", { maximumFractionDigits: 2 })}</td>` : ""}
             ${showInternal ? `<td class="num">${(item.marginPercentage ?? 0).toLocaleString("en-US", { maximumFractionDigits: 1 })}%</td>` : ""}
-            <td class="num">${(item.sellingRate ?? 0).toLocaleString("en-US", { maximumFractionDigits: 2 })}</td>
-            <td class="num">${(item.totalAmount ?? 0).toLocaleString("en-US", { maximumFractionDigits: 2 })}</td>
+            ${quantitiesOnly ? "" : `<td class="num">${(item.sellingRate ?? 0).toLocaleString("en-US", { maximumFractionDigits: 2 })}</td>`}
+            ${quantitiesOnly ? "" : `<td class="num">${(item.totalAmount ?? 0).toLocaleString("en-US", { maximumFractionDigits: 2 })}</td>`}
           </tr>`,
         )
         .join("");
@@ -88,7 +89,7 @@ export function generateHtml(input: GenerateHtmlInput): string {
   // is DOCX-only per this mission) — totals is always populated here; the
   // fallback only satisfies the now-optional shared type, it changes nothing.
   const htmlTotals = data.boq.totals ?? { subtotal: 0, discountAmount: 0, taxableAmount: 0, taxAmount: 0, grandTotal: 0 };
-  const totalsHtml = [
+  const totalsHtml = quantitiesOnly ? "" : [
     ["Subtotal", htmlTotals.subtotal],
     ["Discount", htmlTotals.discountAmount],
     ["Taxable Amount", htmlTotals.taxableAmount],
@@ -137,6 +138,7 @@ export function generateHtml(input: GenerateHtmlInput): string {
 </head>
 <body>
   ${data.meta.isDraft ? `<div class="draft-badge">${escapeHtml(style.watermarkDraftText)}</div>` : ""}
+  ${quantitiesOnly ? `<div class="draft-badge">${data.meta.isDraft ? "Draft Quantities — For Scope Review Only (No Pricing)" : "Unpriced BOQ — Rates Excluded"}</div>` : ""}
   ${data.meta.watermarkText ? `<div class="trial-watermark-banner">${escapeHtml(data.meta.watermarkText)}</div>` : ""}
   <div class="header-row">
     <div>
@@ -163,19 +165,18 @@ export function generateHtml(input: GenerateHtmlInput): string {
         <th class="num">Qty</th>
         ${showInternal ? '<th class="num">Landed</th>' : ""}
         ${showInternal ? '<th class="num">Margin</th>' : ""}
-        <th class="num">Rate</th>
-        <th class="num">Total</th>
+        ${quantitiesOnly ? "" : '<th class="num">Rate</th><th class="num">Total</th>'}
       </tr>
     </thead>
     <tbody>${sectionsHtml}</tbody>
   </table>
 
-  <div class="totals">
+  ${quantitiesOnly ? "" : `<div class="totals">
     ${totalsHtml}
     <div class="totals-row grand"><span>Grand Total</span><span>${formatCurrency(htmlTotals.grandTotal, data.project.currency)}</span></div>
-  </div>
+  </div>`}
 
-  ${content.showTermsSection ? `<div class="section-block"><h2>Terms &amp; Payment</h2><p>${escapeHtml(data.boq.termsText)}</p></div>` : ""}
+  ${content.showTermsSection && !quantitiesOnly ? `<div class="section-block"><h2>Terms &amp; Payment</h2><p>${escapeHtml(data.boq.termsText)}</p></div>` : ""}
   ${content.showExclusionsSection ? `<div class="section-block"><h2>Exclusions</h2><p>${escapeHtml(data.boq.exclusionsText)}</p></div>` : ""}
   ${content.showSignatureSection ? `<div class="signatures"><div>Prepared by</div><div>Client acceptance</div></div>` : ""}
 </body>

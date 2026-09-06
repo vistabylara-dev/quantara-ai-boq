@@ -1,5 +1,70 @@
 # Quantara — Production Recovery & System Status Audit
 
+## 2026-09-06 unified estimator completion checkpoint (authoritative continuation point)
+
+Continue from commit `ce9c62a` and the existing recovered Joinery source/project documented
+below. Do not re-upload, recreate, or resume the recovered Joinery preparation job again. Do
+not change Stripe or subscription behavior. Standard estimating remains deterministic code;
+OpenAI is an optional TAYQAN fallback, not a dependency of normal project extraction,
+measurement, calculation, or BOQ generation.
+
+This completion batch adds one shared commercial-finalization contract across industries:
+
+- BOQs persist either `UNPRICED` or `PRICED` mode. System-generated standard and Joinery BOQs
+  start unpriced, can be finalized from verified quantities without invented rates, and can
+  later be deliberately converted to priced BOQs by an engineer.
+- Verification and locking always require traceable quantity evidence. Commercial rate
+  evidence is required only for a BOQ explicitly set to `PRICED`.
+- Quantity-only DOCX, XLSX, PDF, HTML, and CSV output omits rate/amount/terms fields and is
+  labelled as an unpriced BOQ. A priced export cannot be requested from an unpriced revision.
+- The shared deterministic estimator now binds canonical measurement rule IDs correctly,
+  normalizes explicit metric units, rejects incompatible units, requires valid reinforcement
+  evidence, and covers softscape/hardscape area rules in the common industry engine.
+- Free entitlement remains one non-archived project per company; the existing three-day Pro
+  trial remains unchanged. Company logo/stamp/signature settings accept only public HTTP(S)
+  asset URLs without embedded credentials, matching the safe document-rendering boundary.
+
+Verification for this batch before release: TypeScript passed, full ESLint passed, production
+Next.js build passed (151 static pages), and 121 focused regression tests passed across 16 test
+files. Local Prisma CLI validation could not be re-run because the execution environment
+blocked the Prisma command at its network-approval boundary; Prisma Client generation and the
+production build's schema/type consumption passed. Database migration and authenticated live
+browser verification remain release steps, not reasons to alter or recreate production data.
+
+## 2026-09-05 live Joinery recovery checkpoint (authoritative continuation point)
+
+Do not restart this workflow, re-upload its source, recreate its project, or move standard
+estimating logic back behind OpenAI. The live recovery project is
+`project-join-e2e-0904-lara` (`9aee80b0-011d-4275-a743-2a54ded4649f`) and its existing source is
+`1402b777-1a45-4aca-b410-4ed343e0b0be`, a 16-page, 16.03 MB Joinery PDF. Production is
+`https://quantara.vistabylara.com` on Vercel project
+`prj_i3LahrynL0ZN9QdVUnYMBt3KQdk3`.
+
+Live recovery is complete through the unit-rate boundary:
+
+- Source processing finished as `NEEDS_REVIEW` with 16 tables and exactly 30 source-linked
+  schedule rows (J05–J34), each quantity `1`, unit `nr`. No source/project was recreated.
+- Joinery workspace is now `0 parts`, `30 orderItems`, `30 lockedOrderItems`, `0 blocking`.
+  The locks are deterministic system validation tied to the immutable preparation operation;
+  no user attestation was fabricated.
+- BOQ preparation is `READY_FOR_RATES` and bypasses OpenAI for specialized Joinery. BOQ Studio
+  contains 33 governed rows: 30 extracted Joinery schedule items plus the project summary,
+  wastage record, and input-integrity record. All commercial rates remain `0` by design.
+- Verification was re-run live. It correctly reports zero/missing selling-rate criticals and
+  blocks lock/finalization. Documents also correctly block final output (30 customer-priced
+  schedule rows still need rates). Proposal and Client Preview pages load and correctly require
+  a locked BOQ or completed report.
+- Next action is commercial input, not another code/extraction recovery: an engineer must enter
+  the actual AED unit rates. Then run Generate Final BOQ, re-run verification, lock R01, generate
+  the document, and create the client proposal. Do not invent, auto-fill, or resolve zero-rate
+  exceptions without real pricing evidence.
+
+Production recovery merges, in order: `8f1b02d`, `60556aa`, `b5bbb992`, `595ee00`, `dd37e595`,
+`75107be`, `702ab03`, `ef15e94`, `c8455da`, `c501004`, and `dbcc35f`. The final runtime repair
+is PR #200 / `dbcc35f`; it accepts valid order-only Joinery canonical output while preserving
+editable `UNCLASSIFIED` purchasing categories for the rate-review stage. Focused verification
+for the final boundary: 31 tests passed, ESLint passed, and TypeScript passed.
+
 Date: 2026-08-05. Conducted as PRODUCTION-RECOVERY-1. This document is built entirely from
 direct repository forensics, a live production diagnostic endpoint (`/api/admin/system-health`,
 owner-only, added during this audit), and a systematic re-read of the source for every feature

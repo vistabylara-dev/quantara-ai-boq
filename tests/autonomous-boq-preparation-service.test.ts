@@ -372,4 +372,25 @@ describe("autonomous preparation start and refresh", () => {
       },
     } as never).retryable).toBe(false);
   });
+
+  it("allows a Joinery preparation to recheck source evidence after engineering review", () => {
+    const status = toAutonomousPreparationStatus({
+      id: IDS.job, companyId: IDS.company, projectId: IDS.project, projectFileId: IDS.fileR2,
+      engineType: "QUANTITY_CALCULATION", provider: "local", status: ExtractionJobStatus.NEEDS_REVIEW,
+      progressPercentage: 100, currentStep: "NEEDS_REVIEW", startedAt: new Date(), completedAt: null, failedAt: null,
+      attempts: 1, maximumAttempts: 3,
+      configurationJson: {
+        targetBoqId: IDS.boq,
+        frozenSources: [{ id: IDS.fileR2 }],
+      },
+      resultSummaryJson: {
+        stage: "NEEDS_REVIEW",
+        exceptions: [{ code: "STRUCTURAL_EVIDENCE_MISSING", message: "Review schedule evidence" }],
+      },
+      usageMetadataJson: null, errorCode: null, errorMessage: null,
+      createdByUserId: IDS.user, createdAt: new Date(), updatedAt: new Date(),
+    } as never);
+
+    expect(status.retryable).toBe(true);
+  });
 });

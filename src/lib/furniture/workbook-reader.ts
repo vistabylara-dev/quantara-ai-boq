@@ -211,7 +211,7 @@ export function furnitureSourceTableToParsedTable(table: FurnitureSourceTable): 
     ? table.confidence
     : FURNITURE_STRUCTURED_TABLE_CONFIDENCE;
   return {
-    sheetName: table.sheetName,
+    sheetName: table.sheetName ?? undefined,
     title: table.title,
     confidence: tableConfidence,
     method: "xlsx-merge-reconstruction",

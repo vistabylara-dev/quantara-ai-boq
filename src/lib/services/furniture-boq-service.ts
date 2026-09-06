@@ -604,13 +604,6 @@ export async function regenerateFurnitureManagedBOQ(
         systemValidatedCandidateCount += 1;
       }
     }
-    if (entities.length === 0) {
-      throw new AppError(
-        "FURNITURE_CONFIRMED_CANDIDATES_REQUIRED",
-        "Confirm at least one furniture candidate before generating the managed BOQ and cutting list.",
-        409,
-      );
-    }
     if (entities.some((entity) => entity.status !== ExtractedEntityStatus.CONFIRMED || !entity.confirmedAt)) {
       throw new AppError(
         "FURNITURE_CANDIDATES_REQUIRE_REVIEW",
@@ -694,6 +687,13 @@ export async function regenerateFurnitureManagedBOQ(
         systemValidatedOrderItemCount += 1;
       }
     }
+    if (entities.length === 0 && orderEntities.length === 0) {
+      throw new AppError(
+        "FURNITURE_CONFIRMED_CANDIDATES_REQUIRED",
+        "Confirm at least one furniture part or scheduled order item before generating managed outputs.",
+        409,
+      );
+    }
     if (orderEntities.some((entity) => entity.status !== ExtractedEntityStatus.CONFIRMED || !entity.confirmedAt)) {
       throw new AppError(
         "FURNITURE_ORDER_ITEMS_REQUIRE_REVIEW",
@@ -766,7 +766,7 @@ export async function regenerateFurnitureManagedBOQ(
       && (!item.rateProvenance
         || item.rateProvenance.sourceType === "LEGACY_UNVERIFIED"
         || item.rateProvenance.confirmedAt === null));
-    const changed = sectionChanges || createdItems > 0 || updatedItems > 0
+    const changed = boq.pricingMode === "PRICED" || sectionChanges || createdItems > 0 || updatedItems > 0
       || removedManagedItems > 0 || nonCommercialRateBackfillItems.length > 0;
     if (!changed) {
       return {
@@ -792,6 +792,7 @@ export async function regenerateFurnitureManagedBOQ(
       },
       data: {
         status: BOQStatus.NEEDS_VERIFICATION,
+        pricingMode: "UNPRICED",
         version: { increment: 1 },
         verifiedVersion: null,
         verifiedAt: null,

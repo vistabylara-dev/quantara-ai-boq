@@ -185,6 +185,9 @@ export type AutonomousBoqDraftItem = {
 export type AutonomousDraftCompletion = {
   technicalComplete: boolean;
   readyForRates: boolean;
+  readyToFinalizeUnpriced: boolean;
+  pricingOptional: boolean;
+  /** Deprecated compatibility field. Rates are no longer a finalization blocker. */
   onlyRatesBlock: boolean;
   blockers: readonly string[];
 };

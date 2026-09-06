@@ -389,4 +389,47 @@ describe("autonomous preparation handler", () => {
     expect(result.resultSummary).toEqual(expect.objectContaining({ stage: "SOURCE_INPUT_REQUIRED", readyForRates: false }));
     expect(deps.measure).not.toHaveBeenCalled();
   });
+
+  it("sends specialized Joinery schedules directly to deterministic assembly without AI measurement", async () => {
+    const deps = dependencies();
+    deps.validateFrozenScope = vi.fn().mockResolvedValue({
+      projectSlug: "joinery-project",
+      assemblyMode: "SPECIALIZED_JOINERY",
+      industryContext: {
+        engineId: "joinery",
+        key: "joinery",
+        name: "Joinery",
+        policyVersion: "autonomous-boq-policy/v1",
+        configurationHash: "b".repeat(64),
+        supportedUnits: ["nr"],
+        sections: [],
+        supportedCalculationTypes: [],
+        rules: [],
+      },
+    });
+    deps.assemble = vi.fn().mockResolvedValue({
+      state: "READY_FOR_RATES",
+      boqId: IDS.boq,
+      addedItemCount: 30,
+      duplicateItemCount: 0,
+      exceptions: [],
+    });
+
+    const result = await createAutonomousBoqPreparationHandler(deps)(job(), ctx);
+
+    expect(deps.measure).not.toHaveBeenCalled();
+    expect(deps.assemble).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      expect.objectContaining({ assemblyMode: "SPECIALIZED_JOINERY" }),
+      expect.objectContaining({ provider: "deterministic", model: "joinery-schedule-v1" }),
+    );
+    expect(result.status).toBe(ExtractionJobStatus.COMPLETED);
+    expect(result.resultSummary).toEqual(expect.objectContaining({
+      readyForRates: true,
+      addedItemCount: 30,
+      measuredSubjectCount: 30,
+      provider: "deterministic",
+    }));
+  });
 });

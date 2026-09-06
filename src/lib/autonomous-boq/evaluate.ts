@@ -266,7 +266,7 @@ export function assembleAutonomousBoqDraft(input: AssembleAutonomousBoqDraftInpu
   const sortedItems = items.sort((left, right) => left.itemFingerprint.localeCompare(right.itemFingerprint));
   const technicalComplete = sortedItems.length > 0 && sortedExceptions.length === 0;
   const blockers = technicalComplete
-    ? ["UNIT_RATES_REQUIRED"]
+    ? []
     : [...new Set(sortedExceptions.map((entry) => entry.code))].sort();
 
   return {
@@ -280,7 +280,9 @@ export function assembleAutonomousBoqDraft(input: AssembleAutonomousBoqDraftInpu
     completion: {
       technicalComplete,
       readyForRates: technicalComplete,
-      onlyRatesBlock: technicalComplete,
+      readyToFinalizeUnpriced: technicalComplete,
+      pricingOptional: true,
+      onlyRatesBlock: false,
       blockers,
     },
   };

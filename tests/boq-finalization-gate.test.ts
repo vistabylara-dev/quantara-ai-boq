@@ -32,4 +32,12 @@ describe("BOQ finalization gate", () => {
     });
     expect(gate).toMatchObject({ lockEligible: true, lockReason: null, freshlyVerified: true });
   });
+
+  it("allows an unpriced revision when quantity evidence is confirmed and rate confirmation is not required", () => {
+    const gate = evaluateBOQFinalizationGate({
+      isLocked: false, version: 8, verifiedVersion: 8, verifiedAt: new Date(), unresolvedCritical: 0,
+      items: [{ status: "CONFIRMED", quantityConfirmed: true, rateConfirmed: false, rateConfirmationRequired: false }],
+    });
+    expect(gate).toMatchObject({ lockEligible: true, lockReason: null, unconfirmedItemCount: 0 });
+  });
 });

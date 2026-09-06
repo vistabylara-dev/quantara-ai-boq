@@ -67,6 +67,7 @@ export const boqSchema = z.object({
   title: z.string().min(1),
   revision: z.string().min(1),
   status: z.enum(["draft", "locked", "approved"]),
+  pricingMode: z.enum(["PRICED", "UNPRICED"]).default("PRICED"),
   sections: z.array(boqSectionSchema),
   totals: boqTotalsSchema,
   taxRate: z.number().finite().min(0).max(100).optional(),

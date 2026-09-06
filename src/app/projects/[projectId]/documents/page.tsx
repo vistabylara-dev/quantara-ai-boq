@@ -186,6 +186,7 @@ export default function ProjectDocumentsPage(props: PageProps) {
   const generate = useCallback(async (overrides?: Partial<{ boqId: string; templateId: string; type: string; audience: string }>) => {
     const boqId = overrides?.boqId ?? selectedBoqId;
     const type = overrides?.type ?? selectedType;
+    const targetBoq = boqs.find((boq) => boq.id === boqId) ?? null;
     setGenerateError(null);
     setCommercialDecision(null);
 
@@ -217,6 +218,7 @@ export default function ProjectDocumentsPage(props: PageProps) {
         templateId: overrides?.templateId ?? selectedTemplateId,
         documentType: type,
         audience: overrides?.audience ?? selectedAudience,
+        pricingMode: targetBoq?.pricingMode === "UNPRICED" ? "QUANTITIES_ONLY" : "WITH_PRICES",
       });
       trackFirstConversionEvent("first_export_generated", {
         format: type.toLowerCase(),
@@ -242,7 +244,7 @@ export default function ProjectDocumentsPage(props: PageProps) {
     } finally {
       setIsGenerating(false);
     }
-  }, [params.projectId, refreshHistory, selectedAudience, selectedBoqId, selectedTemplateId, selectedType]);
+  }, [boqs, params.projectId, refreshHistory, selectedAudience, selectedBoqId, selectedTemplateId, selectedType]);
 
   const deleteDocument = useCallback(async (documentId: string) => {
     setDeletingId(documentId);

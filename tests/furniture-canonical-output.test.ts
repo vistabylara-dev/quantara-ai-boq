@@ -101,6 +101,18 @@ function build(confirmedOrderItems: ConfirmedFurnitureOrderItem[] = []) {
   });
 }
 
+function buildOrderOnly(confirmedOrderItems: ConfirmedFurnitureOrderItem[]) {
+  return buildFurnitureCanonicalOutput({
+    projectId: "project-1",
+    projectReference: "FJC-001",
+    projectName: "Controlled Furniture Test",
+    discipline: "JOINERY_CABINETRY",
+    wastagePercentage: DEFAULT_FURNITURE_WASTAGE_PERCENTAGE,
+    confirmedCandidates: [],
+    confirmedOrderItems,
+  });
+}
+
 function existing(
   id: string,
   item: FurnitureCanonicalItem,
@@ -307,6 +319,39 @@ describe("furniture canonical output", () => {
     expect(generatedCategories).toContain("LED");
     expect(generatedCategories).toContain("PROPRIETARY_DRAWER_SYSTEM");
     expect(generatedCategories).toContain("SUPPLIED_BY_OTHERS");
+  });
+
+  it("builds a reviewable canonical BOQ from an order-only Joinery schedule", () => {
+    const output = buildOrderOnly([{
+      entityId: "entity-order-j05",
+      status: "CONFIRMED",
+      confirmedAt: "2026-09-05T20:00:00.000Z",
+      updatedAt: "2026-09-05T20:00:00.000Z",
+      item: {
+        id: "schedule-j05",
+        description: "CABINET WITH DRAWERS",
+        quantity: 1,
+        quantityText: "1",
+        unit: "nr",
+        category: "UNCLASSIFIED",
+        suppliedByOthers: false,
+        notes: "Scheduled Joinery item; category remains editable during rate review.",
+      },
+    }]);
+
+    expect(output.confirmedCandidateCount).toBe(0);
+    expect(output.sections.find(({ code }) => code === "HWA")?.items).toEqual([
+      expect.objectContaining({
+        description: "CABINET WITH DRAWERS",
+        quantity: 1,
+        unit: "nr",
+        category: "UNCLASSIFIED",
+      }),
+    ]);
+    expect(output.sections.find(({ code }) => code === "PRJ")?.items[0]).toMatchObject({
+      quantity: 1,
+      unit: "confirmed source rows",
+    });
   });
 });
 

@@ -252,8 +252,10 @@ export async function generateFurnitureCandidatesFromStructuredTables(
       sourceFileName: file.originalName,
       sourceKind,
     });
-    if (!hasPartHierarchyColumns(sourceTable) && orderResult.items.length > 0) {
-      return { kind: "ORDER_ITEMS" as const, table, result: orderResult };
+    if (!hasPartHierarchyColumns(sourceTable)) {
+      return orderResult.items.length > 0
+        ? { kind: "ORDER_ITEMS" as const, table, result: orderResult }
+        : { kind: "IGNORED_NON_SEMANTIC" as const, table };
     }
     return { kind: "PARTS" as const, table, result: mapFurnitureCandidateTable(sourceTable, {
       industryEnabled: true,
@@ -275,6 +277,7 @@ export async function generateFurnitureCandidatesFromStructuredTables(
   const rowsConsidered = tables.reduce((sum, table) => sum + table.rows.length, 0);
   const desiredCandidateIds = new Set(mappedTables.flatMap((mapped) => {
     if (mapped.kind === "ORDER_ITEMS") return mapped.result.items.map((candidate) => candidate.id);
+    if (mapped.kind === "IGNORED_NON_SEMANTIC") return [];
     return mapped.result.status === "mapped"
       ? mapped.result.candidates.map((candidate) => candidate.candidateId)
       : [];
@@ -352,6 +355,7 @@ export async function generateFurnitureCandidatesFromStructuredTables(
     }
 
     for (const mapped of mappedTables) {
+      if (mapped.kind === "IGNORED_NON_SEMANTIC") continue;
       if (mapped.kind === "ORDER_ITEMS") {
         for (const candidate of mapped.result.items) {
           await persistCandidateData(candidate.id, orderCandidateData(

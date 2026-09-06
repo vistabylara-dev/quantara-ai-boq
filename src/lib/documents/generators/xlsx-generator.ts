@@ -36,6 +36,7 @@ export async function generateXlsx(data: CanonicalDocumentData): Promise<Buffer>
   });
 
   const showInternal = data.boq.showInternalFields;
+  const quantitiesOnly = data.boq.pricingMode === "QUANTITIES_ONLY";
 
   const columnHeaders = [
     "Section",
@@ -46,8 +47,7 @@ export async function generateXlsx(data: CanonicalDocumentData): Promise<Buffer>
     "Qty",
     "Unit",
     ...(showInternal ? ["Unit Cost", "Freight", "Installation", "Additional", "Landed Cost", "Margin %"] : []),
-    "Selling Rate",
-    "Total",
+    ...(quantitiesOnly ? [] : ["Selling Rate", "Total"]),
     "Room / Zone",
     "Drawing Ref.",
     "Notes",
@@ -55,7 +55,7 @@ export async function generateXlsx(data: CanonicalDocumentData): Promise<Buffer>
   const columnWidths = [
     22, 10, 16, 40, 28, 10, 8,
     ...(showInternal ? [12, 10, 12, 11, 12, 10] : []),
-    13, 14, 14, 14, 24,
+    ...(quantitiesOnly ? [] : [13, 14]), 14, 14, 24,
   ];
   const columns = columnHeaders.map((header, index) => ({ header, width: columnWidths[index] }));
   columnWidths.forEach((width, index) => {
@@ -66,8 +66,8 @@ export async function generateXlsx(data: CanonicalDocumentData): Promise<Buffer>
   const sellingRateColIndex = showInternal ? 14 : 8;
   const totalColIndex = showInternal ? 15 : 9;
   const quantityColLetter = sheet.getColumn(quantityColIndex).letter;
-  const sellingRateColLetter = sheet.getColumn(sellingRateColIndex).letter;
-  const totalColLetter = sheet.getColumn(totalColIndex).letter;
+  const sellingRateColLetter = quantitiesOnly ? "" : sheet.getColumn(sellingRateColIndex).letter;
+  const totalColLetter = quantitiesOnly ? "" : sheet.getColumn(totalColIndex).letter;
 
   // --- Title block (rows 1-5, pushed above the table by inserting later) ---
   const companyDetailLine = [
@@ -82,7 +82,7 @@ export async function generateXlsx(data: CanonicalDocumentData): Promise<Buffer>
   sheet.spliceRows(1, 0, [companyDetailLine ? `${data.company.legalName}\n${companyDetailLine}` : data.company.legalName]);
   sheet.spliceRows(2, 0, [`${data.project.name} (${data.project.reference})`]);
   sheet.spliceRows(3, 0, [`Client: ${data.client.companyName ?? data.client.name}`]);
-  sheet.spliceRows(4, 0, [`Revision ${data.boq.revision} · ${data.boq.status.toUpperCase()}${data.meta.isDraft ? " · DRAFT" : ""} · Generated ${new Date(data.meta.generatedAt).toLocaleDateString()}`]);
+  sheet.spliceRows(4, 0, [`Revision ${data.boq.revision} · ${data.boq.status.toUpperCase()}${data.meta.isDraft ? " · DRAFT" : ""}${quantitiesOnly ? " · UNPRICED BOQ — RATES EXCLUDED" : ""} · Generated ${new Date(data.meta.generatedAt).toLocaleDateString()}`]);
   sheet.spliceRows(5, 0, []);
 
   sheet.mergeCells(1, 1, 1, columns.length);
@@ -161,10 +161,10 @@ export async function generateXlsx(data: CanonicalDocumentData): Promise<Buffer>
         row.getCell(colIndex++).value = item.landedCost ?? 0;
         row.getCell(colIndex++).value = item.marginPercentage ?? 0;
       }
-      const sellingRateCol = colIndex++;
-      row.getCell(sellingRateCol).value = item.sellingRate;
-      const totalCol = colIndex++;
-      row.getCell(totalCol).value = {
+      const sellingRateCol = quantitiesOnly ? null : colIndex++;
+      if (sellingRateCol !== null) row.getCell(sellingRateCol).value = item.sellingRate;
+      const totalCol = quantitiesOnly ? null : colIndex++;
+      if (totalCol !== null) row.getCell(totalCol).value = {
         formula: `${quantityColLetter}${rowCursor}*${sellingRateColLetter}${rowCursor}`,
         result: item.totalAmount,
       };
@@ -178,8 +178,8 @@ export async function generateXlsx(data: CanonicalDocumentData): Promise<Buffer>
         row.getCell(colIndex - 1).alignment = { vertical: "top", wrapText: true };
       }
 
-      row.getCell(sellingRateCol).numFmt = CURRENCY_FMT;
-      row.getCell(totalCol).numFmt = CURRENCY_FMT;
+      if (sellingRateCol !== null) row.getCell(sellingRateCol).numFmt = CURRENCY_FMT;
+      if (totalCol !== null) row.getCell(totalCol).numFmt = CURRENCY_FMT;
       if (showInternal) {
         for (let c = 8; c <= 13; c += 1) row.getCell(c).numFmt = CURRENCY_FMT;
       }
@@ -204,12 +204,14 @@ export async function generateXlsx(data: CanonicalDocumentData): Promise<Buffer>
   // XLSX generation is a FINAL_ONLY (locked-revision) type and only ever
   // receives WITH_PRICES data — totals is always populated here; the
   // fallback only satisfies the now-optional shared type, it changes nothing.
-  const xlsxTotals = data.boq.totals ?? { subtotal: 0, discountAmount: 0, taxableAmount: 0, taxAmount: 0, grandTotal: 0 };
-  totalsRow("Subtotal", { formula: `SUM(${totalColLetter}${firstDataRow}:${totalColLetter}${lastDataRow})` });
-  totalsRow("Discount", xlsxTotals.discountAmount);
-  totalsRow("Taxable Amount", xlsxTotals.taxableAmount);
-  totalsRow(`VAT (${data.project.taxRate}%)`, xlsxTotals.taxAmount);
-  totalsRow("Grand Total", xlsxTotals.grandTotal);
+  if (!quantitiesOnly) {
+    const xlsxTotals = data.boq.totals ?? { subtotal: 0, discountAmount: 0, taxableAmount: 0, taxAmount: 0, grandTotal: 0 };
+    totalsRow("Subtotal", { formula: `SUM(${totalColLetter}${firstDataRow}:${totalColLetter}${lastDataRow})` });
+    totalsRow("Discount", xlsxTotals.discountAmount);
+    totalsRow("Taxable Amount", xlsxTotals.taxableAmount);
+    totalsRow(`VAT (${data.project.taxRate}%)`, xlsxTotals.taxAmount);
+    totalsRow("Grand Total", xlsxTotals.grandTotal);
+  }
 
   return Buffer.from(await workbook.xlsx.writeBuffer());
 }

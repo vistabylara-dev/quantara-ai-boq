@@ -21,6 +21,28 @@ describe("backend write schemas", () => {
     });
   });
 
+  it("accepts only public web URLs for company document images", () => {
+    expect(companyUpdateSchema.parse({
+      logoUrl: " https://assets.example.com/logo.png ",
+      stampUrl: "",
+      signatureUrl: null,
+    })).toEqual({
+      logoUrl: "https://assets.example.com/logo.png",
+      stampUrl: null,
+      signatureUrl: null,
+    });
+
+    for (const logoUrl of [
+      "javascript:alert(1)",
+      "data:image/png;base64,AAAA",
+      "https://user:secret@example.com/logo.png",
+      "not a URL",
+    ]) {
+      const result = companyUpdateSchema.safeParse({ logoUrl });
+      expect(result.success, logoUrl).toBe(false);
+    }
+  });
+
   it("returns path-addressable field errors", () => {
     const result = validateWriteInput(projectSchema, {
       clientId: "not-a-uuid",

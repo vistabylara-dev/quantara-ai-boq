@@ -594,6 +594,7 @@ export async function generateAiDraftBoq(
       },
       data: {
         status: BOQStatus.NEEDS_VERIFICATION,
+        ...(autonomousMode ? { pricingMode: "UNPRICED" as const } : {}),
         version: { increment: 1 },
         verifiedVersion: null,
         verifiedAt: null,

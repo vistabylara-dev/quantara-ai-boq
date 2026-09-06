@@ -11,9 +11,9 @@ export async function generateMetadata() {
 
 const content: SeoLandingPageContent = {
   breadcrumbLabel: "AI BOQ Software",
-  h1: "AI-Assisted BOQ Measurement & Quantity Calculation Software",
+  h1: "AI BOQ Generator and Quantity Takeoff from Drawings",
   directDefinition:
-    "Quantara brings project sources, reviewable extraction, guided measurement, deterministic quantity calculations and professional BOQ workflows together in one controlled platform. Review source-linked or professionally entered dimensions, see the engineering equation and calculated quantity, and confirm the result into your BOQ workflow.",
+    "Select the project industry, upload the complete drawing set and use Quantara to prepare a structured, quantity-complete unpriced BOQ. Every supported quantity retains calculation evidence and drawing provenance, while assumptions, exclusions and unresolved evidence remain visible for engineer review.",
   audience: {
     heading: "Who Uses AI BOQ Software?",
     content:
@@ -46,7 +46,7 @@ const content: SeoLandingPageContent = {
   quantaraSupport: {
     heading: "How Quantara Supports the Workflow",
     paragraphs: [
-      "Quantara supports review-led extraction from supported sources, then lets professionals review source-linked dimensions where available or enter and correct the required dimensions for supported calculation types. It applies deterministic engineering formulas, displays the equation and calculated quantity, and requires professional confirmation before governed BOQ use.",
+      "Quantara processes supported project sources through an industry-specific estimator, applies deterministic engineering calculation rules and assembles an unpriced BOQ without inventing commercial rates. The responsible professional reviews the evidence, assumptions, exclusions and unresolved scope before issue.",
       "In supported BOQ contexts, voice can enter or correct measurements and propose supported item changes for review. Through controlled access, Autodesk / AutoCAD DWG analysis can turn selected DWG model metadata and properties into traceable review candidates. Quantara also supports structured BOQ management and professional outputs from reviewed project data.",
     ],
   },
@@ -169,7 +169,7 @@ const content: SeoLandingPageContent = {
   ],
   limitations: [
     "Quantara does not automatically determine final project costs.",
-    "Quantara does not make a blanket claim of fully unattended computer-vision takeoff that derives final quantities from arbitrary drawing geometry without professional review.",
+    "Results depend on legible, coordinated and supported project evidence; unclear or missing scope is recorded for professional resolution rather than silently invented.",
     "Supported calculation types require the applicable dimensions, professional review and confirmation; missing dimensions are not fabricated.",
   ],
   faqs: [
@@ -179,7 +179,7 @@ const content: SeoLandingPageContent = {
     },
     {
       question: "Can AI create a BOQ?",
-      answer: "AI can assist with supported extraction, guided measurement, deterministic quantity calculation and BOQ structuring, but a qualified professional must review, refine and approve the final BOQ.",
+      answer: "Yes. Quantara generates a structured, quantity-complete unpriced BOQ from supported drawing evidence using industry-specific extraction and deterministic calculation rules. A qualified professional reviews the evidence and approves the final issue.",
     },
     {
       question: "Can AI read scanned BOQ files?",
@@ -191,7 +191,7 @@ const content: SeoLandingPageContent = {
     },
     {
       question: "Is AI BOQ software the same as quantity takeoff software?",
-      answer: "Quantara provides guided measurement and deterministic quantity calculation for supported calculation types within a review-led BOQ workflow. It does not make a blanket claim of fully unattended computer-vision takeoff from arbitrary drawing geometry without professional review.",
+      answer: "Quantity takeoff measures project scope from drawings; BOQ software structures those quantities into sections, items, units, revisions and deliverables. Quantara connects both stages in one evidence-backed workflow for supported industries.",
     },
     {
       question: "Can I use voice for BOQ measurement and editing?",

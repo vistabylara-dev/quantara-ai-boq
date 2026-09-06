@@ -2,6 +2,7 @@ import { PrismaClient } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { Pool } from "pg";
 import { getHyperdriveBinding, isCloudflareRuntime } from "@/lib/cloudflare/env";
+import { normalizePostgresSslMode } from "@/lib/db/postgres-connection-string";
 
 type ConnectionMethod = "direct" | "hyperdrive";
 
@@ -78,7 +79,10 @@ const PENDING_MASTER_BOQ_1A_OMIT =
  * Cloudflare path — there is no more engine-only fallback anywhere.
  */
 function createDirectClient(): PrismaClient {
-  const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+  const connectionString = process.env.DATABASE_URL;
+  const pool = new Pool({
+    connectionString: connectionString ? normalizePostgresSslMode(connectionString) : connectionString,
+  });
   const adapter = new PrismaPg(pool);
   // Prisma rejects an explicit `omit: undefined` key outright ("omit"
   // option is expected to be an object) — the key must be absent entirely
@@ -95,7 +99,7 @@ function createDirectClient(): PrismaClient {
  */
 function createHyperdriveClient(connectionString: string): PrismaClient {
   const adapter = new PrismaPg({
-    connectionString,
+    connectionString: normalizePostgresSslMode(connectionString),
     max: 1,
     maxUses: 1,
     idleTimeoutMillis: 30_000,

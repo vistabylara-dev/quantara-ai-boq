@@ -70,7 +70,7 @@ describe("public search registry", () => {
   });
 
   it("keeps the four owner-confirmation-dependent legal documents out of the public search index", () => {
-    expect(indexableEntries).toHaveLength(61);
+    expect(indexableEntries).toHaveLength(60);
     expect(
       PUBLIC_SEARCH_PAGES
         .filter((entry) => entry.indexable === false)
@@ -78,6 +78,7 @@ describe("public search registry", () => {
         .sort(),
     ).toEqual([
       "/acceptable-use",
+      "/boq-software-for-facilities-management",
       "/cookie-policy",
       "/data-processing",
       "/subprocessors",

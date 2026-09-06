@@ -34,7 +34,7 @@ const metadataCopy = getDictionary("en").publicContent.metadata;
 
 export const PUBLIC_SEARCH_PAGES = [
   page({ path: "/", title: "AI BOQ & Quantity Takeoff Software | Quantara", description: "Upload drawings and generate a quantity-complete unpriced BOQ with calculation evidence, source provenance and engineer review across ten industries.", cluster: "core", intent: "commercial", priority: 1, changeFrequency: "weekly" }),
-  page({ path: "/features", title: "AI Quantity Takeoff & BOQ Features | Quantara", description: "Generate evidence-backed unpriced BOQs from project drawings, review assumptions and quantities, add rates, control revisions and deliver professional documents.", cluster: "core", intent: "commercial", priority: 0.95, changeFrequency: "weekly" }),
+  page({ path: "/features", title: "AI Quantity Takeoff & BOQ Features | Quantara", description: "Generate evidence-backed unpriced BOQs from drawings, review assumptions and quantities, add rates, control revisions and produce documents.", cluster: "core", intent: "commercial", priority: 0.95, changeFrequency: "weekly" }),
   page({ path: "/about", title: "About Quantara BOQ Workflow Software", description: "Learn what Quantara is, who it supports and how Vista By Lara is developing an AI-assisted BOQ workflow for construction professionals.", cluster: "company", intent: "navigational" }),
   page({ path: "/security", title: metadataCopy.securityTitle, description: metadataCopy.securityDescription, cluster: "company", intent: "informational" }),
   page({ path: "/terms", title: metadataCopy.termsTitle, description: metadataCopy.termsDescription, cluster: "legal", intent: "navigational", priority: 0.3, changeFrequency: "yearly" }),

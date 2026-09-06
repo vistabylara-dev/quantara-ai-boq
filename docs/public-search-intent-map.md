@@ -1,5 +1,14 @@
 # Quantara public search intent map
 
+## Competitor-alternative intent — 6 September 2026
+
+| URL | Primary query | Intent | Conversion path |
+| --- | --- | --- | --- |
+| `/quantara-vs-togal-ai` | Quantara vs Togal.AI; Togal.AI alternative | Commercial | Comparison → Contact Sales |
+| `/quantara-vs-kreo` | Quantara vs Kreo; Kreo alternative | Commercial | Comparison → Contact Sales |
+| `/quantara-vs-costx` | Quantara vs CostX; CostX alternative | Commercial | Comparison → Contact Sales |
+| `/quantara-vs-autodesk-takeoff` | Quantara vs Autodesk Takeoff; Autodesk Takeoff alternative | Commercial | Comparison → Contact Sales |
+
 Reviewed: 2026-08-20
 Scope: 65 registered public content routes, of which 61 are indexable, plus 43 public provider integration detail URLs, for 104 sitemap URLs. Auth, account recovery, noindex legal support pages, token-sharing pages and authenticated SaaS routes are intentionally excluded.
 

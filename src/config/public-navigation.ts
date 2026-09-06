@@ -157,6 +157,10 @@ export const publicNavigation: NavigationSection[] = [
           { label: "AI BOQ vs Manual BOQ Preparation", href: "/ai-boq-vs-manual-boq-preparation" },
           { label: "OCR vs Structured BOQ Extraction", href: "/ocr-vs-structured-boq-extraction" },
           { label: "Quantity Takeoff vs BOQ Software", href: "/quantity-takeoff-vs-boq-software" },
+          { label: "Quantara vs Togal.AI", href: "/quantara-vs-togal-ai" },
+          { label: "Quantara vs Kreo", href: "/quantara-vs-kreo" },
+          { label: "Quantara vs RIB CostX", href: "/quantara-vs-costx" },
+          { label: "Quantara vs Autodesk Takeoff", href: "/quantara-vs-autodesk-takeoff" },
           { label: "BOQ Software vs Document Management", href: "/boq-software-vs-document-management" },
           { label: "Construction Estimating Software vs Excel", href: "/construction-estimating-software-vs-excel" },
           { label: "When to Use BOQ Software", href: "/when-to-use-boq-software" }

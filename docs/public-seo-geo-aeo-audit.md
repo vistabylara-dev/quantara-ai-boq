@@ -1,5 +1,14 @@
 # Quantara public SEO, GEO and AEO audit
 
+## Competitor-intent expansion — 6 September 2026
+
+| URL | Search intent | Primary topic | Evidence policy |
+| --- | --- | --- | --- |
+| `/quantara-vs-togal-ai` | Commercial comparison | Quantara vs Togal.AI | Official source, visible fact-check date and capability boundaries |
+| `/quantara-vs-kreo` | Commercial comparison | Quantara vs Kreo | Official source, visible fact-check date and capability boundaries |
+| `/quantara-vs-costx` | Commercial comparison | Quantara vs RIB CostX | Official source, visible fact-check date and capability boundaries |
+| `/quantara-vs-autodesk-takeoff` | Commercial comparison | Quantara vs Autodesk Takeoff | Official source, visible fact-check date and capability boundaries |
+
 Reviewed: 2026-08-20
 Scope: website-only public search pages. Authenticated Quantara product routes, the in-app Guide, PR #19 runtime work, public proposal tokens and public technical-report tokens are outside this report.
 

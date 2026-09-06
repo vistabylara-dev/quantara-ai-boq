@@ -79,7 +79,7 @@ function preparationStageLabel(stage: string): string {
     MEASURING: "Calculating quantities",
     ASSEMBLING_BOQ: "Structuring the BOQ",
     ASSEMBLY_PENDING: "BOQ assembly pending",
-    READY_FOR_RATES: "BOQ ready for rates",
+    READY_FOR_RATES: "BOQ ready — pricing optional",
     NEEDS_REVIEW: "Review required",
     FAILED: "Preparation failed",
     CANCELLED: "Preparation cancelled",

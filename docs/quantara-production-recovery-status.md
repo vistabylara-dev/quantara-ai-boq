@@ -1,5 +1,36 @@
 # Quantara — Production Recovery & System Status Audit
 
+## 2026-09-06 unified estimator completion checkpoint (authoritative continuation point)
+
+Continue from commit `ce9c62a` and the existing recovered Joinery source/project documented
+below. Do not re-upload, recreate, or resume the recovered Joinery preparation job again. Do
+not change Stripe or subscription behavior. Standard estimating remains deterministic code;
+OpenAI is an optional TAYQAN fallback, not a dependency of normal project extraction,
+measurement, calculation, or BOQ generation.
+
+This completion batch adds one shared commercial-finalization contract across industries:
+
+- BOQs persist either `UNPRICED` or `PRICED` mode. System-generated standard and Joinery BOQs
+  start unpriced, can be finalized from verified quantities without invented rates, and can
+  later be deliberately converted to priced BOQs by an engineer.
+- Verification and locking always require traceable quantity evidence. Commercial rate
+  evidence is required only for a BOQ explicitly set to `PRICED`.
+- Quantity-only DOCX, XLSX, PDF, HTML, and CSV output omits rate/amount/terms fields and is
+  labelled as an unpriced BOQ. A priced export cannot be requested from an unpriced revision.
+- The shared deterministic estimator now binds canonical measurement rule IDs correctly,
+  normalizes explicit metric units, rejects incompatible units, requires valid reinforcement
+  evidence, and covers softscape/hardscape area rules in the common industry engine.
+- Free entitlement remains one non-archived project per company; the existing three-day Pro
+  trial remains unchanged. Company logo/stamp/signature settings accept only public HTTP(S)
+  asset URLs without embedded credentials, matching the safe document-rendering boundary.
+
+Verification for this batch before release: TypeScript passed, full ESLint passed, production
+Next.js build passed (151 static pages), and 121 focused regression tests passed across 16 test
+files. Local Prisma CLI validation could not be re-run because the execution environment
+blocked the Prisma command at its network-approval boundary; Prisma Client generation and the
+production build's schema/type consumption passed. Database migration and authenticated live
+browser verification remain release steps, not reasons to alter or recreate production data.
+
 ## 2026-09-05 live Joinery recovery checkpoint (authoritative continuation point)
 
 Do not restart this workflow, re-upload its source, recreate its project, or move standard

@@ -290,6 +290,7 @@ export async function generatePdf(input: GeneratePdfInput): Promise<Buffer> {
 
     // ---------- BOQ table ----------
     const showInternal = data.boq.showInternalFields;
+    const quantitiesOnly = data.boq.pricingMode === "QUANTITIES_ONLY";
     const showSpecification = shouldRenderSpecification(data, content.columns.specification);
     const baseColumns: Column[] = [
       { key: "itemNumber", label: "#", width: 26, align: "center" },
@@ -300,8 +301,8 @@ export async function generatePdf(input: GeneratePdfInput): Promise<Buffer> {
       { key: "quantity", label: "Qty", width: 44, align: "right" as const },
       ...(showInternal ? [{ key: "landedCost", label: "Landed", width: 52, align: "right" as const }] : []),
       ...(showInternal ? [{ key: "marginPercentage", label: "Mgn %", width: 40, align: "right" as const }] : []),
-      { key: "sellingRate", label: "Rate", width: 56, align: "right" as const },
-      { key: "totalAmount", label: "Total", width: 64, align: "right" as const },
+      ...(quantitiesOnly ? [] : [{ key: "sellingRate", label: "Rate", width: 56, align: "right" as const }]),
+      ...(quantitiesOnly ? [] : [{ key: "totalAmount", label: "Total", width: 64, align: "right" as const }]),
       ...(content.columns.drawingReference ? [{ key: "drawingReference", label: "Dwg", width: 44 } as Column] : []),
     ];
     const totalColumnsWidth = baseColumns.reduce((sum, col) => sum + col.width, 0);
@@ -371,8 +372,9 @@ export async function generatePdf(input: GeneratePdfInput): Promise<Buffer> {
     }
 
     // ---------- Totals ----------
-    ensureSpace(110);
-    y += 8;
+    if (!quantitiesOnly) {
+      ensureSpace(110);
+      y += 8;
     // PDF generation is a FINAL_ONLY (locked-revision) type and only ever
     // receives WITH_PRICES data — totals is always populated here; the
     // fallback only satisfies the now-optional shared type, it changes nothing.
@@ -396,9 +398,15 @@ export async function generatePdf(input: GeneratePdfInput): Promise<Buffer> {
       });
       y += isGrand ? 18 : 14;
     }
+    } else {
+      ensureSpace(32);
+      y += 10;
+      writeText(data.meta.isDraft ? "Draft Quantities — For Scope Review Only (No Pricing)" : "Unpriced BOQ — Rates Excluded", PAGE_MARGIN, y, contentWidth, { bold: true, size: 10, color: [ar, ag, ab], align: "center" });
+      y += 22;
+    }
 
     // ---------- Terms / Exclusions ----------
-    if (content.showTermsSection) {
+    if (content.showTermsSection && !quantitiesOnly) {
       ensureSpace(50);
       y += 10;
       writeText("Terms & Payment", PAGE_MARGIN, y, contentWidth, { bold: true, size: 10, color: [ar, ag, ab] });

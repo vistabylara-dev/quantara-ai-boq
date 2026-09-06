@@ -308,6 +308,7 @@ function emptyBoq() {
     id: BOQ_ID,
     projectId: PROJECT_ID,
     status: BOQStatus.DRAFT,
+    pricingMode: "PRICED",
     isLocked: false,
     version: 1,
     sections: [],
@@ -376,7 +377,8 @@ describe("Furniture managed BOQ hardware/order integration", () => {
       systemValidatedOperationHash: "a".repeat(64),
     });
 
-    expect(result.changed).toBe(false);
+    expect(result.changed).toBe(true);
+    expect(managedStore.bOQ.updateMany).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ pricingMode: "UNPRICED" }) }));
     expect(managedStore.extractedEntity.updateMany).toHaveBeenCalledTimes(2);
     expect(part).toMatchObject({ status: ExtractedEntityStatus.CONFIRMED, confirmedByUserId: null });
     expect(order).toMatchObject({ status: ExtractedEntityStatus.CONFIRMED, confirmedByUserId: null });
@@ -399,7 +401,8 @@ describe("Furniture managed BOQ hardware/order integration", () => {
       systemValidatedOperationHash: "c".repeat(64),
     });
 
-    expect(result.changed).toBe(false);
+    expect(result.changed).toBe(true);
+    expect(managedStore.bOQ.updateMany).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ pricingMode: "UNPRICED" }) }));
     expect(order).toMatchObject({ status: ExtractedEntityStatus.CONFIRMED, confirmedByUserId: null });
     expect(mocks.buildFurnitureCanonicalOutput).toHaveBeenCalledWith(expect.objectContaining({
       confirmedCandidates: [],
@@ -435,7 +438,7 @@ describe("Furniture managed BOQ hardware/order integration", () => {
       wastagePercentage: 10,
     });
 
-    expect(result.changed).toBe(false);
+    expect(result.changed).toBe(true);
     const canonicalInput = mocks.buildFurnitureCanonicalOutput.mock.calls[0][0];
     expect(canonicalInput.confirmedCandidates).toEqual([
       expect.objectContaining({

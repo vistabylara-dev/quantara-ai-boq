@@ -261,13 +261,13 @@ export function RateOnlyBOQEditor({
     <section aria-labelledby="rate-only-heading" className="space-y-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h2 id="rate-only-heading" className="text-xl font-semibold text-white">Add unit rates</h2>
+          <h2 id="rate-only-heading" className="text-xl font-semibold text-white">Optional unit rates</h2>
           <p className="mt-1 text-sm text-slate-400">
-            Quantara generated the scope, descriptions, units and quantities. Enter only your rate for each item.
+            Quantara generated the scope, descriptions, units and quantities. Add rates only when you need a priced estimate or quotation.
           </p>
         </div>
         <div className="text-end text-sm text-slate-300" role="status" aria-live="polite">
-          <p>{missingRateCount} zero or missing rates remaining</p>
+          <p>{missingRateCount} items remain unpriced</p>
           <p className="mt-1 font-semibold text-white">Estimated total from entered rates: {formatCurrency(estimatedTotal, currency)}</p>
           <p className="mt-1 text-xs text-slate-400">
             {immutable
@@ -337,7 +337,7 @@ export function RateOnlyBOQEditor({
                       {overrideReceipt ? (
                         <div className="mt-3 rounded-xl border border-amber-700/50 bg-amber-950/30 p-3 text-amber-100" role="status">
                           <p className="font-semibold">Quantity override recorded</p>
-                          <p className="mt-1">Original AI quantity: {overrideReceipt.originalSystemQuantity} {overrideReceipt.unit}</p>
+                          <p className="mt-1">Original calculated quantity: {overrideReceipt.originalSystemQuantity} {overrideReceipt.unit}</p>
                           <p>Replacement quantity: {overrideReceipt.quantity} {overrideReceipt.unit}</p>
                           <p>Audit: {overrideReceipt.actorName} · {new Date(overrideReceipt.overriddenAt).toLocaleString()}</p>
                           <p>Reason: {overrideReceipt.reason}</p>
@@ -347,7 +347,7 @@ export function RateOnlyBOQEditor({
                         <div className="mt-3 border-t border-slate-700 pt-3">
                           {overrideItemId === item.id ? (
                             <div className="space-y-3">
-                              <p className="font-semibold text-slate-200">Original AI quantity: {overrideOriginalQuantity} {item.unit}</p>
+                              <p className="font-semibold text-slate-200">Original calculated quantity: {overrideOriginalQuantity} {item.unit}</p>
                               <label className="block">
                                 <span className="text-slate-300">Replacement quantity</span>
                                 <input

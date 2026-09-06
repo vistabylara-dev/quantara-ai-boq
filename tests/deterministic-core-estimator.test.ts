@@ -139,4 +139,35 @@ describe("deterministic core estimator", () => {
       relatedEntityId: ENTITY_ID,
     }));
   });
+
+  it("binds the controlled category path by measurementRuleId rather than its human work-package label", async () => {
+    const input = bundle() as any;
+    input.existingEntities[0].technicalData = {
+      categoryPath: {
+        workPackage: "Human-readable furniture package",
+        measurementRuleId: "joinery-unit-count",
+        calculationType: "COUNT",
+      },
+    };
+    const result = await createDeterministicMeasurementReasoner()({ bundle: input, loadPageImageDataUrl: vi.fn() });
+    expect(result.plan.subjects[0]).toEqual(expect.objectContaining({
+      workPackage: "joinery-unit-count",
+      calculationType: "COUNT",
+    }));
+  });
+
+  it("blocks reinforcement when neither a schedule weight nor the complete bar calculation exists", async () => {
+    const input = bundle() as any;
+    input.governingContext.industryPolicy.rules = [{
+      id: "structural-reinforcement", sectionCode: "CON", title: "Reinforcement",
+      calculationType: "REINFORCEMENT_WEIGHT", resultUnit: "kg",
+    }];
+    input.existingEntities[0].technicalData = {
+      categoryPath: { measurementRuleId: "structural-reinforcement", calculationType: "REINFORCEMENT_WEIGHT" },
+      barLength: 120,
+    };
+    const result = await createDeterministicMeasurementReasoner()({ bundle: input, loadPageImageDataUrl: vi.fn() });
+    expect(result.plan.subjects).toHaveLength(0);
+    expect(result.plan.exceptions[0]?.message).toContain("unit weight per metre");
+  });
 });

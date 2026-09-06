@@ -57,7 +57,7 @@ const candidateStore = vi.hoisted(() => {
   };
   const prisma = {
     drawingPage: { findMany: vi.fn(async () => []) },
-    $transaction: vi.fn(async (operation: (client: typeof tx) => Promise<unknown>) => operation(tx)),
+    $transaction: vi.fn(async (operation: (client: typeof tx) => Promise<unknown>, _options?: { timeout: number }) => operation(tx)),
   };
   return { state, extractedEntity, tx, prisma };
 });
@@ -120,7 +120,7 @@ function table(id: string, part: string, edgeBanding = "All 4 edges", title = "C
     companyId: COMPANY_ID,
     projectFileId: FILE_ID,
     drawingPageId: null,
-    sheetName: "Cutting List",
+    sheetName: "Cutting List" as string | null,
     title,
     tableType: ExtractedTableType.FURNITURE_SCHEDULE,
     confidence: decimal(96),

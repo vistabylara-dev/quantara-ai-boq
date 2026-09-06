@@ -184,6 +184,15 @@ export async function generateDocument(actor: CurrentActor, projectIdentifier: s
 
   const isLocked = boqRecord.isLocked;
   const isDraft = !isLocked;
+  const requestedPricingMode = input.pricingMode ?? "WITH_PRICES";
+
+  if (requestedPricingMode === "WITH_PRICES" && boqRecord.pricingMode === "UNPRICED") {
+    throw new AppError(
+      "UNPRICED_BOQ_CANNOT_GENERATE_PRICED_OUTPUT",
+      "This revision is finalized as an unpriced BOQ. Change it to Priced Estimate and verify its rates before generating a priced document.",
+      409,
+    );
+  }
 
   if (input.audience === DocumentAudience.CLIENT && !isDraft) {
     const company = await prisma.company.findUniqueOrThrow({ where: { id: actor.companyId } });
@@ -216,7 +225,7 @@ export async function generateDocument(actor: CurrentActor, projectIdentifier: s
   // locked-snapshot integrity concern FINAL_ONLY_TYPES exists for doesn't
   // apply to it. Every other FINAL_ONLY_TYPES case (including WITH_PRICES
   // DOCX) is unchanged.
-  const isQuantitiesOnlyDraftDocx = input.documentType === GeneratedDocumentType.DOCX && input.pricingMode === "QUANTITIES_ONLY";
+  const isQuantitiesOnlyDraftDocx = input.documentType === GeneratedDocumentType.DOCX && requestedPricingMode === "QUANTITIES_ONLY";
   if (FINAL_ONLY_TYPES.includes(input.documentType) && isDraft && !isQuantitiesOnlyDraftDocx) {
     throw new AppError(
       "LOCKED_REVISION_REQUIRED",
@@ -308,7 +317,7 @@ export async function generateDocument(actor: CurrentActor, projectIdentifier: s
     generatedByName: actor.fullName,
     isDraft,
     showInternalCostFieldsToClient: effectiveContentConfig.showInternalCostFieldsToClient,
-    pricingMode: input.pricingMode ?? "WITH_PRICES",
+    pricingMode: requestedPricingMode,
     watermarkText: applyTrialWatermark ? TRIAL_WATERMARK_TEXT : null,
   });
 

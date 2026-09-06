@@ -29,6 +29,11 @@ enum BOQStatus {
   APPROVED
 }
 
+enum BOQPricingMode {
+  PRICED
+  UNPRICED
+}
+
 enum BOQItemStatus {
   DRAFT
   EXTRACTED
@@ -1887,6 +1892,7 @@ model BOQ {
   title                  String
   revisionNumber         Int                     @default(1)
   status                 BOQStatus               @default(DRAFT)
+  pricingMode            BOQPricingMode           @default(PRICED)
   isLocked               Boolean                 @default(false)
   lockedAt               DateTime?
   lockedByUserId         String?                 @db.Uuid

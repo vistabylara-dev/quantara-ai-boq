@@ -76,10 +76,10 @@ describe("universal drawing-to-BOQ customer workflow UI", () => {
   it("keeps generated scope read-only, exposes missing rates and nests override behind evidence", () => {
     const editor = source("src/components/boq/rate-only-boq-editor.tsx");
 
-    expect(editor).toContain("zero or missing rates remaining");
+    expect(editor).toContain("items remain unpriced");
     expect(editor).toContain("Estimated total from entered rates");
     expect(editor).toContain("Request quantity override");
-    expect(editor).toContain("Original AI quantity");
+    expect(editor).toContain("Original calculated quantity");
     expect(editor).toContain("/quantity-override");
     expect(editor).toContain("sessionStorage");
     expect(editor).toContain("beforeunload");

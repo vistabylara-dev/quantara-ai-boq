@@ -100,6 +100,22 @@ const nullableUrl = z.preprocess(
   (value) => typeof value === "string" && value.trim() === "" ? null : value,
   z.string().trim().url("A valid website URL is required.").max(2_048).nullable().optional(),
 );
+const nullablePublicAssetUrl = (label: string) => z.preprocess(
+  (value) => typeof value === "string" && value.trim() === "" ? null : value,
+  z.string().trim().max(2_048).superRefine((value, context) => {
+    try {
+      const parsed = new URL(value);
+      if ((parsed.protocol !== "http:" && parsed.protocol !== "https:") || parsed.username || parsed.password) {
+        throw new Error("Unsafe asset URL");
+      }
+    } catch {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `${label} must be a public http:// or https:// URL without embedded credentials.`,
+      });
+    }
+  }).nullable().optional(),
+);
 const currencySchema = z.string().trim().regex(/^[A-Za-z]{3}$/, "Currency must be a three-letter ISO code.").transform((value) => value.toUpperCase());
 const uuidSchema = z.string().uuid("A valid UUID is required.");
 const slugSchema = z
@@ -125,11 +141,11 @@ export const companySchema = z.object({
   defaultCurrency: currencySchema.default("AED"),
   vatRate: percentage("VAT rate", 100).default("5"),
   defaultLanguage: requiredText("Default language", 50).default("English"),
-  logoUrl: nullableText(2_048),
+  logoUrl: nullablePublicAssetUrl("Logo URL"),
   authorizedSignatoryName: nullableText(255),
   authorizedSignatoryTitle: nullableText(255),
-  stampUrl: nullableText(2_048),
-  signatureUrl: nullableText(2_048),
+  stampUrl: nullablePublicAssetUrl("Stamp URL"),
+  signatureUrl: nullablePublicAssetUrl("Signature URL"),
   defaultTerms: nullableText(4_000),
   defaultExclusions: nullableText(4_000),
   defaultValidityDays: z.coerce.number().int().min(1).max(365).default(30),
@@ -169,6 +185,7 @@ export const boqSchema = z.object({
   title: requiredText("BOQ title", 500),
   revisionNumber: z.number().int().positive().default(1),
   status: boqStatusSchema.default("DRAFT"),
+  pricingMode: z.enum(["PRICED", "UNPRICED"]).default("PRICED"),
   isLocked: z.boolean().default(false),
   lockedAt: dateInputSchema.nullable().optional(),
   approvedByName: nullableText(255),
@@ -187,6 +204,7 @@ export const boqSchema = z.object({
 export const boqUpdateSchema = z.object({
   title: requiredText("BOQ title", 500).optional(),
   status: boqStatusSchema.optional(),
+  pricingMode: z.enum(["PRICED", "UNPRICED"]).optional(),
   approvedByName: nullableText(255),
   discountPercentage: percentage("Discount percentage", 100).optional(),
   taxRate: percentage("Tax rate", 100).optional(),

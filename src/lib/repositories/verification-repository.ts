@@ -81,7 +81,7 @@ function verificationPayload(boq: Awaited<ReturnType<typeof getBOQRecord>>) {
       status: item.status,
       quantityConfirmed: Boolean(item.quantityProvenance?.confirmedAt) && item.quantityProvenance?.sourceType !== "LEGACY_UNVERIFIED",
       rateConfirmed: Boolean(item.rateProvenance?.confirmedAt) && item.rateProvenance?.sourceType !== "LEGACY_UNVERIFIED",
-      rateConfirmationRequired: !isStrictFurnitureManagedNonCommercialRow({
+      rateConfirmationRequired: boq.pricingMode !== "UNPRICED" && !isStrictFurnitureManagedNonCommercialRow({
         industryKey: boq.project.industryEngine.key,
         sectionCode,
         sourceType: item.sourceType,
@@ -174,7 +174,7 @@ export async function runBOQVerification(companyId: string, boqId: string, asOf 
           (item.pricingMetadataJson as { manuallyOverriddenFields?: string[] } | null)?.manuallyOverriddenFields ??
           undefined,
         status: item.status,
-        commercialPricingRequired: !isStrictFurnitureManagedNonCommercialRow({
+        commercialPricingRequired: boq.pricingMode !== "UNPRICED" && !isStrictFurnitureManagedNonCommercialRow({
           industryKey: boq.project.industryEngine.key,
           sectionCode,
           sourceType: item.sourceType,

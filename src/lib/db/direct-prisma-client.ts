@@ -1,6 +1,7 @@
 import { PrismaClient } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { Pool } from "pg";
+import { normalizePostgresSslMode } from "./postgres-connection-string";
 
 /**
  * Creates an explicit Node/Postgres Prisma client for one-off scripts, seeds,
@@ -14,6 +15,6 @@ export function createDirectPrismaClient(
     throw new Error("DATABASE_URL is required to create a direct Prisma client.");
   }
 
-  const pool = new Pool({ connectionString });
+  const pool = new Pool({ connectionString: normalizePostgresSslMode(connectionString) });
   return new PrismaClient({ adapter: new PrismaPg(pool) });
 }

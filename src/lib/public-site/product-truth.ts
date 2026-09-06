@@ -38,7 +38,7 @@ export const PUBLIC_CAPABILITY_EVIDENCE_LABELS: Record<
   SOURCE_AND_TESTS_REVIEWED: "Source and tests reviewed",
 };
 
-export const PUBLIC_CAPABILITY_REVIEW_DATE = "2026-08-20";
+export const PUBLIC_CAPABILITY_REVIEW_DATE = "2026-09-06";
 
 export const PUBLIC_CAPABILITY_STATUS_LABELS: Record<PublicCapabilityStatus, string> = {
   AVAILABLE: "Available",
@@ -55,10 +55,10 @@ export const PUBLIC_CAPABILITY_STATUS_DESCRIPTIONS: Record<PublicCapabilityStatu
 };
 
 export const QUANTARA_ENTITY_DEFINITION =
-  "Quantara is hybrid AI-assisted and engineer-controlled BOQ software for construction professionals to create, measure, calculate, review and deliver professional bills of quantities.";
+  "Quantara is drawing-to-BOQ quantity takeoff software that generates structured, quantity-complete unpriced bills of quantities with calculation evidence, source provenance and engineer-controlled review.";
 
 export const QUANTARA_WORKFLOW_TRUTH =
-  "Quantara combines AI-assisted preparation with complete engineer-controlled BOQ creation in one platform. Teams can use supported project extraction, directly enter or correct items and dimensions, review visible quantity formulas, control rates and revisions, and generate professional BOQ outputs without waiting for every source to be automated.";
+  "Users select a supported industry and upload the project drawing set. Quantara prepares a traceable, quantity-complete unpriced BOQ, records assumptions and unresolved evidence, and keeps rates, final review, revision locking and issue under professional control.";
 
 export const PROFESSIONAL_REVIEW_NOTICE =
   "Project information, extracted data, measurements, calculations, rates and outputs require review by the responsible construction professional before tender, procurement, contractual or construction use.";

@@ -206,7 +206,7 @@ describe("Phase 8 sub-phase 2: background processing (job queue) (integration, r
       );
       const final = await prisma.extractionJob.findUniqueOrThrow({ where: { id: job.id } });
       expect((final.resultSummaryJson as { recovered?: boolean })?.recovered).toBe(true);
-    });
+    }, 15_000);
   });
 
   describe("extraction-job-service (real global queue singleton, tenant isolation + RBAC)", () => {

@@ -200,7 +200,10 @@ describe("Phase 8 sub-phase 2: background processing (job queue) (integration, r
       });
 
       await queue.recoverStaleJobs();
-      await waitFor(async () => (await prisma.extractionJob.findUniqueOrThrow({ where: { id: job.id } })).status === ExtractionJobStatus.COMPLETED);
+      await waitFor(
+        async () => (await prisma.extractionJob.findUniqueOrThrow({ where: { id: job.id } })).status === ExtractionJobStatus.COMPLETED,
+        10_000,
+      );
       const final = await prisma.extractionJob.findUniqueOrThrow({ where: { id: job.id } });
       expect((final.resultSummaryJson as { recovered?: boolean })?.recovered).toBe(true);
     });

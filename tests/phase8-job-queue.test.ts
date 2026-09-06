@@ -195,7 +195,7 @@ describe("Phase 8 sub-phase 2: background processing (job queue) (integration, r
           status: ExtractionJobStatus.RUNNING,
           completedAt: null,
           resultSummaryJson: undefined,
-          updatedAt: new Date(Date.now() - 6 * 60 * 1000),
+          updatedAt: new Date(Date.now() - 11 * 60 * 1000),
         },
       });
 

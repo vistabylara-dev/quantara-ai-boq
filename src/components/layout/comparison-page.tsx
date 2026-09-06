@@ -23,6 +23,14 @@ export interface ComparisonFAQ {
   answer: string;
 }
 
+export interface MarketAlternative {
+  name: string;
+  bestFor: string;
+  officialSummary: string;
+  officialUrl: string;
+  quantaraDifference: string;
+}
+
 export interface ComparisonPageProps {
   title: string;
   h1: string;
@@ -45,6 +53,8 @@ export interface ComparisonPageProps {
   relatedLinks: { url: string; label: string }[];
   breadcrumbCurrent: string;
   slug: string;
+  marketAlternatives?: MarketAlternative[];
+  comparisonReviewedAt?: string;
 }
 
 const COMPARISON_ROUTE_KEYS: Record<string, TranslationKey> = {
@@ -238,6 +248,55 @@ export async function ComparisonPage(sourceProps: ComparisonPageProps) {
           <h3 className="text-xl font-semibold text-white mb-3">{t("publicLanding.howQuantaraFits")}</h3>
           <p className="text-slate-300 leading-relaxed">{props.quantaraRole}</p>
         </section>
+
+        {props.marketAlternatives?.length ? (
+          <section className="mb-16" aria-labelledby="market-comparison-heading">
+            <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
+              <div>
+                <h2 id="market-comparison-heading" className="text-2xl font-bold text-white">
+                  Quantara compared with popular takeoff and estimating platforms
+                </h2>
+                <p className="mt-3 max-w-3xl text-slate-300">
+                  This buyer guide compares workflow emphasis, not absolute product quality. Competitor descriptions are based on each vendor&apos;s official published material; availability can vary by plan, file type and configuration.
+                </p>
+              </div>
+              {props.comparisonReviewedAt ? (
+                <p className="text-sm text-slate-400">Last fact-checked: {props.comparisonReviewedAt}</p>
+              ) : null}
+            </div>
+            <div className="overflow-x-auto rounded-2xl border border-slate-800">
+              <table className="w-full min-w-[760px] border-collapse text-start">
+                <caption className="sr-only">Workflow comparison of Quantara and popular takeoff and estimating products</caption>
+                <thead className="bg-slate-900/80">
+                  <tr className="border-b border-slate-800">
+                    <th scope="col" className="px-4 py-4 text-sm font-semibold text-white">Platform</th>
+                    <th scope="col" className="px-4 py-4 text-sm font-semibold text-white">Published workflow emphasis</th>
+                    <th scope="col" className="px-4 py-4 text-sm font-semibold text-white">Official product evidence</th>
+                    <th scope="col" className="px-4 py-4 text-sm font-semibold text-white">When Quantara is the closer fit</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-800 bg-slate-950/40">
+                  {props.marketAlternatives.map((alternative) => (
+                    <tr key={alternative.name} className="align-top">
+                      <th scope="row" className="px-4 py-5 font-semibold text-white">{alternative.name}</th>
+                      <td className="px-4 py-5 text-sm leading-6 text-slate-300">{alternative.bestFor}</td>
+                      <td className="px-4 py-5 text-sm leading-6 text-slate-300">
+                        {alternative.officialSummary}{" "}
+                        <a href={alternative.officialUrl} target="_blank" rel="noopener noreferrer" className="font-medium text-blue-400 underline underline-offset-4 hover:text-blue-300">
+                          Official product page
+                        </a>
+                      </td>
+                      <td className="px-4 py-5 text-sm leading-6 text-slate-300">{alternative.quantaraDifference}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <p className="mt-4 text-sm leading-6 text-slate-400">
+              Quantara is not affiliated with Togal.AI, Kreo, RIB or Autodesk. Product names belong to their respective owners. Verify current capabilities with each vendor before purchasing.
+            </p>
+          </section>
+        ) : null}
 
         <section className="mb-16">
           <h2 className="text-2xl font-bold text-white mb-8">{t("publicLanding.frequentlyAskedQuestions")}</h2>

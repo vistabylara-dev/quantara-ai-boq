@@ -4375,6 +4375,26 @@ model EntitlementTemplate {
   product                         CommerceProduct @relation(fields: [productId], references: [id], onDelete: Cascade)
 }
 
+model SalesAgentBudget {
+  period       String              @id
+  reservedFils Int                 @default(0)
+  attempts     SalesAgentAttempt[]
+}
+
+model SalesAgentAttempt {
+  id           String           @id
+  period       String
+  day          String
+  ipHash       String
+  reservedFils Int
+  status       String           @default("RESERVED")
+  createdAt    DateTime         @default(now()) @db.Timestamptz(6)
+  budget       SalesAgentBudget @relation(fields: [period], references: [period], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([day])
+  @@index([day, ipHash])
+}
+
 model SalesInquiry {
   id                      String   @id @default(uuid()) @db.Uuid
   firstName               String
